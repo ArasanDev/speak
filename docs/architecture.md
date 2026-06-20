@@ -277,7 +277,16 @@ public final class FoundationModelsCleaner: LLMCleaning, @unchecked Sendable {
     }
 
     public var isAvailable: Bool {
-        get async { LanguageModel.default != nil }
+        // [verified via swiftc against the macOS 26 SDK] The real symbol is
+        // `SystemLanguageModel` (NOT `LanguageModel`, which does not resolve).
+        // Use `.availability` (an enum) — it reports WHY the model is unavailable
+        // (Apple Intelligence off, model downloading, unsupported device), which
+        // the P3.5 graceful raw-text fallback needs. Do NOT use `!= nil`:
+        // `.default` is non-optional, so that comparison is always true.
+        get async {
+            if case .available = SystemLanguageModel.default.availability { return true }
+            return false
+        }
     }
 
     public func clean(_ text: String, mode: CleanupMode) async throws -> String {
