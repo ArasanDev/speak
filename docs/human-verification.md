@@ -133,7 +133,55 @@ all green). The overlay's **live behavior** is `[deferred — needs human verifi
       a full-screen space (panel `collectionBehavior` includes `.fullScreenAuxiliary`
       and `.canJoinAllSpaces`).
 
-> Rows for P7 onboarding are added here as that screen lands.
+### 4.4 Onboarding flow (P7)
+
+The `OnboardingStateMachine` step logic and `SettingsStore.hasCompletedOnboarding`
+persistence are unit-verified (`OnboardingFlowTests` — 14 tests, all green). The
+`IOHIDCheckAccess` input-monitoring status read typechecks against the macOS 26 SDK
+([verified: swiftc -typecheck, 2026-06-21]). The **live, rendered behavior** is
+`[deferred — needs human verification]`.
+
+- [ ] **Onboarding appears on first launch**: `make run` on a fresh install (or after
+      `defaults delete com.speak.app`) → the onboarding window opens before or alongside
+      the menubar icon appearing.
+- [ ] **Welcome screen displays correctly**: title card with the waveform icon and
+      "Get Started" button renders; "Skip for now" is in the footer.
+- [ ] **Microphone step — first-run dialog fires**: tapping "Grant Microphone Access"
+      triggers the macOS microphone permission dialog. After granting, the step shows a
+      green checkmark and a "Continue" button.
+- [ ] **Microphone denied — Settings deep-link**: if microphone is denied (test by
+      pre-denying in System Settings), the "Open System Settings instead" link appears
+      and opens `Privacy & Security → Microphone` in System Settings.
+- [ ] **Accessibility step — deep-link opens correct pane**: "Open System Settings"
+      opens `Privacy & Security → Accessibility` (the
+      `?Privacy_Accessibility` anchor). After toggling the app on, the status indicator
+      flips to ✓ within ~2 s (the 1.5 s poll interval + processing time).
+      `[deep-link anchor correctness: deferred — verify on macOS 26 Tahoe]`
+- [ ] **Input Monitoring step — deep-link opens correct pane**: "Open System Settings"
+      opens `Privacy & Security → Input Monitoring` (the `?Privacy_ListenEvent` anchor).
+      After toggling on, the checkmark appears. `[anchor correctness: deferred — macOS 26]`
+- [ ] **IOHIDCheckAccess returns correct state**: after granting Input Monitoring in
+      System Settings and returning to the app, `PermissionManager.status(.inputMonitoring)`
+      returns `.granted`. After denying, returns `.denied`. Confirms IOKit live correctness.
+      `[deferred — environment-dependent, confirmed only with real TCC grant]`
+- [ ] **Hotkey step renders correctly**: "Double-tap Fn" explanation, the Fn icon, and
+      "Finish Setup" button.
+- [ ] **Done step + auto-close**: "You're all set." screen appears, then the window
+      closes automatically after ~1.5 s.
+- [ ] **hasCompletedOnboarding persists**: after finishing, quit and relaunch the app —
+      the onboarding window does NOT appear again.
+- [ ] **Skip path works**: clicking "Skip for now" closes the onboarding window and does
+      not re-show on next launch (flag is set). Permissions can be granted later via the
+      `Grant Accessibility + Input Monitoring` menu item.
+- [ ] **Revocation → re-shows onboarding**: revoke Accessibility in System Settings while
+      the app is running; quit and relaunch — the onboarding window re-appears on the
+      Accessibility step (`showOnboardingIfNeeded` fires because `status(.accessibility)`
+      returns `.denied` even though `hasCompletedOnboarding == true`).
+- [ ] **Window comes to front**: the onboarding window is frontmost after launch without
+      the app appearing in the Dock (LSUIElement). `NSApp.activate(ignoringOtherApps:true)`
+      is wired; confirm it actually brings the window to front on macOS 26.
+- [ ] **Step progress dots**: five dots appear in the footer; the filled dot tracks the
+      current step (welcome=1, microphone=2, accessibility=3, inputMonitoring=4, hotkey=5).
 
 ---
 

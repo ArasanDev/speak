@@ -204,10 +204,18 @@ Accessibility + Input Monitoring (deep-link to
 selected). Explain *why* each is needed with a screenshot per permission.
 
 **Done when**:
-- [ ] A fresh user can grant all 3 permissions and reach a working dictation
-      with no confusion (the bar is comprehension, not a stopwatch)
-- [ ] Deep-links open the correct System Settings pane
-- [ ] Permission revocation mid-session is detected → state moves to error
+- [~] A fresh user can grant all 3 permissions and reach a working dictation
+      with no confusion — `[verified]` the step-state machine
+      (`OnboardingStateMachine`, 14 tests) + mic/accessibility/inputMonitoring
+      status backends; **the rendered flow + comprehension** `[deferred — visual]`
+      (§4.4)
+- [~] Deep-links open the correct System Settings pane — `[verified]` the
+      deep-link URLs are wired; **that they open the right pane** `[deferred —
+      needs human verification]`
+- [~] Permission revocation mid-session is detected → state moves to error —
+      `[verified]` the wiring (`showOnboardingIfNeeded()` re-surfaces on
+      permission-denied catches; monitor-start failure → `permissionsNeeded`);
+      **live revocation behavior** `[deferred — visual]`
 
 ---
 
