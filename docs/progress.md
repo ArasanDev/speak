@@ -8,7 +8,7 @@
 
 ## Current phase
 
-**Phases 0, 1, 2, 3, 3.5 COMPLETE; P5 code-complete; P6 code-complete (live criteria deferred).**
+**Phases 0, 1, 2, 3, 3.5 COMPLETE; P5 code-complete; P6 code-complete (live criteria deferred); P9 COMPLETE.**
 P5 — global hotkey — delivers `HotkeyMonitor` (CGEventTap-based, `SpeakCore/Hotkey/`).
 P6 — paste — delivers `TextInserting` protocol + `PasteboardWriter` conformer
 (`SpeakCore/Paste/`), wired additively into `CaptureSession` via optional `inserter`
@@ -32,7 +32,20 @@ and password-field silent no-op. Critical path: P3.5 → P5 → **P6 (code) →*
 
 ---
 
-## Done (this session — 2026-06-20, loop run #7 — P6 PasteboardWriter)
+## Done (this session — 2026-06-21, loop run #8 — P9 HistoryStore)
+
+- [x] **Phase 9 COMPLETE — SQLite history store**
+      - **`SpeakCore/Storage/HistoryEntry.swift` (NEW):** `public struct HistoryEntry: Sendable, Identifiable, Equatable` — verbatim §6 fields + `public init` + `Equatable` for test assertions.
+      - **`SpeakCore/Storage/HistoryStoring.swift` (NEW):** `public protocol HistoryStoring: Sendable` — `save`, `recent(limit:)`, `search(_:)`, `clear()`, `export()` all `async throws`.
+      - **`SpeakCore/Storage/HistoryStore.swift` (NEW):** `public actor HistoryStore: HistoryStoring` — raw SQLite3 C API (no third-party deps). `init(databaseURL:maxEntries:)` + `makeProductionStore()` convenience. Actor isolation is the entire data-race-safety story. `sqlite3_bind_int64` for limit (not `Int32`, which would overflow on `Int.max`). `SQLITE_TRANSIENT` shim via `unsafeBitCast` so text binds copy the Swift buffer. `setupSchema` extracted to a static nonisolated helper to avoid Swift 5 actor-init warning. Schema stores `createdAt` as `REAL` (Double epoch), ordered by `createdAt DESC, rowid DESC` everywhere for deterministic ordering under sub-second save bursts. Capacity trim deletes `NOT IN (SELECT rowid ... LIMIT maxEntries)`.
+      - **`benchmark.md` §7 "history size"** row filled in: 10,000 entries `[decision]` with derivation (≈ 4 MB). `defaultHistoryMaxEntries` public constant + init param.
+      - **`SpeakTests/HistoryStoreTests.swift` (NEW, 11 tests, all green):** covers all P9 done-when rows — persistence across reopens, newest-first ordering + limit, search in rawText/cleanedText/no-match, clear, export (JSON, valid, readable), capacity trim, nil cleanedText round-trip, non-nil round-trip.
+      - `make build` zero new warnings. `make lint` zero new errors (one pre-existing warning in `PasteTests.swift`). `make test` **61 total, 5 XCTSkip (live-FM), 0 failures.** 11 new P9 tests all green; all 50 prior green.
+      - SpeakError case used: `.unknown(String)` — existing case, no new case invented.
+
+---
+
+## Done (previous session — 2026-06-20, loop run #7 — P6 PasteboardWriter)
 
 - [x] **Phase 6 code-complete (live criteria deferred) — paste seam**
       - **`SpeakCore/Paste/TextInserting.swift` (NEW):** `public protocol TextInserting: Sendable`
