@@ -1,43 +1,123 @@
 // App/SpeakApp.swift
 //
 // The app shell: a menubar-only (LSUIElement) SwiftUI app. The dictation engine
-// lives in SpeakCore.framework; this target is the thin UI shell (architecture
-// §5). The icon reflects capture state; full state-driven icons land at P8.
+// lives in SpeakCore.framework; this target is the thin UI shell (architecture §5).
+//
+// Wiring:
+//   AppDelegate constructs DictationController and calls startMonitoring() in
+//   applicationDidFinishLaunching — the only correct hook for a menubar-only app.
+//   Using .onAppear on the MenuBarExtra menu content would defer arming the
+//   hotkey tap until the user first *opens* the menu, which would break the
+//   "double-tap Fn works immediately after launch" requirement.
+//
+// Icon mapping (presentation layer):
+//   MenubarIcon (SpeakCore, pure+tested) → SF Symbol name (here, App layer).
+//   Full P8 polish is deferred; these are functional placeholders.
+//   Exact SF Symbol names are [decision] comments below.
 
 import SwiftUI
 import AppKit
 import SpeakCore
 
+// MARK: - AppDelegate
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+
+    /// Owned here for its lifetime. Passed to SwiftUI via the App's body.
+    let controller = DictationController()
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        controller.startMonitoring()
+    }
+}
+
+// MARK: - SpeakApp
+
 @main
 struct SpeakApp: App {
 
-    @StateObject private var micTest = MicTestController()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra("speak", systemImage: micTest.isCapturing ? "waveform.circle.fill" : "waveform") {
-            SpeakMenu(micTest: micTest)
+        MenuBarExtra {
+            SpeakMenu(controller: appDelegate.controller)
+        } label: {
+            MenuBarLabel(controller: appDelegate.controller)
         }
         .menuBarExtraStyle(.menu)
     }
 }
 
-private struct SpeakMenu: View {
-    @ObservedObject var micTest: MicTestController
+// MARK: - MenuBarLabel
+
+/// The always-visible status-bar icon. Updates reactively as `icon` changes.
+private struct MenuBarLabel: View {
+    @ObservedObject var controller: DictationController
 
     var body: some View {
-        // Temporary P2 affordance — real hotkey-driven capture arrives at P5.
-        Button(micTest.isCapturing ? "Stop mic test" : "Start mic test") {
-            micTest.toggle()
+        Image(systemName: systemImage(for: controller.icon))
+    }
+
+    /// Map the semantic icon to an SF Symbol name (presentation only).
+    /// P8 polish: full intent-matched icon set. These are functional placeholders. [decision]
+    private func systemImage(for icon: MenubarIcon) -> String {
+        switch icon {
+        case .idle:
+            return "waveform"                       // [decision]: calm, always-present waveform
+        case .listening:
+            return "waveform.circle.fill"           // [decision]: filled = active capture
+        case .processing:
+            return "hourglass"                      // [decision]: processing / cleanup in flight
+        case .done:
+            return "checkmark.circle"               // [decision]: brief success flash
+        case .error:
+            return "exclamationmark.triangle"       // [decision]: error state
         }
+    }
+}
+
+// MARK: - SpeakMenu
+
+private struct SpeakMenu: View {
+    @ObservedObject var controller: DictationController
+
+    var body: some View {
+        // Status line — reflects current capture state.
+        Text(statusLine(for: controller.icon))
+            .foregroundStyle(.secondary)
+
+        if controller.permissionsNeeded {
+            Divider()
+            Button("⚠️ Grant Accessibility + Input Monitoring") {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+        }
+
         Divider()
+
         Button("About speak…") {
             NSApplication.shared.orderFrontStandardAboutPanel(nil)
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
+
         Divider()
+
         Button("Quit speak") {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q")
+    }
+
+    private func statusLine(for icon: MenubarIcon) -> String {
+        switch icon {
+        case .idle:       return "speak — ready (double-tap Fn to start)"
+        case .listening:  return "speak — listening…"
+        case .processing: return "speak — processing…"
+        case .done:       return "speak — done"
+        case .error:      return "speak — error (try again)"
+        }
     }
 }
