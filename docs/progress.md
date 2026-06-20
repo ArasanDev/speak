@@ -47,6 +47,46 @@ P4 overlay, P7 onboarding, P8 menubar polish, P10 settings UI.
 
 ---
 
+## Done (this session — 2026-06-21, loop run #11 — autonomous BEAT-row verification)
+
+- [x] **Structural moat audit + headless latency measurement + WER harness**
+      - **`SpeakTests/MoatAuditTests.swift` (NEW, 9 tests, all green):**
+        XCTest-based source-tree audit that permanently regression-guards the
+        benchmark.md §3 BEAT moat rows. Import allowlist (9 tests) asserts:
+        - `testMITLicenseExists` — LICENSE exists and contains "MIT License". `[verified]`
+        - `testNoThirdPartyImports` — every `import` ∈ Apple allowlist. `[verified]`
+        - `testNoNetworkEgress` — no URLSession/NWConnection/CFSocket/getaddrinfo etc. `[verified]`
+        - `testNoAccountOrAuthCode` — no ASAuthorization/LAContext/SecItemAdd etc. `[verified]`
+        - `testNoPaywallOrWordCap` — no StoreKit/wordCap/isPremium/paywall etc. `[verified]`
+        - `testOfflineByConstruction` — Speech+FoundationModels+SQLite3 all present (on-device). `[verified]`
+        - `testNoPasteboardRead` — no string(forType:)/pasteboardItems read calls. `[verified]`
+        - `testNoPrintInProductionCode` — no bare print() in SpeakCore/App. `[verified]`
+        - `testNoForceUnwrapInProductionCode` — no try!/as!/force-unwrap in production. `[verified]`
+      - **`scripts/verify-moat.sh` (NEW) + `make verify-moat` (NEW Makefile target):**
+        Standalone shell audit — 7/7 checks PASS. Runs without Xcode; re-runnable in CI
+        as a pre-build step. Covers MIT license, import allowlist, networking symbols,
+        identity-auth symbols, paywall symbols, pasteboard reads, print() calls.
+      - **`SpeakTests/LatencyAndAccuracyTests.swift` (NEW, 10 tests, all green):**
+        Headless latency measurement + WER harness.
+        - `testFirstPartialLatency` — 5 trials after 1 warm-up on hello_speech.caf:
+          **p50 = 42 ms** (budget: < 100 ms ✓), **p95 = 43 ms** (budget: < 200 ms ✓).
+          `[verified — measured, headless file-fed proxy; not real-time user-facing lag]`
+        - `testLocalPipelineLatency` — raw-fallback path, no paste, no FM:
+          **median = 60 ms** (budget: < 1000 ms ✓), p95 = 63 ms.
+          `[verified — measured, headless; full stop→paste deferred to human-verification.md]`
+        - WER harness (`WERHarnessTests`) — 8 tests prove correctness (perfect match,
+          deletion, substitution, punctuation ignored, case-insensitive, empty edge cases).
+          Demo on fixture: "Cased in one, two, three." vs "Testing one two three" → high
+          WER expected (synthetic speech). Harness ready; full §6 corpus is a data dependency
+          a human must supply. `[verified — harness correct; WER gate deferred — corpus needed]`
+      - `make build` clean. `make lint` 0 new serious violations (non-serious
+        warnings only: for_where, trailing_comma, type/file/function length,
+        identifier_name). `make test` **88 total, 5 XCTSkip (pre-existing live-FM),
+        0 failures** (orchestrator re-verified — the "83" figure mid-run was stale;
+        actual is 88, i.e. 20 new tests, 68 → 88). All prior green.
+      - **`make verify-moat` output (run 2026-06-21):** 7/7 PASS — MIT ✓, imports ✓,
+        networking ✓, auth ✓, paywall ✓, pasteboard-read ✓, print ✓.
+
 ## Done (this session — 2026-06-21, loop run #10 — app-shell wiring, END-TO-END)
 
 - [x] **App shell wired — `make run` exercises the full flow** (live-gated)
