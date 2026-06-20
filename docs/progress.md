@@ -73,6 +73,46 @@ mute **chord** (the mute menu toggle ships; the chord is live-gated follow-up).
 
 ---
 
+## Done (this session — 2026-06-21, loop run #17 — agent-drivable visual verification)
+
+**Breakthrough: the agent now closes the UI-rendering half of `human-verification.md`
+itself — no human, no permissions.** The remaining v0 gate was entirely live behaviour;
+this session proved how much of it the agent can drive on the real Mac.
+
+- [x] **Capability probe (grounded, not assumed):** macOS 26.5 / arm64. Authoritative
+      on-device model check (`SystemLanguageModel.default.availability`) =
+      **`appleIntelligenceNotEnabled`** → live cleanup genuinely needs the human to enable
+      Apple Intelligence (corrected an earlier misread of the *cloud* opt-in key). De-risked
+      the linchpin: external **AX UI-scripting is blocked** (`osascript not allowed assistive
+      access`) but **`screencapture` is not** → harness must drive windows *from inside the
+      app*, never by clicking from outside.
+- [x] **`#if DEBUG` verification surface (`App/Debug/DebugLaunchDispatcher.swift`,
+      `SpeakCore/Debug/FixtureAudioProducer.swift`, builder-app):** `--debug-open <target>`
+      opens any window / runs the real pipeline from `open --args`. 10 targets. All gated
+      DEBUG; `make verify-moat` stays **7/7** (never leaks to release).
+      - **Orchestrator fix (`App/SpeakApp.swift`):** the dispatcher only skipped
+        `startMonitoring()` for `simulate-dictation`; every other target still ran
+        `showOnboardingIfNeeded()`, popping the production welcome window *on top* of the
+        requested one (all screenshots showed welcome). Fixed: a debug target now fully owns
+        the launch — no normal startup — so each capture is isolated. Re-verified.
+- [x] **`scripts/verify-visual.sh` (NEW):** re-runnable harness — per-target launch →
+      settle → `screencapture` → kill. Bug fixed (`local` split under `set -u`).
+- [x] **RENDERED ✓ — all 9 window targets, orchestrator Read every PNG:** onboarding ×6
+      (correct icon/copy/button/step-dot each), Settings, History (empty state), overlay
+      ("the quick brown fox"). Recorded in `human-verification.md §4` with a hard integrity
+      boundary: **renders ≠ behaves-live**; no behaviour checkbox flipped.
+- [x] **Onboarding permission-grant fix (builder-app, adjacent — kept after review):**
+      `PermissionManager.requestAccessibility()` / `requestInputMonitoring()`
+      (`AXIsProcessTrustedWithOptions` + `IOHIDRequestAccess`); the onboarding "Grant"
+      buttons now *register the app in the permission lists* instead of only deep-linking —
+      without this the app may never appear in System Settings for the user (would block the
+      Bucket C grant step). Production behaviour change, vetted; build/test/moat green.
+- [x] **CLAUDE.md Commands section de-staled** (was "repo is pre-build, run `git init`").
+- **Deferred (unchanged):** `simulate-dictation` live STT→cleanup→**paste** — paste needs
+  Accessibility, so folded into the §0/§3 permission pass (the visible paste-into-TextEdit
+  will be the proof). Terminal paste-provenance stays P11 (unsigned dev build). The 3 TCC
+  grants + Apple-Intelligence enable + one spoken dictation remain the human residue.
+
 ## Done (this session — 2026-06-21, loop run #16 — History window + hardware mute)
 
 - [x] **History window UI (SPEC §5.6 / roadmap P9 — last unbuilt UI surface)**

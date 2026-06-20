@@ -85,6 +85,27 @@ unit-verified; the **live paste** is not. **This is the project's #1 `[unverifie
 UI built after the user authorized it (2026-06-21). Logic/persistence is
 unit-tested; the **rendered, interactive behavior** needs a human running the app.
 
+> ### Agent-verified — RENDERED ✓ (2026-06-21, automated visual harness)
+>
+> A `#if DEBUG`-only launch surface (`--debug-open <target>`, `App/Debug/`) lets the
+> build's own windows be opened from `open --args` with **no Accessibility/AX grant**;
+> `scripts/verify-visual.sh` drives each one and `screencapture`s it. The orchestrator
+> Read every PNG. **All nine window-render targets render correctly:** onboarding
+> welcome / microphone / accessibility / inputMonitoring / hotkey / done (each the right
+> icon, copy, button, and step-dot), the Settings window (Transcription / AI-Cleanup
+> toggle ON + Foundation Models / Paste-Mode), the History window (search + "No
+> dictations yet" empty state + Export/Clear), and the partial-transcript overlay
+> ("the quick brown fox" card). Screens in `/tmp/speak-verify/*.png`; re-runnable.
+>
+> **Integrity boundary (hard):** this proves each surface **renders**, NOT that it
+> **behaves under real input**. Every per-row checkbox below that asserts *behaviour*
+> (a toggle changing the next dictation, a deep-link opening the right pane, partials
+> updating live, a real entry appearing, mute stopping capture) stays **unchecked** —
+> those need live input + permissions (Bucket C) and are NOT closed by a screenshot.
+> The `simulate-dictation` target wires the REAL STT→cleanup→paste pipeline, but its
+> synthetic Cmd+V can't land without Accessibility, so its end-to-end proof is deferred
+> to the §0/§3 permission pass (where the paste visibly lands and is screenshotted).
+
 ### 4.1 Settings window (P10)
 - [ ] "Settings…" menu item opens a window.
 - [ ] AI cleanup toggle flips `cleanupEnabled`; turning it off → the **next**
