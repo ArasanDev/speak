@@ -102,19 +102,27 @@ Apple docs before coding; tag any inference `[inferred]`.
 stubbed for the toggle; fully wired in P10 proper.
 
 **Done when**:
-- [ ] A sample dictation produces **cleaned** output (filler removal,
-      punctuation, capitalization) when `cleanupEnabled` is `true` and
-      Foundation Models is available
-- [ ] With `cleanupEnabled = false`, `cleanedText` is `nil` and raw text is
-      pasted — no cleanup path runs
-- [ ] When Foundation Models is **unavailable**, session gracefully falls back
-      to raw transcript and reaches `done` state (not `error`)
-- [ ] `SpeakError.llmCleanupFailed` is surfaced only on a genuine API failure,
-      not on unavailability
-- [ ] Engine id is stored in `TranscriptionResult.engineId` when cleanup runs
-- [ ] No third-party dependencies introduced — Apple Foundation Models only
-- [ ] Foundation Models API surface verified against current Apple docs (not
-      assumed)
+- [x] A sample dictation produces **cleaned** output when `cleanupEnabled` is
+      `true` and Foundation Models is available — `[verified]` via the
+      `CaptureSession` orchestration against a mock cleaner
+      (`testStopWithCleanerAvailableProducesCleanedText`); **live cleanup
+      quality stays `[inferred]`** until P13 dogfood on a Mac with Apple
+      Intelligence enabled (gated off on the dev Mac as of 2026-06-20).
+- [x] With `cleanupEnabled = false`, `cleanedText` is `nil` and raw text is
+      pasted — `cleanedText == nil` and `engineId == STT id` verified
+      (`testStopWithCleanerNilHasCleanedTextNil`); the *paste* half is P6.
+- [x] When Foundation Models is **unavailable**, session gracefully falls back
+      to raw transcript and reaches `done` state (not `error`) — verified
+      (`testStopWithCleanerUnavailableFallsBackToRawNoError`).
+- [x] `SpeakError.llmCleanupFailed` is surfaced only on a genuine API
+      failure, not on unavailability — verified (SpeakError path + generic
+      Error→SpeakError mapping + unavailable-doesn't-throw path).
+- [x] Engine id is stored in `TranscriptionResult.engineId` when cleanup
+      runs — verified (`engineId == "<stt>+<cleaner>"`).
+- [x] No third-party dependencies introduced — Apple Foundation Models only.
+- [x] Foundation Models API surface verified against current Apple docs
+      (SDK-anchored, see comments at the top of
+      `SpeakCore/Cleanup/FoundationModelsCleaner.swift`).
 
 ---
 

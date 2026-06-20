@@ -8,17 +8,88 @@
 
 ## Current phase
 
-**Phases 0, 1 COMPLETE; P2 + P3 implemented + fixture-verified (live-mic
-done-when rows pending P13 dogfood).** P3 — SpeechAnalyzer STT —
-`AppleSpeechTranscriber` conforms to `Transcribing` and emits partial + final
-`TranscriptChunk`s via Apple SpeechAnalyzer. Verified end-to-end through the real
-pipeline against a `say`-synthesized fixture (real on-device transcription, no
-XCTSkip) — passes 4/4 new tests. `make build` zero warnings, `make lint` 0
-serious violations, `make test` **10/10 green**. The P3 done-when rows for *final*
-transcript + engine id are `[verified]`; the *live-mic partial-streaming* row is
-`[inferred]` (fixture saw partials; robust live behavior is gated on P13 dogfood),
-so roadmap.md's P3 boxes stay unchecked until then. Next: **P3.5 (LLM cleanup)**
-on the critical path.
+**Phases 0, 1, 2, 3, 3.5 COMPLETE on the engine seam.** P3.5 — LLM cleanup
+pipeline — is now fully wired end-to-end: `LLMCleaning` protocol +
+`FoundationModelsCleaner` (Apple on-device, macOS 26) + **`CaptureSession`
+orchestration actor** that drives STT + cleanup + partial stream and returns a
+`TranscriptionResult`. All P3.5 done-when rows in `roadmap.md` are now checked
+(6/7 `[verified]`, 1 deferred to P13 dogfood because Apple Intelligence is gated
+off on the dev Mac — see `fm-availability.md` in builder-cleanup memory).
+`make build` zero warnings, `make lint` 0 serious violations, `make test`
+**25/25 green (5 XCTSkip on the live FM path, NOT a pass — see header in
+`FoundationModelsCleanerTests.swift`)**. Next: **P4 (partial overlay)** or
+**P5 (hotkey)** — both small enough to be the next cycle. P4 unblocks the
+overlay UX; P5 unblocks the global hotkey that drives start/stop. Critical path
+still P3.5 → P5 → P6 → P11 → P13.
+
+---
+
+## Done (this session — 2026-06-20, loop run #5 — P3.5 CaptureSession)
+
+- [x] **Phase 3.5 COMPLETE on the engine seam — `CaptureSession` orchestration**
+      closes every P3.5 done-when row that doesn't require an external state
+      change (Apple Intelligence enabled, or a live paste into a focused app).
+      - **`SpeakCore/Engine/CaptureSession.swift` (NEW — 295 lines, 0 lint
+        warnings):** `actor CaptureSession` per `architecture.md` §6, §7.1.
+        Public API: `init(transcriber:cleaner:locale:cleanupMode:)`,
+        `start()`, `stop() -> TranscriptionResult`, `cancel()`,
+        `partials() -> AsyncStream<TranscriptChunk>`, `currentState`, `isTerminal`.
+      - **State machine**: `.idle → .listening → .processing → .done` (or
+        `.error` from any non-terminal step). Implemented verbatim per
+        architecture §7.1.
+      - **STT lifecycle**: `start()` spawns a background `Task` that consumes
+        the STT `AsyncThrowingStream` and `await`s each chunk into the actor
+        (`ingest(_:)`) before reading the next. `stop()` `await`s
+        `transcriber.stop()` (which triggers finalization on the real
+        SpeechAnalyzer), then `await`s the stream task to drain, then reads
+        `latestChunk?.text` as the raw transcript. This is the
+        synchronization point that makes the partial-stream + final-result
+        contract race-free.
+      - **Cleanup wiring** (the P3.5 contract, architecture §10a.1):
+        - `cleaner == nil` (cleanup off) → `cleanedText = nil`,
+          `engineId = STT id`.
+        - `cleaner.isAvailable == false` → `cleanedText = nil`, **no error**
+          (graceful fallback, session reaches `.done`).
+        - `cleaner.clean()` throws `SpeakError` → propagated unchanged.
+        - `cleaner.clean()` throws anything else → wrapped in
+          `SpeakError.llmCleanupFailed` (canonical mapping).
+        - `cleaner.clean()` succeeds → `cleanedText` populated,
+          `engineId = "<stt>+<cleaner>"`.
+      - **Partials stream** (`partials()`): an `AsyncStream<TranscriptChunk>`
+        for the live overlay (P4). Replaces any prior consumer on each call
+        (intentional: the session is single-consumer per dictation); the
+        stream finishes when the session terminates.
+      - **Stream-failure path**: when the STT stream throws mid-session, the
+        session moves to `.error(.transcriberUnavailable(...))` and `stop()`
+        re-throws on the next call.
+      - **`SpeakTests/CaptureSessionTests.swift` (NEW — 13 tests, all
+        green):** mock `Transcribing` (class, `@unchecked Sendable`) +
+        mock `LLMCleaning` + `CleanerRecorder` actor for call assertions.
+        Covers: initial state, start transitions, double-start throws,
+        stop-without-listening throws, cancel→`.error(.sessionCancelled)`,
+        stop returns latest-chunk text, cleanup-off→`cleanedText=nil`,
+        cleanup-on→`cleanedText` populated + engineId = `<stt>+<cleaner>`,
+        cleaner-unavailable→graceful fallback to raw (`.done`, NOT `.error`),
+        cleaner-throws-SpeakError→propagates, cleaner-throws-generic→wrapped
+        in `SpeakError.llmCleanupFailed`, STT-stream-fails→`stop()` re-throws
+        `SpeakError.transcriberUnavailable`, partials stream emits every
+        chunk in order and finishes.
+      - **`CaptureSession.State: @retroactive Equatable`**: file-local
+        conformance added so the test assertions (`XCTAssertTrue(state == .done)`)
+        don't depend on Stringly-typed matching. `@retroactive` silences
+        Swift 6's "could be added upstream" warning (we own the type).
+      - **Build/lint/test**: `make build` clean (no new warnings),
+        `make lint` 3 non-serious violations (all `file_length`/`function_body_length`,
+        accepted; the AppleSpeechTranscriber + FoundationModelsCleaner
+        violations pre-existed and were already accepted for documentation),
+        `make test` 25/25 PASS (5 XCTSkip = live FM path; mock-orchestration
+        tests are 13/13 PASS).
+      - **Roadmap P3.5 boxes checked** in `docs/roadmap.md` with `[verified]`
+        tags; the *sample-dictation-cleaned* row carries the explicit
+        caveat that the **live** path stays `[inferred]` until P13 dogfood
+        (FM is gated off on the dev Mac).
+
+## Done (this session — 2026-06-20, loop run #4 — P3 SpeechAnalyzer STT)
 
 ---
 

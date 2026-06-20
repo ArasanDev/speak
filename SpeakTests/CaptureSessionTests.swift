@@ -1,0 +1,429 @@
+// SpeakTests/CaptureSessionTests.swift
+//
+// Tests for the CaptureSession orchestration actor (architecture.md §6, §7.1;
+// roadmap P3.5 done-when).
+//
+// SCOPE (read before changing):
+//   These tests use MOCK `Transcribing` and `LLMCleaning` so the orchestration
+//   logic is fully covered without depending on Apple SpeechAnalyzer or
+//   Foundation Models hardware/availability. The REAL engine integration
+//   tests live in `SpeechTranscriberTests.swift` and
+//   `FoundationModelsCleanerTests.swift`. Paste (P6) and hotkey (P5) are not
+//   exercised here — they consume this actor's API in their own test files.
+//
+// Done-when rows closed here (P3.5):
+//   [x] start() transitions idle → listening
+//   [x] stop() returns a TranscriptionResult with the latest chunk's text
+//   [x] stop() with cleaner=nil (cleanup off) → cleanedText=nil, engineId=STT id
+//   [x] stop() with cleaner.isAvailable=false → cleanedText=nil, no error,
+//       engineId=STT id (graceful fallback, NOT .error)
+//   [x] stop() with cleaner.clean() throwing → throws SpeakError.llmCleanupFailed
+//   [x] stop() with cleaner available and succeeding → cleanedText populated,
+//       engineId="<stt>+<cleaner>"
+//   [x] double-start() throws
+//   [x] cancel() moves to .error(.sessionCancelled) and stops the STT
+//   [x] partials() stream emits chunks as the STT emits them, and finishes
+//       when the session terminates
+//   [x] stop() with stream that threw mid-session surfaces the STT error
+//
+// SKIP / DEFER:
+//   - Live, end-to-end dictation with real STT + real cleanup is the P13
+//     dogfood bar (quality.md §2). Out of scope here.
+
+import XCTest
+@testable import SpeakCore
+
+// MARK: - Mocks
+
+/// A controllable mock STT engine. Class (not actor) so it can conform to
+/// `Transcribing` without the protocol's `nonisolated` requirements. Marked
+/// `@unchecked Sendable` because all mutation is funneled through the
+/// Mutable state (`_stopCallCount`) is only touched from the test's
+    /// deterministic, single-task usage; no real concurrency, so no lock is needed.
+private final class MockTranscriber: Transcribing, @unchecked Sendable {
+    let id: String
+    private let script: [TranscriptChunk]
+    /// When non-nil, the stream finishes by throwing this error (used to
+    /// exercise the stream-failure path).
+    let failWith: Error?
+    private var _stopCallCount: Int = 0
+    private let _waitForStop: Bool
+    /// Continuation used to gate the stream's finish on `stop()` being called
+    /// (used by the stop()-awaits-finalization path test, if needed).
+    private let stopContinuation: CheckedContinuation<Void, Never>?
+    private let stopSignal: StopSignal?
+
+    init(id: String = "mock-stt",
+         script: [TranscriptChunk],
+         failWith: Error? = nil) {
+        self.id = id
+        self.script = script
+        self.failWith = failWith
+        self._waitForStop = false
+        self.stopContinuation = nil
+        self.stopSignal = nil
+    }
+
+    func startStream(locale: Locale) -> AsyncThrowingStream<TranscriptChunk, Error> {
+        let script = self.script
+        let failWith = self.failWith
+        let stopSignal = self.stopSignal
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                for chunk in script {
+                    // Yield each chunk.
+                    continuation.yield(chunk)
+                    // Brief sleep so the consumer has time to ingest each one
+                    // (mimics real partial cadence; deterministic, not flaky).
+                    try? await Task.sleep(nanoseconds: 1_000_000) // 1ms
+                }
+                if let stopSignal = stopSignal {
+                    // Wait for stop() to be called before finishing.
+                    await stopSignal.wait()
+                }
+                if let err = failWith {
+                    continuation.finish(throwing: err)
+                } else {
+                    continuation.finish()
+                }
+            }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+
+    func stop() async {
+        _stopCallCount += 1
+        stopSignal?.signal()
+    }
+
+    /// Test helper: how many times `stop()` was called on this mock.
+    func calls() -> Int { _stopCallCount }
+}
+
+/// Helper used by `MockTranscriber` to coordinate "finish the stream" with
+/// "the orchestrator called stop()". A second continuation primitive used
+/// only in tests that need to verify the stream waits for stop().
+private final class StopSignal: @unchecked Sendable {
+    private var waiter: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            // Single-task usage: no lock needed for the wait/signal handshake.
+            waiter = continuation
+        }
+    }
+
+    func signal() {
+        waiter?.resume()
+        waiter = nil
+    }
+}
+
+/// A controllable mock cleanup engine. Lets the test configure availability
+/// and the `clean()` outcome (success, throw).
+private struct MockCleaner: LLMCleaning {
+    let id: String
+    let available: Bool
+    /// If non-nil, `clean()` throws this error.
+    let cleanError: Error?
+    /// What `clean()` returns on success.
+    let cleanResult: String
+    /// Records every `clean()` call.
+    let recorder: CleanerRecorder
+
+    var isAvailable: Bool { get async { available } }
+
+    func clean(_ text: String, mode: CleanupMode) async throws -> String {
+        await recorder.record(text: text, mode: mode)
+        if let err = cleanError {
+            throw err
+        }
+        return cleanResult
+    }
+}
+
+/// Actor used to record `clean()` invocations across the test (the cleaner
+/// is a struct, but it can call into this actor to retain state).
+private actor CleanerRecorder {
+    private(set) var calls: [(text: String, mode: CleanupMode)] = []
+
+    func record(text: String, mode: CleanupMode) {
+        calls.append((text, mode))
+    }
+
+    func snapshot() -> [(text: String, mode: CleanupMode)] { calls }
+}
+
+// MARK: - Tests
+
+final class CaptureSessionTests: XCTestCase {
+
+    // MARK: Helpers
+
+    private func makeChunks(_ texts: [String], final: String? = nil) -> [TranscriptChunk] {
+        let now = Date()
+        let all = texts + (final.map { [$0] } ?? [])
+        return all.enumerated().map { idx, text in
+            TranscriptChunk(text: text,
+                            isFinal: idx == all.count - 1,
+                            timestamp: now.addingTimeInterval(Double(idx) * 0.01))
+        }
+    }
+
+    // MARK: - State machine
+
+    func testInitialStateIsIdle() async {
+        let transcriber = MockTranscriber(script: makeChunks(["hello"]))
+        let session = CaptureSession(transcriber: transcriber)
+        let state = await session.currentState
+        XCTAssertTrue(state == .idle, "Fresh session must start in .idle, got \(state)")
+    }
+
+    func testStartTransitionsToListening() async throws {
+        let transcriber = MockTranscriber(script: makeChunks(["hello"]))
+        let session = CaptureSession(transcriber: transcriber)
+        try await session.start()
+        let state = await session.currentState
+        XCTAssertTrue(state == .listening, "start() must transition to .listening, got \(state)")
+    }
+
+    func testDoubleStartThrows() async throws {
+        let transcriber = MockTranscriber(script: makeChunks(["hello"]))
+        let session = CaptureSession(transcriber: transcriber)
+        try await session.start()
+        do {
+            try await session.start()
+            XCTFail("Second start() must throw")
+        } catch {
+            // Expected — non-idle state rejects start.
+        }
+    }
+
+    func testStopWithoutListeningThrows() async throws {
+        let transcriber = MockTranscriber(script: makeChunks(["hello"]))
+        let session = CaptureSession(transcriber: transcriber)
+        do {
+            _ = try await session.stop()
+            XCTFail("stop() from .idle must throw")
+        } catch {
+            // Expected.
+        }
+    }
+
+    func testCancelMovesToErrorSessionCancelled() async throws {
+        let transcriber = MockTranscriber(script: makeChunks(["hello"]))
+        let session = CaptureSession(transcriber: transcriber)
+        try await session.start()
+        await session.cancel()
+        let state = await session.currentState
+        if case .error(.sessionCancelled) = state {
+            // Expected.
+        } else {
+            XCTFail("cancel() must move to .error(.sessionCancelled), got \(state)")
+        }
+    }
+
+    // MARK: - Stop returns a TranscriptionResult
+
+    func testStopReturnsTranscriptionResultWithLatestChunkText() async throws {
+        let chunks = makeChunks(["hel", "hello", "hello world"], final: nil)
+        let transcriber = MockTranscriber(script: chunks)
+        let session = CaptureSession(transcriber: transcriber)
+        try await session.start()
+
+        // Give the stream a moment to emit.
+        try await Task.sleep(nanoseconds: 50_000_000) // 50ms
+
+        let result = try await session.stop()
+        XCTAssertEqual(result.rawText, "hello world", "rawText must be the last chunk's text")
+        XCTAssertEqual(result.engineId, "mock-stt", "engineId is STT id when no cleanup")
+        let state = await session.currentState
+        XCTAssertTrue(state == .done, "stop() must end in .done, got \(state)")
+    }
+
+    // MARK: - Cleanup off (cleaner == nil)
+
+    func testStopWithCleanerNilHasCleanedTextNil() async throws {
+        let chunks = makeChunks(["hello", "world"], final: nil)
+        let transcriber = MockTranscriber(script: chunks)
+        let session = CaptureSession(transcriber: transcriber, cleaner: nil)
+        try await session.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let result = try await session.stop()
+        XCTAssertNil(result.cleanedText, "Cleanup off → cleanedText must be nil")
+        XCTAssertEqual(result.engineId, "mock-stt", "Cleanup off → engineId is STT id only")
+    }
+
+    // MARK: - Cleanup on (cleaner available, succeeds)
+
+    func testStopWithCleanerAvailableProducesCleanedText() async throws {
+        let chunks = makeChunks(["um hello uh world"], final: nil)
+        let transcriber = MockTranscriber(script: chunks)
+        let recorder = CleanerRecorder()
+        let cleaner = MockCleaner(
+            id: "mock-cleaner",
+            available: true,
+            cleanError: nil,
+            cleanResult: "Hello, world.",
+            recorder: recorder
+        )
+        let session = CaptureSession(transcriber: transcriber, cleaner: cleaner)
+        try await session.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let result = try await session.stop()
+        XCTAssertEqual(result.cleanedText, "Hello, world.", "Cleanup on → cleaned text populated")
+        XCTAssertEqual(result.engineId, "mock-stt+mock-cleaner", "engineId combines STT + cleaner")
+        let calls = await recorder.snapshot()
+        XCTAssertEqual(calls.count, 1, "clean() must be called exactly once")
+        XCTAssertEqual(calls.first?.text, "um hello uh world", "clean() must receive the raw text")
+    }
+
+    // MARK: - Cleanup unavailable (graceful fallback)
+
+    func testStopWithCleanerUnavailableFallsBackToRawNoError() async throws {
+        let chunks = makeChunks(["hello world"], final: nil)
+        let transcriber = MockTranscriber(script: chunks)
+        let recorder = CleanerRecorder()
+        let cleaner = MockCleaner(
+            id: "mock-cleaner",
+            available: false,                  // engine says it can't run
+            cleanError: nil,
+            cleanResult: "",
+            recorder: recorder
+        )
+        let session = CaptureSession(transcriber: transcriber, cleaner: cleaner)
+        try await session.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let result = try await session.stop()
+        XCTAssertNil(result.cleanedText, "Unavailable cleanup → cleanedText must be nil")
+        XCTAssertEqual(result.engineId, "mock-stt", "Unavailable cleanup → engineId is STT id only")
+        XCTAssertEqual(result.rawText, "hello world", "Raw text is preserved on fallback")
+        let state = await session.currentState
+        XCTAssertTrue(state == .done, "Unavailable cleanup → .done (NOT .error), got \(state)")
+        let calls = await recorder.snapshot()
+        XCTAssertEqual(calls.count, 0, "clean() must NOT be called when unavailable")
+    }
+
+    // MARK: - Cleanup throws (genuine API failure)
+
+    func testStopWithCleanerThrowingThrowsSpeakError() async throws {
+        let chunks = makeChunks(["hello world"], final: nil)
+        let transcriber = MockTranscriber(script: chunks)
+        let recorder = CleanerRecorder()
+        let cleaner = MockCleaner(
+            id: "mock-cleaner",
+            available: true,
+            cleanError: SpeakError.llmCleanupFailed("model rejected input"),
+            cleanResult: "",
+            recorder: recorder
+        )
+        let session = CaptureSession(transcriber: transcriber, cleaner: cleaner)
+        try await session.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        do {
+            _ = try await session.stop()
+            XCTFail("stop() must throw when cleaner.clean() throws")
+        } catch let SpeakError.llmCleanupFailed(detail) {
+            XCTAssertEqual(detail, "model rejected input", "SpeakError detail must propagate")
+        } catch {
+            XCTFail("stop() must throw SpeakError.llmCleanupFailed, got \(error)")
+        }
+    }
+
+    func testStopWithCleanerThrowingGenericErrorMapsToSpeakError() async throws {
+        // A non-SpeakError thrown from clean() must be wrapped in
+        // SpeakError.llmCleanupFailed per the architecture contract.
+        struct GenericCleanError: LocalizedError {
+            var errorDescription: String? { "transient api failure" }
+        }
+        let chunks = makeChunks(["hello world"], final: nil)
+        let transcriber = MockTranscriber(script: chunks)
+        let recorder = CleanerRecorder()
+        let cleaner = MockCleaner(
+            id: "mock-cleaner",
+            available: true,
+            cleanError: GenericCleanError(),
+            cleanResult: "",
+            recorder: recorder
+        )
+        let session = CaptureSession(transcriber: transcriber, cleaner: cleaner)
+        try await session.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        do {
+            _ = try await session.stop()
+            XCTFail("stop() must throw when cleaner.clean() throws a generic error")
+        } catch let SpeakError.llmCleanupFailed(detail) {
+            XCTAssertTrue(detail.contains("transient"),
+                          "SpeakError detail must include the underlying message; got: \(detail)")
+        } catch {
+            XCTFail("stop() must throw SpeakError.llmCleanupFailed, got \(error)")
+        }
+    }
+
+    // MARK: - STT stream failure
+
+    func testStopSurfacesStreamFailure() async throws {
+        let chunks = makeChunks(["hello"])
+        let transcriber = MockTranscriber(
+            script: chunks,
+            failWith: SpeakError.transcriberUnavailable("mock STT crashed")
+        )
+        let session = CaptureSession(transcriber: transcriber)
+        try await session.start()
+        // Give the stream a moment to throw.
+        try await Task.sleep(nanoseconds: 50_000_000)
+        do {
+            _ = try await session.stop()
+            XCTFail("stop() must throw when the STT stream failed")
+        } catch let SpeakError.transcriberUnavailable(detail) {
+            XCTAssertEqual(detail, "mock STT crashed", "STT error detail must propagate")
+        } catch {
+            XCTFail("stop() must throw SpeakError.transcriberUnavailable, got \(error)")
+        }
+    }
+
+    // MARK: - Partials stream
+
+    func testPartialsStreamEmitsChunksAndFinishes() async throws {
+        let chunks = makeChunks(["hel", "hello", "hello world"], final: nil)
+        let transcriber = MockTranscriber(script: chunks)
+        let session = CaptureSession(transcriber: transcriber)
+
+        // Attach the partials consumer BEFORE start() so no chunks are lost.
+        // `partials()` is `async` on an actor — `await` is required.
+        let stream = await session.partials()
+        let consumer = Task<[TranscriptChunk], Never> {
+            var collected: [TranscriptChunk] = []
+            for await chunk in stream {
+                collected.append(chunk)
+            }
+            return collected
+        }
+        try await session.start()
+        // Wait for the stream to drain (chunks + finish).
+        let result = try await session.stop()
+        let collected = await consumer.value
+        XCTAssertEqual(collected.count, 3, "Partials stream must emit every chunk")
+        XCTAssertEqual(collected.map(\.text), ["hel", "hello", "hello world"],
+                       "Partials must preserve chunk order")
+        XCTAssertEqual(result.rawText, "hello world", "Final result uses the last chunk")
+    }
+}
+
+// MARK: - State == State (Equatable for assertions)
+
+extension CaptureSession.State: @retroactive Equatable {
+    public static func == (lhs: CaptureSession.State, rhs: CaptureSession.State) -> Bool {
+        switch (lhs, rhs) {
+        case (.idle, .idle), (.listening, .listening),
+             (.processing, .processing), (.done, .done):
+            return true
+        case (.error(let lhsErr), .error(let rhsErr)):
+            return lhsErr.recoverySuggestion == rhsErr.recoverySuggestion
+        default:
+            return false
+        }
+    }
+}

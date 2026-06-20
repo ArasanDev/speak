@@ -16,7 +16,7 @@ APP      := $(DERIVED)/Build/Products/$(CONFIG)/Speak.app
 
 XCB := xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration $(CONFIG) -derivedDataPath $(DERIVED)
 
-.PHONY: all generate build test lint run clean release
+.PHONY: all generate build test lint run lsp clean release
 
 all: build
 
@@ -39,6 +39,15 @@ lint:
 ## run: build then launch the menubar app
 run: build
 	open $(APP)
+
+## lsp: configure sourcekit-lsp (buildServer.json) so editors/agents get SDK-correct
+##      Swift semantics. Build first so xcode-build-server has fresh compile args,
+##      then pin workspace + our local build_root (the tool can't emit both at once).
+##      Re-run after a clean clone or a project.yml change; reload the LSP after.
+lsp: build
+	xcode-build-server config -project $(PROJECT) -scheme $(SCHEME)
+	@python3 -c "import json,os; p='buildServer.json'; d=json.load(open(p)); d['workspace']=os.path.abspath('$(PROJECT)/project.xcworkspace'); d['build_root']=os.path.abspath('$(DERIVED)'); json.dump(d, open(p,'w'), indent=2)"
+	@echo "buildServer.json configured -> $(DERIVED). Reload the LSP server (restart Claude Code / editor) to pick it up."
 
 ## clean: remove generated project + build artifacts
 clean:
