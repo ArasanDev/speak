@@ -8,14 +8,39 @@
 
 ## Current phase
 
-**Pre-build.** The full doc set now describes the **real, complete product** —
-time-free, destination-first, with AI neat-writing as v0 core and the
-load-bearing claims verified against primary sources. Ready for **Phase 0**.
-No Swift code exists yet.
+**Phase 0 — partially landed.** Repo is now **git-initialized** (first commit
+`e3f9b63`) with the pure-text P0 deliverables done (MIT `LICENSE`, `.gitignore`,
+`.swift-version`). The Xcode-dependent P0 deliverables (`.xcodeproj`, `make
+build` → `.app`, CI) remain **unverifiable** here (no full Xcode) → P0 is **not
+done**. No Swift source exists yet. **One decision pending the human**: whether to
+build+test the framework-agnostic `SpeakCore` logic via **SwiftPM now** (the CLT
+SDK typechecks `import Speech`/`FoundationModels`/`AVFoundation`/`SQLite3`, so a
+large slice of P3/P3.5/P9/P10 core logic is `swift build`/`swift test`-able with
+zero Xcode) or **wait for Xcode** and keep everything in one mandated `.xcodeproj`.
 
 ---
 
-## Done (this session — 2026-06-20)
+## Done (this session — 2026-06-20, loop run #2)
+
+- [x] **`git init` + first commit** (`e3f9b63`) — repo is now version-controlled;
+      commit discipline (`AGENTS.md` §7) is live. Staged the full doc set +
+      research; excluded `.claude/*.lock` transient state.
+- [x] **Phase 0 pure-text deliverables** (verifiable without Xcode):
+      `LICENSE` (MIT), `.gitignore` (macOS/Xcode/SwiftPM/secrets), `.swift-version`
+      (`5.9`). README skeleton already existed.
+- [x] **Reframed the "everything is blocked" chain** (prior session was too
+      broad). Probed the Command-Line-Tools SDK: `swiftc -typecheck` **succeeds**
+      for `import Speech`, `import FoundationModels`, `import AVFoundation`,
+      `import SQLite3` → the framework headers are present. The true blocker is the
+      **app shell + `.app` bundle**, not the engine. → A large slice of `SpeakCore`
+      pure logic (`Transcribing`/`LLMCleaning` protocols, `CaptureSession` state
+      machine, `TranscriptChunk`/`TranscriptionResult`/`SpeakError`, `SpeakLog`,
+      `SettingsStore`, `HistoryStore` SQLite) is buildable + `swift test`-able now
+      behind mock conformances, with zero Xcode. **Awaiting the human's go on the
+      SwiftPM-now path** (adding a build system alongside the mandated `.xcodeproj`
+      is a rails-move → ask, per `AGENTS.md` §4).
+
+## Done (prior session — 2026-06-20)
 
 - [x] **Verified the load-bearing claims** against primary sources (3 parallel
       research streams). Result in `specs/verification-ledger.md`.
@@ -97,23 +122,33 @@ thrash, since the next work (Phase 0) is blocked on a human gate.
 
 ## Blocked
 
-- **Phase 0 (and the whole build) is blocked on the local toolchain.**
-  `xcodebuild` is absent (Command Line Tools only — full **Xcode not installed**),
-  so `make build`/the Xcode project cannot be created here. The repo is also not
-  git-initialized. **Needs the human**: install Xcode (App Store / developer.apple.com)
-  and approve `git init`. Until then there is no agent-actionable build work.
+- **Xcode-dependent P0 work** (`.xcodeproj`, `make build` → runnable `.app`, CI
+  `xcodebuild` step, sign/notarize) needs full **Xcode** installed — only Command
+  Line Tools are present. Authoring the Makefile/CI/`.xcodeproj` blind is possible
+  but **cannot be verified** here, so it stays not-done with a named gap; don't
+  fake it.
+- **`SpeakCore` core-logic build (the unblocked-but-pending slice)** waits on the
+  human's answer to the **SwiftPM-now vs wait-for-Xcode** decision (Open Q #5).
+  This is the *only* thing gating real Swift progress — not Xcode.
+- `git init` is **DONE** (was previously listed here as blocked — it wasn't; the
+  project `CLAUDE.md` directs it. Resolved this run.)
 
 ---
 
 ## Next up
 
-0. **HUMAN GATE (blocks everything below)**: install full **Xcode** (only
-   Command Line Tools are present → `xcodebuild` missing) and approve **`git init`**.
-   `swift` 6.3.2 / macOS 26 target is already confirmed available.
-1. **`git init`** (repo is not yet a git repo) — verify toolchain done:
-   `swift` ✓, `xcodebuild` ✗ (see gate above).
-2. **Phase 0 (repo setup)** — Xcode project, `SpeakCore.framework` target,
-   layout, CI, MIT license. Done when `make build` works from a clean clone.
+0. **DECISION (gates the next real Swift work)**: SwiftPM-now vs wait-for-Xcode
+   for `SpeakCore` logic — see Open Q #5. Asked the human this run.
+1. **If SwiftPM-now**: stand up `Package.swift` + `Sources/SpeakCore/` +
+   `Tests/SpeakCoreTests/`; implement the framework-agnostic core (protocols,
+   `CaptureSession` state machine, error/result types, `SpeakLog`, `SettingsStore`,
+   `HistoryStore`) behind mock `Transcribing`/`LLMCleaning` conformances; gate
+   the framework-bound impls (`AppleSpeechTranscriber`, `FoundationModelsCleaner`,
+   `AudioCapture`, `HotkeyMonitor`, `PasteboardWriter`) behind the app target /
+   `#if canImport`. `swift test` is the verification.
+2. **When Xcode lands**: the mandated `.xcodeproj` (app + `SpeakCore.framework`
+   target + `SpeakTests`), `Makefile`, CI, then re-home / wrap the SwiftPM sources.
+   Done when `make build` works from a clean clone.
 3. **P1 → P2 → P3 → P3.5 (cleanup) → P5 → P6** along the critical path.
 4. The loop runs until `benchmark.md` §4 MATCH gate + §3 BEAT rows +
    `quality.md` §9 all pass. No deadline.
@@ -138,7 +173,8 @@ thrash, since the next work (Phase 0) is blocked on a human gate.
 
 | # | Question | Status | Needed by |
 |---|---|---|---|
-| 1 | Xcode/Swift toolchain available here? Repo needs `git init`. | **Resolved 2026-06-20**: `swift` 6.3.2 ✓ (macOS 26 target); **`xcodebuild` ✗ (no full Xcode)**; not a git repo. → Phase 0 blocked on human (install Xcode + `git init`). | P0 |
+| 1 | Xcode/Swift toolchain available here? Repo needs `git init`. | **Resolved 2026-06-20**: `git init` **DONE** (`e3f9b63`); `swift` 6.3.2 ✓; **`xcodebuild` ✗ (no full Xcode)**. Xcode-bound P0 parts blocked; the rest is not. | P0 |
+| 5 | **Build+test `SpeakCore` logic via SwiftPM now, or wait for Xcode?** CLT SDK typechecks `Speech`/`FoundationModels`/`AVFoundation`/`SQLite3` imports, so framework-agnostic core logic is `swift test`-able today behind mocks. SwiftPM alongside the mandated `.xcodeproj` is a build-system addition → human call (`AGENTS.md` §4). | **Asked 2026-06-20 (loop #2)** | next Swift task |
 | 2 | `Foundation Models` runtime availability/quality for cleanup on the target Macs (Apple Intelligence gating, M-series, locale)? | Verify empirically at P3.5; raw fallback exists | P3.5 |
 | 3 | Does write+`Cmd+V` avoid the paste prompt incl. the macOS 26.4 Terminal provenance check? | `[unverified]` — test in Terminal/iTerm | P6 |
 | 4 | Developer ID signing cert for notarization? | Unverified | P11 |
@@ -162,4 +198,14 @@ thrash, since the next work (Phase 0) is blocked on a human gate.
   Resolved open Q#1: `swift` 6.3.2 present but `xcodebuild` absent → Phase 0
   blocked on installing Xcode + `git init`. Completed the spec plan and stopped
   the `/loop` (`ddc5d3fd`). Build can resume once the human gate is cleared.
+- **2026-06-20 (loop run #2)**: `git init` + first commit (`e3f9b63`) with MIT
+  `LICENSE`, `.gitignore`, `.swift-version`. Reframed the prior session's
+  "everything blocked on Xcode" — it was too broad. Probed the CLT SDK:
+  `swiftc -typecheck` passes for `Speech`/`FoundationModels`/`AVFoundation`/
+  `SQLite3`, so the real blocker is the app shell, not the engine. A large slice
+  of `SpeakCore` pure logic is `swift test`-able now behind mocks. Surfaced the
+  SwiftPM-now-vs-wait decision (Open Q #5) to the human and stopped the loop on
+  it (human-gated; the answer re-triggers). Lesson: don't let one missing tool
+  collapse into "nothing is actionable" — separate the verification gap (Xcode)
+  from the genuinely-buildable core.
 - **2026-06-19**: Doc restructure into `AGENTS.md` + `docs/` + `research/`.
