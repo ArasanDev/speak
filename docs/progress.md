@@ -8,16 +8,31 @@
 
 ## Current phase
 
-**Phases 0, 1, 2, 3, 3.5 COMPLETE; P5 code-complete; P6 code-complete (live criteria deferred); P9 COMPLETE.**
-P5 — global hotkey — delivers `HotkeyMonitor` (CGEventTap-based, `SpeakCore/Hotkey/`).
-P6 — paste — delivers `TextInserting` protocol + `PasteboardWriter` conformer
-(`SpeakCore/Paste/`), wired additively into `CaptureSession` via optional `inserter`
-param. `make build` zero new warnings, `make lint` 0 new serious violations,
-`make test` **50 tests total (5 XCTSkip live-FM); 6 new P6 tests all green;
-all 44 prior tests still green**. Seven P6 done-when rows `[verified]` via unit
-tests (mock inserter); **four rows `[deferred — needs human verification]`**:
-TextEdit paste, Slack paste, Terminal paste-provenance (the project's #1 `[unverified]`),
-and password-field silent no-op. Critical path: P3.5 → P5 → **P6 (code) →** P11 → P13.
+**The v0 dictation pipeline is built end-to-end and the app is RUNNABLE.**
+Engine seam complete (P0–P3.5), plus P5 (hotkey), P6 (paste), P9 (history) all
+code-complete, the **`SpeakEngine` facade** assembling them, and the **app-shell
+wiring** that drives the whole flow from the menubar. `make run` now launches a
+menubar app that, given live permissions, runs **double-tap Fn → capture →
+on-device cleanup → paste at cursor → local history**. `make test` **68 tests, 5
+XCTSkip (live-FM), 0 failures**; a **real-component integration test** proves
+fixture-STT → real CaptureSession → real cleaner (raw-fallback) → real
+HistoryStore run together (`raw='Cased in one, two, three.'`).
+
+**This is the planned terminus of the autonomous build phase.** Everything that
+can be built + unit-tested headlessly is done. The remaining v0 ship-gate
+criteria are **physically gated on live runs on a real Mac** and are tracked in
+**`docs/human-verification.md`**: grant Accessibility + Input Monitoring + enable
+Apple Intelligence; confirm the global hotkey fires; confirm paste into
+TextEdit/Slack/**Terminal** (the #1 `[unverified]` — macOS 26.4 paste-provenance);
+confirm live Foundation Models cleanup quality. None of these are marked passed —
+"done = verified, not assumed." **The runnable app + that checklist is the
+handoff.** Deliberately NOT built (would sit on still-`[unverified]` foundations):
+P4 overlay, P7 onboarding, P8 menubar polish, P10 settings UI.
+
+> **Design decision (this session):** history-save lives in `SpeakEngine.endDictation`
+> as best-effort (logged + swallowed) — a failed DB write must NOT fail a dictation
+> whose text already pasted. Paste-failure, by contrast, errors the session (it IS
+> the delivery) and stays in `CaptureSession`. Failure semantics decided the seam.
 
 > **Orchestrator review note (loop #6):** caught + fixed a latent correctness
 > bug before commit — `DoubleTapDetector` was fed `CGEvent.timestamp / 1e9` as
@@ -31,6 +46,48 @@ and password-field silent no-op. Critical path: P3.5 → P5 → **P6 (code) →*
 > CFRunLoop thread leaks per instance (fine for a single app-lifetime monitor).
 
 ---
+
+## Done (this session — 2026-06-21, loop run #10 — app-shell wiring, END-TO-END)
+
+- [x] **App shell wired — `make run` exercises the full flow** (live-gated)
+      - **`App/DictationController.swift` (NEW, `@MainActor ObservableObject`):**
+        builds the production `SpeakEngine` (AppleSpeechTranscriber +
+        FoundationModelsCleaner + PasteboardWriter + HistoryStore), owns a
+        `HotkeyMonitor`, consumes `monitor.events` → `beginDictation`/`endDictation`,
+        publishes a `MenubarIcon` state.
+      - **Graceful degradation:** `HistoryStore.makeProductionStore()` throw →
+        `NullHistoryStore` fallback (dictation unaffected); `monitor.start()`
+        permission-denied → `permissionsNeeded` flag + System Settings deep-link,
+        no crash. `AppDelegate` arms monitoring in `applicationDidFinishLaunching`.
+      - **`SpeakCore/Engine/MenubarIcon.swift` (NEW):** pure enum +
+        `init(for: CaptureSession.State)`, exhaustive switch (new state = compile
+        error). **`SpeakTests/MenubarIconTests.swift`** — 6 tests, the only
+        headless-verifiable piece here; all green.
+      - Retired `App/MicTestController.swift` (P2 affordance now subsumed).
+      - **Orchestrator fix:** the done-flash literal was 1.5 s with a *phantom*
+        "benchmark §7" citation (no such row) and contradicted roadmap P8's 600 ms
+        → corrected to 600 ms citing P8 (single source), removing a magic number.
+      - `make build` clean; `make test` **68 total, 5 XCTSkip, 0 failures**.
+      - **Everything end-to-end is `[deferred — needs human verification]`**
+        (`docs/human-verification.md`); only the icon mapping is `[verified]`.
+
+## Done (this session — 2026-06-21, loop run #9 — SpeakEngine facade + integration)
+
+- [x] **`SpeakEngine` facade + first real-component integration test**
+      - **`SpeakCore/Engine/SpeakEngine.swift` (NEW, `actor`):** assembles
+        transcriber + cleaner? + inserter? + history; verbs `beginDictation` /
+        `endDictation` / `cancelDictation`; `currentState` / `currentPartials`
+        observation. History save is best-effort (do/catch + log + swallow) in
+        `endDictation`. Documented §6 deviations: `SettingsStore` deferred to P10
+        (`cleaner == nil` ⇒ cleanup off); `actor` (matches §8) not
+        `@unchecked Sendable` class; `async throws` verbs.
+      - **`SpeakTests/SpeakEngineIntegrationTests.swift` (NEW):** fixture-audio
+        `AppleSpeechTranscriber` → real `CaptureSession` → real
+        `FoundationModelsCleaner` (`isAvailable=false` → raw fallback) → real
+        `HistoryStore` (temp file) → mock inserter. Asserts end-to-end `.done`,
+        raw transcript, `cleanedText == nil`, inserter received text, exactly 1
+        history entry. **PASSED** — first time real components ran together.
+      - `make test` **62 total, 0 failures**; all 61 prior green.
 
 ## Done (this session — 2026-06-21, loop run #8 — P9 HistoryStore)
 
