@@ -245,13 +245,14 @@ tunable setting (not a hardcoded constant — see `benchmark.md` §7 "history
 size"). Searchable from a History window.
 
 **Done when**:
-- [~] Every completed session writes a `HistoryEntry` (with `cleanedText`
+- [x] Every completed session writes a `HistoryEntry` (with `cleanedText`
       when cleanup ran, `nil` otherwise) — `[verified]` `HistoryStore.save()`
-      round-trips both `cleanedText`-present and `nil` (`testNilCleanedTextRoundTrips`);
-      **end-to-end wiring pending** — nothing calls `save()` on session `.done`
-      yet (integration follow-up: `SpeakEngine` facade owns history + settings
-      per architecture §6, or `CaptureSession` gains a `history` param like
-      `inserter`; settle when `SpeakEngine` is built)
+      round-trips both `cleanedText`-present and `nil` (`testNilCleanedTextRoundTrips`),
+      **and the end-to-end wiring is now in place**: `SpeakEngine.endDictation`
+      builds a `HistoryEntry` from the result and calls `history.save(_:)`
+      (best-effort: logged + swallowed so a DB failure never fails a dictation
+      whose text already pasted). Verified by `SpeakEngineIntegrationTests`
+      (exactly one entry after a real-component dictation).
 - [x] History persists across app launches — `[verified]`
       (`testSaveAndReopenPersistence`: a second `HistoryStore` on the same file
       reads back saved entries)
@@ -260,9 +261,12 @@ size"). Searchable from a History window.
 - [x] "Clear history" empties the store — `[verified]` (`testClearEmptiesStore`)
 - [x] "Export" produces a readable file (plain text or JSON) — `[verified]`
       (JSON, ISO-8601 dates; `testExportContainsEntriesText`)
-- [ ] **History window (UI)** — search/clear/export surfaced in a SwiftUI
-      window — `[deferred — UI task; needs visual verification]` (not built here;
-      store layer is complete)
+- [~] **History window (UI)** — search/clear/export surfaced in a SwiftUI
+      window — `[verified]` the wiring: `HistoryView` + `HistoryWindowController`
+      (opened from the "History…" menu item) bind to a `HistoryViewModel` that
+      reads the shared `historyStore` via `recent`/`search`/`clear`/`export`;
+      the **rendered window + NSSavePanel** are `[deferred — visual]`
+      (human-verification.md §4.5).
 
 ---
 

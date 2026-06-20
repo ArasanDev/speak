@@ -20,16 +20,27 @@ menubar. `make test` **143 tests (123 XCTest + 20 Swift Testing; 5 XCTSkip
 live-FM), 0 failures**; `make verify-moat` **7/7** (5 of 7 structural BEAT rows
 proven by automated audit — no egress, no account, no third-party, MIT, offline).
 
-**The autonomously-buildable scope is now genuinely exhausted.** What remains for
-the v0 ship gate is **irreducibly live or a data dependency**, all tracked in
-**`docs/human-verification.md`**: grant Accessibility + Input Monitoring + enable
-Apple Intelligence; the live UI screens (§4.1–4.4); the global hotkey firing;
-paste into TextEdit/Slack/**Terminal** (the #1 `[unverified]` — macOS 26.4
-paste-provenance); live Foundation Models cleanup quality; the §6 ~20-clip WER
-corpus (audio only a human can supply); Developer-ID sign/notarize (P11). None are
-marked passed — "done = verified, not assumed." **The runnable app + the checklist
-is the complete handoff.** Every UI screen's *logic* is unit-tested; only the
-*rendered/live* behavior is deferred.
+**Two further autonomous gaps were closed in loop #16** (2026-06-21): the **History
+window UI** (SPEC §5.6 / roadmap P9 — was the last unbuilt UI surface; store layer
+was already done+tested) and **hardware mute** (SPEC §7.4 / product.md §8 #4 — was
+"design posture, not yet implemented"; now enforced in the engine). `make test`
+**149 tests (129 XCTest + 20 Swift Testing; 5 XCTSkip live-FM), 0 failures**;
+`make verify-moat` **7/7**; lint 0 serious.
+
+**The autonomously-buildable scope is now genuinely exhausted (re-confirmed by a
+SPEC §5–§7 feature scan).** What remains for the v0 ship gate is **irreducibly live
+or a data dependency**, all tracked in **`docs/human-verification.md`**: grant
+Accessibility + Input Monitoring + enable Apple Intelligence; the live UI screens
+(§4.1–4.6, now incl. the History window §4.5 and the mute behavior §4.6); the
+global hotkey firing; paste into TextEdit/Slack/**Terminal** (the #1 `[unverified]`
+— macOS 26.4 paste-provenance); live Foundation Models cleanup quality; the §6
+~20-clip WER corpus (audio only a human can supply); Developer-ID sign/notarize
+(P11). None are marked passed — "done = verified, not assumed." **The runnable app +
+the checklist is the complete handoff.** Every UI screen's *logic* is unit-tested;
+only the *rendered/live* behavior is deferred. One known-deferred UI affordance
+remains (not a blocking gap): the hotkey-**rebind recording** UI (Settings shows the
+binding read-only; the binding system + default persist and are tested) and a global
+mute **chord** (the mute menu toggle ships; the chord is live-gated follow-up).
 
 > **Launch-survival VERIFIED (loop run #15, orchestrator):** `make build` then
 > launched `Speak.app` three times on the dev Mac (no permissions granted). Each
@@ -60,6 +71,58 @@ is the complete handoff.** Every UI screen's *logic* is unit-tested; only the
 > CFRunLoop thread leaks per instance (fine for a single app-lifetime monitor).
 
 ---
+
+## Done (this session — 2026-06-21, loop run #16 — History window + hardware mute)
+
+- [x] **History window UI (SPEC §5.6 / roadmap P9 — last unbuilt UI surface)**
+      - **`App/History/HistoryViewModel.swift` (NEW, `@MainActor ObservableObject`):**
+        reads the shared `historyStore` via `recent(limit:)`/`search(_:)`/`clear()`/
+        `export()`; live debounced substring search (cancels the in-flight query on
+        each keystroke); `recentLimit = defaultHistoryMaxEntries` (single-sourced to
+        `HistoryStore`, no second magic number); export → `NSSavePanel` writing JSON.
+      - **`App/History/HistoryView.swift` (NEW):** search field, entry list (cleaned
+        ?? raw + timestamp + engineId), Export/Clear footer, empty + no-match states.
+      - **`App/History/HistoryWindowController.swift` (NEW):** `NSWindow + NSHostingView`
+        (mirrors `OnboardingWindowController`; resizable). Opened from a new
+        "History…" menu item.
+      - **`DictationController`:** now exposes the `historyStore` (the same instance
+        the engine writes to) and a lazy `showHistory()`. Roadmap P9 "History window
+        (UI)" row flipped `[ ]` → `[~]` (logic verified; rendered window deferred-visual
+        §4.5). Also corrected the **stale P9 row** that claimed save wasn't wired —
+        `SpeakEngine.endDictation` has called `history.save(_:)` since loop #9
+        (verified by `SpeakEngineIntegrationTests`).
+      - `import UniformTypeIdentifiers` (UTType.json) added to the moat allowlist in
+        both `MoatAuditTests.swift` and `scripts/verify-moat.sh`.
+- [x] **Hardware mute (SPEC §7.4 / product.md §8 #4 — was "not yet implemented")**
+      - **Enforcement point = the engine, not the UI** (bypass-proof): added an
+        actor-isolated `muted` flag to `SpeakEngine`; `beginDictation()` guards on it
+        and throws a new `SpeakError.microphoneMuted` **before** any `CaptureSession`
+        or transcriber is constructed → "when muted, no audio is read." Added
+        `isMuted` / `setMuted(_:)` / `toggleMute()`.
+      - **`SpeakError.microphoneMuted` (NEW case):** additive to the §6 verbatim list,
+        surfaced in a header comment. It is a *refusal*, not a fault — `DictationController`
+        catches it specifically and stays `.idle` (no `.error` flash, no overlay).
+      - **UI:** "Mute/Unmute Microphone" menu item + a "Muted — dictation disabled"
+        line; `DictationController.toggleMute()` mirrors `engine.isMuted` into a
+        published flag for the menu checkmark.
+      - **`SpeakTests/SpeakEngineMuteTests.swift` (NEW, 6 XCTest, all green, NO skip):**
+        uses a `RecordingTranscriber` that records whether `startStream` was ever
+        called. The load-bearing test — `testMutedRefusesBeginAndNeverStartsTranscriber`
+        — proves the privacy guarantee headlessly: muted → throws `.microphoneMuted`
+        **and** `didStartStream == false` **and** state stays `.idle`. Plus default-
+        unmuted, set/toggle semantics, unmuted-allows-begin, unmute-restores.
+      - **v0 scope (honest):** the mute *toggle* ships as a menu item; a global mute
+        *chord* (SPEC §7.4 wording) is a tracked, live-gated follow-up (human-
+        verification.md §4.6) — not built, to avoid unverifiable surface.
+      - README guarantee #4 updated from "design posture, not yet implemented" to the
+        engine-enforced + unit-tested reality.
+- [x] **Verification:** `make build` clean; `make test` **149 tests (129 XCTest +
+      20 Swift Testing), 5 XCTSkip (pre-existing live-FM), 0 failures**; `make
+      verify-moat` **7/7**; `make lint` **0 serious** (my new files: 0 violations).
+- [x] **SPEC §5–§7 feature scan (advisor-requested, to confirm no third gap):**
+      every §5 flow/UX item, §6 seam, and §7 privacy guarantee now maps to built +
+      tested code. Remaining items are live-gated (human-verification.md) — autonomous
+      scope is exhausted.
 
 ## Done (this session — 2026-06-21, loop run #15 — P12 public docs)
 

@@ -183,6 +183,44 @@ persistence are unit-verified (`OnboardingFlowTests` — 14 tests, all green). T
 - [ ] **Step progress dots**: five dots appear in the footer; the filled dot tracks the
       current step (welcome=1, microphone=2, accessibility=3, inputMonitoring=4, hotkey=5).
 
+### 4.5 History window (P9)
+
+The store layer (`HistoryStore`, SQLite) is unit-tested (`HistoryStoreTests`) and
+the engine writes an entry on every completed dictation (`SpeakEngine.endDictation`,
+best-effort). The **rendered window** (`HistoryView` / `HistoryWindowController`)
+is `[deferred — needs human verification]`.
+
+- [ ] **"History…" menu item opens a window** listing past dictations, newest first.
+- [ ] **Each row shows the cleaned text** (or raw when cleanup was off) plus the
+      timestamp and engine id.
+- [ ] **Live substring search** filters the list as you type (matches raw OR cleaned).
+- [ ] **"Clear History"** empties the list and the underlying store (confirm entries
+      do not reappear after relaunch).
+- [ ] **"Export…"** opens a save panel and writes a readable JSON file of all entries.
+- [ ] **A real dictation appears in the window** without relaunching (the engine and
+      the window share one `historyStore`).
+- [ ] **Empty state** shows "No dictations yet" on a fresh install, and "No matches"
+      when a search has no results.
+
+### 4.6 Hardware mute (SPEC §7.4 / product.md §8 #4)
+
+The mute **gate** is enforced in `SpeakEngine.beginDictation` (the only place that
+starts capture) and unit-tested headlessly (`SpeakEngineMuteTests` — a muted engine
+throws `.microphoneMuted` and the transcriber is *never started*, proving "no audio
+is read when muted"). The **live behavior + the "impossible to bypass" claim** are
+`[deferred — needs human verification]`.
+
+- [ ] **"Mute Microphone" menu item** toggles to "Unmute Microphone" and shows a
+      "Muted — dictation disabled" line while muted.
+- [ ] **While muted, double-tap Fn does nothing** — no overlay, menubar stays idle,
+      and (confirm via Console/`log stream`) no `CaptureSession`/STT start is logged.
+- [ ] **Unmuting restores dictation** — double-tap Fn works again immediately.
+- [ ] **`[deferred — design follow-up]` Global mute chord**: v0 ships the mute toggle
+      as a **menu item only**. A global hotkey *chord* for mute (SPEC §7.4 wording) is
+      not yet bound — it is the same class of deferred, live-gated work as the Fn
+      hotkey and would land in `HotkeyMonitor` with its own binding. Note here when
+      built; until then the menu toggle is the mute surface.
+
 ---
 
 ## 5. P12 — README demo GIF and screenshots

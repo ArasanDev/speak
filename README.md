@@ -89,6 +89,13 @@ every import and every networking/auth/paywall symbol in `SpeakCore` and `App`
 and fail the build if any appear. It is a re-runnable, regression-gated proof,
 not a promise. Current status: **7/7 checks pass**.
 
+Guarantee 4 (hardware mute) is enforced in the engine, not the UI: when muted,
+`SpeakEngine.beginDictation` refuses and the transcriber is never started — so no
+microphone capture is ever initiated. This is unit-tested headlessly
+(`SpeakEngineMuteTests` asserts the transcriber's `startStream` is never called
+while muted). In v0 the mute toggle is a menu item; a global mute *chord* is a
+tracked follow-up (`docs/human-verification.md` §4.6).
+
 > Contrast: Wispr uploads audio to OpenAI (STT) and a fine-tuned Llama (cleanup),
 > mandates an account, and has no offline mode.
 
@@ -97,7 +104,7 @@ not a promise. Current status: **7/7 checks pass**.
 ## Install
 
 **`speak` v0 is pre-release.** The engine, UI, and all core features are built
-and pass 143 tests. Live verification (paste compatibility with real apps, hotkey
+and pass 149 tests. Live verification (paste compatibility with real apps, hotkey
 firing with real permissions, notarized release) is in progress — see
 [`docs/human-verification.md`](docs/human-verification.md).
 
