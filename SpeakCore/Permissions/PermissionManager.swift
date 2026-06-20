@@ -3,12 +3,19 @@
 // Tracks and requests the OS permissions speak needs (AGENTS.md §2.2):
 // Microphone (P2), Accessibility + Input Monitoring (P5/P7). v0 P2 implements
 // the microphone path fully; accessibility is queryable now (used at P5), and
-// input monitoring is wired at P5 when CGEventTap actually needs it.
+// input monitoring is wired here at P7 using IOHIDCheckAccess.
 //
 // State/kind enums are verbatim from architecture.md §6.
+//
+// IOKit/HID note (P7): IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) is the
+// documented way to query Input Monitoring ("listen event") authorization without
+// prompting. Returns IOHIDAccessType: kIOHIDAccessTypeGranted / kIOHIDAccessTypeDenied
+// / kIOHIDAccessTypeUnknown. [verified: swiftc -typecheck against macOS 26 SDK, 2026-06-21]
+// Grant can only be done via System Settings; no programmatic grant API exists.
 
 import AVFoundation
 import ApplicationServices
+import IOKit.hid
 import os
 
 @MainActor
@@ -24,9 +31,23 @@ public final class PermissionManager {
         case .accessibility:
             return AXIsProcessTrusted() ? .granted : .denied
         case .inputMonitoring:
-            // Implemented at P5 (CGEventTap requires it). Reported as not-yet-known
-            // until then so onboarding (P7) doesn't claim a false state.
-            return .notDetermined
+            // IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) queries the Input
+            // Monitoring TCC permission without prompting. This is the approved
+            // IOKit/HID way to read the "listen event" (keyboard monitoring) gate.
+            // [verified: swiftc -typecheck against macOS 26 SDK, 2026-06-21]
+            // Live correctness (grant → granted, deny → denied) is
+            // [deferred — needs human verification with TCC prompt in real app].
+            let access = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
+            switch access {
+            case kIOHIDAccessTypeGranted:
+                return .granted
+            case kIOHIDAccessTypeUnknown:
+                // Not yet determined — user has never been asked.
+                return .notDetermined
+            default:
+                // kIOHIDAccessTypeDenied and any future values map to denied.
+                return .denied
+            }
         }
     }
 

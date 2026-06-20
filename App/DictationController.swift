@@ -96,6 +96,15 @@ final class DictationController: ObservableObject {
     /// an engine restart.
     private(set) var settingsStore: SettingsStore
 
+    // MARK: - Onboarding
+
+    /// The onboarding window controller. Created lazily on first show request.
+    /// `nil` after onboarding is complete so it can be released.
+    private var onboardingController: OnboardingWindowController?
+
+    /// The live `PermissionManager` (shared with the onboarding flow).
+    let permissionManager: PermissionManager
+
     // MARK: - Init
 
     init() {
@@ -104,6 +113,9 @@ final class DictationController: ObservableObject {
         // window and the engine share one source of truth.
         let store = SettingsStore()
         self.settingsStore = store
+
+        // --- Permission manager (shared with onboarding) ---
+        self.permissionManager = PermissionManager()
 
         // --- History store (best-effort) ---
         // `makeProductionStore()` throws if SQLite cannot be opened (e.g., disk
@@ -142,6 +154,10 @@ final class DictationController: ObservableObject {
     /// creates the overlay panel, and begins consuming events. Safe to call
     /// exactly once; calling again is a no-op (the prior eventTask is still running).
     func startMonitoring() {
+        // Show onboarding when any required permission is missing or the flag is not set.
+        // Evaluated before arming the hotkey so the user is prompted immediately.
+        showOnboardingIfNeeded()
+
         // Create the panel once here, on the main actor, so it is ready for the
         // first dictation without any lazy-init race.
         overlayPanel = TranscriptOverlayPanel(overlayModel: overlayModel)
@@ -156,12 +172,18 @@ final class DictationController: ObservableObject {
                 "DictationController: Accessibility permission denied — hotkey tap not armed."
             )
             permissionsNeeded = true
+            // P7 revocation path: re-surface onboarding so the user can re-grant.
+            // This handles mid-session revocation: if the user had previously granted
+            // accessibility but revoked it between launches, this is the detection point.
+            showOnboardingIfNeeded()
             return
         } catch SpeakError.inputMonitoringDenied {
             SpeakLog.permissions.error(
                 "DictationController: Input Monitoring permission denied — hotkey tap not armed."
             )
             permissionsNeeded = true
+            // P7 revocation path: same as above for Input Monitoring.
+            showOnboardingIfNeeded()
             return
         } catch {
             let hotkeyDetail = error.localizedDescription
@@ -182,6 +204,30 @@ final class DictationController: ObservableObject {
             }
             SpeakLog.hotkey.info("DictationController: event stream ended.")
         }
+    }
+
+    // MARK: - Onboarding
+
+    /// Shows the onboarding window when the evaluation machine says it is incomplete.
+    ///
+    /// Called at launch and whenever a session-start failure indicates a permission
+    /// was revoked mid-session (P7 done-when #3 — revocation → error path).
+    func showOnboardingIfNeeded() {
+        let eval = OnboardingStateMachine.evaluate(
+            manager: permissionManager,
+            hasCompletedOnboarding: settingsStore.hasCompletedOnboarding
+        )
+        guard !eval.isComplete else { return }
+        SpeakLog.permissions.info(
+            "DictationController: onboarding required — step=\(String(describing: eval.currentStep), privacy: .public)"
+        )
+        if onboardingController == nil {
+            onboardingController = OnboardingWindowController(
+                permissionManager: permissionManager,
+                settings: settingsStore
+            )
+        }
+        onboardingController?.show()
     }
 
     // MARK: - Private event handling

@@ -71,11 +71,12 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
 
     private enum Keys {
         // Prefix matches the bundle id convention; stable across versions.
-        static let cleanupEnabled  = "speak.settings.cleanupEnabled"
-        static let cleanupEngine   = "speak.settings.cleanupEngine"
-        static let sttEngine       = "speak.settings.sttEngine"
-        static let language        = "speak.settings.language"
-        static let pasteMode       = "speak.settings.pasteMode"
+        static let cleanupEnabled        = "speak.settings.cleanupEnabled"
+        static let cleanupEngine         = "speak.settings.cleanupEngine"
+        static let sttEngine             = "speak.settings.sttEngine"
+        static let language              = "speak.settings.language"
+        static let pasteMode             = "speak.settings.pasteMode"
+        static let hasCompletedOnboarding = "speak.settings.hasCompletedOnboarding"
     }
 
     // MARK: - Injected defaults (the testability seam)
@@ -174,6 +175,23 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
         set {
             objectWillChange.send()
             defaults.set(newValue.identifier, forKey: Keys.language)
+        }
+    }
+
+    // MARK: - Onboarding completion flag
+
+    /// `true` once the user has completed (or deliberately skipped) the
+    /// first-run onboarding flow. When `false`, the onboarding window is
+    /// presented on launch. Defaults to `false` so a fresh install always shows
+    /// onboarding. [decision: false default — new installs must onboard]
+    public var hasCompletedOnboarding: Bool {
+        get { defaults.bool(forKey: Keys.hasCompletedOnboarding) }
+        set {
+            objectWillChange.send()
+            defaults.set(newValue, forKey: Keys.hasCompletedOnboarding)
+            SpeakLog.storage.info(
+                "SettingsStore: hasCompletedOnboarding → \(newValue, privacy: .public)"
+            )
         }
     }
 

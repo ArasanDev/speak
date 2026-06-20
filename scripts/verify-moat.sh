@@ -80,8 +80,10 @@ ALLOWED_IMPORTS=(
     "CoreGraphics"
     "ApplicationServices"
     "Carbon.HIToolbox"
+    "IOKit.hid"         # IOHIDCheckAccess — P7 Input Monitoring status (Apple IOKit)
     "SQLite3"
     "SpeakCore"
+    "Combine"           # Apple; ObservableObject in SpeakCore
 )
 
 IMPORT_VIOLATIONS=0

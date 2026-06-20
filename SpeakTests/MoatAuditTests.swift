@@ -129,6 +129,7 @@ final class MoatAuditTests: XCTestCase {
         "CoreGraphics",
         "ApplicationServices",
         "Carbon.HIToolbox",
+        "IOKit.hid",        // IOHIDCheckAccess — P7 Input Monitoring status (Apple IOKit)
         "SQLite3",
         "SpeakCore",
     ]

@@ -1,0 +1,368 @@
+// App/Onboarding/OnboardingView.swift
+//
+// The first-run onboarding window content.
+//
+// DESIGN (product.md §7.3 + 3 states per screen):
+//   Each step has three states:
+//     - loading/in-progress: permission request in-flight (spinner + disabled button)
+//     - active/empty: permission not yet granted (Why text + action button)
+//     - granted/done: permission granted (checkmark + Continue button)
+//
+// HONESTY BOUNDARY:
+//   The rendered flow, system prompts, and deep-link correctness are
+//   [deferred — needs human verification: human-verification.md §4.4].
+//   The step-state machine is [verified] by OnboardingFlowTests.
+//
+// THREADING:
+//   SwiftUI View bodies are @MainActor by default.
+//   `viewModel` is @StateObject (owns lifetime) or @ObservedObject (injected).
+
+import SwiftUI
+import SpeakCore
+
+// MARK: - OnboardingView
+
+/// The root onboarding view. Rendered inside `OnboardingWindowController`.
+struct OnboardingView: View {
+    @ObservedObject var viewModel: OnboardingViewModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            stepContent
+            Spacer(minLength: 0)
+            footer
+        }
+        .frame(width: 480, height: 400)
+        .background(.background)
+        .onAppear { viewModel.onAppear() }
+        .onDisappear { viewModel.onDisappear() }
+    }
+
+    // MARK: - Step dispatch
+
+    @ViewBuilder
+    private var stepContent: some View {
+        switch viewModel.displayedStep {
+        case .welcome:
+            WelcomeStepView(onContinue: { viewModel.advance() })
+        case .microphone:
+            PermissionStepView(
+                kind: .microphone,
+                status: viewModel.evaluation.blockingPermissions.contains(.microphone)
+                    ? .needed : .granted,
+                isLoading: viewModel.isRequestingMic,
+                onAction: { viewModel.requestMicrophone() },
+                onContinue: { viewModel.advance() },
+                onOpenSettings: { viewModel.openSystemSettings(for: .microphone) }
+            )
+        case .accessibility:
+            PermissionStepView(
+                kind: .accessibility,
+                status: viewModel.evaluation.blockingPermissions.contains(.accessibility)
+                    ? .needed : .granted,
+                isLoading: false,
+                onAction: { viewModel.openSystemSettings(for: .accessibility) },
+                onContinue: { viewModel.advance() },
+                onOpenSettings: { viewModel.openSystemSettings(for: .accessibility) }
+            )
+        case .inputMonitoring:
+            PermissionStepView(
+                kind: .inputMonitoring,
+                status: viewModel.evaluation.blockingPermissions.contains(.inputMonitoring)
+                    ? .needed : .granted,
+                isLoading: false,
+                onAction: { viewModel.openSystemSettings(for: .inputMonitoring) },
+                onContinue: { viewModel.advance() },
+                onOpenSettings: { viewModel.openSystemSettings(for: .inputMonitoring) }
+            )
+        case .hotkey:
+            HotkeyStepView(onContinue: { viewModel.advance() })
+        case .done:
+            DoneStepView()
+        }
+    }
+
+    // MARK: - Footer
+
+    private var footer: some View {
+        HStack {
+            Button("Skip for now") {
+                viewModel.skip()
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .font(.caption)
+            Spacer()
+            progressDots
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+    }
+
+    /// Step-position dots (visual only — pure decoration).
+    private var progressDots: some View {
+        let allSteps: [OnboardingStep] = [.welcome, .microphone, .accessibility, .inputMonitoring, .hotkey]
+        let currentIndex = allSteps.firstIndex(of: viewModel.displayedStep) ?? 0
+        return HStack(spacing: 6) {
+            ForEach(0..<allSteps.count, id: \.self) { idx in
+                Circle()
+                    .fill(idx == currentIndex ? Color.accentColor : Color.secondary.opacity(0.3))
+                    .frame(width: 7, height: 7)
+            }
+        }
+    }
+}
+
+// MARK: - WelcomeStepView
+
+private struct WelcomeStepView: View {
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "waveform.circle.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(.tint)
+                .padding(.top, 40)
+
+            VStack(spacing: 8) {
+                Text("Welcome to speak")
+                    .font(.title.bold())
+                Text("speak turns your voice into polished text, entirely on your Mac. Nothing leaves your device.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 340)
+            }
+
+            Button("Get Started") {
+                onContinue()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        }
+        .padding(.horizontal, 40)
+    }
+}
+
+// MARK: - PermissionStepView
+
+private enum PermissionStatus {
+    case needed
+    case granted
+}
+
+private struct PermissionStepView: View {
+    let kind: PermissionKind
+    let status: PermissionStatus
+    let isLoading: Bool
+    let onAction: () -> Void
+    let onContinue: () -> Void
+    let onOpenSettings: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            // Icon
+            ZStack {
+                Circle()
+                    .fill(iconBackground)
+                    .frame(width: 72, height: 72)
+                Image(systemName: iconName)
+                    .font(.system(size: 32))
+                    .foregroundStyle(iconForeground)
+            }
+            .padding(.top, 36)
+
+            // Title + description
+            VStack(spacing: 8) {
+                Text(title)
+                    .font(.title2.bold())
+                Text(description)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 360)
+            }
+
+            // Action area
+            switch status {
+            case .needed:
+                if isLoading {
+                    // Loading state: in-progress spinner
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Requesting access\u{2026}")
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    VStack(spacing: 10) {
+                        Button(actionLabel) {
+                            onAction()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+
+                        // For mic denied, also offer Settings deep-link.
+                        if kind == .microphone {
+                            Button("Open System Settings instead") {
+                                onOpenSettings()
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                        }
+                    }
+                }
+
+            case .granted:
+                // Success state: green checkmark + Continue
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text("Permission granted")
+                        .foregroundStyle(.secondary)
+                }
+                Button("Continue") {
+                    onContinue()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            }
+        }
+        .padding(.horizontal, 40)
+    }
+
+    // MARK: - Per-kind content
+
+    private var title: String {
+        switch kind {
+        case .microphone:     return "Microphone Access"
+        case .accessibility:  return "Accessibility Access"
+        case .inputMonitoring: return "Input Monitoring"
+        }
+    }
+
+    private var description: String {
+        switch kind {
+        case .microphone:
+            return "speak captures your voice to transcribe it. Audio is processed on-device and never sent anywhere."
+        case .accessibility:
+            // swiftlint:disable:next line_length
+            return "speak needs Accessibility access to simulate the Cmd+V keystroke that pastes your transcribed text at the cursor."
+        case .inputMonitoring:
+            // swiftlint:disable:next line_length
+            return "Input Monitoring lets speak detect your double-tap Fn hotkey so it can start listening while another app has focus."
+        }
+    }
+
+    private var actionLabel: String {
+        switch kind {
+        case .microphone:
+            return "Grant Microphone Access"
+        case .accessibility, .inputMonitoring:
+            return "Open System Settings"
+        }
+    }
+
+    private var iconName: String {
+        switch status {
+        case .granted:
+            return "checkmark.circle.fill"
+        case .needed:
+            switch kind {
+            case .microphone:      return "mic.fill"
+            case .accessibility:   return "hand.point.up.left.fill"
+            case .inputMonitoring: return "keyboard.fill"
+            }
+        }
+    }
+
+    private var iconBackground: Color {
+        status == .granted ? Color.green.opacity(0.15) : Color.accentColor.opacity(0.12)
+    }
+
+    private var iconForeground: Color {
+        status == .granted ? .green : .accentColor
+    }
+}
+
+// MARK: - HotkeyStepView
+
+private struct HotkeyStepView: View {
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "fn.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(.tint)
+                .padding(.top, 40)
+
+            VStack(spacing: 8) {
+                Text("Your Hotkey: Double-tap Fn")
+                    .font(.title2.bold())
+                VStack(spacing: 6) {
+                    Text("Double-tap the Fn key to start dictating. Tap it once to stop.")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                    Text("speak listens while you work in any app — no need to switch focus.")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 360)
+
+                Text("You can change the hotkey in Settings at any time.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 4)
+            }
+
+            Button("Finish Setup") {
+                onContinue()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        }
+        .padding(.horizontal, 40)
+    }
+}
+
+// MARK: - DoneStepView
+
+private struct DoneStepView: View {
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(.green)
+                .padding(.top, 40)
+
+            VStack(spacing: 8) {
+                Text("You\u{2019}re all set.")
+                    .font(.title.bold())
+                Text("Double-tap Fn to start dictating. speak will paste polished text wherever your cursor is.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 340)
+            }
+            Text("This window will close automatically.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 40)
+    }
+}
+
+// MARK: - Preview
+
+#if DEBUG
+#Preview("Welcome") {
+    let pm = PermissionManager()
+    let store = SettingsStore()
+    let vm = OnboardingViewModel(permissionManager: pm, settings: store)
+    return OnboardingView(viewModel: vm)
+}
+#endif
