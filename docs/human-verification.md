@@ -102,7 +102,38 @@ unit-tested; the **rendered, interactive behavior** needs a human running the ap
 - [ ] (Polish) Consider distinct colors (red/yellow/green) — currently
       monochrome SF Symbols; cosmetic.
 
-> Rows for P4 overlay and P7 onboarding are added here as those screens land.
+### 4.3 Partial-transcript overlay (P4)
+
+The text-accumulation logic (`OverlayTextAccumulator`) is unit-verified (11 tests,
+all green). The overlay's **live behavior** is `[deferred — needs human verification]`:
+
+- [ ] **Overlay appears on listening**: double-tap Fn → the translucent card appears
+      near the top-center of the screen (below the menubar) while the menubar icon
+      changes to "listening".
+- [ ] **Panel does NOT steal focus**: while the overlay is visible, keyboard focus
+      remains in the app you were dictating into (TextEdit, Slack, etc.). Typing in
+      that app still works normally while the overlay is shown.
+- [ ] **Partials update in real time**: spoken words appear in the overlay as the
+      transcriber produces partial chunks. The perceived lag between speech and
+      overlay update should meet the `L_partial` < 200 ms budget (`benchmark.md` §7).
+      `[deferred — benchmark.md §7 L_partial; measured at build time as 42 ms p50
+       on a file-fed proxy — live lag includes mic buffer and SpeechAnalyzer overhead]`
+- [ ] **"Listening…" placeholder shown before first partial**: between the moment
+      the overlay appears and when the first non-empty chunk arrives, the card shows
+      "Listening…" (empty-state placeholder), not a blank card.
+- [ ] **Empty chunks do not blank the overlay**: if the transcriber momentarily
+      emits an empty string between hypotheses, the previous text stays displayed
+      (newest-non-empty rule — verified in unit tests; confirm live behavior matches).
+- [ ] **Overlay hides on done**: after endDictation() (single-tap Fn), the overlay
+      disappears before the menubar switches to "processing". The text is already
+      pasted at the cursor.
+- [ ] **Overlay hides on error**: if the dictation fails (e.g. STT unavailable),
+      the overlay also hides and does not linger.
+- [ ] **Multi-space / full-screen**: the overlay appears when the focused app is in
+      a full-screen space (panel `collectionBehavior` includes `.fullScreenAuxiliary`
+      and `.canJoinAllSpaces`).
+
+> Rows for P7 onboarding are added here as that screen lands.
 
 ---
 

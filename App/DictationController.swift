@@ -33,6 +33,7 @@
 
 import Foundation
 import SwiftUI
+import AppKit
 import SpeakCore
 
 // MARK: - NullHistoryStore
@@ -61,11 +62,31 @@ final class DictationController: ObservableObject {
     /// Drives a ⚠️ hint in the menu so the user knows to grant permissions.
     @Published private(set) var permissionsNeeded: Bool = false
 
+    /// The current running partial transcript text (empty when not listening).
+    /// Exposed for the overlay view; not directly observed by SwiftUI here —
+    /// the overlay panel has its own `OverlayViewModel`.
+    @Published private(set) var partialText: String = ""
+
     // MARK: - Private components
 
     private let engine: SpeakEngine
     private let monitor: HotkeyMonitor
     private var eventTask: Task<Void, Never>?
+
+    // MARK: - Overlay (P4)
+
+    /// View-model shared between this controller and the overlay panel's SwiftUI view.
+    /// Created once; updated on the main actor via the partials task.
+    private let overlayModel = OverlayViewModel()
+
+    /// The floating overlay panel. Created lazily on first `startMonitoring()` call
+    /// (NSPanel init requires a main-thread context — fine since this is @MainActor).
+    /// Stored as `NSPanel` to avoid a hard import of `TranscriptOverlayPanel` type
+    /// in tests that only depend on `SpeakCore`.
+    private var overlayPanel: TranscriptOverlayPanel?
+
+    /// Task that drains the `currentPartials()` stream and updates `overlayModel`.
+    private var partialsTask: Task<Void, Never>?
 
     // MARK: - Settings store
 
@@ -117,10 +138,13 @@ final class DictationController: ObservableObject {
 
     // MARK: - Public API
 
-    /// Call once from `applicationDidFinishLaunching`. Arms the hotkey tap and
-    /// begins consuming events. Safe to call exactly once; calling again is a no-op
-    /// (the prior eventTask is still running).
+    /// Call once from `applicationDidFinishLaunching`. Arms the hotkey tap,
+    /// creates the overlay panel, and begins consuming events. Safe to call
+    /// exactly once; calling again is a no-op (the prior eventTask is still running).
     func startMonitoring() {
+        // Create the panel once here, on the main actor, so it is ready for the
+        // first dictation without any lazy-init race.
+        overlayPanel = TranscriptOverlayPanel(overlayModel: overlayModel)
         SpeakLog.hotkey.info("DictationController: startMonitoring() called — arming hotkey tap.")
 
         do {
@@ -177,6 +201,9 @@ final class DictationController: ObservableObject {
             try await engine.beginDictation()
             icon = .listening
             SpeakLog.engine.info("DictationController: beginDictation succeeded → .listening")
+
+            // P4: spawn the partials-streaming task and show the overlay.
+            startOverlay()
         } catch {
             icon = .error
             SpeakLog.engine.error(
@@ -193,6 +220,10 @@ final class DictationController: ObservableObject {
             // is brief, but the state is still surfaced rather than skipped.
             icon = .processing
             _ = try await engine.endDictation()
+
+            // P4: hide the overlay immediately when dictation succeeds (text pasted).
+            stopOverlay()
+
             icon = .done
             SpeakLog.engine.info("DictationController: endDictation succeeded → .done")
             // Briefly show .done then return to .idle. Duration = 600 ms, the
@@ -203,10 +234,70 @@ final class DictationController: ObservableObject {
             try? await Task.sleep(nanoseconds: 600_000_000)
             icon = .idle
         } catch {
+            // P4: hide the overlay on error too — dictation is over.
+            stopOverlay()
+
             icon = .error
             SpeakLog.engine.error(
                 "DictationController: endDictation failed — \(error.localizedDescription, privacy: .public)"
             )
         }
+    }
+
+    // MARK: - Overlay lifecycle (P4)
+
+    /// Show the overlay panel and begin streaming partial chunks into it.
+    ///
+    /// Called immediately after `beginDictation()` succeeds. Cancels any prior
+    /// partials task (defensive — there should never be one) before spawning a
+    /// new one so a stale stream cannot pollute the new session.
+    private func startOverlay() {
+        // Reset text and show the panel first so the user gets instant feedback.
+        overlayModel.partialText = ""
+        overlayPanel?.show()
+
+        // Cancel any residual task from a prior dictation.
+        partialsTask?.cancel()
+        partialsTask = nil
+
+        partialsTask = Task { [weak self] in
+            guard let self else { return }
+
+            // `currentPartials()` awaits the engine actor and returns the stream
+            // for the *current* session (nil if the session already finished).
+            guard let stream = await self.engine.currentPartials() else {
+                SpeakLog.engine.info("DictationController: partials stream unavailable (session may have ended).")
+                return
+            }
+
+            var accumulator = OverlayTextAccumulator()
+
+            for await chunk in stream {
+                // Check for cancellation before each update — the task may be
+                // cancelled by stopOverlay() racing with the stream's natural end.
+                if Task.isCancelled { break }
+
+                let displayed = accumulator.next(chunk)
+                // All @Published mutations must happen on the main actor.
+                await MainActor.run {
+                    self.overlayModel.partialText = displayed
+                    self.partialText = displayed
+                }
+            }
+
+            SpeakLog.engine.info("DictationController: partials stream finished.")
+        }
+    }
+
+    /// Hide the overlay and tear down the partials task.
+    ///
+    /// Called on `.done` and `.error` (both terminate the dictation).
+    private func stopOverlay() {
+        partialsTask?.cancel()
+        partialsTask = nil
+        overlayModel.partialText = ""
+        partialText = ""
+        overlayPanel?.hide()
+        SpeakLog.engine.info("DictationController: overlay hidden.")
     }
 }
