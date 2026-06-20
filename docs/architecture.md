@@ -388,7 +388,7 @@ notDetermined ──request()──► requesting ──granted──► granted
 | `ApplicationServices` | `CGEventTap`, `CGEvent`, `CGEventSource` | global Fn detection + Cmd+V simulation |
 | `AppKit` | `NSPasteboard`, `NSStatusItem`, `NSWorkspace` | paste write, menubar, focused-app detection |
 | `SwiftUI` | `MenuBarExtra`, `Settings`, `@AppStorage` | UI shell, settings persistence |
-| `FoundationModels` | `LanguageModelSession`, `LanguageModel` | `[verified]` on-device LLM for cleanup; macOS 26, Apple Silicon + Neural Engine |
+| `FoundationModels` | `LanguageModelSession`, `SystemLanguageModel` | `[verified]` (swiftc, macOS 26 SDK) on-device LLM for cleanup; AS + Neural Engine. NB: `LanguageModel` does **not** resolve — use `SystemLanguageModel` |
 | `os` | `Logger` | structured logging (no `print`) |
 | `Security` | Hardened Runtime, notarization | Gatekeeper compliance |
 | `Accessibility` | `AXUIElement` (v1) | per-app paste fallback |

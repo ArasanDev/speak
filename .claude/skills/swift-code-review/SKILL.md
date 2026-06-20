@@ -33,6 +33,7 @@ the diff against each, and report violations with `file:line`.
 - **Never read the pasteboard** — only write. Any `NSPasteboard` *read* (`pasteboard.string(forType:)`, `pasteboardItems`) fails review outright.
 - **Apple frameworks only (v0).** No third-party runtime dependency (SPM/Cocoapods/Carthage). Flag any new `import` of a non-Apple module.
 - **Cleanup unavailability ≠ error.** When Foundation Models is unavailable, the session must fall back to raw text and reach `done`, never `error`.
+- **Capture path + permissions:** a diff touching the capture path must honor `AGENTS.md` §2.7 (hardware mute → no audio captured); a diff adding an OS permission request must honor `AGENTS.md` §2.2 (exactly three permissions: Microphone, Accessibility, Input Monitoring — no more, no fewer).
 
 ## How to review
 

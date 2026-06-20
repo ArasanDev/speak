@@ -33,8 +33,9 @@ Onboarding UI lives at `App/Onboarding/`. It is a SwiftUI flow that walks the us
 - **Each permission screen must explain WHY** it is needed in plain language before requesting it. Do not show a system prompt cold.
 - **Deep-link to System Settings** for manual-grant permissions using `x-apple.systempreferences:com.apple.preference.security`. Do not instruct users to navigate there manually.
 - **Permission acquisition is asymmetric:**
-  - Microphone: runtime prompt via `AVAudioSession` / `AVCaptureDevice` — the OS shows the dialog.
+  - Microphone: runtime prompt via `AVCaptureDevice` — the OS shows the dialog. (`AVAudioSession` is unavailable on macOS; `PermissionManager.swift` uses `AVCaptureDevice.requestAccess(for: .audio)`.)
   - Accessibility + Input Monitoring: cannot be granted programmatically — show the deep-link button and poll/observe for the grant.
+  - Note: `PermissionManager.swift` currently stubs `inputMonitoring` as `.notDetermined` until P5 — that is the wiring point for Input Monitoring permission checking.
 - **Mid-session revocation must be detected.** If the user revokes a permission while the app is active, transition to error state immediately; do not crash or silently continue.
 - Use `os.Logger`. No `print`. No force-unwrap. No `try!`.
 - v0: Apple frameworks only. No third-party permission libraries.
@@ -43,7 +44,7 @@ Onboarding UI lives at `App/Onboarding/`. It is a SwiftUI flow that walks the us
 
 - `PermissionManager` tracks `PermissionState` for all three kinds and publishes state changes.
 - Onboarding flow presents each permission step with a clear WHY explanation and the appropriate action (runtime prompt for mic; deep-link button for accessibility + input monitoring).
-- Deep-link `x-apple.systempreferences:com.apple.preference.security` opens System Settings to the correct pane.
+- Deep-link `x-apple.systempreferences:com.apple.preference.security` (with pane anchors such as `Privacy_Microphone`, `Privacy_Accessibility`, `Privacy_ListenEvent` on macOS 13+) is used for manual-grant permissions — **verify at implementation time** that the routing opens the correct pane on macOS 26 (runtime behavior, not statically verifiable).
 - App does not proceed past onboarding until all three permissions are `granted`.
 - Mid-session revocation of any permission is detected and transitions the app to error state with a recoverable prompt (re-open settings).
 - Unit tests cover all `PermissionState` transitions for each `PermissionKind`.

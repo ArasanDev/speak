@@ -10,14 +10,14 @@ description: Use when implementing or modifying the Apple SpeechAnalyzer speech-
 Protocol: `Transcribing` — lives at `SpeakCore/STT/Transcriber.swift`
 
 ```swift
-protocol Transcribing {
+public protocol Transcribing: Sendable {
     var id: String { get }
     func startStream(locale: Locale) -> AsyncThrowingStream<TranscriptChunk, Error>
     func stop() async
 }
 ```
 
-The v0 concrete implementation is `AppleSpeechTranscriber`, backed by Apple's **SpeechAnalyzer** framework (macOS 26, on-device only). It emits `TranscriptChunk(text: String, isFinal: Bool, timestamp: TimeInterval)` values through the stream. The engine `id` for this implementation is `"apple-speech-en-US"`.
+The v0 concrete implementation is `AppleSpeechTranscriber`, backed by Apple's **SpeechAnalyzer** framework (macOS 26, on-device only). It emits `TranscriptChunk(text: String, isFinal: Bool, timestamp: Date)` values through the stream. The engine `id` for this implementation is `"apple-speech-en-US"`.
 
 ## Hard Constraints
 
@@ -37,6 +37,6 @@ The v0 concrete implementation is `AppleSpeechTranscriber`, backed by Apple's **
 
 **Do not rely on recalled SpeechAnalyzer API surface.** The streaming API shape — how you obtain an analyzer instance, how you feed audio buffers, and how results arrive — must be ground-truthed against current Apple documentation before writing any code.
 
-Use the `apple-docs-mcp` MCP server (if available in this session) to look up `SpeechAnalyzer` directly. Otherwise, fetch from `https://developer.apple.com/documentation/speech`. Tag every API claim: `[verified]` when confirmed from docs or headers, `[inferred]` when extrapolated, `[unverified]` when untested. If a verified fact contradicts a prior claim, stop and surface it before continuing.
+Use the `apple-docs-mcp` MCP server (if available in this session) to look up `SpeechAnalyzer` directly. Otherwise, fetch from `https://developer.apple.com/documentation/speech`. Additionally, `swiftc -typecheck -sdk "$(xcrun --show-sdk-path)" -target arm64-apple-macosx26.0 <file>` is now the strongest available local check for symbol resolution — use it to confirm any API symbol claim (note: it confirms symbol availability, not full streaming-method signatures). Tag every API claim: `[verified]` when confirmed from docs, headers, or swiftc probe, `[inferred]` when extrapolated, `[unverified]` when untested. If a verified fact contradicts a prior claim, stop and surface it before continuing.
 
-Architecture detail for this surface lives in `docs/architecture.md` §14.1.
+Architecture detail for this surface lives in `docs/architecture.md` §10.2 (API shape), §14 (day-0 verification).

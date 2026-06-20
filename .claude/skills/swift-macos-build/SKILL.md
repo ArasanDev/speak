@@ -21,24 +21,36 @@ runtime deps — they don't violate the no-third-party-deps rule.
 
 ## Toolchain reality (check before assuming)
 
-Run `xcodebuild -version` and `swift --version` first. As of the current state,
-**only Command Line Tools may be present** (no full Xcode) — in which case
-`xcodebuild`/`.app` bundling is **unavailable** and must be reported as a
-verification gap, not faked. The CLT SDK still typechecks `import
-Speech`/`FoundationModels`/`AVFoundation`/`SQLite3` (`swiftc -typecheck`), so
-framework-agnostic `SpeakCore` logic can be checked even without Xcode. Mandated
-build system is the **`.xcodeproj`** (no SwiftPM detour — Open Q#5, resolved).
+Run `xcodebuild -version` and `swift --version` first. **Xcode 26.5 (Build 17F42)
+is installed and active** — the full `xcodebuild` build/test/`.app` path is
+available. (The repo is still pre-build per CLAUDE.md — `make build` hasn't been
+run clean yet — so phrase it as the toolchain CAN produce a `.app`, not that
+`speak` builds clean today.) The SDK also supports `swiftc -typecheck -sdk
+"$(xcrun --show-sdk-path)" -target arm64-apple-macosx26.0 <file>` as a fast,
+cutoff-proof technique for verifying Apple API symbol availability before writing
+code — use it to confirm any `import Speech`/`FoundationModels`/`AVFoundation`
+claim rather than relying on recalled API surface. Mandated build system is the
+**`.xcodeproj`** (no SwiftPM detour — Open Q#5, resolved).
 
-The native **Xcode 26.3 MCP** (build/test/diagnostics/SwiftUI-preview verify) and
-the **`swift-lsp`** plugin (SourceKit-LSP) become available once full Xcode is
-installed — prefer them over hand-parsing build logs. See `docs/agent-tooling.md`.
+**XcodeGen:** `Speak.xcodeproj` is **generated** from `project.yml` by XcodeGen
+(build-time tooling, git-ignored — see `.gitignore` "Speak.xcodeproj/" and
+Makefile L3-9). A clean clone has **no project file** — you must run
+`brew install xcodegen` first. `make build` runs `xcodegen generate` automatically
+before invoking `xcodebuild` (Makefile L24-29: `build: generate`).
+
+The native **Xcode 26.5 MCP** (build/test/diagnostics/SwiftUI-preview verify) and
+the **`swift-lsp`** plugin (SourceKit-LSP) are available — prefer them over
+hand-parsing build logs. For live MCP/tooling truth (incl. the `xcode` bridge's
+one-time in-Xcode authorization caveat), see `docs/agent-tooling.md` and
+`.mcp.json`.
 
 ## P0 setup deliverables (roadmap P0 done-when)
 
-- `make build` produces a runnable `.app` from a clean clone
+- `brew install xcodegen` installed; `xcodegen generate` produces `Speak.xcodeproj` from `project.yml`
+- `make build` produces a runnable `.app` from a clean clone (runs `xcodegen generate` first)
 - `SpeakCore.framework` is a **separate build target** (the portability seam)
 - CI (GitHub Actions) runs on every push: `xcodebuild build` + `swiftlint`
-- `LICENSE` MIT; `.gitignore` covers `DerivedData/`, `.build/`, `*.xcuserstate`, `.DS_Store`
+- `LICENSE` MIT; `.gitignore` covers `DerivedData/`, `.build/`, `*.xcuserstate`, `.DS_Store`, `Speak.xcodeproj/`
 
 ## The verification gate — run before marking ANY task done (`AGENTS.md` §6)
 

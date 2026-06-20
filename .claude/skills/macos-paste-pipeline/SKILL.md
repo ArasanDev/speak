@@ -38,4 +38,6 @@ Text selection rule: use `TranscriptionResult.cleanedText` when cleanup is on AN
 
 ## Verify at Implementation Time
 
-Confirm the `CGEvent` keyboard-event approach for Cmd+V simulation against current Apple docs — specifically which event types to post, whether `CGEventPost` or `CGEventTapPostEvent` is appropriate for this use case, and any macOS 26 changes to synthetic event handling. Use `apple-docs-mcp` (if available) or `https://developer.apple.com/documentation/coregraphics`. Tag all API claims before committing.
+`docs/architecture.md §11` already contains a reference `PasteboardWriter`/`simulateCmdV()` implementation — start from it rather than re-deriving.
+
+Confirm the `CGEvent` keyboard-event approach for Cmd+V simulation against current Apple docs — specifically which event types to post. Note: `CGEventPost` and `CGEventTapPostEvent` are **free C functions obsoleted in Swift 3**; use the Swift instance method `CGEvent.post(tap: .cghidEventTap)` instead. Confirm the posting tap location at implementation time. Check any macOS 26 changes to synthetic event handling. Use `apple-docs-mcp` (if available) or `https://developer.apple.com/documentation/coregraphics`. Tag all API claims before committing.

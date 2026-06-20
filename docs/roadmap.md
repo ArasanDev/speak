@@ -75,7 +75,7 @@ Silicon). `[verified]` Feed PCM buffers in, emit `TranscriptChunk` (partial
 - [ ] Spoken audio produces **partial** transcripts (streaming, live)
 - [ ] Spoken audio produces a **final** transcript at session end
 - [ ] Engine id is `"apple-speech-en-US"`
-- [ ] Verify against `architecture.md` §14.1 (re-check SpeechAnalyzer API
+- [ ] Verify against `architecture.md` §10.2 (re-check SpeechAnalyzer API
       surface vs current Apple docs before coding)
 
 ---
