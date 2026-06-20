@@ -213,8 +213,14 @@ red dot (listening), yellow spinner (processing), green flash (done), red X
 (error).
 
 **Done when**:
-- [ ] Icon changes color on every state transition
-- [ ] "Done" green flash lasts 600ms then returns to idle
+- [~] Icon changes on every state transition — `[verified]` the wiring:
+      `MenuBarLabel` renders a distinct SF Symbol per `MenubarIcon`
+      (idle/listening/processing/done/error, `MenubarIconTests`), `DictationController`
+      drives idle→listening→**processing**→done→idle. **Distinct *color*** (red/
+      yellow/green vs monochrome SF Symbols) + the live visual `[deferred — visual]`.
+- [~] "Done" green flash lasts 600ms then returns to idle — `[verified]` the
+      600 ms timing in `DictationController.endDictation` (single-sourced to this
+      row); the live visual flash `[deferred — visual]`.
 
 ---
 

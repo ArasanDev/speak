@@ -187,6 +187,11 @@ final class DictationController: ObservableObject {
 
     private func endDictation() async {
         do {
+            // Show .processing during STT-finalize + cleanup (the await below),
+            // so the menubar reflects every transition (idle→listening→processing
+            // →done→idle), per roadmap P8. With Foundation Models unavailable this
+            // is brief, but the state is still surfaced rather than skipped.
+            icon = .processing
             _ = try await engine.endDictation()
             icon = .done
             SpeakLog.engine.info("DictationController: endDictation succeeded → .done")

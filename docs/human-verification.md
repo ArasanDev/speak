@@ -94,8 +94,15 @@ unit-tested; the **rendered, interactive behavior** needs a human running the ap
       Foundation Models (Ollama disabled placeholder); paste-mode picker present.
 - [ ] Settings persist after quitting + relaunching.
 
-> Rows for P8 menubar states, P4 overlay, and P7 onboarding are added here as
-> those screens land.
+### 4.2 Menubar states (P8)
+- [ ] The menubar icon visibly changes through idle → listening → processing →
+      done → idle across a real dictation (symbol changes are wired + tested;
+      confirm they actually render on each transition).
+- [ ] The "done" indication shows ~600ms then returns to idle.
+- [ ] (Polish) Consider distinct colors (red/yellow/green) — currently
+      monochrome SF Symbols; cosmetic.
+
+> Rows for P4 overlay and P7 onboarding are added here as those screens land.
 
 ---
 
