@@ -1,0 +1,86 @@
+# project.yml — XcodeGen project definition for `speak`.
+#
+# XcodeGen is BUILD-TIME tooling only (never linked into the shipped app), so it
+# does not touch the "Apple-frameworks-only at runtime" moat (AGENTS.md §2.4).
+# The generated Speak.xcodeproj is the canonical build system mandated by
+# architecture.md §5: app target + SpeakCore.framework + SpeakTests.
+#
+# Regenerate with `xcodegen generate` (wired into `make build`). The .swift
+# sources live in their final §5 folders and are assigned to targets here.
+
+name: Speak
+
+options:
+  bundleIdPrefix: com.speak
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"            # Swift 5 language mode (compiler is 6.3.2)
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    # Local dev signing: ad-hoc so the .app launches without a Developer ID.
+    # Real Developer ID signing + notarization arrives at P11.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGNING_ALLOWED: "NO"
+
+targets:
+
+  SpeakCore:
+    type: framework
+    platform: macOS
+    sources:
+      - SpeakCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.speak.SpeakCore
+        GENERATE_INFOPLIST_FILE: "YES"
+        # Ad-hoc sign the framework so the embedding app can launch locally.
+        CODE_SIGNING_ALLOWED: "YES"
+        CODE_SIGN_IDENTITY: "-"
+
+  Speak:
+    type: application
+    platform: macOS
+    sources:
+      - App
+    dependencies:
+      - target: SpeakCore
+        embed: true
+    info:
+      path: App/Info.generated.plist
+      properties:
+        LSUIElement: true            # menubar-only, no Dock icon
+        CFBundleDisplayName: speak
+        CFBundleName: speak
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.speak.app
+        CODE_SIGNING_ALLOWED: "YES"
+        CODE_SIGN_IDENTITY: "-"
+
+  SpeakTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - SpeakTests
+    dependencies:
+      - target: SpeakCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
+
+schemes:
+  Speak:
+    build:
+      targets:
+        Speak: all
+        SpeakTests: [test]
+    test:
+      targets:
+        - SpeakTests
+    run:
+      config: Debug

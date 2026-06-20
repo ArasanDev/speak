@@ -29,11 +29,13 @@ directory layout per `architecture.md` §5, `README.md` skeleton, `LICENSE`
 `Makefile`/`justfile` for common tasks, GitHub Actions CI (build + lint).
 
 **Done when**:
-- [ ] `make build` produces a runnable `.app` from a clean clone
-- [ ] `SpeakCore.framework` is a separate build target (the portability seam)
-- [ ] CI runs on every push: `xcodebuild build` + `swiftlint`
-- [ ] `LICENSE` is MIT; `.gitignore` covers `DerivedData/`, `.build/`,
-      `*.xcuserstate`, `DS_Store`
+- [x] `make build` produces a runnable `.app` from a clean clone ✓ (XcodeGen →
+      `xcodebuild`; verified `make clean && make build`)
+- [x] `SpeakCore.framework` is a separate build target (the portability seam) ✓
+- [~] CI runs on every push: `xcodebuild build` + `swiftlint` — workflow authored
+      (`.github/workflows/ci.yml`); **[unverified]** until repo has a remote + push
+- [x] `LICENSE` is MIT; `.gitignore` covers `DerivedData/`, `.build/`,
+      `*.xcuserstate`, `DS_Store` ✓
 
 ---
 
@@ -43,9 +45,9 @@ directory layout per `architecture.md` §5, `README.md` skeleton, `LICENSE`
 Inject an empty `SpeakEngine` into the SwiftUI environment.
 
 **Done when**:
-- [ ] `speak` shows in the menubar on launch
-- [ ] Clicking the icon opens a menu with an "About…" item
-- [ ] App runs as a `LSUIElement` (no dock icon, menubar only)
+- [x] `speak` shows in the menubar on launch ✓ (waveform icon; launched + verified)
+- [x] Clicking the icon opens a menu with an "About…" item ✓
+- [x] App runs as a `LSUIElement` (no dock icon, menubar only) ✓
 
 ---
 

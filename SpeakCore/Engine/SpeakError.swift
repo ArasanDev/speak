@@ -16,14 +16,22 @@ public enum SpeakError: Error, Sendable {
 
     public var recoverySuggestion: String {
         switch self {
-        case .microphoneDenied:      return "Open System Settings → Privacy → Microphone and enable speak."
-        case .accessibilityDenied:   return "Open System Settings → Privacy → Accessibility and enable speak."
-        case .inputMonitoringDenied: return "Open System Settings → Privacy → Input Monitoring and enable speak."
-        case .transcriberUnavailable(let m): return "Speech engine unavailable: \(m). Try a fallback engine in Settings."
-        case .pasteboardBusy:        return "Pasteboard busy. Retry in a moment."
-        case .llmCleanupFailed(let m): return "LLM cleanup failed: \(m). Showing raw transcript."
-        case .sessionCancelled:      return "Session cancelled."
-        case .unknown(let m):        return "Unknown error: \(m)."
+        case .microphoneDenied:
+            return "Open System Settings → Privacy → Microphone and enable speak."
+        case .accessibilityDenied:
+            return "Open System Settings → Privacy → Accessibility and enable speak."
+        case .inputMonitoringDenied:
+            return "Open System Settings → Privacy → Input Monitoring and enable speak."
+        case .transcriberUnavailable(let detail):
+            return "Speech engine unavailable: \(detail). Try a fallback engine in Settings."
+        case .pasteboardBusy:
+            return "Pasteboard busy. Retry in a moment."
+        case .llmCleanupFailed(let detail):
+            return "LLM cleanup failed: \(detail). Showing raw transcript."
+        case .sessionCancelled:
+            return "Session cancelled."
+        case .unknown(let detail):
+            return "Unknown error: \(detail)."
         }
     }
 }

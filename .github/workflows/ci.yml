@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test-lint:
+    # NOTE [unverified]: speak targets macOS 26 (Tahoe) + Xcode 26, which needs a
+    # macOS 26 runner image. `macos-latest` tracks GitHub's newest image; pin to a
+    # macos-26 label once available. Untested until the repo has a remote + a push.
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select latest Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Install build tooling
+        run: brew install xcodegen swiftlint
+
+      - name: Build
+        run: make build
+
+      - name: Test
+        run: make test
+
+      - name: Lint
+        run: make lint

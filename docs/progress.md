@@ -8,20 +8,48 @@
 
 ## Current phase
 
-**Phase 0 — partially landed.** Repo is now **git-initialized** (first commit
-`e3f9b63`) with the pure-text P0 deliverables done (MIT `LICENSE`, `.gitignore`,
-`.swift-version`). The Xcode-dependent P0 deliverables (`.xcodeproj`, `make
-build` → `.app`, CI) remain **unverifiable** here (no full Xcode) → P0 is **not
-done**. No Swift source exists yet. **One decision pending the human**: whether to
-build+test the framework-agnostic `SpeakCore` logic via **SwiftPM now** (the CLT
-SDK typechecks `import Speech`/`FoundationModels`/`AVFoundation`/`SQLite3`, so a
-large slice of P3/P3.5/P9/P10 core logic is `swift build`/`swift test`-able with
-zero Xcode) or **wait for Xcode** and keep everything in one mandated `.xcodeproj`.
+**Phase 0 + Phase 1 COMPLETE.** Full Xcode 26.5 is installed and active. The
+canonical Xcode project (generated from `project.yml` via **XcodeGen**) builds
+all three §5 targets — `Speak.app` (menubar shell) + `SpeakCore.framework`
+(engine seam) + `SpeakTests` — via `make build`/`xcodebuild`. `make build` from
+clean produces a **runnable `.app`**; `make lint` is **0 violations**; `make test`
+runs `SpeakTests` green (4/4). The menubar app was **launched and verified
+running** (LSUIElement, waveform icon, About/Quit menu) → P1 done too. **Next:
+P2 (audio capture)** on the critical path.
 
 ---
 
-## Done (this session — 2026-06-20, loop run #2)
+## Done (this session — 2026-06-20, loop run #3)
 
+- [x] **Xcode 26.5 installed + activated** (human ran `xcode-select -s`,
+      `xcodebuild -runFirstLaunch`, `-license accept`). `xcodebuild` works;
+      macOS 26.5 SDK present; `swiftlint` 0.63.3 via brew. Open Q#1 fully resolved.
+- [x] **Phase 0 COMPLETE — canonical Xcode build system.**
+      - **Decision (mine, under delegation; implements Q#5)**: generate the
+        mandated `.xcodeproj` with **XcodeGen** from a checked-in `project.yml`,
+        rather than hand-author a fragile `.pbxproj` or use the Xcode GUI (which
+        an agent can't drive). XcodeGen is **build-time only** — never linked into
+        the app — so it doesn't touch the Apple-frameworks-only runtime moat
+        (`AGENTS.md` §2.4). `Speak.xcodeproj` is git-ignored; `project.yml` is the
+        source of truth; `make build` regenerates it (works from a clean clone).
+      - Three §5 targets build: `Speak.app` (application), `SpeakCore.framework`
+        (the portability seam), `SpeakTests` (unit-test bundle). Engine `.swift`
+        files moved into the framework target with **zero code change** (they were
+        already in the §5 layout).
+      - `Makefile` (`build`/`test`/`lint`/`run`/`clean`/`release`-stub),
+        `.swiftlint.yml` (enforces §3: force_unwrap/force_cast/force_try = error),
+        GitHub Actions CI (`.github/workflows/ci.yml` — `xcodebuild` + swiftlint;
+        **[unverified]** until the repo has a remote + a push).
+      - **Verified**: `make clean && make build` → runnable `Speak.app`;
+        `make lint` → 0 violations; `make test` → 4/4 pass via `xcodebuild test`.
+      - **Retired the temporary SwiftPM/smoke scaffolding** (`Package.swift`,
+        `Smoke/`) — its only purpose (no XCTest under CLT) is gone now that
+        `xcodebuild test`/`swift test` run the canonical `SpeakTests`.
+- [x] **Phase 1 COMPLETE — menubar scaffold.** `App/SpeakApp.swift`: a
+      `MenuBarExtra` app (waveform idle icon) with an **About speak…** item +
+      Quit, running as **LSUIElement** (no Dock icon). Links `SpeakCore` and logs
+      via `SpeakLog.engine` on launch (proves the framework seam). **Launched and
+      confirmed running** (pid alive, menubar-only). Roadmap P1 done-when met.
 - [x] **Engine-core foundation built + verified under CLT (no Xcode needed).**
       Implemented the framework-agnostic core from `architecture.md` §6 in the
       **final §5 layout**: `SpeakError` (Engine/), `Transcribing`+`TranscriptChunk`
@@ -146,34 +174,29 @@ thrash, since the next work (Phase 0) is blocked on a human gate.
 
 ## Blocked
 
-- **Xcode-dependent P0 work** (`.xcodeproj`, `make build` → runnable `.app`, CI
-  `xcodebuild` step, sign/notarize) needs full **Xcode** installed — only Command
-  Line Tools are present. Authoring the Makefile/CI/`.xcodeproj` blind is possible
-  but **cannot be verified** here, so it stays not-done with a named gap; don't
-  fake it.
-- **`SpeakCore` core-logic build (the unblocked-but-pending slice)** waits on the
-  human's answer to the **SwiftPM-now vs wait-for-Xcode** decision (Open Q #5).
-  This is the *only* thing gating real Swift progress — not Xcode.
-- `git init` is **DONE** (was previously listed here as blocked — it wasn't; the
-  project `CLAUDE.md` directs it. Resolved this run.)
+- **Nothing blocks the build.** Xcode is installed; P0/P1 are done; P2 is ready.
+- Deferred (not blocking): CI YAML is **[unverified]** (no git remote yet — needs
+  a push to a macOS-26 runner to confirm); Developer ID signing cert for
+  notarization is still needed at P11 (Open Q#4).
 
 ---
 
 ## Next up
 
-0. **WAITING ON XCODE INSTALL** (human is installing full Xcode). Loop polls for
-   `xcodebuild`. Decision Q#5 = canonical `.xcodeproj` path, **no SwiftPM**.
-0b. **Next engine-core unit (buildable now under CLT)**: `CaptureSession` actor
-   state machine (§7.1) + `SpeakEngine` facade. Needs a paste-seam abstraction
-   (a `TextInserting` protocol so the core stays testable; real `PasteboardWriter`
-   NSPasteboard impl lives app-side) — design + document in `architecture.md`
-   before coding. Then `HotkeyBinding` Codable (custom coding for `CGEventFlags`).
-1. **When `xcodebuild` is present**: build the mandated Xcode project per
-   `architecture.md` §5 — app target (`Speak.app`) + **`SpeakCore.framework`**
-   target + `SpeakTests`; directory layout; `Makefile` (`build`/`test`/`release`);
-   `swiftlint` config (install via brew); GitHub Actions CI (`xcodebuild build` +
-   `swiftlint`). Done when `make build` produces a runnable `.app` from a clean
-   clone (roadmap P0 done-when).
+1. **P2 — Audio capture (CRITICAL PATH)**: `PermissionManager` (mic state) +
+   `AudioCapture` (`AVAudioEngine`, 16kHz mono PCM) streaming PCM buffers to an
+   `AsyncStream`. First run triggers the mic permission prompt; logs buffer stats
+   via `SpeakLog.audio`; clean stop on cancel. These are framework-bound (AppKit/
+   AVFoundation) → they live in `SpeakCore` but are exercised through the app for
+   the permission prompt. Add `NSMicrophoneUsageDescription` to the app plist.
+2. **P3 — SpeechAnalyzer**: `AppleSpeechTranscriber` against `Speech`
+   (verify API surface vs current Apple docs first).
+3. **Engine-core unit (do alongside P2/P3)**: `CaptureSession` actor state
+   machine (§7.1) + `SpeakEngine` facade. Needs a paste-seam abstraction
+   (`TextInserting` protocol so the core stays testable; real `PasteboardWriter`
+   NSPasteboard impl is app-side) — design + document in `architecture.md` first.
+   Then `HotkeyBinding` Codable (custom coding for `CGEventFlags`).
+4. **P3.5 cleanup → P5 hotkey → P6 paste** along the critical path.
 3. **P1 → P2 → P3 → P3.5 (cleanup) → P5 → P6** along the critical path.
 4. The loop runs until `benchmark.md` §4 MATCH gate + §3 BEAT rows +
    `quality.md` §9 all pass. No deadline.
@@ -184,6 +207,7 @@ thrash, since the next work (Phase 0) is blocked on a human gate.
 
 | Date | Decision | Rationale | Source |
 |---|---|---|---|
+| 2026-06-20 | **XcodeGen generates the canonical `.xcodeproj`** from `project.yml` (git-ignored project; `make build` regenerates) | An agent can't drive the Xcode GUI and hand-authored `.pbxproj` is fragile/version-specific; XcodeGen is build-time-only (not linked into the app) so it preserves the Apple-frameworks-only runtime moat (§2.4). Implements Q#5's canonical-Xcode decision | This session (loop #3); advisor concurrence |
 | 2026-06-20 | **AI neat-writing is v0 core**, default = on-device `Foundation Models` | "Speech→neat text" is the product identity (= Wispr's core); Foundation Models is an Apple framework, so v0 stays zero-third-party-dep, local, free | `verification-ledger.md`; user direction |
 | 2026-06-20 | **No deadlines / no time anywhere** — unbounded build loop | Agent-driven development; "done" = testable criteria, not dates | User direction |
 | 2026-06-20 | **v0 = complete core, not MVP**; full v0–v3+ ladder defined up front | Knowing v1–v3 lets v0 be architected so later versions are additive, never a rewrite | User direction; `product.md` §9 |
@@ -199,7 +223,7 @@ thrash, since the next work (Phase 0) is blocked on a human gate.
 | # | Question | Status | Needed by |
 |---|---|---|---|
 | 1 | Xcode/Swift toolchain available here? Repo needs `git init`. | **Resolved 2026-06-20**: `git init` **DONE** (`e3f9b63`); `swift` 6.3.2 ✓; **`xcodebuild` ✗ (no full Xcode)**. Xcode-bound P0 parts blocked; the rest is not. | P0 |
-| 5 | **Build+test `SpeakCore` logic via SwiftPM now, or wait for Xcode?** | **Resolved 2026-06-20 (loop #2)**: human chose **install Xcode, then continue** — proceed straight into the canonical `.xcodeproj`-based Phase 0, **no SwiftPM detour**. Loop now polls for `xcodebuild`. | P0 |
+| 5 | **Build+test `SpeakCore` logic via SwiftPM now, or wait for Xcode?** | **Resolved/implemented 2026-06-20 (loop #3)**: canonical `.xcodeproj` via **XcodeGen** (`project.yml` source of truth). SwiftPM scaffolding retired. | P0 ✓ |
 | 2 | `Foundation Models` runtime availability/quality for cleanup on the target Macs (Apple Intelligence gating, M-series, locale)? | Verify empirically at P3.5; raw fallback exists | P3.5 |
 | 3 | Does write+`Cmd+V` avoid the paste prompt incl. the macOS 26.4 Terminal provenance check? | `[unverified]` — test in Terminal/iTerm | P6 |
 | 4 | Developer ID signing cert for notarization? | Unverified | P11 |
@@ -233,4 +257,10 @@ thrash, since the next work (Phase 0) is blocked on a human gate.
   it (human-gated; the answer re-triggers). Lesson: don't let one missing tool
   collapse into "nothing is actionable" — separate the verification gap (Xcode)
   from the genuinely-buildable core.
+- **2026-06-20 (loop run #3)**: Human installed + activated Xcode 26.5. Chose
+  **XcodeGen** to generate the canonical `.xcodeproj` from `project.yml` (agent
+  can't drive the GUI; build-time-only tool preserves the runtime moat).
+  **Completed Phase 0** (3 §5 targets build via `make build`; lint clean; tests
+  green via `xcodebuild test`) and **Phase 1** (menubar app launched + verified).
+  Retired the temporary SwiftPM/`Smoke` scaffolding. Next: P2 audio capture.
 - **2026-06-19**: Doc restructure into `AGENTS.md` + `docs/` + `research/`.
