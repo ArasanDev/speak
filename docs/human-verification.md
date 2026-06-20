@@ -185,6 +185,30 @@ persistence are unit-verified (`OnboardingFlowTests` — 14 tests, all green). T
 
 ---
 
+## 5. P12 — README demo GIF and screenshots
+
+> **Added**: 2026-06-21, P12 public docs.
+
+The README placeholder reserves space for a demo GIF showing the full dictation
+flow (double-tap Fn → overlay streams → paste). This requires a live, working
+app with all permissions granted — it cannot be fabricated or captured headlessly.
+
+- [ ] **Demo GIF**: record a ~10 s screen capture of the full flow (hotkey →
+      overlay appears + streams → text pastes at cursor in a visible app) using
+      QuickTime or another recorder; export as an optimised GIF or short MP4;
+      embed in `README.md` in the "How it works" section (replace the TODO
+      placeholder once this item is checked off).
+      *Unblock condition*: §0 setup complete + §2 and §3 pass (hotkey fires;
+      paste works in at least one target app).
+- [ ] **Screenshots (optional, v0.1)**: a Settings window screenshot and an
+      overlay screenshot to accompany the install instructions. Same unblock
+      condition as the GIF.
+
+When both items above pass, update `README.md`'s Status section to remove the
+"Demo GIF — deferred" note and embed the media.
+
+---
+
 ## How to use this file
 
 1. Do §0 setup once.
