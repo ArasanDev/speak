@@ -22,6 +22,30 @@ zero Xcode) or **wait for Xcode** and keep everything in one mandated `.xcodepro
 
 ## Done (this session — 2026-06-20, loop run #2)
 
+- [x] **Engine-core foundation built + verified under CLT (no Xcode needed).**
+      Implemented the framework-agnostic core from `architecture.md` §6 in the
+      **final §5 layout**: `SpeakError` (Engine/), `Transcribing`+`TranscriptChunk`
+      (STT/), `LLMCleaning`+`CleanupMode` (Cleanup/), `TranscriptionResult`
+      (Engine/, split to its own file), `SpeakLog` OSLog categories (Logging/).
+      `swift build` **green, zero warnings**. Verification: XCTest/swift-testing
+      both ship only inside full Xcode, so `swift test` can't run under CLT — so
+      I added a temporary `speak-smoke` executable target (`swift run speak-smoke`)
+      that exercises every type/seam with mock `Transcribing`/`LLMCleaning`
+      conformers: **16/16 checks pass**. The canonical swift-testing suite
+      (`SpeakTests/EngineCoreTests.swift`) is authored and runs once Xcode lands.
+      - **Decision (mine, logged)**: user delegated all technical calls → built
+        the engine core in parallel with the Xcode install. Reason is *non-churn*,
+        not speed: these §6 types are stable across build systems and the .swift
+        files drop into the Xcode `SpeakCore.framework` target unchanged.
+      - **Minor verbatim-spec deviations (strict additions, surfaced)**: added
+        explicit `public init`s to `TranscriptChunk` and `TranscriptionResult`
+        (a public struct needs a public init to be constructible cross-module —
+        §6 omitted them); `TranscriptionResult` lives in its own file rather than
+        inside `CaptureSession.swift`. Neither changes the type shape.
+      - **Deferred from this increment**: `HotkeyBinding` (its `modifiers:
+        CGEventFlags` isn't `Codable` out of the box → needs custom coding; it's
+        CoreGraphics/P5 territory anyway) and `CaptureSession`/`SpeakEngine` (the
+        state machine needs a paste-seam abstraction decision — next unit).
 - [x] **`git init` + first commit** (`e3f9b63`) — repo is now version-controlled;
       commit discipline (`AGENTS.md` §7) is live. Staged the full doc set +
       research; excluded `.claude/*.lock` transient state.
@@ -139,6 +163,11 @@ thrash, since the next work (Phase 0) is blocked on a human gate.
 
 0. **WAITING ON XCODE INSTALL** (human is installing full Xcode). Loop polls for
    `xcodebuild`. Decision Q#5 = canonical `.xcodeproj` path, **no SwiftPM**.
+0b. **Next engine-core unit (buildable now under CLT)**: `CaptureSession` actor
+   state machine (§7.1) + `SpeakEngine` facade. Needs a paste-seam abstraction
+   (a `TextInserting` protocol so the core stays testable; real `PasteboardWriter`
+   NSPasteboard impl lives app-side) — design + document in `architecture.md`
+   before coding. Then `HotkeyBinding` Codable (custom coding for `CGEventFlags`).
 1. **When `xcodebuild` is present**: build the mandated Xcode project per
    `architecture.md` §5 — app target (`Speak.app`) + **`SpeakCore.framework`**
    target + `SpeakTests`; directory layout; `Makefile` (`build`/`test`/`release`);
