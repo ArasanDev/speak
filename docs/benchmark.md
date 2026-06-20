@@ -87,14 +87,29 @@ numeric target carries a derivation (§7) — no hardcoded magic numbers.
 
 Each is something Wispr **cannot** match without abandoning its model:
 
-1. **100% local + offline** — Wispr requires internet + cloud upload. `[verified]`
-2. **Free & unlimited** — Wispr's free tier is capped at 2k words/wk. `[verified]`
-3. **Open source (MIT)** — Wispr is closed. `[verified]`
-4. **No account** — Wispr mandates one. `[verified]`
-5. **Local persistent history** — Wispr has none. `[unverified]` (no persistent
-   searchable history found, only temp "retry" — ledger §2; a gap `speak` can own)
-6. **Lower latency** — local beats the ~700ms–2s cloud round-trip. `[verified]`
-7. **Privacy** — no audio/text egress; vs Wispr → OpenAI subprocessor. `[verified]`
+1. **100% local + offline** — Wispr requires internet + cloud upload.
+   `[verified — automated]` `MoatAuditTests.testOfflineByConstruction` + the
+   no-egress audit (#7) + `make verify-moat`; offline by construction (no
+   networking anywhere; STT + cleanup are on-device).
+2. **Free & unlimited** — Wispr's free tier is capped at 2k words/wk.
+   `[verified — automated]` `MoatAuditTests.testNoPaywallOrWordCap` +
+   `make verify-moat` (no StoreKit / wordCap / paywall / trial-gate code).
+3. **Open source (MIT)** — Wispr is closed. `[verified — automated]`
+   `MoatAuditTests.testMITLicenseExists` + `make verify-moat`.
+4. **No account** — Wispr mandates one. `[verified — automated]`
+   `MoatAuditTests.testNoAccountOrAuthCode` + `make verify-moat` (no
+   ASAuthorization / LAContext / credential code).
+5. **Local persistent history** — Wispr has none. `[unverified]` for Wispr;
+   **`speak`'s own history is `[verified]`** (P9 `HistoryStoreTests`).
+6. **Lower latency** — local beats the ~700ms–2s cloud round-trip.
+   `[verified — partial]` headless slices measured (`LatencyAndAccuracyTests`:
+   first-partial p50 ≈ 42 ms < 200 ms; local stop→result-ready median ≈ 60 ms
+   < 1 s). Full stop→**paste** incl. live paste deferred (human-verification.md).
+7. **Privacy** — no audio/text egress; vs Wispr → OpenAI subprocessor.
+   `[verified — automated]` `MoatAuditTests.testNoNetworkEgress` (denylist:
+   URLSession/URLRequest/dataTask/NWConnection/CFSocketCreate/getaddrinfo/…) +
+   `MoatAuditTests.testNoPasteboardRead` + `make verify-moat`. Re-runnable
+   regression guard, not a one-time assertion.
 
 > **Scope of this list**: items 1–7 are the **structural** moat — what Wispr
 > cannot copy without abandoning its cloud + subscription model. The §2 matrix

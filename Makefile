@@ -16,7 +16,7 @@ APP      := $(DERIVED)/Build/Products/$(CONFIG)/Speak.app
 
 XCB := xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration $(CONFIG) -derivedDataPath $(DERIVED)
 
-.PHONY: all generate build test lint run lsp clean release
+.PHONY: all generate build test lint run lsp clean release verify-moat
 
 all: build
 
@@ -52,6 +52,12 @@ lsp: build
 ## clean: remove generated project + build artifacts
 clean:
 	rm -rf $(DERIVED) $(PROJECT)
+
+## verify-moat: static audit of structural BEAT rows (benchmark.md §3)
+## Runs without Xcode. Re-runnable in CI. Exits 1 on any violation.
+## For the full XCTest audit, run `make test` (MoatAuditTests.swift).
+verify-moat:
+	bash scripts/verify-moat.sh
 
 ## release: Developer ID sign + notarize + .dmg + Homebrew cask (implemented at P11)
 release:
