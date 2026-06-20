@@ -8,21 +8,96 @@
 
 ## Current phase
 
-**Phases 0, 1, 2, 3, 3.5 COMPLETE on the engine seam.** P3.5 — LLM cleanup
-pipeline — is now fully wired end-to-end: `LLMCleaning` protocol +
-`FoundationModelsCleaner` (Apple on-device, macOS 26) + **`CaptureSession`
-orchestration actor** that drives STT + cleanup + partial stream and returns a
-`TranscriptionResult`. All P3.5 done-when rows in `roadmap.md` are now checked
-(6/7 `[verified]`, 1 deferred to P13 dogfood because Apple Intelligence is gated
-off on the dev Mac — see `fm-availability.md` in builder-cleanup memory).
-`make build` zero warnings, `make lint` 0 serious violations, `make test`
-**25/25 green (5 XCTSkip on the live FM path, NOT a pass — see header in
-`FoundationModelsCleanerTests.swift`)**. Next: **P4 (partial overlay)** or
-**P5 (hotkey)** — both small enough to be the next cycle. P4 unblocks the
-overlay UX; P5 unblocks the global hotkey that drives start/stop. Critical path
-still P3.5 → P5 → P6 → P11 → P13.
+**Phases 0, 1, 2, 3, 3.5 COMPLETE; P5 code-complete (live criteria deferred).**
+P5 — global hotkey — delivers `HotkeyMonitor` (CGEventTap-based, `SpeakCore/Hotkey/`)
+with the pure `DoubleTapDetector` state machine, `HotkeyBinding` with custom
+`Codable` for `CGEventFlags`, `BindingStoring`/`UserDefaultsBindingStore`
+persistence boundary, and full `AsyncStream<HotkeyEvent>` output. `make build`
+zero new warnings, `make lint` 0 serious violations (pre-existing file_length
+only), `make test` **44 XCTest (5 XCTSkip live-FM) + 6 swift-testing green; 19
+new P5 tests all green**. Four P5 done-when rows `[verified]` via unit tests;
+**three rows `[deferred — needs human verification]`** (live OS + other-app
+focus, permission prompts, false-trigger rate) — P5 is therefore NOT ship-gate
+complete, only code-complete. Critical path: P3.5 → **P5 (code) →** P6 → P11 →
+P13. Next: **P6 (PasteboardWriter + Cmd+V)** — the product's biggest `[unverified]`
+(macOS 26.4 paste-provenance check), also live-gated.
+
+> **Orchestrator review note (loop #6):** caught + fixed a latent correctness
+> bug before commit — `DoubleTapDetector` was fed `CGEvent.timestamp / 1e9` as
+> seconds, but that field is mach-absolute-time units (timebase ≠ 1 ns on Apple
+> Silicon), which would have stretched the 0.4 s window to ~16 s. Unit tests
+> couldn't catch it (they inject synthetic seconds, bypassing the conversion).
+> Fixed to read `DispatchTime.now().uptimeNanoseconds` (documented ns) at handle
+> time; HID-tap latency ≪ window. Known v0 follow-ups (note-only): the
+> `@unchecked Sendable` callback-thread vs main-thread access to
+> `binding`/`eventTap`/`detector` is an unsynchronized race, and the init
+> CFRunLoop thread leaks per instance (fine for a single app-lifetime monitor).
 
 ---
+
+## Done (this session — 2026-06-20, loop run #6 — P5 HotkeyMonitor)
+
+- [x] **Phase 5 code-complete (live criteria deferred) — `HotkeyMonitor` (CGEventTap global hotkey)**
+      - **`SpeakCore/Hotkey/HotkeyMonitor.swift` (NEW):** Full P5 implementation.
+        - `HotkeyEvent: Sendable` — `startCapture | stopCapture` (verbatim §6).
+        - `HotkeyBinding: Codable, Sendable` — custom `Codable` for `CGEventFlags`
+          (encodes `modifiers.rawValue: UInt64`). Default binding: `kVK_Function`
+          (0x3F=63, Carbon/HIToolbox [verified]), `modifiers: []`, `.doubleTap`,
+          `doubleTapWindow: 0.4` (benchmark.md §7 [decision], trace comment inline).
+        - `DoubleTapDetector: Sendable` — pure value-type detector. No CGEventTap,
+          no wall-clock. Timestamps injected → fully testable. State: idle →
+          first-tap-recorded → startCapture emitted → stopCapture on next single tap.
+          `reset()` clears all state.
+        - `BindingStoring` protocol + `UserDefaultsBindingStore` — thin testable
+          boundary; loads/saves via `JSONEncoder`/`JSONDecoder` in UserDefaults.
+        - `HotkeyMonitor` (final class, `@unchecked Sendable`): spawns a private
+          CFRunLoop thread for tap callbacks; installs tap via
+          `CGEvent.tapCreate(tap:place:options:eventsOfInterest:callback:userInfo:)`
+          [verified: obsoletes CGEventTapCreate, SDK 2026-06-20]. Event mask:
+          `.flagsChanged` only (Fn does NOT produce keyDown [verified: flagsChanged
+          rawValue=12]). Press-edge detected via `.maskSecondaryFn` [verified:
+          rawValue=8388608, SDK]. `self` passed via `Unmanaged.passUnretained`
+          through `userInfo` — no global mutable state, no retain cycle.
+          `CGEvent.tapEnable` re-enables on `tapDisabledByTimeout/ByUserInput`.
+          `CGEvent.tapCreate` nil → distinguishes `accessibilityDenied` (via
+          `AXIsProcessTrusted()`) from `inputMonitoringDenied` with clean error,
+          no force-unwrap. Emits `HotkeyEvent` via `AsyncStream` continuation.
+        - **Fn-key event model** [inferred, deferred]: `.maskSecondaryFn` as the
+          Fn/Globe key bit is a standard CoreGraphics convention. Live confirmation
+          (does this actually fire for the physical Fn key while another app has
+          focus) requires a non-sandboxed run with permissions granted → deferred.
+      - **`SpeakTests/HotkeyMonitorTests.swift` (NEW, 19 tests):**
+        - `HotkeyBindingCodableTests` (6): default binding constants, round-trips
+          (default, with modifiers, empty modifiers).
+        - `DoubleTapDetectorTests` (11): within-window→start, at-edge→start,
+          outside-window→no-event, single-tap→no-event, start→single→stop,
+          isCapturing state after start and stop, reset clears state and allows
+          fresh double-tap, three-taps cycle, restart after stop.
+        - `UserDefaultsBindingStoreTests` (2): save+load round-trip, nil when nothing stored.
+      - **`make build`**: zero new warnings. **`make lint`**: 0 serious violations
+        (1 new non-serious `file_length` on `HotkeyMonitor.swift` at 417 lines —
+        accepted; the verification comment block is the documentation). **`make test`**:
+        44/44 PASS (5 XCTSkip = pre-existing live FM path; 19 new P5 tests green).
+      - **SDK verifications (all done with `swiftc -typecheck` against macOS 26 SDK):**
+        - `CGEvent.tapCreate(...)` [verified] — CGEventTapCreate obsoleted Swift 3
+        - `CGEvent.tapEnable(tap:enable:)` [verified]
+        - `CGEventType.flagsChanged` rawValue=12 [verified]
+        - `CGEventFlags.maskSecondaryFn` rawValue=8388608 [verified]
+        - `kVK_Function` = 63 = 0x3F [verified: compiled + ran]
+        - `CGEventTapCallBack` callback type [verified]
+      - **P5 done-when rows:**
+        - `[verified]` Double-tap Fn within 400ms window emits `startCapture`
+          (DoubleTapDetector test, injected timestamps).
+        - `[verified]` Single-tap Fn after start emits `stopCapture` (same).
+        - `[verified]` `HotkeyBinding` Codable round-trip (encode/decode preserves
+          keyCode, modifiers.rawValue, trigger, doubleTapWindow).
+        - `[verified]` Taps outside window do not trigger (pure detector test).
+        - `[deferred — needs human verification]` Double-tap Fn triggers start/stop
+          while **another app has focus** (requires live run + Accessibility grant).
+        - `[deferred — needs human verification]` First run triggers Accessibility +
+          Input Monitoring permission prompts (requires live run, fresh install).
+        - `[deferred — needs human verification, P13]` False-trigger rate < 1/30min
+          (dogfood in Notes, benchmark.md §7 F_rate).
 
 ## Done (this session — 2026-06-20, loop run #5 — P3.5 CaptureSession)
 
