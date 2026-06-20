@@ -49,6 +49,25 @@ is the complete handoff.** Every UI screen's *logic* is unit-tested; only the
 
 ---
 
+## Done (this session — 2026-06-21, loop run #15 — P12 public docs)
+
+- [x] **Phase 12 — public docs (README/CONTRIBUTING/CHANGELOG); GIF deferred**
+      - **`README.md` (rewrite):** what it is, the structural moat (with the honest
+        caveat that Wispr also has a free tier + Fn — the wedge is the bundle),
+        install (build-from-source now; Homebrew cask at P11), usage (hotkey/
+        overlay/settings/history/3 permissions), **privacy section listing all 5
+        `product.md` §8 guarantees**, #1/#2/#3/#5 citing `make verify-moat` as a
+        re-runnable proof (#4 hardware-mute = design posture, not yet implemented),
+        build commands, honest pre-release status, MIT.
+      - **`CONTRIBUTING.md` + `CHANGELOG.md` (NEW):** build/test/lint/verify-moat,
+        the layered docs model, architecture seams, hard rules; Keep-a-Changelog
+        `[Unreleased] — v0`.
+      - **`human-verification.md` §5 (NEW):** demo GIF + screenshots deferred
+        (need a live recorded run; unblocked by §0+§2+§3 passing).
+      - Docs only — no Swift touched; build/test unaffected (143 tests / moat 7/7
+        remain valid). Corrected a false skeleton claim ("only local+free+open" —
+        Aiko/TypeWhisper/FluidVoice also qualify).
+
 ## Done (this session — 2026-06-21, loop run #14 — P7 Permissions Onboarding)
 
 - [x] **Phase 7 COMPLETE — Permissions onboarding (step-state machine `[verified]`; rendered flow `[deferred — visual]`)**

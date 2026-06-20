@@ -1,0 +1,1 @@
+- [P12 public docs](project_p12_docs.md) — README rewrite, CONTRIBUTING, CHANGELOG written 2026-06-21; moat precision, deferred GIF, hardware mute caveat

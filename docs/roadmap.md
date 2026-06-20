@@ -312,10 +312,15 @@ macOS 26 (Tahoe, shipped Q3 2025) requires Gatekeeper-compliant notarization.
 hotkey help), screenshots, demo GIF, `CONTRIBUTING.md`, `CHANGELOG.md`.
 
 **Done when**:
-- [ ] README answers: what is it, how to install, how to use, privacy stance
-- [ ] Privacy section states all 5 guarantees from `product.md` §8
-- [ ] Demo GIF shows the headline flow end-to-end (hotkey → overlay → paste)
-- [ ] Repo is public-ready
+- [x] README answers: what is it, how to install, how to use, privacy stance —
+      `[verified]` (full rewrite; build-from-source path; honest pre-release status)
+- [x] Privacy section states all 5 guarantees from `product.md` §8 — `[verified]`
+      (all 5 listed; #1/#2/#3/#5 cite the `make verify-moat` automated proof;
+      #4 hardware-mute framed as design posture, not yet implemented)
+- [ ] Demo GIF shows the headline flow end-to-end (hotkey → overlay → paste) —
+      `[deferred — needs human verification]` (requires a live recorded run; §5)
+- [~] Repo is public-ready — docs in place; gated on the live-verification pass
+      + P11 notarized release before a public tag
 
 ---
 
