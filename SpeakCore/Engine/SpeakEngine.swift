@@ -8,20 +8,18 @@
 // DESIGN DEVIATION FROM §6 (surfaced, not papered over):
 //   §6 shows:
 //     public init(transcriber:cleaner:history:settings: SettingsStore) throws
-//   This implementation diverges in two deliberate ways:
+//   This implementation diverges in one deliberate way:
 //
-//   (1) `SettingsStore` is not injected — it is a P10 deliverable (not yet built).
-//       Pending P10, cleanup on/off is encoded structurally: `cleaner == nil` ↔
-//       cleanup off (the existing CaptureSession contract), matching the intent of
-//       the `guard settings.cleanupEnabled else { return nil }` factory documented
-//       in §10a.1. A typed SettingsStore replaces this at P10.
-//
-//   (2) `init` is not `throws` — none of the injected components require throwing
+//   (1) `init` is not `throws` — none of the injected components require throwing
 //       initialisation in v0. `throws` in §6 may have anticipated an eager setup
 //       call (e.g., DB open); `HistoryStore.init(databaseURL:)` is non-throwing
 //       (errors surface on the first `async throws` DB call, per the SQLite actor
 //       design in Storage/HistoryStore.swift). Removing `throws` makes call-sites
 //       cleaner without losing correctness.
+//
+//   `SettingsStore` IS now injected (P10 deliverable — see below). The cleanup
+//   toggle is read at `newSession()` time so each dictation reflects the current
+//   setting without requiring an engine restart.
 //
 // CONCURRENCY MODEL (§8 actor vs §6 class contradiction — surfaced):
 //   §6 shows `public final class SpeakEngine: @unchecked Sendable`.
@@ -63,6 +61,11 @@ public actor SpeakEngine {
     private let locale: Locale
     private let cleanupMode: CleanupMode
 
+    /// The settings store. Read at `newSession()` time so the cleanup toggle
+    /// takes effect on the next dictation without requiring an engine restart.
+    /// `@unchecked Sendable` on `SettingsStore` makes this actor-safe.
+    private let settings: SettingsStore
+
     // MARK: - Session state (actor-isolated)
 
     /// The in-flight dictation session. `nil` when idle.
@@ -89,18 +92,23 @@ public actor SpeakEngine {
     ///   - locale: Transcription locale. Defaults to `en-US`.
     ///   - cleanupMode: The LLM cleanup mode passed to the cleaner. Defaults to
     ///     `.punctuation` (the most common use-case).
+    ///   - settings: The `SettingsStore` whose `cleanupEnabled` is read at each
+    ///     `newSession()` call. The toggle applies per-dictation — no restart
+    ///     required. Inject a test `SettingsStore` in tests to control behavior.
     public init(transcriber: any Transcribing,
                 cleaner: (any LLMCleaning)? = nil,
                 inserter: (any TextInserting)? = nil,
                 history: any HistoryStoring,
                 locale: Locale = Locale(identifier: "en-US"),
-                cleanupMode: CleanupMode = .punctuation) {
+                cleanupMode: CleanupMode = .punctuation,
+                settings: SettingsStore) {
         self.transcriber = transcriber
         self.cleaner = cleaner
         self.inserter = inserter
         self.history = history
         self.locale = locale
         self.cleanupMode = cleanupMode
+        self.settings = settings
     }
 
     // MARK: - Session factory
@@ -108,14 +116,27 @@ public actor SpeakEngine {
     /// Create and return a new `CaptureSession` wired with the engine's
     /// transcriber, cleaner, inserter, locale, and cleanupMode.
     ///
+    /// The cleaner is gated by `settings.cleanupEnabled` at call time:
+    /// - `true` → the injected `cleaner` is passed (cleanup runs).
+    /// - `false` → `nil` is passed (raw transcript delivered, no LLM pass).
+    ///
+    /// This means the cleanup toggle takes effect on the **next** dictation
+    /// without requiring an engine restart. `SettingsStore` is `@unchecked
+    /// Sendable` and `cleanupEnabled` is a synchronous computed property over
+    /// `UserDefaults`, so this read is actor-safe with no `await`.
+    ///
     /// The engine retains the session as `currentSession`. Calling this
     /// again before the prior session is terminal replaces the reference
     /// (the prior session should have been stopped or cancelled first).
     @discardableResult
     public func newSession() -> CaptureSession {
+        // Gate the cleaner on the current toggle value (read synchronously;
+        // SettingsStore is @unchecked Sendable — actor read is safe).
+        let activeCleaner: (any LLMCleaning)? = settings.cleanupEnabled ? cleaner : nil
+
         let session = CaptureSession(
             transcriber: transcriber,
-            cleaner: cleaner,
+            cleaner: activeCleaner,
             inserter: inserter,
             locale: locale,
             cleanupMode: cleanupMode

@@ -67,9 +67,23 @@ final class DictationController: ObservableObject {
     private let monitor: HotkeyMonitor
     private var eventTask: Task<Void, Never>?
 
+    // MARK: - Settings store
+
+    /// Shared settings store. Exposed so the Settings window can bind to it.
+    /// One instance for the app lifetime; the engine reads from it at each
+    /// `newSession()` call so toggle changes take effect per-dictation without
+    /// an engine restart.
+    private(set) var settingsStore: SettingsStore
+
     // MARK: - Init
 
     init() {
+        // --- Settings store (single instance for the app lifetime) ---
+        // Created first; passed to the engine below so both the Settings
+        // window and the engine share one source of truth.
+        let store = SettingsStore()
+        self.settingsStore = store
+
         // --- History store (best-effort) ---
         // `makeProductionStore()` throws if SQLite cannot be opened (e.g., disk
         // full, permissions, first-time directory creation fails). On failure,
@@ -86,14 +100,15 @@ final class DictationController: ObservableObject {
         }
 
         // --- Engine (production wiring) ---
-        // Cleanup is ON by default (FoundationModelsCleaner). If Foundation Models
-        // is unavailable at runtime, CaptureSession gracefully falls back to raw
-        // transcript (never .error) per architecture §10a.1.
+        // Transcriber and cleaner are chosen via the runtime factories (§10.1/§10a.1).
+        // The cleanup toggle (`cleanupEnabled`) is re-read at each `newSession()`
+        // call, so changes made via the Settings window apply on the next dictation.
         engine = SpeakEngine(
-            transcriber: AppleSpeechTranscriber(),
-            cleaner: FoundationModelsCleaner(),
+            transcriber: defaultTranscriber(for: store),
+            cleaner: defaultCleaner(for: store),
             inserter: PasteboardWriter(),
-            history: historyStore
+            history: historyStore,
+            settings: store
         )
 
         // --- Hotkey monitor ---

@@ -119,6 +119,7 @@ final class MoatAuditTests: XCTestCase {
     ///   • `SpeakCore` — the framework target itself (App imports it)
     private let allowedImports: Set<String> = [
         "Foundation",
+        "Combine",          // Apple framework; used by ObservableObject in SpeakCore
         "os",
         "SwiftUI",
         "AppKit",

@@ -127,6 +127,21 @@ final class SpeakEngineIntegrationTests: XCTestCase {
         // Build real components (named so they can be asserted after the run)
         let mockInserter = MockTextInserter()
         let historyStore = try HistoryStore(databaseURL: tempDatabaseURL())
+
+        // Inject a test-isolated SettingsStore (never touches .standard).
+        // Set cleanupEnabled=true so this test exercises the FM-unavailable
+        // raw-fallback path, NOT the toggle-off path. The two are distinct:
+        // toggle-off → activeCleaner==nil by toggle; FM-unavailable → activeCleaner
+        // is non-nil but isAvailable==false → CaptureSession falls back to raw.
+        let suiteName = "SpeakEngineIntegrationTests.\(UUID().uuidString)"
+        let testDefaults = try XCTUnwrap(
+            UserDefaults(suiteName: suiteName),
+            "UserDefaults(suiteName:) returned nil for '\(suiteName)' — UUID names cannot be invalid."
+        )
+        addTeardownBlock { testDefaults.removePersistentDomain(forName: suiteName) }
+        let testSettings = SettingsStore(defaults: testDefaults)
+        testSettings.cleanupEnabled = true   // exercise FM-unavailable path, not toggle-off
+
         let engine = SpeakEngine(
             transcriber: AppleSpeechTranscriber(
                 audioProducer: SpeechTranscriberTests.FixtureAudioProducer(fileURL: fixtureURL)
@@ -135,7 +150,8 @@ final class SpeakEngineIntegrationTests: XCTestCase {
             inserter: mockInserter,
             history: historyStore,
             locale: enUS,
-            cleanupMode: .punctuation
+            cleanupMode: .punctuation,
+            settings: testSettings
         )
 
         // Begin dictation

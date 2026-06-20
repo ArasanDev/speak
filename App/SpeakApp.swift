@@ -46,6 +46,13 @@ struct SpeakApp: App {
             MenuBarLabel(controller: appDelegate.controller)
         }
         .menuBarExtraStyle(.menu)
+
+        // Settings window — opened via "Settings…" menu item or Cmd+,.
+        // [deferred — human verification]: whether this renders and persists
+        // live requires running on a Mac with the app active.
+        Settings {
+            SettingsView(store: appDelegate.controller.settingsStore)
+        }
     }
 }
 
@@ -89,7 +96,7 @@ private struct SpeakMenu: View {
 
         if controller.permissionsNeeded {
             Divider()
-            Button("⚠️ Grant Accessibility + Input Monitoring") {
+            Button("Grant Accessibility + Input Monitoring") {
                 if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") {
                     NSWorkspace.shared.open(url)
                 }
@@ -98,7 +105,18 @@ private struct SpeakMenu: View {
 
         Divider()
 
-        Button("About speak…") {
+        // Opens the Settings scene declared in SpeakApp.body.
+        // `SettingsLink` is the canonical SwiftUI way to open a Settings scene
+        // from a MenuBarExtra menu — it uses the platform's openSettings action
+        // under the hood. [verified: SwiftUI API, macOS 13+]
+        SettingsLink {
+            Text("Settings\u{2026}")
+        }
+        .keyboardShortcut(",")
+
+        Divider()
+
+        Button("About speak\u{2026}") {
             NSApplication.shared.orderFrontStandardAboutPanel(nil)
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
