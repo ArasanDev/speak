@@ -25,6 +25,27 @@ direction from it.
 
 ---
 
+## Agents, skills & tooling (the build harness)
+
+A standing specialist team + a skill library equip the autonomous loop — full map
+in **`docs/agent-tooling.md`**. In short:
+
+- **Skills** (`.claude/skills/`): `swift-macos-build`, `swift-code-review`,
+  `signing-notarization-release` (thick, doc-grounded); per-seam Apple-API
+  pointers (`speechanalyzer-stt`, `foundation-models-cleanup`, `cgeventtap-hotkey`,
+  `macos-paste-pipeline`, `permissions-onboarding`) that **defer the exact API to
+  implementation time** by design.
+- **Team** (`.claude/agents/team/`): `builder-engine` · `-audio-stt` · `-cleanup` ·
+  `-input` · `-app` · `-release` · `-qa` — route each seam's work to its specialist.
+- **MCP** (`.mcp.json`): `apple-docs` (live Apple docs) + `xcode` (`xcrun mcpbridge`;
+  needs a one-time in-Xcode authorization to serve tools).
+
+**Project orchestration principle** — never tag an Apple-API claim `[verified]`
+from memory. Confirm it first with `swiftc -typecheck` against the **local macOS 26
+SDK** (or `apple-docs`); the local SDK is the cutoff-proof source of truth. Route
+mechanical/multi-file work to the right model tier (see the global charter); the
+orchestrator reviews diffs and owns commits.
+
 ## What "done" means — there is NO deadline
 
 This is an autonomous, agent-driven build. The loop runs across as many cycles as

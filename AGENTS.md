@@ -48,7 +48,14 @@ deepvoice/
 │   ├── roadmap.md       # ORDER. Dependency-ordered build sequence (no dates).
 │   ├── benchmark.md     # DONE. Parity vs the frontier; the definition of done.
 │   ├── quality.md       # VERIFY. Tests, risks, ship gates.
-│   └── progress.md      # NOW. Living state. YOU rewrite this every session.
+│   ├── progress.md      # NOW. Living state. YOU rewrite this every session.
+│   └── agent-tooling.md # BUILD HARNESS. Team, skills, MCP, verification backbone.
+│
+├── .claude/             # the autonomous build harness (how agents are equipped)
+│   ├── skills/          # on-demand skills: build, code-review, per-seam API pointers
+│   └── agents/team/     # standing specialist team (one per architecture seam) — see its README
+│
+├── .mcp.json            # project MCP servers: xcode (mcpbridge) + apple-docs
 │
 └── research/            # WHY-evidence archive. Read-only. Never the direction.
     └── README.md        # start here if you ever touch this folder

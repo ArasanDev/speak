@@ -232,6 +232,21 @@ thrash, since the next work (Phase 0) is blocked on a human gate.
 
 ## Session log
 
+- **2026-06-20 (agent-harness / context-engineering)**: Built the autonomous
+  build harness — 8 skills (`.claude/skills/`: 3 thick doc-grounded + 5 thin
+  per-seam Apple-API pointers) and a 7-agent standing team (`.claude/agents/team/`,
+  one per architecture seam). Wired project MCP (`.mcp.json`): `apple-docs`
+  (✔ connected) + `xcode` (`xcrun mcpbridge`, Xcode 26.5 — connects but needs a
+  one-time in-Xcode auth). Established the **swiftc-against-the-local-SDK**
+  verification backbone (cutoff-proof) and ran an SDK-anchored, adversarially
+  citation-checked verification workflow over all 8 skills (14 agents). Applied
+  11 upheld fixes; 10 claims correctly deferred (empirical-by-design). **Two
+  source-of-truth API bugs caught + fixed**: `architecture.md` §6 + §9 used
+  `LanguageModel.default` / `LanguageModel` (do not resolve) → `SystemLanguageModel`
+  + `.availability`; `roadmap.md` P3 §14.1 anchor → §10.2. Added the harness to
+  `AGENTS.md`/`CLAUDE.md` navigation so a fresh `/loop` discovers it. Lesson:
+  agents share the Jan-2026 cutoff, so skills must carry post-cutoff truth verified
+  against the live SDK, never recalled. See `docs/agent-tooling.md`.
 - **2026-06-20**: Verified load-bearing claims (foundation sound; Foundation
   Models unlock; Wispr thesis repositioned). Created `benchmark.md` +
   `verification-ledger.md`. Rewrote `product.md`. Elevated AI cleanup to v0 core.
