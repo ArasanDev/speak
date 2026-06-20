@@ -47,6 +47,26 @@ P4 overlay, P7 onboarding, P8 menubar polish, P10 settings UI.
 
 ---
 
+## Done (this session — 2026-06-21, loop run #13 — P4 overlay + P8 finish)
+
+- [x] **Phase 4 — Partial overlay (wiring + logic `[verified]`; live `[deferred — visual]`)**
+      - **`App/Overlay/` (NEW):** `TranscriptOverlayPanel` — an `NSPanel` with
+        `.nonactivatingPanel` + `.floating` + `canBecomeKey/Main = false`, joins
+        all spaces + `.fullScreenAuxiliary`, hosts a SwiftUI card. **Never steals
+        focus** (load-bearing: the user dictates into another app).
+      - **`SpeakCore/Engine/OverlayText.swift` (NEW):** `OverlayTextAccumulator`
+        pure type (newest-non-empty chunk wins) — 11 unit tests.
+      - **`DictationController`:** drains `engine.currentPartials()` on a
+        `[weak self]` Task, routes to an `OverlayViewModel` via `MainActor.run`;
+        shows the panel on `.listening`, hides + clears on `.done`/`.error`.
+      - 123 tests, 0 failures; `make verify-moat` 7/7. Overlay live behavior →
+        `human-verification.md` §4.3.
+- [x] **Phase 8 — Menubar states (wiring `[verified]`; live visual `[deferred]`)**
+      - Already wired via `MenubarIcon` + `DictationController` (reactive label,
+        600 ms done-flash). Added `icon = .processing` before the `endDictation`
+        await so every transition (idle→listening→processing→done→idle) surfaces.
+      - Roadmap P8 + checklist §4.2. Distinct colors = cosmetic polish (deferred).
+
 ## Done (this session — 2026-06-21, loop run #12 — P10 Settings, UI build authorized)
 
 - [x] **Phase 10 — Settings (store + toggle wiring `[verified]`; window `[deferred — visual]`)**

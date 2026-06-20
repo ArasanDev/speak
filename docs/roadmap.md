@@ -132,10 +132,15 @@ stubbed for the toggle; fully wired in P10 proper.
 transcript in real time. Auto-position near cursor or top-right, always-on-top.
 
 **Done when**:
-- [ ] Overlay appears when session enters `listening` state
-- [ ] Partial transcript text updates live (≤200ms lag — matches
-      `benchmark.md` §7 `L_partial`)
-- [ ] Overlay hides on `done` / `error`
+- [~] Overlay appears when session enters `listening` state — `[verified]` the
+      wiring (`DictationController` shows the panel on `.listening`, hides on
+      `.done`/`.error`); **live appearance** `[deferred — visual]` (§4.3)
+- [~] Partial transcript text updates live (≤200ms lag — `benchmark.md` §7
+      `L_partial`) — `[verified]` accumulation logic (`OverlayTextAccumulator`,
+      11 tests) + drains `currentPartials()`; **live lag** `[deferred — visual]`
+      (headless proxy ≈ 42 ms p50; live includes mic + SpeechAnalyzer overhead)
+- [~] Overlay hides on `done` / `error` — `[verified]` the hide wiring;
+      **live** `[deferred — visual]`
 
 ---
 
