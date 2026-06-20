@@ -46,6 +46,7 @@ public actor CaptureSession {
 
     private let transcriber: any Transcribing
     private let cleaner: (any LLMCleaning)?
+    private let inserter: (any TextInserting)?
 
     // MARK: - Mutable session state (actor-isolated)
 
@@ -63,14 +64,21 @@ public actor CaptureSession {
     ///   - transcriber: The STT engine. Owned for the lifetime of the session.
     ///   - cleaner: `nil` when AI cleanup is disabled (per-user setting).
     ///     Non-nil enables the cleanup pass on stop.
+    ///   - inserter: `nil` (default) leaves paste as a caller responsibility
+    ///     (pre-P6 behaviour, all existing call-sites unchanged). Non-nil wires
+    ///     paste directly into the session: `insert(cleanedText ?? rawText)` is
+    ///     called just before the session settles to `.done`. If `insert` throws,
+    ///     the session transitions to `.error` (paste failure = delivery failure).
     ///   - locale: Locale passed to the transcriber. Default: en-US.
     ///   - cleanupMode: `CleanupMode` passed to the cleaner. Default: `.punctuation`.
     public init(transcriber: any Transcribing,
                 cleaner: (any LLMCleaning)? = nil,
+                inserter: (any TextInserting)? = nil,
                 locale: Locale = Locale(identifier: "en-US"),
                 cleanupMode: CleanupMode = .punctuation) {
         self.transcriber = transcriber
         self.cleaner = cleaner
+        self.inserter = inserter
         self.locale = locale
         self.cleanupMode = cleanupMode
     }
@@ -191,6 +199,30 @@ public actor CaptureSession {
             engineId: engineId,
             createdAt: sessionEndedAt
         )
+
+        // Paste step (P6): if an inserter was injected, paste the final text
+        // before settling to `.done`. Text selection rule per architecture §11:
+        //   cleanedText ?? rawText
+        // (cleanup-unavailable already produced cleanedText=nil, so the raw
+        //  transcript is used — the graceful-fallback contract is preserved.)
+        // If paste throws, the session transitions to `.error` (paste is the
+        // delivery; if it fails, the dictation has not landed at the cursor).
+        if let inserter = inserter {
+            let textToInsert = result.cleanedText ?? result.rawText
+            do {
+                try await inserter.insert(textToInsert)
+            } catch {
+                let speakError = (error as? SpeakError) ?? .pasteboardBusy
+                SpeakLog.engine.error(
+                    "CaptureSession: paste failed — \(speakError.recoverySuggestion, privacy: .public)"
+                )
+                state = .error(speakError)
+                partialsContinuation?.finish()
+                partialsContinuation = nil
+                streamTask = nil
+                throw speakError
+            }
+        }
 
         state = .done
         partialsContinuation?.finish()

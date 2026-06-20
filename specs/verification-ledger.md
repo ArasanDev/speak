@@ -79,6 +79,45 @@
 
 ---
 
+## P6 — Paste pipeline (2026-06-20, loop run #7)
+
+### SDK verifications (swiftc -typecheck + runtime, macOS 26 SDK, 2026-06-20)
+
+| Claim | Verdict | Verified value |
+|---|---|---|
+| `NSPasteboard.general.clearContents()` → `Int` | `[verified]` | return type is `Int` (change count), not `Bool` — architecture §11 sketch omits the type; confirmed via -typecheck |
+| `NSPasteboard.general.setString(_:forType: .string)` → `Bool` | `[verified]` | swiftc -typecheck |
+| `CGEventSource(stateID: .hidSystemState)` → `CGEventSource?` | `[verified]` | optional init confirmed; nil is valid |
+| `CGEvent(keyboardEventSource:virtualKey:keyDown:)` → `CGEvent?` | `[verified]` | optional init; nil on system-constrained environments |
+| `CGEvent.flags: CGEventFlags` (gettable + settable) | `[verified]` | swiftc -typecheck |
+| `CGEvent.post(tap: .cghidEventTap)` — Swift instance method | `[verified]` | swiftc -typecheck; **note: free functions `CGEventPost`/`CGEventTapPostEvent` are obsoleted in Swift 3** — use the instance method `.post(tap:)` |
+| `kVK_ANSI_V == 9 == 0x09` | `[verified]` | `swiftc -o` + runtime `print`; Carbon/HIToolbox constant |
+| `CGEventFlags.maskCommand` | `[verified]` | swiftc -typecheck |
+
+### P6 live test matrix (requires human verification)
+
+| Test | Status | Notes |
+|---|---|---|
+| Paste into TextEdit (plain text field) | `[deferred — needs human verification]` | The primary smoke-test for the write+Cmd+V path |
+| Paste into Slack (rich text) | `[deferred — needs human verification]` | Rich-text apps may behave differently |
+| Paste into Terminal / iTerm | `[deferred — needs human verification]` | **macOS 26.4 paste-provenance check** — the #1 unknown; the Terminal check fires on pastejacking attempts; whether our write+Cmd+V pattern triggers it is `[unverified]` |
+| Password-field paste silently no-ops (no crash) | `[deferred — needs human verification]` | Secure text fields reject synthetic Cmd+V; session should reach `.done` (not crash) |
+
+### Unit-verified P6 rows (mock inserter, no live pasteboard)
+
+| Done-when row | Verdict |
+|---|---|
+| `TextInserting` protocol exists; `PasteboardWriter` conforms | `[verified]` — compiles clean |
+| `CaptureSession(inserter: nil)` → no insert, session → `.done` | `[verified]` — `testInserterNilDoesNotInsertAndSessionIsDone` |
+| Cleanup on: inserter receives `cleanedText` | `[verified]` — `testInserterReceivesCleanedTextWhenCleanupSucceeds` |
+| Cleanup off (`cleaner=nil`): inserter receives `rawText` | `[verified]` — `testInserterReceivesRawTextWhenCleanerIsNil` |
+| Cleanup unavailable: inserter receives `rawText` | `[verified]` — `testInserterReceivesRawTextWhenCleanerIsUnavailable` |
+| Insert throws → session → `.error(.pasteboardBusy)` | `[verified]` — `testInserterThrowsTransitionsSessionToError` |
+| Generic insert error wrapped to `.pasteboardBusy` | `[verified]` — `testInserterGenericThrowWrappedToPasteboardBusy` |
+| All 44 prior tests still green with new `inserter` param | `[verified]` — `make test` 50 total, 0 failures |
+
+---
+
 ## 4. Corrections to apply to `docs/` (for the human — `product.md` is immutable)
 
 1. **`product.md` §4 "Why now"** — REWRITE. The "Wispr is polishing/coasting" premise is refuted. New thesis: *Wispr is the advancing cloud frontier; the open window is **structural, not temporal** — Wispr cannot go local/free/open/offline without abandoning its cloud + subscription model.* The window doesn't close because Wispr ships features; it stays open because Wispr is architecturally cloud.

@@ -173,13 +173,21 @@ produced output; otherwise `rawText`. The session must reach `done` in both
 cases.
 
 **Done when**:
-- [ ] When cleanup is **on**: cleaned text (filler-free, punctuated) pastes
-      into the focused app
-- [ ] When cleanup is **off** or unavailable: raw transcript pastes instead
+- [~] When cleanup is **on**: cleaned text (filler-free, punctuated) pastes
+      into the focused app — `[verified]` selection logic (`CaptureSession`
+      hands `cleanedText` to the inserter, `testInserterReceivesCleanedText…`);
+      `[deferred — needs human verification]` the actual live paste
+- [~] When cleanup is **off** or unavailable: raw transcript pastes instead —
+      `[verified]` selection logic (inserter receives `rawText` in both the
+      `cleaner=nil` and unavailable paths); `[deferred]` live paste
 - [ ] Final transcript (cleaned or raw) pastes into focused text field in
-      **TextEdit, Slack, Terminal** (3 different app categories)
-- [ ] No macOS 26.4 paste-protection prompt appears (we write, never read)
-- [ ] Paste fails gracefully (error state) in password fields
+      **TextEdit, Slack, Terminal** (3 different app categories) —
+      `[deferred — needs human verification]`
+- [ ] No macOS 26.4 paste-protection prompt appears (we write, never read) —
+      `[deferred — needs human verification]` (**project's #1 `[unverified]`**:
+      the Terminal paste-provenance check; test in Terminal/iTerm first)
+- [ ] Paste fails gracefully (error state) in password fields —
+      `[deferred — needs human verification]`
 
 ---
 
