@@ -47,6 +47,33 @@ P4 overlay, P7 onboarding, P8 menubar polish, P10 settings UI.
 
 ---
 
+## Done (this session — 2026-06-21, loop run #12 — P10 Settings, UI build authorized)
+
+- [x] **Phase 10 — Settings (store + toggle wiring `[verified]`; window `[deferred — visual]`)**
+      - User explicitly authorized building the remaining UI now (overriding the
+        earlier "defer UI on unverified foundations" caution).
+      - **`SpeakCore/Storage/SettingsStore.swift` (NEW):** typed, observable
+        `UserDefaults` wrapper; **injectable defaults** for test isolation.
+        `cleanupEnabled`, `cleanupEngine`, `sttEngine`, `language`, `pasteMode`
+        (+ v0.1/v1 enum placeholders).
+      - **`SpeakCore/Engine/EngineFactories.swift` (NEW):** `defaultTranscriber(for:)`
+        / `defaultCleaner(for:)` per architecture §10.1/§10a.1; unbuilt engines
+        log + fall back to the v0 default, never `fatalError`.
+      - **`SpeakEngine` now takes `settings`** (resolves the §6 deferral): kept the
+        injected transcriber/cleaner for DI, but `newSession()` gates the cleaner
+        by `settings.cleanupEnabled` **at call time** → the toggle applies
+        per-dictation, no restart. Updated the two callers (DictationController +
+        integration test, the latter with a test-isolated `SettingsStore`).
+      - **`App/Settings/` Settings window:** cleanup toggle, STT/cleanup-engine/
+        language/paste-mode pickers, hotkey display; wired into the menu.
+      - **`SettingsStoreTests` (NEW):** persistence round-trips + factory gating
+        (`cleanupEnabled=false → nil cleaner`, `true → FoundationModelsCleaner`).
+      - `MoatAudit` allowlist += `Combine` (Apple; `ObservableObject`) — still
+        rejects any non-Apple import.
+      - `make build` clean; `make test` **112 total, 5 XCTSkip, 0 failures**;
+        `make verify-moat` 7/7; lint 0 serious. **Window live behavior deferred**
+        (`human-verification.md` §4.1); store + toggle gating are `[verified]`.
+
 ## Done (this session — 2026-06-21, loop run #11 — autonomous BEAT-row verification)
 
 - [x] **Structural moat audit + headless latency measurement + WER harness**

@@ -80,6 +80,23 @@ unit-verified; the **live paste** is not. **This is the project's #1 `[unverifie
 - [ ] **Password field**: synthetic Cmd+V is silently rejected by secure fields;
       the session reaches `done` **without crashing** (graceful no-op).
 
+## 4. UI screens (visual verification — built, not yet seen)
+
+UI built after the user authorized it (2026-06-21). Logic/persistence is
+unit-tested; the **rendered, interactive behavior** needs a human running the app.
+
+### 4.1 Settings window (P10)
+- [ ] "Settings…" menu item opens a window.
+- [ ] AI cleanup toggle flips `cleanupEnabled`; turning it off → the **next**
+      dictation pastes raw text (the toggle is read per-dictation).
+- [ ] Language picker shows en-US + en-GB; STT picker shows Apple Speech
+      (others disabled v0.1/v1 placeholders); cleanup-engine picker shows
+      Foundation Models (Ollama disabled placeholder); paste-mode picker present.
+- [ ] Settings persist after quitting + relaunching.
+
+> Rows for P8 menubar states, P4 overlay, and P7 onboarding are added here as
+> those screens land.
+
 ---
 
 ## How to use this file

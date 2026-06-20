@@ -256,12 +256,19 @@ engine selector (Foundation Models default; placeholder for future Ollama/MLX
 in v1).
 
 **Done when**:
-- [ ] All settings persist across launches
-- [ ] User can rebind the hotkey to a custom key/modifier combo
-- [ ] Language picker lists at least en-US, en-GB
-- [ ] Cleanup toggle is active and functional (toggles the P3.5 path)
-- [ ] Cleanup engine selection is present in the UI (Foundation Models selected
-      by default; v1 alternatives shown as disabled placeholders)
+- [x] All settings persist across launches — `[verified]` (`SettingsStoreTests`:
+      every property + enum encodings round-trip on a fresh store)
+- [~] User can rebind the hotkey to a custom key/modifier combo — `[verified]`
+      binding persistence (`UserDefaultsBindingStore`, P5); **live rebind UX**
+      (record a key combo in the window) `[deferred — visual]`
+- [~] Language picker lists at least en-US, en-GB — `[verified]` store holds the
+      locale (en-US/en-GB); **the picker rendering** `[deferred — visual]`
+- [~] Cleanup toggle is active and functional (toggles the P3.5 path) —
+      `[verified]` the gating logic: `defaultCleaner(for:)` returns `nil` when
+      `cleanupEnabled == false`, and `SpeakEngine.newSession()` re-reads it so the
+      toggle applies per-dictation; **the live UI toggle** `[deferred — visual]`
+- [~] Cleanup engine selection is present in the UI (Foundation Models default;
+      v1 alternatives as disabled placeholders) — built; `[deferred — visual]`
 
 ---
 
