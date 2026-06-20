@@ -169,7 +169,7 @@ No magic numbers elsewhere; matrix/gate values reference these symbols.
 | `N/M` | ≥ 13/16 | = `quality.md` §3 compatibility matrix size + ship gate; **measured, not assumed** | `[decision]`, single source = `quality.md` §3 |
 | `F_rate` | < 1 / 30 min | = `roadmap.md` P5 done-when (typing test in Notes) | `[decision]`, single source = `roadmap.md` P5 |
 | double-tap window | 400 ms | human double-tap timing; **flagged to tune in P13 dogfood, not load-bearing** | `[decision]`, tune empirically |
-| history size | "last N" | no frontier anchor (Wispr has none); pick in P9, justify, make a setting | `[decision]`, not a hardcoded constant |
+| history size | 10,000 entries | no frontier anchor (Wispr has none); derivation: avg entry ≈ 400 B (UUID 36 B + timestamps 30 B + text ~300 B + engineId 30 B + overhead) → 10 k entries ≈ 4 MB on disk, negligible on modern hardware; value is an init param (P10 Settings exposes it) `[decision]` — set in P9, source = `HistoryStore.defaultHistoryMaxEntries` | `[decision]` |
 
 > **Rule for the build loop**: if you introduce a numeric constant not derivable
 > from a measured value, a platform constraint, or a `[decision]` row here, that

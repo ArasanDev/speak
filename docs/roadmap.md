@@ -226,12 +226,24 @@ tunable setting (not a hardcoded constant — see `benchmark.md` §7 "history
 size"). Searchable from a History window.
 
 **Done when**:
-- [ ] Every completed session writes a `HistoryEntry` (with `cleanedText`
-      when cleanup ran, `nil` otherwise)
-- [ ] History persists across app launches
-- [ ] Search by substring returns matching entries
-- [ ] "Clear history" empties the store
-- [ ] "Export" produces a readable file (plain text or JSON)
+- [~] Every completed session writes a `HistoryEntry` (with `cleanedText`
+      when cleanup ran, `nil` otherwise) — `[verified]` `HistoryStore.save()`
+      round-trips both `cleanedText`-present and `nil` (`testNilCleanedTextRoundTrips`);
+      **end-to-end wiring pending** — nothing calls `save()` on session `.done`
+      yet (integration follow-up: `SpeakEngine` facade owns history + settings
+      per architecture §6, or `CaptureSession` gains a `history` param like
+      `inserter`; settle when `SpeakEngine` is built)
+- [x] History persists across app launches — `[verified]`
+      (`testSaveAndReopenPersistence`: a second `HistoryStore` on the same file
+      reads back saved entries)
+- [x] Search by substring returns matching entries — `[verified]` (matches in
+      both `rawText` and `cleanedText`; empty on no match)
+- [x] "Clear history" empties the store — `[verified]` (`testClearEmptiesStore`)
+- [x] "Export" produces a readable file (plain text or JSON) — `[verified]`
+      (JSON, ISO-8601 dates; `testExportContainsEntriesText`)
+- [ ] **History window (UI)** — search/clear/export surfaced in a SwiftUI
+      window — `[deferred — UI task; needs visual verification]` (not built here;
+      store layer is complete)
 
 ---
 
