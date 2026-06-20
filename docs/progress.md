@@ -31,6 +31,18 @@ marked passed — "done = verified, not assumed." **The runnable app + the check
 is the complete handoff.** Every UI screen's *logic* is unit-tested; only the
 *rendered/live* behavior is deferred.
 
+> **Launch-survival VERIFIED (loop run #15, orchestrator):** `make build` then
+> launched `Speak.app` three times on the dev Mac (no permissions granted). Each
+> run: process alive, STAT `S` (idle event loop, not a CPU spin), normal startup
+> CPU, clean termination. `sample` showed the **main thread in `NSApplicationMain`**
+> (the AppKit run loop) — NOT stuck in `semaphore_wait`/`DictationController.init`,
+> so the full startup path executed: `HotkeyMonitor` init semaphore signaled →
+> `applicationDidFinishLaunching` → `startMonitoring()` (permission-denied handled
+> gracefully) → steady-state idle. This upgrades "runnable" from *inferred* (build
+> compiles) to *verified* (the new startup path actually runs without crashing or
+> hanging). The hotkey/paste/onboarding-window *rendered behavior* still needs
+> permissions + a human (human-verification.md) — but does-it-launch is now proven.
+
 > **Design decision (this session):** history-save lives in `SpeakEngine.endDictation`
 > as best-effort (logged + swallowed) — a failed DB write must NOT fail a dictation
 > whose text already pasted. Paste-failure, by contrast, errors the session (it IS
