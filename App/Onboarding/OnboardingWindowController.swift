@@ -124,6 +124,48 @@ final class OnboardingWindowController {
 
     /// A thin NSWindowDelegate that logs when the user closes the window manually.
     private lazy var windowCloseDelegate: WindowCloseDelegate = WindowCloseDelegate(log: log)
+
+#if DEBUG
+    // MARK: - Debug (verification harness only)
+
+    /// Shows the onboarding window forced to a specific step. The normal
+    /// permission-gated polling and the auto-close watchForCompletion task are
+    /// both suppressed so the step stays visible for screenshotting regardless
+    /// of TCC state or step completion.
+    ///
+    /// Called only from `DebugLaunchDispatcher`. Never compiled into release builds.
+    func showForcedStep(_ step: OnboardingStep) {
+        // Force the VM step first (suppresses polling inside forceStep()).
+        viewModel.forceStep(step)
+
+        if let existing = window, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let contentView = OnboardingView(viewModel: viewModel)
+        let hosting = NSHostingView(rootView: contentView)
+
+        let win = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 400),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        win.title = "Welcome to speak (debug)"
+        win.contentView = hosting
+        win.isReleasedWhenClosed = false
+        win.center()
+        self.window = win
+
+        win.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        // Note: watchForCompletion() is intentionally NOT called here so the
+        // window does not auto-close when the step is .done.
+        log.info("OnboardingWindowController [DEBUG]: window shown forced to step \(String(describing: step), privacy: .public)")
+    }
+#endif
 }
 
 // MARK: - WindowCloseDelegate

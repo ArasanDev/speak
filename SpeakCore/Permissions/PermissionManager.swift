@@ -63,6 +63,32 @@ public final class PermissionManager {
         return state
     }
 
+    /// Requests Accessibility access. Unlike `status(.accessibility)` (a silent
+    /// check), this **registers the app in the Accessibility list** and shows the
+    /// system prompt when not yet trusted — the only way `speak` appears in
+    /// System Settings → Privacy → Accessibility for the user to toggle on.
+    /// Returns whether the process is already trusted.
+    /// [verified: swiftc -typecheck against macOS 26 SDK, 2026-06-21]
+    @discardableResult
+    public func requestAccessibility() -> Bool {
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        let trusted = AXIsProcessTrustedWithOptions(options)
+        SpeakLog.permissions.info("accessibility prompt → trusted=\(trusted, privacy: .public)")
+        return trusted
+    }
+
+    /// Requests Input Monitoring ("listen event") access. Registers the app in
+    /// the Input Monitoring list and shows the system prompt when not yet granted
+    /// — the counterpart to the silent `IOHIDCheckAccess` read in `status(_:)`.
+    /// Returns whether access is already granted.
+    /// [verified: swiftc -typecheck against macOS 26 SDK, 2026-06-21]
+    @discardableResult
+    public func requestInputMonitoring() -> Bool {
+        let granted = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+        SpeakLog.permissions.info("inputMonitoring prompt → granted=\(granted, privacy: .public)")
+        return granted
+    }
+
     private static func map(_ status: AVAuthorizationStatus) -> PermissionState {
         switch status {
         case .notDetermined: return .notDetermined

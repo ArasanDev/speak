@@ -28,8 +28,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let controller = DictationController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+#if DEBUG
+        let debugDispatcher = DebugLaunchDispatcher()
+        if let target = DebugLaunchDispatcher.parseTarget() {
+            // A debug target fully owns the launch: do NOT call startMonitoring()
+            // for ANY target. startMonitoring() runs showOnboardingIfNeeded(),
+            // which pops the production onboarding window (when onboarding is
+            // incomplete) on top of the requested debug window — defeating the
+            // isolation each screenshot needs. The dispatcher opens exactly the
+            // one surface the harness asked for; nothing else should draw.
+            _ = debugDispatcher.dispatch(target: target, controller: controller)
+            // Keep the dispatcher alive for the process lifetime so retained
+            // window controllers / panels are not deallocated.
+            self.debugDispatcherStorage = debugDispatcher
+            return
+        }
+#endif
         controller.startMonitoring()
     }
+
+#if DEBUG
+    /// Holds the `DebugLaunchDispatcher` alive for the process lifetime when a
+    /// `--debug-open` target is present. `nil` in normal (non-debug-launch) runs.
+    /// [decision: stored on AppDelegate — avoids global mutable state while
+    ///  keeping the dispatcher for the full process lifetime]
+    private var debugDispatcherStorage: DebugLaunchDispatcher?
+#endif
 }
 
 // MARK: - SpeakApp

@@ -68,6 +68,25 @@ final class OnboardingViewModel: ObservableObject {
         pollTask?.cancel()
     }
 
+#if DEBUG
+    // MARK: - Debug (verification harness only)
+
+    /// Forces the onboarding view to display a specific step, bypassing the
+    /// normal permission-gated auto-advance. Also suppresses the polling loop
+    /// so TCC state on the test machine does not inadvertently advance the step.
+    ///
+    /// Called only from the `--debug-open onboarding-<step>` launch-arg path in
+    /// `DebugLaunchDispatcher`. Never called in release builds.
+    ///
+    /// - Parameter step: The `OnboardingStep` to display.
+    func forceStep(_ step: OnboardingStep) {
+        pollTask?.cancel()
+        pollTask = nil
+        displayedStep = step
+        log.info("OnboardingViewModel [DEBUG]: forced step to \(String(describing: step), privacy: .public)")
+    }
+#endif
+
     // MARK: - Lifecycle
 
     /// Call when the onboarding window appears. Starts the status-poll loop.
@@ -94,6 +113,34 @@ final class OnboardingViewModel: ObservableObject {
             self.isRequestingMic = false
             self.refreshEvaluation()
             self.advanceStepIfGranted(kind: .microphone)
+        }
+    }
+
+    /// Primary action for the Accessibility step. Calls the prompting API so the
+    /// app is **registered in the Accessibility list** (and a system prompt shows
+    /// when not yet trusted), then opens System Settings so the user can toggle it
+    /// on. Without this, the app never appears in the list and the deep-link lands
+    /// on an empty pane — the toggle has nothing to act on.
+    func requestAccessibility() {
+        let trusted = permissionManager.requestAccessibility()
+        refreshEvaluation()
+        if trusted {
+            advanceStepIfGranted(kind: .accessibility)
+        } else {
+            openSystemSettings(for: .accessibility)
+        }
+    }
+
+    /// Primary action for the Input Monitoring step. Registers the app in the
+    /// Input Monitoring list (and prompts), then opens System Settings. Same
+    /// rationale as `requestAccessibility()`.
+    func requestInputMonitoring() {
+        let granted = permissionManager.requestInputMonitoring()
+        refreshEvaluation()
+        if granted {
+            advanceStepIfGranted(kind: .inputMonitoring)
+        } else {
+            openSystemSettings(for: .inputMonitoring)
         }
     }
 

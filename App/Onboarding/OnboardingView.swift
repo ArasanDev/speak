@@ -61,7 +61,7 @@ struct OnboardingView: View {
                 status: viewModel.evaluation.blockingPermissions.contains(.accessibility)
                     ? .needed : .granted,
                 isLoading: false,
-                onAction: { viewModel.openSystemSettings(for: .accessibility) },
+                onAction: { viewModel.requestAccessibility() },
                 onContinue: { viewModel.advance() },
                 onOpenSettings: { viewModel.openSystemSettings(for: .accessibility) }
             )
@@ -71,7 +71,7 @@ struct OnboardingView: View {
                 status: viewModel.evaluation.blockingPermissions.contains(.inputMonitoring)
                     ? .needed : .granted,
                 isLoading: false,
-                onAction: { viewModel.openSystemSettings(for: .inputMonitoring) },
+                onAction: { viewModel.requestInputMonitoring() },
                 onContinue: { viewModel.advance() },
                 onOpenSettings: { viewModel.openSystemSettings(for: .inputMonitoring) }
             )
