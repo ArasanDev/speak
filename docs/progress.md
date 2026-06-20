@@ -137,18 +137,14 @@ thrash, since the next work (Phase 0) is blocked on a human gate.
 
 ## Next up
 
-0. **DECISION (gates the next real Swift work)**: SwiftPM-now vs wait-for-Xcode
-   for `SpeakCore` logic — see Open Q #5. Asked the human this run.
-1. **If SwiftPM-now**: stand up `Package.swift` + `Sources/SpeakCore/` +
-   `Tests/SpeakCoreTests/`; implement the framework-agnostic core (protocols,
-   `CaptureSession` state machine, error/result types, `SpeakLog`, `SettingsStore`,
-   `HistoryStore`) behind mock `Transcribing`/`LLMCleaning` conformances; gate
-   the framework-bound impls (`AppleSpeechTranscriber`, `FoundationModelsCleaner`,
-   `AudioCapture`, `HotkeyMonitor`, `PasteboardWriter`) behind the app target /
-   `#if canImport`. `swift test` is the verification.
-2. **When Xcode lands**: the mandated `.xcodeproj` (app + `SpeakCore.framework`
-   target + `SpeakTests`), `Makefile`, CI, then re-home / wrap the SwiftPM sources.
-   Done when `make build` works from a clean clone.
+0. **WAITING ON XCODE INSTALL** (human is installing full Xcode). Loop polls for
+   `xcodebuild`. Decision Q#5 = canonical `.xcodeproj` path, **no SwiftPM**.
+1. **When `xcodebuild` is present**: build the mandated Xcode project per
+   `architecture.md` §5 — app target (`Speak.app`) + **`SpeakCore.framework`**
+   target + `SpeakTests`; directory layout; `Makefile` (`build`/`test`/`release`);
+   `swiftlint` config (install via brew); GitHub Actions CI (`xcodebuild build` +
+   `swiftlint`). Done when `make build` produces a runnable `.app` from a clean
+   clone (roadmap P0 done-when).
 3. **P1 → P2 → P3 → P3.5 (cleanup) → P5 → P6** along the critical path.
 4. The loop runs until `benchmark.md` §4 MATCH gate + §3 BEAT rows +
    `quality.md` §9 all pass. No deadline.
@@ -174,7 +170,7 @@ thrash, since the next work (Phase 0) is blocked on a human gate.
 | # | Question | Status | Needed by |
 |---|---|---|---|
 | 1 | Xcode/Swift toolchain available here? Repo needs `git init`. | **Resolved 2026-06-20**: `git init` **DONE** (`e3f9b63`); `swift` 6.3.2 ✓; **`xcodebuild` ✗ (no full Xcode)**. Xcode-bound P0 parts blocked; the rest is not. | P0 |
-| 5 | **Build+test `SpeakCore` logic via SwiftPM now, or wait for Xcode?** CLT SDK typechecks `Speech`/`FoundationModels`/`AVFoundation`/`SQLite3` imports, so framework-agnostic core logic is `swift test`-able today behind mocks. SwiftPM alongside the mandated `.xcodeproj` is a build-system addition → human call (`AGENTS.md` §4). | **Asked 2026-06-20 (loop #2)** | next Swift task |
+| 5 | **Build+test `SpeakCore` logic via SwiftPM now, or wait for Xcode?** | **Resolved 2026-06-20 (loop #2)**: human chose **install Xcode, then continue** — proceed straight into the canonical `.xcodeproj`-based Phase 0, **no SwiftPM detour**. Loop now polls for `xcodebuild`. | P0 |
 | 2 | `Foundation Models` runtime availability/quality for cleanup on the target Macs (Apple Intelligence gating, M-series, locale)? | Verify empirically at P3.5; raw fallback exists | P3.5 |
 | 3 | Does write+`Cmd+V` avoid the paste prompt incl. the macOS 26.4 Terminal provenance check? | `[unverified]` — test in Terminal/iTerm | P6 |
 | 4 | Developer ID signing cert for notarization? | Unverified | P11 |
