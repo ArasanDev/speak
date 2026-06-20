@@ -8,19 +8,16 @@
 
 ## Current phase
 
-**Phases 0, 1, 2, 3, 3.5 COMPLETE; P5 code-complete (live criteria deferred).**
-P5 — global hotkey — delivers `HotkeyMonitor` (CGEventTap-based, `SpeakCore/Hotkey/`)
-with the pure `DoubleTapDetector` state machine, `HotkeyBinding` with custom
-`Codable` for `CGEventFlags`, `BindingStoring`/`UserDefaultsBindingStore`
-persistence boundary, and full `AsyncStream<HotkeyEvent>` output. `make build`
-zero new warnings, `make lint` 0 serious violations (pre-existing file_length
-only), `make test` **44 XCTest (5 XCTSkip live-FM) + 6 swift-testing green; 19
-new P5 tests all green**. Four P5 done-when rows `[verified]` via unit tests;
-**three rows `[deferred — needs human verification]`** (live OS + other-app
-focus, permission prompts, false-trigger rate) — P5 is therefore NOT ship-gate
-complete, only code-complete. Critical path: P3.5 → **P5 (code) →** P6 → P11 →
-P13. Next: **P6 (PasteboardWriter + Cmd+V)** — the product's biggest `[unverified]`
-(macOS 26.4 paste-provenance check), also live-gated.
+**Phases 0, 1, 2, 3, 3.5 COMPLETE; P5 code-complete; P6 code-complete (live criteria deferred).**
+P5 — global hotkey — delivers `HotkeyMonitor` (CGEventTap-based, `SpeakCore/Hotkey/`).
+P6 — paste — delivers `TextInserting` protocol + `PasteboardWriter` conformer
+(`SpeakCore/Paste/`), wired additively into `CaptureSession` via optional `inserter`
+param. `make build` zero new warnings, `make lint` 0 new serious violations,
+`make test` **50 tests total (5 XCTSkip live-FM); 6 new P6 tests all green;
+all 44 prior tests still green**. Seven P6 done-when rows `[verified]` via unit
+tests (mock inserter); **four rows `[deferred — needs human verification]`**:
+TextEdit paste, Slack paste, Terminal paste-provenance (the project's #1 `[unverified]`),
+and password-field silent no-op. Critical path: P3.5 → P5 → **P6 (code) →** P11 → P13.
 
 > **Orchestrator review note (loop #6):** caught + fixed a latent correctness
 > bug before commit — `DoubleTapDetector` was fed `CGEvent.timestamp / 1e9` as
@@ -34,6 +31,63 @@ P13. Next: **P6 (PasteboardWriter + Cmd+V)** — the product's biggest `[unverif
 > CFRunLoop thread leaks per instance (fine for a single app-lifetime monitor).
 
 ---
+
+## Done (this session — 2026-06-20, loop run #7 — P6 PasteboardWriter)
+
+- [x] **Phase 6 code-complete (live criteria deferred) — paste seam**
+      - **`SpeakCore/Paste/TextInserting.swift` (NEW):** `public protocol TextInserting: Sendable`
+        with `func insert(_ text: String) async throws`. The paste-seam abstraction:
+        `CaptureSession` calls this just before reaching `.done`; tests inject a
+        mock; the real `PasteboardWriter` uses NSPasteboard + CGEvent.
+      - **`SpeakCore/Paste/PasteboardWriter.swift` (NEW):** `final class PasteboardWriter: TextInserting`.
+        Stateless (only a `SpeakLog.paste` Logger) → auto-`Sendable`, no `@unchecked`.
+        - `insert(_:)` step 1: `NSPasteboard.general.clearContents()` + `setString(_:forType:.string)`
+          — WRITE ONLY. Never reads the pasteboard (hard rule).
+        - `insert(_:)` step 2: `simulateCmdV()` — `CGEventSource(stateID:.hidSystemState)`,
+          `CGEvent(keyboardEventSource:virtualKey:kVK_ANSI_V=0x09:keyDown:)` (kVK_ANSI_V
+          constant from Carbon/HIToolbox, `[verified]` = 9 = 0x09), `.flags = .maskCommand`,
+          `.post(tap:.cghidEventTap)` (Swift instance method, not the obsoleted free fn).
+          nil `CGEvent` → logs + throws `SpeakError.pasteboardBusy` (no force-unwrap).
+      - **`SpeakCore/Engine/CaptureSession.swift` (MODIFIED — additive):**
+        - Added `private let inserter: (any TextInserting)?` storage.
+        - Extended `init` with `inserter: (any TextInserting)? = nil` (default nil
+          → all existing call-sites and tests compile unchanged).
+        - In `stop()`: after building `result`, before `state = .done`, calls
+          `try await inserter.insert(cleanedText ?? rawText)` when inserter is non-nil.
+          On throw: sets `state = .error(speakError)`, finishes partials continuation,
+          clears streamTask, rethrows — no resource leak.
+      - **`SpeakTests/PasteTests.swift` (NEW, 6 tests, all green):**
+        - `testInserterNilDoesNotInsertAndSessionIsDone` — pre-P6 path unchanged.
+        - `testInserterReceivesCleanedTextWhenCleanupSucceeds` — insert gets cleanedText.
+        - `testInserterReceivesRawTextWhenCleanerIsNil` — insert gets rawText.
+        - `testInserterReceivesRawTextWhenCleanerIsUnavailable` — graceful-fallback path.
+        - `testInserterThrowsTransitionsSessionToError` — SpeakError.pasteboardBusy.
+        - `testInserterGenericThrowWrappedToPasteboardBusy` — generic error mapping.
+      - **SDK verifications (swiftc -typecheck + runtime, 2026-06-20):**
+        - `NSPasteboard.clearContents()` → Int [verified]
+        - `NSPasteboard.setString(_:forType:.string)` → Bool [verified]
+        - `CGEventSource(stateID:.hidSystemState)` → optional [verified]
+        - `CGEvent(keyboardEventSource:virtualKey:keyDown:)` → optional [verified]
+        - `CGEvent.post(tap:.cghidEventTap)` instance method [verified]
+        - `kVK_ANSI_V = 9 = 0x09` [verified: runtime]
+        - `CGEventFlags.maskCommand` [verified]
+      - **make build**: zero new warnings. **make lint**: 0 new serious violations.
+        **make test**: 50/50 (5 XCTSkip = pre-existing live FM); 6 new P6 tests green;
+        all 44 prior tests still pass.
+      - **P6 done-when rows:**
+        - `[verified]` `TextInserting` protocol + `PasteboardWriter` conformer compile clean.
+        - `[verified]` `CaptureSession(inserter:nil)` → no insert, session → `.done`.
+        - `[verified]` Cleanup on: inserter receives `cleanedText`.
+        - `[verified]` Cleanup off: inserter receives `rawText`.
+        - `[verified]` Cleanup unavailable: inserter receives `rawText`.
+        - `[verified]` Insert throws → session → `.error(.pasteboardBusy)`.
+        - `[verified]` All 44 prior tests still green.
+        - `[deferred — needs human verification]` Paste into TextEdit (plain text).
+        - `[deferred — needs human verification]` Paste into Slack (rich text).
+        - `[deferred — needs human verification]` Terminal paste-provenance —
+          **the project's #1 `[unverified]`: whether write+Cmd+V avoids macOS 26.4's
+          Terminal pastejacking check. Must be tested by a human in a running app.**
+        - `[deferred — needs human verification]` Password-field silent no-op (no crash).
 
 ## Done (this session — 2026-06-20, loop run #6 — P5 HotkeyMonitor)
 
