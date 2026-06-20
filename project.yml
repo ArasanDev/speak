@@ -56,6 +56,7 @@ targets:
         LSUIElement: true            # menubar-only, no Dock icon
         CFBundleDisplayName: speak
         CFBundleName: speak
+        NSMicrophoneUsageDescription: "speak transcribes your voice into text on-device. Audio is never uploaded or stored — it never leaves your Mac."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.speak.app

@@ -1,8 +1,8 @@
 // App/SpeakApp.swift
 //
-// The app shell: a menubar-only (LSUIElement) SwiftUI app. v0 P1 scaffold —
-// idle waveform icon + a menu with About and Quit. The dictation engine lives
-// in SpeakCore.framework; this target is the thin UI shell (architecture §5).
+// The app shell: a menubar-only (LSUIElement) SwiftUI app. The dictation engine
+// lives in SpeakCore.framework; this target is the thin UI shell (architecture
+// §5). The icon reflects capture state; full state-driven icons land at P8.
 
 import SwiftUI
 import AppKit
@@ -11,21 +11,25 @@ import SpeakCore
 @main
 struct SpeakApp: App {
 
-    init() {
-        // Proves SpeakCore links and the logging seam works from the app target.
-        SpeakLog.engine.info("speak launched")
-    }
+    @StateObject private var micTest = MicTestController()
 
     var body: some Scene {
-        MenuBarExtra("speak", systemImage: "waveform") {
-            SpeakMenu()
+        MenuBarExtra("speak", systemImage: micTest.isCapturing ? "waveform.circle.fill" : "waveform") {
+            SpeakMenu(micTest: micTest)
         }
         .menuBarExtraStyle(.menu)
     }
 }
 
 private struct SpeakMenu: View {
+    @ObservedObject var micTest: MicTestController
+
     var body: some View {
+        // Temporary P2 affordance — real hotkey-driven capture arrives at P5.
+        Button(micTest.isCapturing ? "Stop mic test" : "Start mic test") {
+            micTest.toggle()
+        }
+        Divider()
         Button("About speak…") {
             NSApplication.shared.orderFrontStandardAboutPanel(nil)
             NSApplication.shared.activate(ignoringOtherApps: true)
