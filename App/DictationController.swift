@@ -67,11 +67,23 @@ final class DictationController: ObservableObject {
     /// the overlay panel has its own `OverlayViewModel`.
     @Published private(set) var partialText: String = ""
 
+    /// Hardware-mute state (SPEC §7.4). Mirrors `engine.isMuted` for the menu
+    /// checkmark. The authoritative state lives in the engine (the bypass-proof
+    /// gate); this published copy is updated whenever the toggle changes.
+    @Published private(set) var isMuted: Bool = false
+
     // MARK: - Private components
 
     private let engine: SpeakEngine
     private let monitor: HotkeyMonitor
     private var eventTask: Task<Void, Never>?
+
+    /// The history store, shared with the engine. Exposed so the History window
+    /// can read/search/clear/export the same persistent store the engine writes to.
+    let historyStore: any HistoryStoring
+
+    /// The History window controller. Created lazily on first show request.
+    private var historyController: HistoryWindowController?
 
     // MARK: - Overlay (P4)
 
@@ -131,6 +143,7 @@ final class DictationController: ObservableObject {
             )
             historyStore = NullHistoryStore()
         }
+        self.historyStore = historyStore
 
         // --- Engine (production wiring) ---
         // Transcriber and cleaner are chosen via the runtime factories (§10.1/§10a.1).
@@ -250,12 +263,41 @@ final class DictationController: ObservableObject {
 
             // P4: spawn the partials-streaming task and show the overlay.
             startOverlay()
+        } catch SpeakError.microphoneMuted {
+            // Hardware-mute refusal (SPEC §7.4) is NOT an error — the engine
+            // declined to start capture by design. Stay idle; the menu shows the
+            // mute state. No overlay, no audio, nothing read.
+            icon = .idle
+            SpeakLog.engine.info("DictationController: start ignored — microphone muted.")
         } catch {
             icon = .error
             SpeakLog.engine.error(
                 "DictationController: beginDictation failed — \(error.localizedDescription, privacy: .public)"
             )
         }
+    }
+
+    // MARK: - Hardware mute (SPEC §7.4)
+
+    /// Toggle the hardware-mute state. Routes to the engine (the authoritative,
+    /// bypass-proof gate) and mirrors the new value into `isMuted` for the menu.
+    func toggleMute() {
+        Task { [weak self] in
+            guard let self else { return }
+            let newValue = await self.engine.toggleMute()
+            self.isMuted = newValue
+        }
+    }
+
+    // MARK: - History window (P9)
+
+    /// Show the History window, creating it lazily. Reads the same `historyStore`
+    /// the engine writes to, so every completed dictation appears here.
+    func showHistory() {
+        if historyController == nil {
+            historyController = HistoryWindowController(store: historyStore)
+        }
+        historyController?.show()
     }
 
     private func endDictation() async {

@@ -71,6 +71,14 @@ public actor SpeakEngine {
     /// The in-flight dictation session. `nil` when idle.
     private var currentSession: CaptureSession?
 
+    /// Hardware-mute state (SPEC §7.4 / product.md §8 #4). When `true`,
+    /// `beginDictation` refuses to start a session — so no `CaptureSession` and
+    /// no audio capture is ever constructed. This is the bypass-proof enforcement
+    /// point for the privacy guarantee ("when muted, no audio is read"): the gate
+    /// lives in the one place that starts capture, not in the UI layer that could
+    /// be circumvented. Actor-isolated so reads/writes are data-race-free.
+    private var muted: Bool = false
+
     // MARK: - Init
 
     /// Create a `SpeakEngine` wired with the given components.
@@ -157,9 +165,38 @@ public actor SpeakEngine {
     /// `async throws` (it initiates the STT stream). §6's non-async `throws`
     /// signature is a primary-source contradiction — surfaced, not papered over.
     public func beginDictation() async throws {
+        // Hardware-mute gate (SPEC §7.4). Refuse before any session/capture is
+        // created so the "no audio is read when muted" guarantee holds at the
+        // only place that could start the microphone. Throws a dedicated refusal
+        // the app shell treats as "stay idle", not as an error.
+        guard !muted else {
+            SpeakLog.engine.info("SpeakEngine: beginDictation refused — microphone is muted.")
+            throw SpeakError.microphoneMuted
+        }
         let session = newSession()
         SpeakLog.engine.info("SpeakEngine: beginDictation — starting new session.")
         try await session.start()
+    }
+
+    // MARK: - Hardware mute (SPEC §7.4)
+
+    /// Whether capture is currently muted. When `true`, `beginDictation` refuses.
+    public var isMuted: Bool {
+        muted
+    }
+
+    /// Set the mute state explicitly.
+    public func setMuted(_ newValue: Bool) {
+        muted = newValue
+        SpeakLog.engine.info("SpeakEngine: mute set to \(newValue, privacy: .public).")
+    }
+
+    /// Toggle the mute state and return the new value.
+    @discardableResult
+    public func toggleMute() -> Bool {
+        muted.toggle()
+        SpeakLog.engine.info("SpeakEngine: mute toggled to \(self.muted, privacy: .public).")
+        return muted
     }
 
     /// End the current dictation.

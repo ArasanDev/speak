@@ -130,6 +130,7 @@ final class MoatAuditTests: XCTestCase {
         "ApplicationServices",
         "Carbon.HIToolbox",
         "IOKit.hid",        // IOHIDCheckAccess — P7 Input Monitoring status (Apple IOKit)
+        "UniformTypeIdentifiers",  // Apple framework; UTType.json for history export save-panel
         "SQLite3",
         "SpeakCore",
     ]

@@ -81,6 +81,7 @@ ALLOWED_IMPORTS=(
     "ApplicationServices"
     "Carbon.HIToolbox"
     "IOKit.hid"         # IOHIDCheckAccess — P7 Input Monitoring status (Apple IOKit)
+    "UniformTypeIdentifiers"  # Apple; UTType.json for history export save-panel
     "SQLite3"
     "SpeakCore"
     "Combine"           # Apple; ObservableObject in SpeakCore

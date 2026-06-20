@@ -105,6 +105,24 @@ private struct SpeakMenu: View {
 
         Divider()
 
+        // Hardware mute (SPEC §7.4). Toggles capture; when muted, the engine
+        // refuses to start a session — no audio is read. The label reflects the
+        // live mute state.
+        Button(controller.isMuted ? "Unmute Microphone" : "Mute Microphone") {
+            controller.toggleMute()
+        }
+        if controller.isMuted {
+            Text("Muted — dictation disabled")
+                .foregroundStyle(.secondary)
+        }
+
+        Divider()
+
+        // Opens the History window (roadmap P9) — searchable past dictations.
+        Button("History\u{2026}") {
+            controller.showHistory()
+        }
+
         // Opens the Settings scene declared in SpeakApp.body.
         // `SettingsLink` is the canonical SwiftUI way to open a Settings scene
         // from a MenuBarExtra menu — it uses the platform's openSettings action
