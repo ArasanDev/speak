@@ -149,11 +149,16 @@ binding in `UserDefaults`. Default binding:
 doubleTapWindow: 0.4)`.
 
 **Done when**:
-- [ ] Double-tap Fn triggers start while **another app has focus**
-- [ ] Single-tap Fn triggers stop while another app has focus
-- [ ] First run triggers Accessibility + Input Monitoring permission prompts
+- [~] Double-tap Fn triggers start while **another app has focus** —
+      `[verified]` pure detector logic (DoubleTapDetector tests, injected
+      timestamps); `[deferred — needs human verification]` live OS + other-app
+      focus with Accessibility + Input Monitoring granted
+- [~] Single-tap Fn triggers stop while another app has focus —
+      `[verified]` pure detector logic; `[deferred — needs human verification]` live OS
+- [~] First run triggers Accessibility + Input Monitoring permission prompts —
+      `[deferred — needs human verification]` (requires live non-sandboxed run)
 - [ ] False-trigger rate < 1 per 30 min in normal typing, tested in Notes
-      (single source for `F_rate` in `benchmark.md` §7)
+      (single source for `F_rate` in `benchmark.md` §7) — P13 dogfood
 
 ---
 
