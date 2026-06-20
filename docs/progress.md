@@ -16,15 +16,16 @@ settings, P8 menubar states, P4 partial overlay, P7 3-permission onboarding**
 menubar app that, given live permissions, runs **onboarding → double-tap Fn →
 overlay streams partials → capture → on-device cleanup → paste at cursor → local
 history**, with a Settings window (live cleanup toggle) and state-reflecting
-menubar. `make test` **143 tests (123 XCTest + 20 Swift Testing; 5 XCTSkip
-live-FM), 0 failures**; `make verify-moat` **7/7** (5 of 7 structural BEAT rows
-proven by automated audit — no egress, no account, no third-party, MIT, offline).
+menubar, plus a **History window** and a **hardware-mute** toggle (loop #16).
+`make test` **150 tests (130 XCTest + 20 Swift Testing; 5 XCTSkip live-FM), 0
+failures**; `make verify-moat` **7/7** (5 of 7 structural BEAT rows proven by
+automated audit — no egress, no account, no third-party, MIT, offline).
 
 **Two further autonomous gaps were closed in loop #16** (2026-06-21): the **History
 window UI** (SPEC §5.6 / roadmap P9 — was the last unbuilt UI surface; store layer
 was already done+tested) and **hardware mute** (SPEC §7.4 / product.md §8 #4 — was
 "design posture, not yet implemented"; now enforced in the engine). `make test`
-**149 tests (129 XCTest + 20 Swift Testing; 5 XCTSkip live-FM), 0 failures**;
+**150 tests (130 XCTest + 20 Swift Testing; 5 XCTSkip live-FM), 0 failures**;
 `make verify-moat` **7/7**; lint 0 serious.
 
 **The autonomously-buildable scope is now genuinely exhausted (re-confirmed by a
@@ -98,25 +99,30 @@ mute **chord** (the mute menu toggle ships; the chord is live-gated follow-up).
         actor-isolated `muted` flag to `SpeakEngine`; `beginDictation()` guards on it
         and throws a new `SpeakError.microphoneMuted` **before** any `CaptureSession`
         or transcriber is constructed → "when muted, no audio is read." Added
-        `isMuted` / `setMuted(_:)` / `toggleMute()`.
+        `isMuted` / `setMuted(_:)` / `toggleMute()`. **Both halves of SPEC §7.4
+        "toggles capture":** muting also `cancelDictation()`s an *in-flight* session
+        (advisor caught that a start-only gate would keep reading audio from a
+        dictation already running); `DictationController.toggleMute` mirrors that in
+        the UI (hide overlay → idle).
       - **`SpeakError.microphoneMuted` (NEW case):** additive to the §6 verbatim list,
         surfaced in a header comment. It is a *refusal*, not a fault — `DictationController`
         catches it specifically and stays `.idle` (no `.error` flash, no overlay).
       - **UI:** "Mute/Unmute Microphone" menu item + a "Muted — dictation disabled"
         line; `DictationController.toggleMute()` mirrors `engine.isMuted` into a
         published flag for the menu checkmark.
-      - **`SpeakTests/SpeakEngineMuteTests.swift` (NEW, 6 XCTest, all green, NO skip):**
+      - **`SpeakTests/SpeakEngineMuteTests.swift` (NEW, 7 XCTest, all green, NO skip):**
         uses a `RecordingTranscriber` that records whether `startStream` was ever
-        called. The load-bearing test — `testMutedRefusesBeginAndNeverStartsTranscriber`
-        — proves the privacy guarantee headlessly: muted → throws `.microphoneMuted`
-        **and** `didStartStream == false` **and** state stays `.idle`. Plus default-
-        unmuted, set/toggle semantics, unmuted-allows-begin, unmute-restores.
+        called. The load-bearing tests — `testMutedRefusesBeginAndNeverStartsTranscriber`
+        (muted → throws `.microphoneMuted` **and** `didStartStream == false` **and**
+        state `.idle`) and `testMutingStopsInFlightCapture` (mute while `.listening`
+        → session no longer listening). Plus default-unmuted, set/toggle semantics,
+        unmuted-allows-begin, unmute-restores.
       - **v0 scope (honest):** the mute *toggle* ships as a menu item; a global mute
         *chord* (SPEC §7.4 wording) is a tracked, live-gated follow-up (human-
         verification.md §4.6) — not built, to avoid unverifiable surface.
       - README guarantee #4 updated from "design posture, not yet implemented" to the
         engine-enforced + unit-tested reality.
-- [x] **Verification:** `make build` clean; `make test` **149 tests (129 XCTest +
+- [x] **Verification:** `make build` clean; `make test` **150 tests (130 XCTest +
       20 Swift Testing), 5 XCTSkip (pre-existing live-FM), 0 failures**; `make
       verify-moat` **7/7**; `make lint` **0 serious** (my new files: 0 violations).
 - [x] **SPEC §5–§7 feature scan (advisor-requested, to confirm no third gap):**

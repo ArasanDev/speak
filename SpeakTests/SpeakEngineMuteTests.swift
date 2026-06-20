@@ -142,6 +142,25 @@ final class SpeakEngineMuteTests: XCTestCase {
         await engine.cancelDictation()
     }
 
+    /// THE GUARANTEE (in-flight half): muting while a session is `.listening`
+    /// stops capture — the session is no longer listening (SPEC §7.4 "toggles
+    /// capture"). A mute that only blocked *starting* would keep reading audio.
+    func testMutingStopsInFlightCapture() async throws {
+        let transcriber = RecordingTranscriber()
+        let engine = try makeEngine(transcriber: transcriber)
+
+        try await engine.beginDictation()
+        let listening = await engine.currentState
+        XCTAssertEqual(String(describing: listening), String(describing: CaptureSession.State.listening),
+            "Precondition: engine must be listening before we mute.")
+
+        await engine.setMuted(true)
+
+        let afterMute = await engine.currentState
+        XCTAssertNotEqual(String(describing: afterMute), String(describing: CaptureSession.State.listening),
+            "Muting mid-capture MUST stop the in-flight session — no audio may keep being read (SPEC §7.4).")
+    }
+
     /// Unmuting after a muted refusal restores the ability to dictate.
     func testUnmuteRestoresDictation() async throws {
         let transcriber = RecordingTranscriber()

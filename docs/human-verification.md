@@ -197,8 +197,10 @@ is `[deferred — needs human verification]`.
 - [ ] **"Clear History"** empties the list and the underlying store (confirm entries
       do not reappear after relaunch).
 - [ ] **"Export…"** opens a save panel and writes a readable JSON file of all entries.
-- [ ] **A real dictation appears in the window** without relaunching (the engine and
-      the window share one `historyStore`).
+- [ ] **A real dictation appears** after reopening the window or re-running the
+      search — the engine and the window share one `historyStore`, but the window
+      does **not** auto-refresh while open (no live observer; re-query to see new
+      entries). `[v0.1: live refresh]`
 - [ ] **Empty state** shows "No dictations yet" on a fresh install, and "No matches"
       when a search has no results.
 
@@ -214,6 +216,10 @@ is read when muted"). The **live behavior + the "impossible to bypass" claim** a
       "Muted — dictation disabled" line while muted.
 - [ ] **While muted, double-tap Fn does nothing** — no overlay, menubar stays idle,
       and (confirm via Console/`log stream`) no `CaptureSession`/STT start is logged.
+- [ ] **Muting mid-dictation stops capture** — start a dictation, then mute while
+      it is listening: the overlay hides, the menubar returns to idle, and capture
+      stops (the in-flight session is cancelled). Unit-proven headlessly
+      (`testMutingStopsInFlightCapture`); confirm the live UI cleanup matches.
 - [ ] **Unmuting restores dictation** — double-tap Fn works again immediately.
 - [ ] **`[deferred — design follow-up]` Global mute chord**: v0 ships the mute toggle
       as a **menu item only**. A global hotkey *chord* for mute (SPEC §7.4 wording) is

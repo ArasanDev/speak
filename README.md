@@ -6,7 +6,7 @@
 [![Status: pre-release (v0 in active development)](https://img.shields.io/badge/status-pre--release-orange)](docs/progress.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform: macOS 26+ · Apple Silicon](https://img.shields.io/badge/platform-macOS%2026%2B%20%C2%B7%20Apple%20Silicon-lightgrey)](#build-from-source)
-[![Tests: 143 passing](https://img.shields.io/badge/tests-143%20passing-green)](docs/progress.md)
+[![Tests: 150 passing](https://img.shields.io/badge/tests-150%20passing-green)](docs/progress.md)
 [![Moat audit: 7/7](https://img.shields.io/badge/moat%20audit-7%2F7-green)](#privacy)
 
 `speak` is a menubar app. Press a hotkey, talk, stop. A live overlay streams your
@@ -90,11 +90,13 @@ and fail the build if any appear. It is a re-runnable, regression-gated proof,
 not a promise. Current status: **7/7 checks pass**.
 
 Guarantee 4 (hardware mute) is enforced in the engine, not the UI: when muted,
-`SpeakEngine.beginDictation` refuses and the transcriber is never started — so no
-microphone capture is ever initiated. This is unit-tested headlessly
+`SpeakEngine.beginDictation` refuses and the transcriber is never started, and
+muting *during* a dictation cancels the in-flight session — so no microphone
+capture is ever initiated or continued while muted. This is unit-tested headlessly
 (`SpeakEngineMuteTests` asserts the transcriber's `startStream` is never called
-while muted). In v0 the mute toggle is a menu item; a global mute *chord* is a
-tracked follow-up (`docs/human-verification.md` §4.6).
+while muted, and that muting mid-capture stops the listening session). In v0 the
+mute toggle is a menu item; a global mute *chord* is a tracked follow-up
+(`docs/human-verification.md` §4.6).
 
 > Contrast: Wispr uploads audio to OpenAI (STT) and a fine-tuned Llama (cleanup),
 > mandates an account, and has no offline mode.
@@ -104,7 +106,7 @@ tracked follow-up (`docs/human-verification.md` §4.6).
 ## Install
 
 **`speak` v0 is pre-release.** The engine, UI, and all core features are built
-and pass 149 tests. Live verification (paste compatibility with real apps, hotkey
+and pass 150 tests. Live verification (paste compatibility with real apps, hotkey
 firing with real permissions, notarized release) is in progress — see
 [`docs/human-verification.md`](docs/human-verification.md).
 
@@ -129,7 +131,7 @@ brew install xcodegen swiftlint xcbeautify
 git clone https://github.com/yourhandle/speak.git
 cd speak
 make build    # generates Speak.xcodeproj, builds Speak.app + SpeakCore.framework
-make test     # 143 tests (123 XCTest + 20 Swift Testing), 0 failures
+make test     # 150 tests (130 XCTest + 20 Swift Testing), 0 failures
 make lint     # SwiftLint (force-unwrap / force-cast / force-try = error)
 make verify-moat  # 7/7 structural BEAT rows (offline, no egress, MIT, no account, ...)
 make run      # launch the menubar app
@@ -164,7 +166,7 @@ launch:
 - Local history: SQLite via raw C API, searchable, exportable
 - Settings: cleanup toggle, STT/cleanup engine selection, language, paste mode
 - Permissions onboarding: three-step flow, auto-advances on grant
-- Tests: **143 (123 XCTest + 20 Swift Testing), 0 failures**
+- Tests: **150 (130 XCTest + 20 Swift Testing), 0 failures**
 - Moat audit: **7/7** (MIT, no third-party imports, no network egress, no
   auth code, no paywall, offline by construction, no pasteboard reads)
 

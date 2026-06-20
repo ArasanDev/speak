@@ -284,8 +284,14 @@ final class DictationController: ObservableObject {
     func toggleMute() {
         Task { [weak self] in
             guard let self else { return }
-            let newValue = await self.engine.toggleMute()
-            self.isMuted = newValue
+            let nowMuted = await self.engine.toggleMute()
+            self.isMuted = nowMuted
+            if nowMuted {
+                // Muting cancels any in-flight session in the engine (SPEC §7.4);
+                // reflect that in the UI — hide the overlay and return to idle.
+                self.stopOverlay()
+                self.icon = .idle
+            }
         }
     }
 

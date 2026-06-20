@@ -185,18 +185,29 @@ public actor SpeakEngine {
         muted
     }
 
-    /// Set the mute state explicitly.
-    public func setMuted(_ newValue: Bool) {
+    /// Set the mute state explicitly. Muting also **stops any in-flight capture**
+    /// (SPEC §7.4 — "a chord toggles capture; when muted, no audio is read"): a
+    /// mute that only blocked *starting* a session would still read audio from a
+    /// dictation already running. `cancelDictation()` is a safe no-op when idle.
+    public func setMuted(_ newValue: Bool) async {
         muted = newValue
         SpeakLog.engine.info("SpeakEngine: mute set to \(newValue, privacy: .public).")
+        if newValue {
+            await cancelDictation()
+        }
     }
 
-    /// Toggle the mute state and return the new value.
+    /// Toggle the mute state and return the new value. When the result is muted,
+    /// stops any in-flight capture (see `setMuted`).
     @discardableResult
-    public func toggleMute() -> Bool {
+    public func toggleMute() async -> Bool {
         muted.toggle()
-        SpeakLog.engine.info("SpeakEngine: mute toggled to \(self.muted, privacy: .public).")
-        return muted
+        let nowMuted = muted
+        SpeakLog.engine.info("SpeakEngine: mute toggled to \(nowMuted, privacy: .public).")
+        if nowMuted {
+            await cancelDictation()
+        }
+        return nowMuted
     }
 
     /// End the current dictation.
