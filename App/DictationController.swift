@@ -97,6 +97,15 @@ final class DictationController: ObservableObject {
     /// start) and the dashboard's Snippets pane.
     let snippetStore = SnippetStore()
 
+    /// The paste writer — held so the engine and the "Paste Last Transcript" action
+    /// share one instance (re-paste writes the clipboard + simulates Cmd+V).
+    private let pasteboardWriter = PasteboardWriter()
+
+    /// The most recent finished transcript (cleaned if available, else raw). Drives the
+    /// "Paste Last Transcript" menu item (Wispr's Ctrl+Cmd+V re-paste); empty until the
+    /// first dictation completes. `@Published` so the menu enables/disables reactively.
+    @Published private(set) var lastTranscript: String = ""
+
     // MARK: - Collaborators (H3)
 
     /// Owns the overlay lifecycle (model + panel + partials drain).
@@ -146,7 +155,7 @@ final class DictationController: ObservableObject {
         engine = SpeakEngine(
             transcriber: defaultTranscriber(for: store),
             cleaner: defaultCleaner(for: store),
-            inserter: PasteboardWriter(),
+            inserter: pasteboardWriter,
             history: historyStore,
             settings: store,
             snippetStore: snippetStore
@@ -246,6 +255,27 @@ final class DictationController: ObservableObject {
     /// Delegates to `WindowPresenter.showDashboard()`.
     func showDashboard() {
         windowPresenter?.showDashboard()
+    }
+
+    /// Re-paste the most recent finished transcript at the current cursor (Wispr's
+    /// "Paste Last Transcript" / Ctrl+Cmd+V). No-op until the first dictation completes.
+    /// On AX-denied, the text is still placed on the clipboard (PasteboardWriter's
+    /// clipboard floor) and the permissions hint is surfaced.
+    func pasteLastTranscript() {
+        let text = lastTranscript
+        guard !text.isEmpty else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.pasteboardWriter.insert(text)
+                SpeakLog.engine.info("DictationController: re-pasted last transcript.")
+            } catch {
+                self.permissionsNeeded = true
+                SpeakLog.engine.info(
+                    "DictationController: re-paste left text on clipboard — Accessibility needed."
+                )
+            }
+        }
     }
 
     /// The current hotkey rendered as keycap labels for the dashboard.
@@ -351,7 +381,9 @@ final class DictationController: ObservableObject {
             // The panel is hidden AFTER the done flash, not immediately on stop.
             icon = .processing
             overlayController.transition(to: .processing)
-            _ = try await engine.endDictation()
+            let result = try await engine.endDictation()
+            // Remember the finished text for "Paste Last Transcript" (Wispr's re-paste).
+            lastTranscript = result.cleanedText ?? result.rawText
             icon = .done
             // Phase C: show done state briefly before hiding the panel.
             overlayController.transition(to: .done)

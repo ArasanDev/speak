@@ -183,6 +183,12 @@ private struct SpeakMenu: View {
             controller.showHistory()
         }
 
+        Button("Paste Last Transcript") {
+            controller.pasteLastTranscript()
+        }
+        .keyboardShortcut("v", modifiers: [.command, .control])
+        .disabled(controller.lastTranscript.isEmpty)
+
         SettingsLink {
             Text("Settings\u{2026}")
         }
