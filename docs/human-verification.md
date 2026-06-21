@@ -16,6 +16,29 @@
 
 ---
 
+## ✅ LIVE RUN #1 — 2026-06-21 (verifier: user, dictated *through speak itself*)
+
+The core end-to-end loop is **confirmed working live** on the dev Mac. The user
+dictated their development instructions into Claude Code *using speak* — a recursive
+feedback loop (the product directing its own build). Verified this run:
+
+- **§0** build + launch (`make run`), menubar icon, onboarding, **Microphone** grant
+  fired ✓. **Accessibility** + **Input Monitoring** effectively confirmed (the tap
+  arms and synthetic Cmd+V lands — both require those grants) ✓.
+- **§2** double-tap Fn **starts** capture while another app has focus; single-tap Fn
+  **stops** → processing → paste ✓. *(Still open: §2 false-trigger rate over 30 min.)*
+- **§3** paste lands at the cursor **into a terminal surface** (Claude Code's input)
+  with **no macOS 26.4 paste-protection prompt** ✓ — first real signal against the #1
+  unknown. *(Still open: dedicated Terminal.app/iTerm + Slack + password-field rows.)*
+- **§4.3** overlay appears **over another app** + **partials update live** ✓.
+- **§1** AI-cleanup OFF → raw transcript pastes, session reaches done (graceful
+  fallback) ✓. *(Still open: Apple Intelligence ON → cleaned-text quality, §1/§3.5.)*
+
+Remaining rows are deferred by user direction (pivot to acceleration), not failed —
+they stay unchecked below. The base is proven; the loop is closed.
+
+---
+
 ## 0. One-time setup (do this first)
 
 These unblock every live test below.
