@@ -9,11 +9,12 @@
 ## Current phase
 
 > ## 🚩 READ THIS FIRST (handoff banner — 2026-06-21, Phase 2 build)
-> **PHASE 2 (full-product dashboard) — ALL autonomously-buildable work COMPLETE & GREEN;**
-> only **human-gated live-verification features remain** (see bottom). The full-window
-> Wispr-style app is built and the Home screen is **visually verified on-screen**. All
-> gates green from clean: build ✅ · **255 tests / 5 XCTSkip / 0 failures** ✅ · lint
-> **0 serious** ✅ · moat **7/7** ✅. Tree clean at `da40b0d`; no agents/worktrees running.
+> **PHASE 2 (full-product dashboard) — EVERY FEATURE BUILT & GREEN; only live human
+> verification remains** (running the app on a real Mac — the pre-existing `#8` gate).
+> The full-window Wispr-style app is complete; Home screen **visually verified on-screen**.
+> Definitive gate from **wiped DerivedData**: build ✅ · **268 tests / 5 XCTSkip / 0
+> failures** ✅ · lint **0 serious** ✅ · moat **7/7** ✅. Tree clean at `76d4716`; no
+> agents/worktrees running.
 >
 > **Shipped this phase (commits):**
 >   - **WaveA.0/A.1** `7b1187f` — Monaco theme token (`SpeakTheme`) + `KeyCapView` +
@@ -39,27 +40,24 @@
 > real Wispr Home in Monaco. (A later WPM-screenshot attempt flaked on a Space/display
 > switch; layout already proven, WPM test-verified.)
 >
-> **Wave D shipped (autonomously buildable + verified):** menubar Style/Language
-> submenus (`b7ac26e`) · **Paste Last Transcript** Cmd+Ctrl+V re-paste (`4a8bd4d`) ·
-> **HUD live duration counter** (`db58c87`) · **Command Mode AI-transform core**
-> (`.command(instruction:)` + prompt, `da40b0d`) · **Command Mode pipeline** —
-> `CommandModeService` orchestration (read→transform→replace, 4 tests) + live
-> `AccessibilitySelection` AX read/replace (`a67dfdd`). Final gate: **259 tests / 0 fail**.
+> **Wave D — COMPLETE:** menubar Style/Language submenus (`b7ac26e`) · **Paste Last
+> Transcript** Cmd+Ctrl+V (`4a8bd4d`) · **HUD live duration counter** (`db58c87`) ·
+> **Command Mode** — full end-to-end: `.command` transform prompt (`da40b0d`),
+> `CommandModeService` orchestration + `AccessibilitySelection` AX read/replace (`a67dfdd`),
+> `CommandChordDetector` (`a87d1cf`), and the **live Fn+Ctrl trigger wiring** —
+> `HotkeyMonitor` emits chord edges (suppresses normal Fn only while Ctrl held → core
+> dictation byte-for-byte unchanged when Ctrl up) + `CommandModeController` captures the
+> spoken instruction and runs the transform (`c2d48c6`) · **Scratchpad paste-failure
+> fallback** — `SpeakError.pasteRequiresAccessibility(text:)` routes failed text to the
+> Scratchpad (`76d4716`). App launches clean; chord wiring init verified non-crashing.
 >
-> **REMAINING — all HUMAN-GATED by nature (need live testing the agent cannot do):**
->   1. **Command Mode — one live hookup only.** Built + tested: `.command` transform
->      prompt, `CommandModeService` orchestration, `AccessibilitySelection` AX read/replace,
->      **and `CommandChordDetector`** (pure Fn+Ctrl edge logic, 6 tests). The ONLY un-built
->      piece: feeding the tap's live `CGEventFlags` into the detector AND **disambiguating
->      Fn+Ctrl from the normal Fn dictation hotkey** so the chord doesn't false-trigger a
->      dictation. That modifies the **critical Fn-detection path** in `HotkeyMonitor` and
->      MUST be live-tested (a blind change could break *core dictation*) → human-gated, #8.
->      Capturing the spoken-instruction audio reuses a transcriber session (also live).
->   2. **Scratchpad paste-failure routing** — needs paste-error plumbing to surface the
->      failed text + a live paste-failure to verify. (Text is already clipboard-safe today.)
->   3. **Live render/run verification** of overlay + every dashboard pane (Home already
->      screenshot-verified) + the live core loop (#8). These are the honesty-boundary items.
->   Then `#16` final RenderPreview sweep + `progress.md` final rewrite once #8 clears.
+> **REMAINING — only LIVE HUMAN VERIFICATION (the pre-existing `#8` gate; agent cannot do):**
+>   Run on a real Mac: grant the 3 permissions, dictate (core loop), exercise paste +
+>   overlay, and try **Command Mode** (select text in another app, hold Fn+Ctrl, speak,
+>   release → AX-replaced) + the **paste-failure → Scratchpad** path. Every code path is
+>   built + unit-tested where possible; what needs a human is *observing it run live with a
+>   voice + permissions + real apps* — by nature, not by gap. Then `#16` = a RenderPreview
+>   sweep of the panes once a display is settled. **No un-built features remain.**
 >
 > **Locked user decisions:** local-first/pluggable-later · full-window dashboard ·
 > **Monaco** ([[monaco-font-theme]]) · **Wave C (WhisperKit/Ollama) deliberately OUT** —
