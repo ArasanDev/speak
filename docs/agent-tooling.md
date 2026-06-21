@@ -44,7 +44,7 @@ All are **dev-time only** — they never become app dependencies.
 | Tool | What it gives agents | Status / gate |
 |---|---|---|
 | **`swift-lsp`** (official plugin) | Live SourceKit-LSP diagnostics + navigation for `.swift` | Confirmed in marketplace cache. Install: `/plugin install swift-lsp@claude-plugins-official`. Needs the Swift toolchain (present: `swift` 6.3.2). |
-| **Xcode native MCP** (Apple) | Xcode exposes build/test/diagnostics/Swift-REPL + **visual verify via SwiftUI Previews** over MCP; integrates Claude Agent directly | `[verified]` present locally: **Xcode 26.5 installed**; bridge binary at `$(xcode-select -p)/usr/bin/mcpbridge`. Wired in `.mcp.json` as server `xcode` (`xcrun mcpbridge`). **Status: connects but tools-fetch times out until a one-time Xcode-side authorization** — open the project in Xcode and approve the agent (Xcode Settings → Intelligence / Agent Client Protocol). Needs Xcode running. |
+| **Xcode native MCP** (Apple) | Xcode exposes build/test/diagnostics/Swift-REPL + **visual verify via SwiftUI Previews** over MCP; integrates Claude Agent directly | `[verified — LIVE 2026-06-21]`: **Xcode 26.5**, bridge `xcrun mcpbridge`, server `xcode` in `.mcp.json`. Authorized + working: `XcodeListWindows` → `windowtab2` (`Speak.xcodeproj`); `RenderPreview` produced real snapshots (Onboarding/Settings) **and caught a real defect** (HistoryView `List` assertion crash). Needs Xcode running with the project open. **Operating protocol: §3.1.** |
 | **`apple-docs-mcp`** (community) | Query real Apple framework docs + WWDC sessions — **kills API hallucination** for SpeechAnalyzer / Foundation Models / CGEvent | `[verified]` `@kimsungwhee/apple-docs-mcp@1.0.26`. Wired in `.mcp.json` as `apple-docs` — **✔ connected**. Dev tooling only; never a runtime dep. |
 | **`XcodeBuildMCP`** (getsentry) | 80+ build/test/simulator tools; installable via Homebrew (no Node) | Optional — overlaps Apple's native MCP. Prefer the native `xcode` bridge. |
 
@@ -64,13 +64,66 @@ This already caught a real bug: `architecture.md` §6 used `LanguageModel.defaul
 (resolves). Agents must verify Apple-API claims this way (or via `apple-docs`)
 before tagging `[verified]`.
 
+### 3.1 Live Xcode MCP — operating protocol (autonomy) — [verified 2026-06-21]
+
+The bridge is the **live-runtime oracle**: it drives the *running* Xcode, so it
+sees the real (cert-anchored) DerivedData and renders real UI. Use it to push
+claims from `[inferred]`/`[deferred]` toward `[verified]` without a human.
+
+**Always start by discovering the tab:** `XcodeListWindows` → use the returned
+`tabIdentifier` (currently `windowtab2`) in every other call. `sourceFilePath` is
+project-relative (e.g. `App/History/HistoryView.swift`).
+
+**The toolbelt and what each *actually* verifies:**
+
+| Tool | Verifies | Does NOT verify |
+|---|---|---|
+| `BuildProject` / `RunAllTests` / `RunSomeTests` / `GetTestList` | Build + tests in **Xcode's own DerivedData** — the cert-anchored path that **preserves TCC grants** (vs `make`'s separate DerivedData; see agent-memory `dev-codesigning-for-tcc`) | — |
+| `RenderPreview` | **Static view appearance with preview/sample data**: does the view compile, lay out, and render without crashing | Window-server behavior, live timing, real data |
+| `ExecuteSnippet` | Apple-API **shape + simple runtime** in real file context (kills `[unverified]`-from-memory) | **Gated-model behavior** — Foundation Models / SpeechAnalyzer still need Apple Intelligence + entitlements live |
+| `XcodeRefreshCodeIssuesInFile` / `GetBuildLog` / `XcodeListNavigatorIssues` | Live compiler diagnostics for a file / build | — |
+
+**RenderPreview scope — do NOT overclaim (the precision matters).** A passing
+preview closes the *static-appearance* subset of a `[deferred — visual]` row and
+nothing more. Classify each visual row by **one discriminating test**: *does it
+depend on the window server, the system menubar, a system panel, or live data
+timing?*
+
+- **No → RenderPreview closes it** (e.g. "Settings screen lays out correctly",
+  "onboarding step renders"). Agent-verifiable now.
+- **Yes → stays live/human** — e.g. the overlay's `.nonactivatingPanel` /
+  `canBecomeKey=false` / floats-over-other-apps / bottom-center / hide-on-done
+  *timing* (NSPanel behavior, not view content); the **menubar SF-Symbol color**
+  (the system templates symbols to monochrome regardless of what the preview
+  renders — a concrete false-pass trap); permission dialogs, Settings deep-links,
+  `NSSavePanel`, hotkey-rebind recording.
+- **Third bucket — unit-testable config:** some of the "live" mechanics are
+  assertable in code without the window server (the panel's `canBecomeKey` /
+  `collectionBehavior` flags). Prefer a unit test there; reserve "live" for the
+  irreducible over-app *visual*.
+
+Classify **per-row, not per-surface** — a single surface (the overlay) has rows in
+all three buckets.
+
+**Worktree vs the live bridge (hard constraint).** The bridge is bound to the
+**main checkout's `Speak.xcodeproj`**. An agent editing in a `git worktree` is
+invisible to it — Xcode would render/build *stale* main-tree code. Therefore:
+
+- An agent that must verify via `RenderPreview`/`BuildProject` works in the **main
+  tree, no isolation** (run it as the *sole* writer to avoid collisions).
+- Parallel file-mutating agents use `worktree` isolation and verify **headlessly
+  via `make`** (XcodeGen + `xcodebuild` regenerate/build the worktree copy fine);
+  they do **not** get the live bridge.
+- Pick one per agent up front: live-Xcode verification **or** worktree isolation,
+  never both.
+
 **Language-agnostic official plugins worth enabling**: `code-review`,
 `security-guidance` (reviews each edit for vulns), `feature-dev`.
 
 **Setup state**: `.mcp.json` configures `xcode` + `apple-docs` (project scope —
 approve on first prompt). `swiftlint` ✔ installed; **`xcbeautify` not yet** (`brew
 install xcbeautify`). Still optional: `/plugin install swift-lsp@claude-plugins-official`
-(SourceKit-LSP). One-time Xcode auth needed to unblock the `xcode` bridge tools.
+(SourceKit-LSP). **The one-time Xcode auth is DONE — the `xcode` bridge is live (§3.1).**
 
 ---
 
