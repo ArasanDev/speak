@@ -125,4 +125,23 @@ final class StyleModeTests: XCTestCase {
         XCTAssertEqual(viaMode, direct,
                        "instructions(for: .styled(...)) must delegate to styledInstructions.")
     }
+
+    // MARK: - Command Mode (Wave D) prompt core
+
+    @available(macOS 26.0, *)
+    func testCommandInstructions_embedsInstructionAndFooter() {
+        let prompt = FoundationModelsCleaner.commandInstructions(instruction: "  make this more concise  ")
+        XCTAssertTrue(prompt.contains("make this more concise"),
+                      "The spoken instruction must be embedded (trimmed) in the prompt.")
+        XCTAssertTrue(prompt.contains("return ONLY") || prompt.contains("ONLY"),
+                      "Command prompt must constrain output to only the result.")
+    }
+
+    @available(macOS 26.0, *)
+    func testInstructionsForCommandModeRoutesToCommandInstructions() {
+        let viaMode = FoundationModelsCleaner.instructions(for: .command(instruction: "translate to Polish"))
+        let direct = FoundationModelsCleaner.commandInstructions(instruction: "translate to Polish")
+        XCTAssertEqual(viaMode, direct,
+                       "instructions(for: .command(...)) must delegate to commandInstructions.")
+    }
 }

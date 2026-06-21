@@ -25,6 +25,14 @@ public enum CleanupMode: Sendable {
     /// no engine restart. The legacy single-axis cases above remain for direct
     /// callers and tests.
     case styled(CleanupStyle, CleanupLevel)
+
+    /// Command Mode (Wave D): apply a spoken `instruction` to the text passed to
+    /// `clean(_:mode:)`. The text is the user's highlighted selection; the instruction
+    /// is what they said (e.g. "make this more concise", "translate to Polish"). The LLM
+    /// returns the transformed selection. The live read/replace of the selection happens
+    /// via the Accessibility API at the app layer — this case is the AI-transform core,
+    /// reused from the same on-device cleaner.
+    case command(instruction: String)
 }
 
 /// The neat-writing *voice* — how the cleaned text should read. User-facing in the

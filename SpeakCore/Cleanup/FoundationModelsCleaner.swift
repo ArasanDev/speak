@@ -194,7 +194,24 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
             // two variable clauses. Kept as composed strings (not a fixed table) so a
             // new style or level is one clause, not a combinatorial rewrite.
             return Self.styledInstructions(style: style, level: level)
+
+        case .command(let instruction):
+            // Wave D Command Mode: apply the user's spoken instruction to their selection.
+            return Self.commandInstructions(instruction: instruction)
         }
+    }
+
+    /// System instructions for Command Mode: apply the spoken `instruction` to the
+    /// highlighted text (passed as the `respond(to:)` argument). The instruction is
+    /// echoed verbatim so the model edits per the user's exact request.
+    static func commandInstructions(instruction: String) -> String {
+        let trimmed = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        return """
+            You are a text editor. The user has selected some text and given you this \
+            instruction: "\(trimmed)". Apply that instruction to the text and return ONLY \
+            the resulting text — no commentary, no quotes, no preamble. If the instruction \
+            asks a question rather than an edit, answer concisely in place of the text.
+            """
     }
 
     /// Compose the system instructions for a `.styled(style, level)` mode.
