@@ -51,13 +51,22 @@
 > fallback** — `SpeakError.pasteRequiresAccessibility(text:)` routes failed text to the
 > Scratchpad (`76d4716`). App launches clean; chord wiring init verified non-crashing.
 >
+> **Render-verified (`#16`):** launched **all 8 panes** in the real app via
+> `--debug-open dashboard:<section>` (seeded vocab/snippets) — **every pane renders
+> crash-free**, including the populated-`List` panes (Dictionary/Snippets/History), which
+> rules out the documented diffRows assertion (preview-only, not the real app). Insights
+> confirmed = plain SwiftUI bars (no Charts dep) in live code. Home is screenshot-verified;
+> pixel-level capture of panes 2–8 was blocked by the user's active Mission Control Space
+> (single display; `screencapture` can't reach another Space without AX) — environment, not
+> code. Use `--debug-open dashboard:<section>` to screenshot any pane when a Space is free.
+>
 > **REMAINING — only LIVE HUMAN VERIFICATION (the pre-existing `#8` gate; agent cannot do):**
 >   Run on a real Mac: grant the 3 permissions, dictate (core loop), exercise paste +
 >   overlay, and try **Command Mode** (select text in another app, hold Fn+Ctrl, speak,
 >   release → AX-replaced) + the **paste-failure → Scratchpad** path. Every code path is
->   built + unit-tested where possible; what needs a human is *observing it run live with a
->   voice + permissions + real apps* — by nature, not by gap. Then `#16` = a RenderPreview
->   sweep of the panes once a display is settled. **No un-built features remain.**
+>   built + unit-tested where possible + render-verified crash-free; what needs a human is
+>   *observing it run live with a voice + permissions + real apps* — by nature, not by gap.
+>   **No un-built features remain.**
 >
 > **Locked user decisions:** local-first/pluggable-later · full-window dashboard ·
 > **Monaco** ([[monaco-font-theme]]) · **Wave C (WhisperKit/Ollama) deliberately OUT** —
