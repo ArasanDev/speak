@@ -16,7 +16,7 @@
 //   - `showError(_:)` — transitions to `.error` with a reason; a retry affordance
 //     is shown in the HUD. Call AFTER stop() has not been called (the panel stays
 //     visible in error state so the user can act).
-//   - `cancelImmediate()` — hides immediately without done-flash (Escape cancel).
+//   - `cancelImmediate()` — hides immediately without done-flash (mute cancel; Escape now routes to stop).
 //
 // W2.1 — Live level drain:
 //   A parallel `levelsTask` runs alongside `partialsTask`. It drains
@@ -24,7 +24,7 @@
 //   via `levelSmoothed(previous:target:)`, and writes `overlayModel.level` on every
 //   value. Torn down identically to `durationTask` on transition/stop.
 //
-// W2.2 — Escape-to-cancel:
+// W2.2 — Escape-to-stop:
 //   A global `NSEvent.addGlobalMonitorForEvents(matching:)` handler intercepts
 //   Escape keystrokes while the panel is visible. A *global* monitor is used (not
 //   local) because the panel is non-activating and the app is LSUIElement; a local
@@ -32,7 +32,10 @@
 //   (suppress) the event — which is fine: we want Escape to also dismiss dialogs in
 //   the target app if the user pressed it there. The monitor is installed at
 //   `start()` and removed at `stop()` / `cancelImmediate()`.
-//   [decision W2.2: global NSEvent monitor; cannot consume; Input Monitoring already granted]
+//   Escape is treated as a stop-and-paste gesture (same as single-press stop), NOT
+//   as a cancel. The `onEscapeStop` callback is guarded by the caller on
+//   `icon == .listening` to avoid re-entrancy during `.processing` or `.error`.
+//   [decision W2.2: Escape = stop+paste, not cancel; guard is in DictationController]
 //
 // Threading:
 //   - `OverlayController` is `@MainActor`. All mutations of `overlayModel` and
@@ -74,7 +77,9 @@ final class OverlayController {
     /// `NSEvent.addGlobalMonitorForEvents` returns `Any?` not `NSObjectProtocol`.
     private var escapeMonitor: Any?
     /// W2.2: callback invoked when the user presses Escape while dictating.
-    var onEscapeCancel: (() -> Void)?
+    /// The caller is responsible for guarding on the active-capture state to
+    /// prevent re-entrancy during `.processing` or `.error` (see DictationController).
+    var onEscapeStop: (() -> Void)?
 
     // MARK: - Init
 
@@ -330,6 +335,10 @@ final class OverlayController {
     /// consume the event, which is acceptable: Escape reaching the target app
     /// is harmless and usually desirable.
     ///
+    /// The callback (`onEscapeStop`) is invoked unconditionally here — re-entrancy
+    /// guarding (only active-capture state triggers stop) lives in `DictationController`,
+    /// keeping OverlayController free of icon-state coupling.
+    ///
     /// [decision W2.2: global monitor; no consumption; AX/Input Monitoring already granted]
     private func installEscapeMonitor() {
         removeEscapeMonitor()   // idempotent — remove prior monitor if any
@@ -338,8 +347,8 @@ final class OverlayController {
             guard event.keyCode == 53 else { return }
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                SpeakLog.engine.info("OverlayController: Escape key detected — cancelling dictation.")
-                self.onEscapeCancel?()
+                SpeakLog.engine.info("OverlayController: Escape key detected — stopping dictation.")
+                self.onEscapeStop?()
             }
         }
     }

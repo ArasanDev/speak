@@ -39,6 +39,15 @@ final class OnboardingWindowController {
     /// Cancelled if the user clicks away (windowDidResignKey) before it fires.
     private var autoCloseTask: Task<Void, Never>?
 
+    /// Called once — on the main thread — immediately after the onboarding window
+    /// auto-closes following the `.done` step. Used by `WindowPresenter` to open
+    /// the dashboard on first completion. Not fired on manual close or skip.
+    ///
+    /// "First-completion only" is free: the caller sets this once at construction
+    /// time; subsequent launches never reach `.done` auto-close because
+    /// `hasCompletedOnboarding == true` causes `showOnboardingIfNeeded()` to skip.
+    var onCompletion: (() -> Void)?
+
     private let log = SpeakLog.permissions
 
     // MARK: - Init
@@ -145,7 +154,14 @@ final class OnboardingWindowController {
                         try? await Task.sleep(nanoseconds: doneAutoCloseDelayNanoseconds)
                         guard !Task.isCancelled else { return }
                         await MainActor.run { [weak self] in
-                            self?.close()
+                            guard let self else { return }
+                            self.close()
+                            // Fire after close() so the onboarding window is gone before
+                            // the dashboard promotion to .regular happens. One runloop
+                            // turn is NOT inserted here — DashboardWindowController.show()
+                            // already does `DispatchQueue.main.async` when it promotes to
+                            // .regular, providing the sequencing buffer.
+                            self.onCompletion?()
                         }
                     }
                     self.autoCloseTask = closeTask
