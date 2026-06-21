@@ -106,7 +106,34 @@ unit-tested; the **rendered, interactive behavior** needs a human running the ap
 > synthetic Cmd+V can't land without Accessibility, so its end-to-end proof is deferred
 > to the §0/§3 permission pass (where the paste visibly lands and is screenshotted).
 
+> ### Per-row classification — the 3-bucket model (`agent-tooling.md §3.1`)
+>
+> Every unchecked box below carries one of three buckets. The bucket tells a future
+> agent **whether the row is already closeable by an agent or genuinely needs a human** —
+> classify **per-row, not per-surface** (a single surface spans buckets).
+>
+> - **`[B-render ✓]`** — static appearance; **already agent-verified** by the
+>   `--debug-open` + `verify-visual.sh` screenshot harness (the callout above). The box
+>   stays unchecked only because the human still does the final ship-pass sign-off; an
+>   agent has confirmed it renders.
+> - **`[B-config → #6]`** — a config *input* (an `NSPanel` flag, a `collectionBehavior`
+>   option, a symbol-name mapping) that is assertable in code **without** the window
+>   server. NOT yet testable: `SpeakTests` depends only on `SpeakCore` and cannot see
+>   App-target types — closing these needs a **`TEST_HOST` app-test bundle**, which is
+>   built deliberately with **task #6** (DictationController decomposition); the panel
+>   config is its first cheap customer. **Caveat (load-bearing):** a passing config
+>   assertion is a **regression guard, not behaviour proof** — it proves the inputs are
+>   set, NOT that focus actually stays put / the panel actually floats over full-screen.
+>   Those *behaviours* remain `[C-live]`. Do **not** check a behaviour box off a config
+>   test (same false-pass trap as the menubar-monochrome case, §3.1).
+> - **`[C-live]`** — irreducibly live: needs real input + permissions + the window
+>   server (focus actually staying put, deep-links opening the right pane, partials
+>   updating live, a real entry appearing, mute stopping capture, hide-on-done timing).
+>   **Human-only. No agent path exists.**
+
 ### 4.1 Settings window (P10)
+> `[B-render ✓]` window + pickers render (harness). `[C-live]` the toggle/picker
+> *behaviours* (toggle changes the next dictation; settings persist across relaunch).
 - [ ] "Settings…" menu item opens a window.
 - [ ] AI cleanup toggle flips `cleanupEnabled`; turning it off → the **next**
       dictation pastes raw text (the toggle is read per-dictation).
@@ -116,6 +143,10 @@ unit-tested; the **rendered, interactive behavior** needs a human running the ap
 - [ ] Settings persist after quitting + relaunching.
 
 ### 4.2 Menubar states (P8)
+> `[B-config → #6]` the state→SF-Symbol *name* mapping is a pure function, assertable
+> once App-test-infra exists. `[C-live]` the icon visibly changing on each transition
+> and the ~600 ms "done" dwell — AND the **monochrome-template color** (the §3.1
+> false-pass trap: the system templates the symbol regardless of render). Human-only.
 - [ ] The menubar icon visibly changes through idle → listening → processing →
       done → idle across a real dictation (symbol changes are wired + tested;
       confirm they actually render on each transition).
@@ -127,6 +158,16 @@ unit-tested; the **rendered, interactive behavior** needs a human running the ap
 
 The text-accumulation logic (`OverlayTextAccumulator`) is unit-verified (11 tests,
 all green). The overlay's **live behavior** is `[deferred — needs human verification]`:
+
+> `[B-render ✓]` the card + "Listening…" placeholder + partial-text layout render
+> (harness). `[B-config → #6]` the focus-steal guards are config inputs assertable
+> without the window server (`TranscriptOverlayPanel`: `.nonactivatingPanel` mask,
+> `canBecomeKey==false`, `canBecomeMain==false`, `isFloatingPanel`, `level==.floating`,
+> `hidesOnDeactivate==false`, `collectionBehavior ⊇ {.canJoinAllSpaces,
+> .fullScreenAuxiliary,.stationary,.ignoresCycle}`) — a **regression guard** for the
+> rows below, NOT proof of the behaviour. `[C-live]` everything the rows actually
+> assert — focus *staying* in the other app, partials updating live, appearing over a
+> full-screen space, hide-on-done/error timing — needs the window server. Human-only.
 
 - [ ] **Overlay appears on listening**: double-tap Fn → the translucent card appears
       near the top-center of the screen (below the menubar) while the menubar icon
@@ -161,6 +202,14 @@ persistence are unit-verified (`OnboardingFlowTests` — 14 tests, all green). T
 `IOHIDCheckAccess` input-monitoring status read typechecks against the macOS 26 SDK
 ([verified: swiftc -typecheck, 2026-06-21]). The **live, rendered behavior** is
 `[deferred — needs human verification]`.
+
+> `[B-render ✓]` all six step screens render with the right icon/copy/button/step-dot
+> (harness). `[B-config → #6]` the deep-link URL *strings* (`?Privacy_Accessibility`,
+> `?Privacy_ListenEvent`) are assertable as constants once App-test-infra exists —
+> but constant-equality is near-tautological; the row that matters (the anchor opening
+> the *correct* pane on macOS 26) is `[C-live]`. `[C-live]` everything else: real
+> permission dialogs firing, status flipping to ✓ after a grant, `IOHIDCheckAccess`
+> live correctness, window-comes-to-front, persistence/skip/revocation. Human-only.
 
 - [ ] **Onboarding appears on first launch**: `make run` on a fresh install (or after
       `defaults delete com.speak.app`) → the onboarding window opens before or alongside
@@ -211,6 +260,14 @@ the engine writes an entry on every completed dictation (`SpeakEngine.endDictati
 best-effort). The **rendered window** (`HistoryView` / `HistoryWindowController`)
 is `[deferred — needs human verification]`.
 
+> `[B-render ✓]` the window renders — both the **populated list** (orchestrator
+> launched `--debug-open history` with seeded entries + viewed the screenshot, loop
+> #23) and the empty state ("No dictations yet"), search bar, and Export/Clear footer.
+> This upgraded a known crash to **preview-only** (the `List` fix, `d0ee182`).
+> `[C-live]` the *behaviours*: live substring filtering as you type, Clear emptying
+> the store, Export writing a real JSON file via NSSavePanel, a real dictation
+> appearing on re-query. Human-only.
+
 - [ ] **"History…" menu item opens a window** listing past dictations, newest first.
 - [ ] **Each row shows the cleaned text** (or raw when cleanup was off) plus the
       timestamp and engine id.
@@ -232,6 +289,13 @@ starts capture) and unit-tested headlessly (`SpeakEngineMuteTests` — a muted e
 throws `.microphoneMuted` and the transcriber is *never started*, proving "no audio
 is read when muted"). The **live behavior + the "impossible to bypass" claim** are
 `[deferred — needs human verification]`.
+
+> `[B-unit ✓]` the mute *gate* is already unit-proven headlessly in `SpeakCore`
+> (`SpeakEngineMuteTests`: muted → throws + transcriber never starts; mid-dictation
+> mute cancels capture) — this is the strongest bucket and it is **closed**.
+> `[C-live]` only the UI surface remains: the menu toggle label flipping, the live
+> overlay/menubar cleanup matching the headless cancel, and Console showing no
+> CaptureSession start. Human-only. The global mute *chord* is `[deferred — design]`.
 
 - [ ] **"Mute Microphone" menu item** toggles to "Unmute Microphone" and shows a
       "Muted — dictation disabled" line while muted.
