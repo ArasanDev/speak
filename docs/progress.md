@@ -73,6 +73,45 @@ mute **chord** (the mute menu toggle ships; the chord is live-gated follow-up).
 
 ---
 
+## Done (this session — 2026-06-21, loop run #23 — live Xcode-MCP autonomy + History/overlay previews)
+
+**The Xcode MCP bridge is now a live verification oracle (orchestrator, encoded
+`agent-tooling.md §3.1`, commit `2382a5d`).** Proved the `xcrun mcpbridge` `xcode`
+server is authorized + working: `XcodeListWindows → windowtab2`, `RenderPreview`
+produces real, inspectable snapshots. Drove it directly to **agent-verify the
+static-appearance subset** of the visual gate — Onboarding (5-step flow, privacy
+copy) and Settings (hotkey mode, language/engine pickers, AI-cleanup toggle) both
+render correctly. **Scope guardrail (advisor-corrected):** a passing preview closes
+*static appearance only* — NOT window-server behavior, live timing, or the menubar
+SF-Symbol color (system templates symbols monochrome → a false-pass trap). Classify
+each `[deferred — visual]` row **per-row, not per-surface**, into preview-verifiable
+/ unit-testable-config / irreducibly-live. **Hard constraint encoded:** the bridge
+binds to the *main* checkout's `Speak.xcodeproj`, so worktree isolation and
+live-Xcode verification are mutually exclusive — pick one per agent.
+
+**HistoryView List crash — diagnosed + fixed, confirmed NON-regression (`d0ee182`,
+builder-app in the main tree as sole writer; orchestrator reviewed + verified +
+committed).** The live bridge *caught a real defect*: the populated History
+`#Preview` crashed under the XOJIT harness (`OutlineListCoordinator.diffRows` /
+`ViewListTree.visitItem` — NSOutlineView row-height assertion). builder-app launched
+the real app via `--debug-open history` + `screencapture`; the **shipping window
+renders + scrolls correctly** → preview-only platform defect, **not a P9
+regression**. Orchestrator independently confirmed by viewing the screenshot. Fix
+hardens production anyway: `List { ForEach }` (decouple container identity from
+data) + always-mounted List with an empty-state `.overlay` (removes the VStack↔List
+switch on async []→[N] reloads). Empty-state preview now passes; populated preview
+still hits the irreducible XOJIT defect (documented; production not degraded to
+satisfy a preview tool). Added 4 static overlay `#Previews` (listening placeholder /
+listening+partial / processing / done) with an in-file honesty boundary (content
+layout only, not panel/window-server behavior). **Gates: build + test SUCCEEDED,
+lint 0 serious, verify-moat PASS.**
+
+**Net after loop #23:** the live Xcode bridge converts a meaningful slice of the
+former "human-only visual" gate into agent-verifiable static-appearance checks, and
+the protocol is durably encoded for future sessions/agents. Next agent-doable step:
+re-classify `human-verification.md` per-row using the §3.1 3-bucket model + run a
+full RenderPreview static-appearance sweep across the remaining UI surfaces.
+
 ## Done (this session — 2026-06-21, loop run #22 — P11 release scaffolding + QA ship-gate audit)
 
 Orchestrated fan-out (3 agents: builder-input Phase D, builder-release P11,
