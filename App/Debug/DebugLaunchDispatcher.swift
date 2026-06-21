@@ -83,6 +83,8 @@ final class DebugLaunchDispatcher {
         guard let idx = args.firstIndex(of: "--debug-open"),
               args.indices.contains(idx + 1) else { return nil }
         let rawValue = args[idx + 1]
+        // `dashboard:<section>` opens the dashboard straight to a pane (verification).
+        if rawValue.hasPrefix("dashboard") { return .dashboard }
         guard let target = DebugTarget(rawValue: rawValue) else {
             // Unknown target — log and return nil so normal startup proceeds.
             SpeakLog.engine.error(
@@ -209,15 +211,41 @@ final class DebugLaunchDispatcher {
     /// screenshot. Uses a throwaway store — never touches the production SQLite DB.
     /// [decision: seeded in-memory store keeps the visual-verification path side-effect-free]
     private func openDashboard(controller: DictationController) {
+        // Isolated, seeded stores so EVERY pane renders with content (incl. the populated
+        // List paths in Snippets/Dictionary/History — the diffRows crash risk) WITHOUT
+        // touching production UserDefaults. [decision: a fixed debug suite, cleared first.]
+        let suite = "speak.debug.dashboard"
+        let defaults = UserDefaults(suiteName: suite) ?? .standard
+        defaults.removePersistentDomain(forName: suite)
+        let settings = SettingsStore(defaults: defaults)
+        settings.customVocabulary = ["Tamilarasan", "Kubernetes", "SpeakCore", "camelCase"]
+        let snippets = SnippetStore(defaults: defaults)
+        snippets.add(trigger: "omw", expansion: "on my way")
+        snippets.add(trigger: "sig", expansion: "Best,\nTamil")
+
+        let section = Self.parseDashboardSection()
         let context = DashboardContext(
-            settingsStore: controller.settingsStore,
+            settingsStore: settings,
             historyStore: DebugSeededHistoryStore(),
-            hotkeyCombo: ["Fn", "Fn"]
+            hotkeyCombo: ["Fn", "Fn"],
+            snippetStore: snippets
         )
-        let vc = DashboardWindowController(context: context)
+        let vc = DashboardWindowController(context: context, initialSection: section)
         vc.show()
         keepAlive(vc)
-        log.info("DebugLaunchDispatcher: Dashboard window opened (seeded feed).")
+        log.info("DebugLaunchDispatcher: Dashboard opened at section=\(section.rawValue, privacy: .public) (seeded).")
+    }
+
+    /// Parse the section from `--debug-open dashboard:<section>` (defaults to Home).
+    private static func parseDashboardSection() -> DashboardSection {
+        let args = CommandLine.arguments
+        guard let idx = args.firstIndex(of: "--debug-open"), args.indices.contains(idx + 1) else {
+            return .home
+        }
+        let raw = args[idx + 1]
+        guard let colon = raw.firstIndex(of: ":") else { return .home }
+        let name = String(raw[raw.index(after: colon)...])
+        return DashboardSection(rawValue: name) ?? .home
     }
 
     // MARK: - Overlay demo target (Phase C)

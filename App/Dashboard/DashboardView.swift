@@ -22,8 +22,14 @@ struct DashboardView: View {
 
     let context: DashboardContext
 
-    /// Persisted last-selected section so re-opening the window restores the user's place.
-    @State private var selection: DashboardSection = .home
+    /// The selected sidebar section. Seeded from `initialSection` (defaults to Home);
+    /// the debug dashboard target uses this to open straight to a pane for verification.
+    @State private var selection: DashboardSection
+
+    init(context: DashboardContext, initialSection: DashboardSection = .home) {
+        self.context = context
+        _selection = State(initialValue: initialSection)
+    }
 
     var body: some View {
         NavigationSplitView {

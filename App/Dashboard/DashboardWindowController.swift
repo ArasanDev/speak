@@ -36,12 +36,14 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
 
     private var window: NSWindow?
     private let context: DashboardContext
+    private let initialSection: DashboardSection
     private let log = SpeakLog.storage
 
     // MARK: - Init
 
-    init(context: DashboardContext) {
+    init(context: DashboardContext, initialSection: DashboardSection = .home) {
         self.context = context
+        self.initialSection = initialSection
         super.init()
     }
 
@@ -60,7 +62,7 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
             return
         }
 
-        let contentView = DashboardView(context: context)
+        let contentView = DashboardView(context: context, initialSection: initialSection)
         let hosting = NSHostingView(rootView: contentView)
 
         let win = NSWindow(
@@ -74,6 +76,10 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
         win.isReleasedWhenClosed = false
         win.setFrameAutosaveName("speak.dashboard")
         win.delegate = self            // observe close → demote back to menubar-only
+        // A menubar app's window should open on the user's CURRENT Space, not whichever
+        // Space it was first created on. [decision: moveToActiveSpace — matches how
+        // menubar-app windows are expected to appear.]
+        win.collectionBehavior.insert(.moveToActiveSpace)
         win.center()
         self.window = win
 
