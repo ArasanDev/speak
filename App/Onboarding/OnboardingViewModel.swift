@@ -22,6 +22,7 @@
 
 import SwiftUI
 import AppKit
+import Combine
 import SpeakCore
 import os
 
@@ -38,6 +39,10 @@ final class OnboardingViewModel: ObservableObject {
     /// `true` while `requestMicrophone()` is in-flight (shows a spinner).
     @Published private(set) var isRequestingMic: Bool = false
 
+    /// `true` once the user has fired the hotkey at least once during the hotkey step.
+    /// Turns the "Try it now" pill green.
+    @Published private(set) var hotkeyTriggered: Bool = false
+
     // MARK: - Private
 
     private let permissionManager: PermissionManager
@@ -49,6 +54,10 @@ final class OnboardingViewModel: ObservableObject {
 
     /// Backing poll task — cancelled when the view model is deallocated.
     private var pollTask: Task<Void, Never>?
+
+    /// Task that subscribes to the hotkey-fired publisher for the "Try it now" pill.
+    /// Cancelled on disappear (along with pollTask) so it doesn't outlive the window.
+    private var hotkeyListenTask: Task<Void, Never>?
 
     private let log = SpeakLog.permissions
 
@@ -66,6 +75,7 @@ final class OnboardingViewModel: ObservableObject {
 
     deinit {
         pollTask?.cancel()
+        hotkeyListenTask?.cancel()
     }
 
 #if DEBUG
@@ -94,10 +104,42 @@ final class OnboardingViewModel: ObservableObject {
         startPolling()
     }
 
-    /// Call when the onboarding window disappears. Stops polling.
+    /// Call when the onboarding window disappears. Stops polling and hotkey listening.
     func onDisappear() {
         pollTask?.cancel()
         pollTask = nil
+        hotkeyListenTask?.cancel()
+        hotkeyListenTask = nil
+    }
+
+    // MARK: - Hotkey live test
+
+    /// Subscribe to a publisher that fires each time the user triggers the hotkey.
+    ///
+    /// Called by `OnboardingWindowController` so the onboarding flow can show a
+    /// live "Try it now" pill (turns green on first trigger).
+    ///
+    /// The publisher is derived from `DictationController.$icon` (`.listening` edge)
+    /// by the caller — no second iterator on `HotkeyMonitor.events` is created here,
+    /// so the single-consumer contract on that AsyncStream is preserved.
+    ///
+    /// [deferred — human verification: that the publisher fires during onboarding
+    ///  once AX is granted and the tap is armed.]
+    func startListeningForHotkey(publisher: AnyPublisher<Void, Never>) {
+        hotkeyListenTask?.cancel()
+        hotkeyListenTask = Task { [weak self] in
+            // Await each element of the Combine publisher via AsyncPublisher.
+            // [verified: AnyPublisher.values (AsyncPublisher) Swift 5.5+, 2026-06-21]
+            for await _ in publisher.values {
+                guard let self, !Task.isCancelled else { break }
+                if !self.hotkeyTriggered {
+                    self.hotkeyTriggered = true
+                    self.log.info("OnboardingViewModel: hotkey fired during onboarding — pill turned green.")
+                }
+                // Continue listening so multiple triggers don't accumulate background work;
+                // the flag is idempotent (already true), so subsequent fires are cheap no-ops.
+            }
+        }
     }
 
     // MARK: - Actions

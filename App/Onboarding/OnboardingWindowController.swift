@@ -20,6 +20,7 @@
 
 import AppKit
 import SwiftUI
+import Combine
 import SpeakCore
 import os
 
@@ -32,15 +33,30 @@ final class OnboardingWindowController {
 
     private var window: NSWindow?
     private let viewModel: OnboardingViewModel
+    private let hotkeyFiredPublisher: AnyPublisher<Void, Never>?
+
+    /// Task owning the auto-close countdown after the Done step is shown.
+    /// Cancelled if the user clicks away (windowDidResignKey) before it fires.
+    private var autoCloseTask: Task<Void, Never>?
+
     private let log = SpeakLog.permissions
 
     // MARK: - Init
 
-    init(permissionManager: PermissionManager, settings: SettingsStore) {
+    /// `hotkeyFiredPublisher` fires (on the main thread) each time the user triggers
+    /// the hotkey during onboarding. Derived from `DictationController.$icon` by the
+    /// caller — no second iterator on `HotkeyMonitor.events` is created here.
+    /// Pass `nil` in tests or when the monitor is not yet running.
+    init(
+        permissionManager: PermissionManager,
+        settings: SettingsStore,
+        hotkeyFiredPublisher: AnyPublisher<Void, Never>? = nil
+    ) {
         self.viewModel = OnboardingViewModel(
             permissionManager: permissionManager,
             settings: settings
         )
+        self.hotkeyFiredPublisher = hotkeyFiredPublisher
     }
 
     // MARK: - Public API
@@ -58,8 +74,10 @@ final class OnboardingWindowController {
         let contentView = OnboardingView(viewModel: viewModel)
         let hosting = NSHostingView(rootView: contentView)
 
+        // Height: 460pt [decision: matches OnboardingView.frame height, W1.2 — accommodates
+        // conflict card + try pill on the hotkey step without clipping other steps.]
         let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 400),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 460),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -82,6 +100,11 @@ final class OnboardingWindowController {
         NSApp.activate(ignoringOtherApps: true)
         log.info("OnboardingWindowController: window shown.")
 
+        // Wire the live hotkey test publisher if we have one.
+        if let publisher = hotkeyFiredPublisher {
+            viewModel.startListeningForHotkey(publisher: publisher)
+        }
+
         // Watch for evaluation → done so we can auto-close.
         watchForCompletion()
     }
@@ -95,25 +118,37 @@ final class OnboardingWindowController {
 
     // MARK: - Private
 
-    /// Polls the view model's `evaluation.isComplete` to auto-close the window
-    /// once onboarding finishes (finish() / skip() path).
+    /// Watches for the Done step and schedules an auto-close after a brief pause
+    /// so the "You're all set!" screen is visible. The close task is cancellable:
+    /// if the user clicks away (windowDidResignKey) before the delay expires, we
+    /// cancel and leave the window open — they may return to it.
     ///
-    /// This replaces a Combine subscription to keep the App target free of
-    /// Combine for this thin coordinator (OnboardingViewModel does the state work).
-    /// The poll runs at 0.5 s cadence — just for the close event, not for TCC.
-    /// [decision: 0.5 s close-watch poll — close-latency vs overhead tradeoff]
+    /// Named constant for the delay:
+    ///   `doneAutoCloseDelayNanoseconds` — 2.5 s
+    ///   [decision: enough to read "You're all set." comfortably; DoneStepView copy
+    ///    promises auto-close, so it must not feel frozen. 2.0 s was the lower bound
+    ///    considered; 3.0 s felt long after repeated runs. 2.5 s is the tradeoff.]
+    ///
+    /// Poll cadence 0.5 s [decision: close-latency vs overhead; same as before].
     private func watchForCompletion() {
-        let closeWatchIntervalNanoseconds: UInt64 = 500_000_000 // 0.5 s [decision above]
+        // Named constant: 2.5 s auto-close delay after Done step [decision above].
+        let doneAutoCloseDelayNanoseconds: UInt64 = 2_500_000_000
+        // Poll cadence: 0.5 s [decision: close-latency vs overhead tradeoff]
+        let closeWatchIntervalNanoseconds: UInt64 = 500_000_000
         Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: closeWatchIntervalNanoseconds)
                 guard let self else { break }
                 if self.viewModel.displayedStep == .done {
-                    // Brief pause so the "You're all set!" screen is visible.
-                    // Duration: 1.5 s [decision: enough to read the text, not so long
-                    // it feels like the app froze. 1.0 s tested too brief for comfort.]
-                    try? await Task.sleep(nanoseconds: 1_500_000_000)
-                    self.close()
+                    // Store a cancellable reference so windowDidResignKey can cancel it.
+                    let closeTask = Task { [weak self] in
+                        try? await Task.sleep(nanoseconds: doneAutoCloseDelayNanoseconds)
+                        guard !Task.isCancelled else { return }
+                        await MainActor.run { [weak self] in
+                            self?.close()
+                        }
+                    }
+                    self.autoCloseTask = closeTask
                     break
                 }
             }
@@ -122,8 +157,17 @@ final class OnboardingWindowController {
 
     // MARK: - Window close delegate bridge
 
-    /// A thin NSWindowDelegate that logs when the user closes the window manually.
-    private lazy var windowCloseDelegate: WindowCloseDelegate = WindowCloseDelegate(log: log)
+    /// A thin NSWindowDelegate that logs when the user closes the window manually
+    /// and cancels the auto-close task if the user clicks away from the Done step.
+    private lazy var windowCloseDelegate: WindowCloseDelegate = WindowCloseDelegate(
+        log: log,
+        onResignKey: { [weak self] in
+            // Cancel the pending auto-close if the user clicks away.
+            // The window stays open — they can return and read it.
+            self?.autoCloseTask?.cancel()
+            self?.autoCloseTask = nil
+        }
+    )
 
 #if DEBUG
     // MARK: - Debug (verification harness only)
@@ -148,7 +192,7 @@ final class OnboardingWindowController {
         let hosting = NSHostingView(rootView: contentView)
 
         let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 400),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 460),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -170,18 +214,27 @@ final class OnboardingWindowController {
 
 // MARK: - WindowCloseDelegate
 
-/// Minimal `NSWindowDelegate` — logs user-initiated close (the X button).
-/// This is intentional: closing the onboarding window manually is equivalent
-/// to "skip" — the user dismissed it. The `hasCompletedOnboarding` flag is NOT
-/// set here; that only happens via `OnboardingViewModel.finish()` or `.skip()`.
+/// Minimal `NSWindowDelegate` — logs user-initiated close (the X button) and
+/// fires `onResignKey` when the window loses key focus (e.g., user clicks away).
+///
+/// Closing the onboarding window manually is equivalent to "skip" — the user
+/// dismissed it. The `hasCompletedOnboarding` flag is NOT set here; that only
+/// happens via `OnboardingViewModel.finish()` or `.skip()`.
 private final class WindowCloseDelegate: NSObject, NSWindowDelegate, @unchecked Sendable {
     private let log: Logger
+    private let onResignKey: () -> Void
 
-    init(log: Logger) {
+    init(log: Logger, onResignKey: @escaping () -> Void) {
         self.log = log
+        self.onResignKey = onResignKey
     }
 
     func windowWillClose(_ notification: Notification) {
         log.info("OnboardingWindowController: user closed the onboarding window manually.")
+    }
+
+    /// Cancel the pending auto-close if the user clicks away from the Done step.
+    func windowDidResignKey(_ notification: Notification) {
+        onResignKey()
     }
 }
