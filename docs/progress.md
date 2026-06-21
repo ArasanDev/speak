@@ -42,12 +42,16 @@
 > **Wave D shipped (autonomously buildable + verified):** menubar Style/Language
 > submenus (`b7ac26e`) · **Paste Last Transcript** Cmd+Ctrl+V re-paste (`4a8bd4d`) ·
 > **HUD live duration counter** (`db58c87`) · **Command Mode AI-transform core**
-> (`.command(instruction:)` + prompt, `da40b0d`). Final gate: **255 tests / 0 fail**.
+> (`.command(instruction:)` + prompt, `da40b0d`) · **Command Mode pipeline** —
+> `CommandModeService` orchestration (read→transform→replace, 4 tests) + live
+> `AccessibilitySelection` AX read/replace (`a67dfdd`). Final gate: **259 tests / 0 fail**.
 >
 > **REMAINING — all HUMAN-GATED by nature (need live testing the agent cannot do):**
->   1. **Command Mode live wiring** — a `Fn+Ctrl` chord detector + reading/replacing the
->      selection via the **Accessibility API** in the frontmost app. The AI core is done +
->      tested; the live AX read/replace + chord need a real app with selected text. Like #8.
+>   1. **Command Mode live TRIGGER only** — the `Fn+Ctrl` chord + capturing the spoken
+>      instruction audio to call `CommandModeService.run(instruction:)`. The whole
+>      transform pipeline (AX read → `.command` clean → AX replace) is **built + tested**;
+>      this last hookup means extending the leave-alone-list `HotkeyMonitor` and can't be
+>      verified without a real app + selection → left for a live session. Like #8.
 >   2. **Scratchpad paste-failure routing** — needs paste-error plumbing to surface the
 >      failed text + a live paste-failure to verify. (Text is already clipboard-safe today.)
 >   3. **Live render/run verification** of overlay + every dashboard pane (Home already
