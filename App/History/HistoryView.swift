@@ -14,6 +14,23 @@
 //
 // HONESTY BOUNDARY:
 //   Rendered/interactive behavior is [deferred — human verification §4.5].
+//
+// LIST / PREVIEW NOTE [decision]:
+//   The populated-list preview crashes under the XOJIT preview harness (macOS 26)
+//   in `OutlineListCoordinator.diffRows` / `ViewListTree.visitItem` — an assertion
+//   in NSOutlineView's row-height estimation triggered during `viewDidMoveToWindow`.
+//   Investigation confirmed this is PREVIEW-ONLY: the real History window (verified
+//   via --debug-open history with seeded entries) renders and scrolls correctly.
+//   The fix applied:
+//     (1) `List { ForEach(...) }` instead of `List(_:) { }` — decouples container
+//         identity from data, the standard macOS 26 workaround for diffRows crashes.
+//     (2) Always-mounted List with an overlay for the empty state — eliminates the
+//         view-type switch (VStack ↔ List) that could cause a second assertion path
+//         during async [] → [N] updates.
+//   The "With entries" preview STILL crashes (XOJIT platform defect; variable-height
+//   rows in List remain broken in Xcode 26.5 XOJIT). The "Empty state" preview passes
+//   (zero rows never touch the crashing diffRows path). This is surfaced to the
+//   orchestrator as a preview-only, non-regression defect.
 
 import SwiftUI
 import SpeakCore
@@ -53,21 +70,26 @@ struct HistoryView: View {
 
     // MARK: - Content
 
-    @ViewBuilder
+    /// Always-mounted List with empty overlay — eliminates the VStack ↔ List
+    /// view-type switch that can trigger a second assertion path on async reloads.
+    /// `List { ForEach(...) }` decouples container identity from data.
+    /// See file-header note for the full investigation. [decision]
     private var content: some View {
-        if viewModel.entries.isEmpty {
-            emptyState
-        } else {
-            List(viewModel.entries) { entry in
+        List {
+            ForEach(viewModel.entries) { entry in
                 HistoryRow(entry: entry)
             }
-            .listStyle(.inset)
+        }
+        .listStyle(.inset)
+        .overlay {
+            if viewModel.entries.isEmpty {
+                emptyState
+            }
         }
     }
 
     private var emptyState: some View {
         VStack(spacing: 8) {
-            Spacer()
             Image(systemName: "text.bubble")
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
@@ -75,9 +97,9 @@ struct HistoryView: View {
                  ? "No dictations yet"
                  : "No matches")
                 .foregroundStyle(.secondary)
-            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     // MARK: - Footer
@@ -124,15 +146,34 @@ private struct HistoryRow: View {
 // MARK: - Preview
 
 #if DEBUG
-#Preview {
-    HistoryView(viewModel: HistoryViewModel(store: PreviewHistoryStore()))
+/// "With entries" preview — KNOWN CRASH under XOJIT on macOS 26 / Xcode 26.5.
+/// Root cause: `OutlineListCoordinator.diffRows` / `ViewListTree.visitItem`
+/// assertion in NSOutlineView row-height estimation during `viewDidMoveToWindow`.
+/// This is preview-only; the real app renders correctly (verified via
+/// --debug-open history). Surfaced to orchestrator — do NOT degrade the
+/// production List to fix a preview tool defect. [decision]
+#Preview("With entries") {
+    HistoryView(viewModel: HistoryViewModel(store: PreviewHistoryStore(empty: false)))
+}
+
+/// "Empty state" preview — passes (zero rows skip the crashing diffRows path).
+/// Verifies: search bar, "No dictations yet" placeholder, disabled Export/Clear footer.
+#Preview("Empty state") {
+    HistoryView(viewModel: HistoryViewModel(store: PreviewHistoryStore(empty: true)))
 }
 
 /// A tiny in-memory store for SwiftUI previews only.
 private final class PreviewHistoryStore: HistoryStoring, @unchecked Sendable {
+    private let empty: Bool
+
+    init(empty: Bool) {
+        self.empty = empty
+    }
+
     func save(_ entry: HistoryEntry) throws {}
     func recent(limit: Int) throws -> [HistoryEntry] {
-        [
+        guard !empty else { return [] }
+        return [
             HistoryEntry(rawText: "hello world this is a test",
                          cleanedText: "Hello world, this is a test.",
                          engineId: "apple-speech-en-US+foundation-models"),

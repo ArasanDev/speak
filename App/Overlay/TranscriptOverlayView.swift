@@ -240,3 +240,52 @@ struct TranscriptOverlayView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
+// MARK: - Preview
+
+// HONESTY BOUNDARY: these previews verify *content layout* only (text, meter
+// bars, icons, padding). They do NOT verify panel/window-server behavior:
+// floating-over-other-apps, bottom-center positioning, `.nonactivatingPanel`,
+// `canBecomeKey=false`, or hide-on-done timing — those are irreducibly live per
+// docs/agent-tooling.md §3.1 and remain [deferred — human verification].
+
+#if DEBUG
+/// Listening — placeholder state. No partial text yet; shows "Listening…" label
+/// and idle-breathing level bars. This is the first visual a user sees on hotkey press.
+#Preview("Listening — placeholder") {
+    let model = OverlayViewModel()
+    model.overlayState = .listening
+    model.partialText = ""
+    model.level = 0.0
+    return TranscriptOverlayView(model: model)
+        .frame(width: 340, height: 60)
+}
+
+/// Listening — with partial transcript. Shows in-flight recognized text plus
+/// mid-range level bars (0.6 simulates a normal speaking volume). [decision: 0.6 = mid]
+#Preview("Listening — with partial text") {
+    let model = OverlayViewModel()
+    model.overlayState = .listening
+    model.partialText = "the quick brown fox"
+    model.level = 0.6
+    return TranscriptOverlayView(model: model)
+        .frame(width: 340, height: 60)
+}
+
+/// Processing — cleanup spinner. Shown after audio capture ends while
+/// Foundation Models cleans the transcript. No text or meter bars visible.
+#Preview("Processing") {
+    let model = OverlayViewModel()
+    model.overlayState = .processing
+    return TranscriptOverlayView(model: model)
+        .frame(width: 340, height: 60)
+}
+
+/// Done — checkmark confirmation. Shown briefly before the panel hides.
+#Preview("Done") {
+    let model = OverlayViewModel()
+    model.overlayState = .done
+    return TranscriptOverlayView(model: model)
+        .frame(width: 340, height: 60)
+}
+#endif
