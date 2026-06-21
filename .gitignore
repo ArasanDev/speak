@@ -63,3 +63,6 @@ Signing.local.xcconfig
 # Local competitor reference screenshots (personal-account data; design ref only)
 wisperflow.png
 *.ref.png
+
+# Local dev screenshots
+speak_*.jpeg
