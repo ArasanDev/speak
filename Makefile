@@ -23,7 +23,7 @@ XCB := xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration $(CONFIG)
 DEV_CERT  := speak-local-codesign
 BUNDLE_ID := com.speak.app
 
-.PHONY: all generate build test lint run lsp clean release verify-moat dev-cert dev-sign reset-permissions
+.PHONY: all generate build test lint run lsp clean release verify-moat dev-cert reset-permissions
 
 all: build
 
@@ -31,30 +31,21 @@ all: build
 generate:
 	xcodegen generate
 
-## build: produce a runnable Speak.app (re-signed with the stable dev cert if present)
+## build: produce a runnable Speak.app (signed per Signing.xcconfig — cert if
+##        `make dev-cert` has been run, else ad-hoc)
 build: generate
 	$(XCB) build
-	@$(MAKE) --no-print-directory dev-sign
 
-## dev-cert: create the stable local code-signing identity (idempotent, one-time)
+## dev-cert: ONE-TIME setup. Creates the stable self-signed signing identity AND writes
+##           the git-ignored Signing.local.xcconfig that points the build at it — so BOTH
+##           `make build` and Xcode Cmd+R sign with it, and TCC grants (Accessibility /
+##           Input Monitoring) persist across rebuilds. Idempotent; re-run any time.
 dev-cert:
 	bash scripts/dev-codesign-setup.sh
-
-## dev-sign: re-sign the built app with the stable cert so TCC grants persist across
-##           rebuilds. Auto-ensures the cert exists. No-op fallback to ad-hoc if the
-##           cert can't be created. Signs nested framework first, then the app wrapper
-##           (correct order — avoids the discouraged `--deep`).
-dev-sign:
-	@bash scripts/dev-codesign-setup.sh || true
-	@if security find-identity -p codesigning 2>/dev/null | grep -q "$(DEV_CERT)"; then \
-		echo "dev-sign: signing $(APP) with stable identity '$(DEV_CERT)'…"; \
-		FW="$(APP)/Contents/Frameworks/SpeakCore.framework"; \
-		[ -d "$$FW" ] && codesign --force --sign "$(DEV_CERT)" "$$FW" >/dev/null 2>&1 || true; \
-		codesign --force --sign "$(DEV_CERT)" "$(APP)" >/dev/null 2>&1; \
-		echo "dev-sign: $$(codesign -d -r- "$(APP)" 2>&1 | grep designated)"; \
-	else \
-		echo "dev-sign: stable cert unavailable — app stays ad-hoc; TCC grants will NOT persist across rebuilds (run 'make dev-cert')."; \
-	fi
+	@printf 'SPEAK_SIGN_IDENTITY = %s\n' "$(DEV_CERT)" > Signing.local.xcconfig
+	@echo "dev-cert: wrote Signing.local.xcconfig (SPEAK_SIGN_IDENTITY=$(DEV_CERT))."
+	@echo "          Run 'make generate' (or reopen Speak.xcodeproj in Xcode) for it to take effect,"
+	@echo "          then 'make reset-permissions' once and re-grant — the grant will now stick."
 
 ## reset-permissions: clear stale TCC grants for speak (run after switching signing
 ##                    identity, or to force a clean re-grant). Then relaunch + grant once.

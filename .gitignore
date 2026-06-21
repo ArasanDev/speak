@@ -56,3 +56,6 @@ buildServer.json
 # Claude Code transient state
 .claude/scheduled_tasks.lock
 .claude/*.lock
+
+# Machine-local signing override (written by `make dev-cert`)
+Signing.local.xcconfig

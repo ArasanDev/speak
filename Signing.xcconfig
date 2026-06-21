@@ -1,0 +1,28 @@
+// Signing.xcconfig — stable local code-signing so macOS TCC permission grants
+// (Accessibility, Input Monitoring) survive rebuilds.
+//
+// WHY: TCC binds a grant to the app's code-signing designated requirement. An
+// ad-hoc signature pins that to the binary's cdhash, which changes every build —
+// so a grant made against one build is rejected by the next ("enabled in System
+// Settings but AXIsProcessTrusted() is false"). A stable signing identity makes
+// the requirement cert-anchored, so the grant persists. See
+// scripts/dev-codesign-setup.sh for the full rationale + the empirical proof.
+//
+// This config is consumed by BOTH `make build` AND Xcode Cmd+R (via the generated
+// Speak.xcodeproj), so the app is signed the same way no matter how it is built —
+// the previous Makefile-only post-sign missed Xcode runs entirely.
+//
+// DEFAULT = ad-hoc ("-"), so a fresh clone / CI builds with no cert and no setup.
+// `make dev-cert` creates a stable self-signed identity and writes the git-ignored
+// Signing.local.xcconfig below, which overrides SPEAK_SIGN_IDENTITY → cert-signed.
+// Real Developer ID signing + notarization arrives at roadmap P11.
+
+SPEAK_SIGN_IDENTITY = -
+
+// Optional, machine-local override (git-ignored). Present only after `make dev-cert`.
+#include? "Signing.local.xcconfig"
+
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = $(SPEAK_SIGN_IDENTITY)
+CODE_SIGNING_ALLOWED = YES
+CODE_SIGNING_REQUIRED = NO

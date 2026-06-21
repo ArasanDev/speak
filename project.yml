@@ -16,16 +16,19 @@ options:
     macOS: "26.0"
   createIntermediateGroups: true
 
+# Code signing is defined in Signing.xcconfig (applied to every config below via
+# `configFiles`), so BOTH `make build` and Xcode Cmd+R produce an identically-signed
+# app. Default is ad-hoc; `make dev-cert` switches it to a stable self-signed identity
+# so TCC permission grants persist across rebuilds. Do NOT re-add CODE_SIGN_* here —
+# target-level settings override the xcconfig and would silently reinstate ad-hoc.
+configFiles:
+  Debug: Signing.xcconfig
+  Release: Signing.xcconfig
+
 settings:
   base:
     SWIFT_VERSION: "5.0"            # Swift 5 language mode (compiler is 6.3.2)
     MACOSX_DEPLOYMENT_TARGET: "26.0"
-    # Local dev signing: ad-hoc so the .app launches without a Developer ID.
-    # Real Developer ID signing + notarization arrives at P11.
-    CODE_SIGN_STYLE: Manual
-    CODE_SIGN_IDENTITY: "-"
-    CODE_SIGNING_REQUIRED: "NO"
-    CODE_SIGNING_ALLOWED: "NO"
 
 targets:
 
@@ -38,9 +41,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.speak.SpeakCore
         GENERATE_INFOPLIST_FILE: "YES"
-        # Ad-hoc sign the framework so the embedding app can launch locally.
-        CODE_SIGNING_ALLOWED: "YES"
-        CODE_SIGN_IDENTITY: "-"
+        # Signing inherited from Signing.xcconfig (see configFiles above).
 
   Speak:
     type: application
@@ -60,8 +61,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.speak.app
-        CODE_SIGNING_ALLOWED: "YES"
-        CODE_SIGN_IDENTITY: "-"
+        # Signing inherited from Signing.xcconfig (see configFiles above).
 
   SpeakTests:
     type: bundle.unit-test
