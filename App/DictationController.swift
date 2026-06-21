@@ -111,7 +111,14 @@ final class DictationController: ObservableObject {
     /// Owns the overlay lifecycle (model + panel + partials drain).
     private let overlayController = OverlayController()
 
-    /// Owns History and Onboarding window presentation.
+    /// Owns History, Onboarding, and Dashboard window presentation.
+    /// Nil until first access — constructed lazily via `ensureWindowPresenter()` so
+    /// that `showDashboard()` / `showHistory()` / `showOnboardingIfNeeded()` work
+    /// whether or not `startMonitoring()` has been called (e.g. the DEBUG path or
+    /// a very-early menu open before monitoring arms).
+    /// [decision: lazy guard, not init-time construction — hotkeyFiredPublisher derives
+    /// from self.$icon via a Combine pipeline, which requires self to be fully initialised
+    /// before the publisher can be formed without a definite-initialisation compile error.]
     private var windowPresenter: WindowPresenter?
 
     /// Drives Command Mode (Wave D) from the Fn+Ctrl chord. Constructed in
@@ -201,24 +208,29 @@ final class DictationController: ObservableObject {
             }
     }
 
-    // MARK: - Public API
+    // MARK: - Lazy WindowPresenter construction
 
-    /// Call once from `applicationDidFinishLaunching`. Arms the hotkey tap
-    /// asynchronously and begins consuming events. Safe to call exactly once.
+    /// Returns the live `WindowPresenter`, constructing it on the first call.
     ///
-    /// Phase A: `monitor.start()` is non-throwing. If AX is not yet granted,
-    /// the monitor's 100ms watchdog will arm the tap on the untrusted→trusted
-    /// edge. This controller responds via `armStateChanges`.
-    func startMonitoring() {
-        // WindowPresenter is constructed here (not in init) so it shares the
-        // same deferred-construction pattern as the panel below. Both become
-        // active at the same point — when monitoring actually starts.
+    /// Construction is deferred out of `init()` for two reasons:
+    /// 1. `hotkeyFiredPublisher` is derived from `self.$icon` (a Combine `@Published`
+    ///    pipeline), which requires `self` to be fully initialised before access.
+    /// 2. Keeps `showDashboard()` / `showHistory()` / `showOnboardingIfNeeded()` safe
+    ///    whether or not `startMonitoring()` has run — the DEBUG launch path, an early
+    ///    menu click, and the normal startup path all converge here.
+    ///
+    /// [decision: guarded-lazy over non-optional `let` — avoids the init-time
+    ///  definite-initialisation constraint while still guaranteeing a non-nil result
+    ///  to every caller without a silent `?` optional chain no-op.]
+    @discardableResult
+    private func ensureWindowPresenter() -> WindowPresenter {
+        if let existing = windowPresenter { return existing }
+
         // Derive a publisher that fires (on the main thread) each time the hotkey
         // triggers a new dictation session. `$icon` transitions to `.listening` on
         // every startCapture event — this is the observable proxy for hotkey fires.
         // `.removeDuplicates()` ensures we only emit on the idle→listening EDGE,
         // not if `.listening` is re-published while already listening.
-        // `.filter { $0 == .listening }` + `.map { _ in () }` → `AnyPublisher<Void, Never>`.
         // `receive(on: RunLoop.main)` ensures the subscriber (onboarding VM) hops to
         // the main thread before touching @Published properties.
         let hotkeyFiredPublisher = $icon
@@ -228,7 +240,7 @@ final class DictationController: ObservableObject {
             .receive(on: RunLoop.main)
             .eraseToAnyPublisher()
 
-        windowPresenter = WindowPresenter(
+        let presenter = WindowPresenter(
             historyStore: historyStore,
             permissionManager: permissionManager,
             settingsStore: settingsStore,
@@ -236,7 +248,23 @@ final class DictationController: ObservableObject {
             hotkeyComboProvider: { [weak self] in self?.currentHotkeyCombo() ?? ["Fn"] },
             hotkeyFiredPublisher: hotkeyFiredPublisher
         )
-        windowPresenter?.showOnboardingIfNeeded()
+        windowPresenter = presenter
+        return presenter
+    }
+
+    // MARK: - Public API
+
+    /// Call once from `applicationDidFinishLaunching`. Arms the hotkey tap
+    /// asynchronously and begins consuming events. Safe to call exactly once.
+    ///
+    /// Phase A: `monitor.start()` is non-throwing. If AX is not yet granted,
+    /// the monitor's 100ms watchdog will arm the tap on the untrusted→trusted
+    /// edge. This controller responds via `armStateChanges`.
+    func startMonitoring() {
+        // WindowPresenter is now constructed lazily via ensureWindowPresenter() —
+        // calling it here both guarantees it exists for the lifetime of monitoring
+        // and triggers the onboarding check on the first clean launch.
+        ensureWindowPresenter().showOnboardingIfNeeded()
 
         // Delegate panel creation to OverlayController — panel is expensive and
         // must be created once, not per-dictation.
@@ -280,21 +308,21 @@ final class DictationController: ObservableObject {
     /// Show the Onboarding window if the onboarding flow is not yet complete.
     /// Delegates to `WindowPresenter.showOnboardingIfNeeded()`.
     func showOnboardingIfNeeded() {
-        windowPresenter?.showOnboardingIfNeeded()
+        ensureWindowPresenter().showOnboardingIfNeeded()
     }
 
     /// Show the History window (P9).
     /// Called from `SpeakApp.swift` via the menu button.
     /// Delegates to `WindowPresenter.showHistory()`.
     func showHistory() {
-        windowPresenter?.showHistory()
+        ensureWindowPresenter().showHistory()
     }
 
     /// Show the full-window dashboard (Phase-2 UI spine).
     /// Called from `SpeakApp.swift` via the menu button.
     /// Delegates to `WindowPresenter.showDashboard()`.
     func showDashboard() {
-        windowPresenter?.showDashboard()
+        ensureWindowPresenter().showDashboard()
     }
 
     /// Cancel the current dictation without pasting. Called by the Escape key handler

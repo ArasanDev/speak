@@ -53,14 +53,16 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
     /// promotes the app to a regular Dock-present app for the window's lifetime.
     /// Calling when already visible re-orders it to front (no duplicate window).
     func show() {
-        // Promote to a real Dock app + app menu while the main window is open.
-        promoteToRegularApp()
-
         if let existing = window, existing.isVisible {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            // Already visible — bring to front without re-promoting (already .regular).
+            bringToFront(existing)
             return
         }
+
+        // Promote to a real Dock app + app menu while the main window is open.
+        // The return value tells us whether the policy actually changed so we can
+        // decide whether to defer the front-ordering by one runloop turn.
+        let didPromote = promoteToRegularApp()
 
         let contentView = DashboardView(context: context, initialSection: initialSection)
         let hosting = NSHostingView(rootView: contentView)
@@ -83,9 +85,23 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
         win.center()
         self.window = win
 
-        win.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        log.info("DashboardWindowController: window shown (promoted to .regular).")
+        if didPromote {
+            // The activation-policy change needs one runloop pass to propagate before
+            // the window can reliably surface above the previously-focused app.
+            // `DispatchQueue.main.async` gives AppKit that single pass without sleeping.
+            // [decision: one async hop is the minimum deterministic delay; no magic
+            //  number — this is a single enqueue, not a duration.]
+            // [unverified — human dogfood required: whether one hop suffices on all
+            //  macOS 26 builds; extend if the window still loses the race in practice.]
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let w = self.window else { return }
+                self.bringToFront(w)
+            }
+        } else {
+            // Policy was already .regular (e.g. another window is open) — no race.
+            bringToFront(win)
+        }
+        log.info("DashboardWindowController: window shown (promoted=\(didPromote, privacy: .public)).")
     }
 
     /// Close the dashboard window.
@@ -96,22 +112,51 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - NSWindowDelegate
 
-    /// When the main window closes, demote back to menubar-only (.accessory) so the
-    /// Dock icon disappears and speak returns to being a background dictation tool.
+    /// When the dashboard window closes, demote back to menubar-only (.accessory) so the
+    /// Dock icon disappears and speak returns to being a background dictation tool —
+    /// but ONLY if no other visible titled window is still open and we are currently .regular.
+    /// Skipping demotion when another window is visible prevents yanking the Dock icon
+    /// out from under an open History or Settings window.
+    ///
+    /// SAFETY NOTE (Bug 4): `DashboardWindowController` holds no reference to
+    /// `HotkeyMonitor`, `SpeakEngine`, or `DictationController`. Closing this window
+    /// cannot reach or disarm the `CGEventTap`. The menubar app and hotkey remain alive.
     func windowWillClose(_ notification: Notification) {
         window = nil
+        // Guard: only demote if currently .regular and no other visible titled window
+        // will be left open after this one closes.
+        guard NSApp.activationPolicy() == .regular else { return }
+        let otherVisible = NSApp.windows.contains { w in
+            w !== (notification.object as? NSWindow) && w.isVisible && !w.title.isEmpty
+        }
+        guard !otherVisible else {
+            log.info("DashboardWindowController: window closed — demotion skipped (other windows visible).")
+            return
+        }
         NSApp.setActivationPolicy(.accessory)
         log.info("DashboardWindowController: window closed (demoted to .accessory).")
     }
 
-    // MARK: - Activation policy
+    // MARK: - Private helpers
 
-    /// Promote to a regular, Dock-present app with a standard app menu. Idempotent —
-    /// AppKit ignores a redundant set to the same policy.
-    private func promoteToRegularApp() {
-        if NSApp.activationPolicy() != .regular {
-            NSApp.setActivationPolicy(.regular)
-            log.info("DashboardWindowController: activation policy → .regular (Dock + app menu).")
-        }
+    /// Activate the app then order the window to front.
+    /// Activates FIRST so the app is the frontmost process before the window
+    /// requests key status — prevents the window landing behind the previously-active
+    /// app. [decision: activate-then-orderFront is the correct sequence for a
+    /// backgrounded LSUIElement app surfacing a window.]
+    private func bringToFront(_ win: NSWindow) {
+        NSApp.activate(ignoringOtherApps: true)
+        win.makeKeyAndOrderFront(nil)
+    }
+
+    /// Promote to a regular, Dock-present app with a standard app menu.
+    /// - Returns: `true` if the policy was actually changed (`.accessory` → `.regular`);
+    ///            `false` if it was already `.regular` (idempotent, no-op).
+    @discardableResult
+    private func promoteToRegularApp() -> Bool {
+        guard NSApp.activationPolicy() != .regular else { return false }
+        NSApp.setActivationPolicy(.regular)
+        log.info("DashboardWindowController: activation policy → .regular (Dock + app menu).")
+        return true
     }
 }
