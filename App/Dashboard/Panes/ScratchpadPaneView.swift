@@ -17,7 +17,9 @@ struct ScratchpadPaneView: View {
     let context: DashboardContext
 
     /// Persisted locally in UserDefaults — the scratchpad is a single on-device note in v0.
-    @AppStorage("speak.scratchpad.text") private var text: String = ""
+    /// Shares `Scratchpad.defaultsKey` with the paste-failure fallback, so failed text
+    /// appears here live.
+    @AppStorage(Scratchpad.defaultsKey) private var text: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

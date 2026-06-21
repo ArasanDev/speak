@@ -27,7 +27,9 @@ public enum SpeakError: Error, Sendable {
     case llmCleanupFailed(String)
     case sessionCancelled
     case microphoneMuted
-    case pasteRequiresAccessibility
+    /// AX not granted at paste time. Carries the `text` it was delivering so the app
+    /// shell can route it to the Scratchpad (it is also already on the clipboard).
+    case pasteRequiresAccessibility(text: String)
     case unknown(String)
 
     public var recoverySuggestion: String {

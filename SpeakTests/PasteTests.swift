@@ -334,8 +334,9 @@ final class PasteboardWriterTests: XCTestCase {
         do {
             try await writer.insert(uniqueText)
             XCTFail("insert() must throw when AX is not trusted")
-        } catch SpeakError.pasteRequiresAccessibility {
-            // Expected — correct error.
+        } catch SpeakError.pasteRequiresAccessibility(let text) {
+            // Expected — correct error; it must carry the text it tried to deliver.
+            XCTAssertEqual(text, uniqueText, "The error must carry the delivered text for Scratchpad routing.")
         } catch {
             XCTFail("Expected SpeakError.pasteRequiresAccessibility, got \(error)")
         }
@@ -378,7 +379,7 @@ final class PasteboardWriterTests: XCTestCase {
         } catch SpeakError.pasteboardBusy {
             // Acceptable in headless CI where CGEvent infrastructure is unavailable.
             return
-        } catch SpeakError.pasteRequiresAccessibility {
+        } catch SpeakError.pasteRequiresAccessibility(_) {
             XCTFail("Should not throw .pasteRequiresAccessibility when AX is trusted")
             return
         } catch {

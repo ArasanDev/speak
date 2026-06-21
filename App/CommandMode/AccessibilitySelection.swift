@@ -51,7 +51,7 @@ struct AccessibilitySelection: SelectionAccessing {
 
     func replaceSelectedText(with text: String) throws {
         guard let element = focusedElement() else {
-            throw SpeakError.pasteRequiresAccessibility
+            throw SpeakError.pasteRequiresAccessibility(text: text)
         }
         let result = AXUIElementSetAttributeValue(
             element, kAXSelectedTextAttribute as CFString, text as CFString

@@ -425,18 +425,22 @@ final class DictationController: ObservableObject {
             try? await Task.sleep(nanoseconds: doneFlashNanoseconds)
             overlayController.stop()
             icon = .idle
-        } catch SpeakError.pasteRequiresAccessibility {
+        } catch SpeakError.pasteRequiresAccessibility(let text) {
             // Graceful degradation: text was written to the clipboard (the
             // clipboard-floor step in PasteboardWriter always runs), but
             // synthetic Cmd+V was skipped because AX is not granted.
             // Outcome: NOT a fault — the user can paste manually (Cmd+V).
             // Mirror the `.microphoneMuted` soft-catch pattern: hide overlay,
             // stay idle, surface the permissions hint via `permissionsNeeded`.
+            // Also route the text to the Scratchpad so it's never lost and is
+            // immediately editable (verified Wispr paste-failure behavior).
             overlayController.stop()
             icon = .idle
             permissionsNeeded = true
+            lastTranscript = text
+            Scratchpad.append(text)
             SpeakLog.engine.info(
-                "DictationController: paste fell back to clipboard — Accessibility needed"
+                "DictationController: paste fell back to clipboard + Scratchpad — Accessibility needed"
             )
         } catch {
             // Error: hide the panel immediately — no done flash on failure.

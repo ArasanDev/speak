@@ -167,7 +167,7 @@ public final class PasteboardWriter: TextInserting, Sendable {
             log.info(
                 "PasteboardWriter: AX not trusted — text on clipboard; skipping Cmd+V"
             )
-            throw SpeakError.pasteRequiresAccessibility
+            throw SpeakError.pasteRequiresAccessibility(text: text)
         }
 
         // ── Step 3: settle delay ─────────────────────────────────────────────
