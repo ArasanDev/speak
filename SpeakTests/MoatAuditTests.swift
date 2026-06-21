@@ -133,6 +133,7 @@ final class MoatAuditTests: XCTestCase {
         "UniformTypeIdentifiers",  // Apple framework; UTType.json for history export save-panel
         "SQLite3",
         "SpeakCore",
+        "CoreFoundation",   // CFRunLoop, CFRunLoopTimer — used in HotkeyMonitor for the tap thread
     ]
 
     /// BEAT §3 / AGENTS.md §2.4 — No third-party dependencies.

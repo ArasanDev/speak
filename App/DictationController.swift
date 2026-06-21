@@ -18,6 +18,18 @@
 //   - `SpeakEngine` and `HistoryStore` are actors: all calls to them are `await`.
 //   - The hotkey-event Task reads `monitor.events` (an AsyncStream) and awaits
 //     engine calls; it captures `[weak self]` to avoid a retain cycle.
+//   - The arm-state Task reads `monitor.armStateChanges` and updates
+//     `permissionsNeeded` on the main actor when the tap arms/disarms.
+//
+// Re-arm wiring (Phase A):
+//   `HotkeyMonitor` manages its own re-arm watchdog internally. `DictationController`
+//   calls `monitor.start()` once from `startMonitoring()`. If AX is not yet granted
+//   at that point, the monitor's 100ms watchdog will arm the tap as soon as AX is
+//   granted — no relaunch required.
+//
+//   When the tap arms, `monitor.armStateChanges` yields `true`, which this
+//   controller receives on a background Task and routes to the @MainActor to clear
+//   `permissionsNeeded` and spawn the event-consume Task if it hasn't been yet.
 //
 // History-store degradation:
 //   `HistoryStore.makeProductionStore()` throws (SQLite open can fail). On
@@ -26,10 +38,9 @@
 //   unaffected; history is silently disabled for the session.
 //
 // Permission-denied degradation:
-//   `HotkeyMonitor.start()` throws `.accessibilityDenied` or
-//   `.inputMonitoringDenied` when CGEvent.tapCreate returns nil. We catch both,
-//   set `permissionsNeeded = true` (drives the menu hint), and log. The app
-//   remains open so the user can grant permissions and restart via settings.
+//   `HotkeyMonitor.start()` is non-throwing (Phase A). The monitor handles its
+//   own retry. `permissionsNeeded` is set when AX is missing; cleared when the
+//   arm-state stream yields `true`.
 
 import Foundation
 import SwiftUI
@@ -58,18 +69,15 @@ final class DictationController: ObservableObject {
     /// The current menubar icon semantic — drives `MenuBarExtra` systemImage.
     @Published private(set) var icon: MenubarIcon = .idle
 
-    /// `true` when the hotkey monitor failed to start due to missing permissions.
+    /// `true` when the hotkey monitor has not yet armed (AX not granted).
     /// Drives a ⚠️ hint in the menu so the user knows to grant permissions.
     @Published private(set) var permissionsNeeded: Bool = false
 
     /// The current running partial transcript text (empty when not listening).
-    /// Exposed for the overlay view; not directly observed by SwiftUI here —
-    /// the overlay panel has its own `OverlayViewModel`.
     @Published private(set) var partialText: String = ""
 
     /// Hardware-mute state (SPEC §7.4). Mirrors `engine.isMuted` for the menu
-    /// checkmark. The authoritative state lives in the engine (the bypass-proof
-    /// gate); this published copy is updated whenever the toggle changes.
+    /// checkmark. The authoritative state lives in the engine.
     @Published private(set) var isMuted: Bool = false
 
     // MARK: - Private components
@@ -77,62 +85,33 @@ final class DictationController: ObservableObject {
     private let engine: SpeakEngine
     private let monitor: HotkeyMonitor
     private var eventTask: Task<Void, Never>?
+    private var armStateTask: Task<Void, Never>?
 
-    /// The history store, shared with the engine. Exposed so the History window
-    /// can read/search/clear/export the same persistent store the engine writes to.
     let historyStore: any HistoryStoring
-
-    /// The History window controller. Created lazily on first show request.
     private var historyController: HistoryWindowController?
 
     // MARK: - Overlay (P4)
 
-    /// View-model shared between this controller and the overlay panel's SwiftUI view.
-    /// Created once; updated on the main actor via the partials task.
     private let overlayModel = OverlayViewModel()
-
-    /// The floating overlay panel. Created lazily on first `startMonitoring()` call
-    /// (NSPanel init requires a main-thread context — fine since this is @MainActor).
-    /// Stored as `NSPanel` to avoid a hard import of `TranscriptOverlayPanel` type
-    /// in tests that only depend on `SpeakCore`.
     private var overlayPanel: TranscriptOverlayPanel?
-
-    /// Task that drains the `currentPartials()` stream and updates `overlayModel`.
     private var partialsTask: Task<Void, Never>?
 
     // MARK: - Settings store
 
-    /// Shared settings store. Exposed so the Settings window can bind to it.
-    /// One instance for the app lifetime; the engine reads from it at each
-    /// `newSession()` call so toggle changes take effect per-dictation without
-    /// an engine restart.
     private(set) var settingsStore: SettingsStore
 
     // MARK: - Onboarding
 
-    /// The onboarding window controller. Created lazily on first show request.
-    /// `nil` after onboarding is complete so it can be released.
     private var onboardingController: OnboardingWindowController?
-
-    /// The live `PermissionManager` (shared with the onboarding flow).
     let permissionManager: PermissionManager
 
     // MARK: - Init
 
     init() {
-        // --- Settings store (single instance for the app lifetime) ---
-        // Created first; passed to the engine below so both the Settings
-        // window and the engine share one source of truth.
         let store = SettingsStore()
         self.settingsStore = store
-
-        // --- Permission manager (shared with onboarding) ---
         self.permissionManager = PermissionManager()
 
-        // --- History store (best-effort) ---
-        // `makeProductionStore()` throws if SQLite cannot be opened (e.g., disk
-        // full, permissions, first-time directory creation fails). On failure,
-        // substitute a no-op store so the rest of the pipeline is unaffected.
         let historyStore: any HistoryStoring
         do {
             historyStore = try HistoryStore.makeProductionStore()
@@ -145,10 +124,6 @@ final class DictationController: ObservableObject {
         }
         self.historyStore = historyStore
 
-        // --- Engine (production wiring) ---
-        // Transcriber and cleaner are chosen via the runtime factories (§10.1/§10a.1).
-        // The cleanup toggle (`cleanupEnabled`) is re-read at each `newSession()`
-        // call, so changes made via the Settings window apply on the next dictation.
         engine = SpeakEngine(
             transcriber: defaultTranscriber(for: store),
             cleaner: defaultCleaner(for: store),
@@ -157,74 +132,43 @@ final class DictationController: ObservableObject {
             settings: store
         )
 
-        // --- Hotkey monitor ---
         monitor = HotkeyMonitor()
     }
 
     // MARK: - Public API
 
-    /// Call once from `applicationDidFinishLaunching`. Arms the hotkey tap,
-    /// creates the overlay panel, and begins consuming events. Safe to call
-    /// exactly once; calling again is a no-op (the prior eventTask is still running).
+    /// Call once from `applicationDidFinishLaunching`. Arms the hotkey tap
+    /// asynchronously and begins consuming events. Safe to call exactly once.
+    ///
+    /// Phase A: `monitor.start()` is non-throwing. If AX is not yet granted,
+    /// the monitor's 100ms watchdog will arm the tap on the untrusted→trusted
+    /// edge. This controller responds via `armStateChanges`.
     func startMonitoring() {
-        // Show onboarding when any required permission is missing or the flag is not set.
-        // Evaluated before arming the hotkey so the user is prompted immediately.
         showOnboardingIfNeeded()
-
-        // Create the panel once here, on the main actor, so it is ready for the
-        // first dictation without any lazy-init race.
         overlayPanel = TranscriptOverlayPanel(overlayModel: overlayModel)
-        SpeakLog.hotkey.info("DictationController: startMonitoring() called — arming hotkey tap.")
+        SpeakLog.hotkey.info("DictationController: startMonitoring() — arming monitor.")
 
-        do {
-            // Read monitor.events AFTER start() — start() allocates a fresh stream;
-            // the placeholder from init() is dead.
-            try monitor.start()
-        } catch SpeakError.accessibilityDenied {
-            SpeakLog.permissions.error(
-                "DictationController: Accessibility permission denied — hotkey tap not armed."
-            )
+        // Check immediate AX state to set the initial permissionsNeeded hint.
+        let axGranted = permissionManager.status(.accessibility) == .granted
+        if !axGranted {
             permissionsNeeded = true
-            // P7 revocation path: re-surface onboarding so the user can re-grant.
-            // This handles mid-session revocation: if the user had previously granted
-            // accessibility but revoked it between launches, this is the detection point.
-            showOnboardingIfNeeded()
-            return
-        } catch SpeakError.inputMonitoringDenied {
-            SpeakLog.permissions.error(
-                "DictationController: Input Monitoring permission denied — hotkey tap not armed."
-            )
-            permissionsNeeded = true
-            // P7 revocation path: same as above for Input Monitoring.
-            showOnboardingIfNeeded()
-            return
-        } catch {
-            let hotkeyDetail = error.localizedDescription
-            SpeakLog.hotkey.error(
-                "DictationController: monitor.start() failed unexpectedly — \(hotkeyDetail, privacy: .public)"
-            )
-            permissionsNeeded = true
-            return
         }
 
-        // Capture the event stream reference AFTER a successful start().
-        let events = monitor.events
+        // Signal the monitor to arm. Arming is async — the watchdog will fire
+        // when AX is granted. If already granted, it arms on the first tick.
+        monitor.start()
 
-        eventTask = Task { [weak self] in
-            for await event in events {
-                guard let self else { break }
-                await self.handle(event)
-            }
-            SpeakLog.hotkey.info("DictationController: event stream ended.")
-        }
+        // Consume arm-state changes so we can react when the tap arms/disarms.
+        startArmStateTask()
+
+        // Consume hotkey events. The stream is stable for the monitor's lifetime;
+        // events arrive once the tap is armed. Starting the consume task early
+        // (before arm) is safe — it just waits on the AsyncStream.
+        startEventTask()
     }
 
     // MARK: - Onboarding
 
-    /// Shows the onboarding window when the evaluation machine says it is incomplete.
-    ///
-    /// Called at launch and whenever a session-start failure indicates a permission
-    /// was revoked mid-session (P7 done-when #3 — revocation → error path).
     func showOnboardingIfNeeded() {
         let eval = OnboardingStateMachine.evaluate(
             manager: permissionManager,
@@ -243,9 +187,71 @@ final class DictationController: ObservableObject {
         onboardingController?.show()
     }
 
+    // MARK: - Hardware mute (SPEC §7.4)
+
+    func toggleMute() {
+        Task { [weak self] in
+            guard let self else { return }
+            let nowMuted = await self.engine.toggleMute()
+            self.isMuted = nowMuted
+            if nowMuted {
+                self.stopOverlay()
+                self.icon = .idle
+            }
+        }
+    }
+
+    // MARK: - History window (P9)
+
+    func showHistory() {
+        if historyController == nil {
+            historyController = HistoryWindowController(store: historyStore)
+        }
+        historyController?.show()
+    }
+
+    // MARK: - Private task management
+
+    /// Start consuming `monitor.armStateChanges` to update `permissionsNeeded`.
+    /// On arm: clear the hint and ensure the event-consume task is running.
+    private func startArmStateTask() {
+        armStateTask?.cancel()
+        armStateTask = Task { [weak self] in
+            guard let self else { return }
+            for await armed in self.monitor.armStateChanges {
+                let isArmed = armed
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    if isArmed {
+                        self.permissionsNeeded = false
+                        SpeakLog.hotkey.info("DictationController: tap armed — permissionsNeeded cleared.")
+                    } else {
+                        self.permissionsNeeded = true
+                        SpeakLog.hotkey.warning("DictationController: tap disarmed — permissionsNeeded set.")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Start the event-consume task. Because `monitor.events` is a stable
+    /// AsyncStream that lives for the monitor's lifetime, this task can be
+    /// started once at `startMonitoring()` and will receive events across all
+    /// arm cycles without restart.
+    private func startEventTask() {
+        guard eventTask == nil else { return }
+        let events = monitor.events
+        eventTask = Task { [weak self] in
+            for await event in events {
+                guard let self else { break }
+                await self.handle(event)
+            }
+            SpeakLog.hotkey.info("DictationController: event stream ended.")
+        }
+    }
+
     // MARK: - Private event handling
 
-    /// Route a hotkey event to the engine verb and update published state.
     private func handle(_ event: HotkeyEvent) async {
         switch event {
         case .startCapture:
@@ -260,13 +266,8 @@ final class DictationController: ObservableObject {
             try await engine.beginDictation()
             icon = .listening
             SpeakLog.engine.info("DictationController: beginDictation succeeded → .listening")
-
-            // P4: spawn the partials-streaming task and show the overlay.
             startOverlay()
         } catch SpeakError.microphoneMuted {
-            // Hardware-mute refusal (SPEC §7.4) is NOT an error — the engine
-            // declined to start capture by design. Stay idle; the menu shows the
-            // mute state. No overlay, no audio, nothing read.
             icon = .idle
             SpeakLog.engine.info("DictationController: start ignored — microphone muted.")
         } catch {
@@ -277,60 +278,18 @@ final class DictationController: ObservableObject {
         }
     }
 
-    // MARK: - Hardware mute (SPEC §7.4)
-
-    /// Toggle the hardware-mute state. Routes to the engine (the authoritative,
-    /// bypass-proof gate) and mirrors the new value into `isMuted` for the menu.
-    func toggleMute() {
-        Task { [weak self] in
-            guard let self else { return }
-            let nowMuted = await self.engine.toggleMute()
-            self.isMuted = nowMuted
-            if nowMuted {
-                // Muting cancels any in-flight session in the engine (SPEC §7.4);
-                // reflect that in the UI — hide the overlay and return to idle.
-                self.stopOverlay()
-                self.icon = .idle
-            }
-        }
-    }
-
-    // MARK: - History window (P9)
-
-    /// Show the History window, creating it lazily. Reads the same `historyStore`
-    /// the engine writes to, so every completed dictation appears here.
-    func showHistory() {
-        if historyController == nil {
-            historyController = HistoryWindowController(store: historyStore)
-        }
-        historyController?.show()
-    }
-
     private func endDictation() async {
         do {
-            // Show .processing during STT-finalize + cleanup (the await below),
-            // so the menubar reflects every transition (idle→listening→processing
-            // →done→idle), per roadmap P8. With Foundation Models unavailable this
-            // is brief, but the state is still surfaced rather than skipped.
             icon = .processing
             _ = try await engine.endDictation()
-
-            // P4: hide the overlay immediately when dictation succeeds (text pasted).
             stopOverlay()
-
             icon = .done
             SpeakLog.engine.info("DictationController: endDictation succeeded → .done")
-            // Briefly show .done then return to .idle. Duration = 600 ms, the
-            // single documented source for the done-flash: roadmap.md P8 done-when
-            // ("Done green flash lasts 600ms then returns to idle"). Visual tuning
-            // is P8 polish (deferred to human verification); this keeps the one
-            // value consistent rather than inventing a second.
+            // 600ms done-flash — roadmap.md P8 [decision].
             try? await Task.sleep(nanoseconds: 600_000_000)
             icon = .idle
         } catch {
-            // P4: hide the overlay on error too — dictation is over.
             stopOverlay()
-
             icon = .error
             SpeakLog.engine.error(
                 "DictationController: endDictation failed — \(error.localizedDescription, privacy: .public)"
@@ -340,52 +299,32 @@ final class DictationController: ObservableObject {
 
     // MARK: - Overlay lifecycle (P4)
 
-    /// Show the overlay panel and begin streaming partial chunks into it.
-    ///
-    /// Called immediately after `beginDictation()` succeeds. Cancels any prior
-    /// partials task (defensive — there should never be one) before spawning a
-    /// new one so a stale stream cannot pollute the new session.
     private func startOverlay() {
-        // Reset text and show the panel first so the user gets instant feedback.
         overlayModel.partialText = ""
         overlayPanel?.show()
-
-        // Cancel any residual task from a prior dictation.
         partialsTask?.cancel()
         partialsTask = nil
 
         partialsTask = Task { [weak self] in
             guard let self else { return }
-
-            // `currentPartials()` awaits the engine actor and returns the stream
-            // for the *current* session (nil if the session already finished).
             guard let stream = await self.engine.currentPartials() else {
-                SpeakLog.engine.info("DictationController: partials stream unavailable (session may have ended).")
+                SpeakLog.engine.info("DictationController: partials stream unavailable.")
                 return
             }
 
             var accumulator = OverlayTextAccumulator()
-
             for await chunk in stream {
-                // Check for cancellation before each update — the task may be
-                // cancelled by stopOverlay() racing with the stream's natural end.
                 if Task.isCancelled { break }
-
                 let displayed = accumulator.next(chunk)
-                // All @Published mutations must happen on the main actor.
                 await MainActor.run {
                     self.overlayModel.partialText = displayed
                     self.partialText = displayed
                 }
             }
-
             SpeakLog.engine.info("DictationController: partials stream finished.")
         }
     }
 
-    /// Hide the overlay and tear down the partials task.
-    ///
-    /// Called on `.done` and `.error` (both terminate the dictation).
     private func stopOverlay() {
         partialsTask?.cancel()
         partialsTask = nil

@@ -5,6 +5,12 @@
 // This is the "headless-verifiable slice" of P7: the step machine is pure value
 // logic with zero UI dependencies. All paths are exercised here. The rendered
 // onboarding flow and live deep-links are [deferred — visual, human-verification.md §4.4].
+//
+// --- Phase A semantics (spec §2) ---
+// Input Monitoring is NON-BLOCKING: its absence does NOT prevent isComplete == true
+// and does NOT appear in blockingPermissions. Only Mic + Accessibility are blocking.
+// IM still has its own step so the user is shown how to grant it, but the machine
+// advances past it to completion regardless of its state.
 
 import Testing
 import Foundation
@@ -81,22 +87,55 @@ func onlyAccessibilityMissing_isAccessibilityStep() {
     #expect(eval.blockingPermissions == [.accessibility])
 }
 
-// MARK: - Only inputMonitoring missing
+// MARK: - Input Monitoring non-blocking (Phase A, spec §2)
+
+/// Core Phase A invariant: IM absence alone DOES NOT block completion.
+@Test
+func inputMonitoringMissing_withCompletedFlag_isComplete() {
+    // Mic + AX granted, IM missing, flag set → complete (IM is non-blocking).
+    let eval = OnboardingStateMachine.evaluate(
+        microphone: .granted,
+        accessibility: .granted,
+        inputMonitoring: .notDetermined,
+        hasCompletedOnboarding: true
+    )
+    #expect(eval.isComplete == true, "IM absence must not block isComplete when Mic+AX are granted")
+    #expect(eval.currentStep == .done)
+    #expect(eval.blockingPermissions.isEmpty, "blockingPermissions must not include .inputMonitoring")
+}
 
 @Test
-func onlyInputMonitoringMissing_isInputMonitoringStep() {
+func inputMonitoringDenied_withCompletedFlag_isComplete() {
+    let eval = OnboardingStateMachine.evaluate(
+        microphone: .granted,
+        accessibility: .granted,
+        inputMonitoring: .denied,
+        hasCompletedOnboarding: true
+    )
+    #expect(eval.isComplete == true)
+    #expect(eval.blockingPermissions.isEmpty)
+}
+
+/// IM still surfaces as a step during onboarding (so the user is guided to grant it),
+/// but its absence does NOT appear in blockingPermissions.
+@Test
+func onlyInputMonitoringMissing_isInputMonitoringStep_notBlocking() {
     let eval = OnboardingStateMachine.evaluate(
         microphone: .granted,
         accessibility: .granted,
         inputMonitoring: .notDetermined,
         hasCompletedOnboarding: false
     )
+    // Step surfaces as inputMonitoring (UI guides user to grant it).
     #expect(eval.currentStep == .inputMonitoring)
-    #expect(eval.blockingPermissions == [.inputMonitoring])
+    // NOT a blocking permission.
+    #expect(eval.blockingPermissions.isEmpty, "IM should not be in blockingPermissions")
+    // Not complete because flag is not set (user needs to tap Done in onboarding).
+    #expect(eval.isComplete == false)
 }
 
 @Test
-func onlyInputMonitoringDenied_isInputMonitoringStep() {
+func onlyInputMonitoringDenied_isInputMonitoringStep_notBlocking() {
     let eval = OnboardingStateMachine.evaluate(
         microphone: .granted,
         accessibility: .granted,
@@ -104,10 +143,10 @@ func onlyInputMonitoringDenied_isInputMonitoringStep() {
         hasCompletedOnboarding: false
     )
     #expect(eval.currentStep == .inputMonitoring)
-    #expect(eval.blockingPermissions == [.inputMonitoring])
+    #expect(eval.blockingPermissions.isEmpty)
 }
 
-// MARK: - Multiple permissions missing (ordering)
+// MARK: - Multiple permissions missing (ordering — only mic + AX in blocking)
 
 @Test
 func micAndAccessibilityMissing_firstStepIsMic() {
@@ -118,11 +157,13 @@ func micAndAccessibilityMissing_firstStepIsMic() {
         hasCompletedOnboarding: false
     )
     #expect(eval.currentStep == .microphone)
+    // Both mic and AX are blocking; IM is not.
     #expect(eval.blockingPermissions == [.microphone, .accessibility])
 }
 
 @Test
-func allMissing_firstStepIsMic() {
+func allMissing_firstStepIsMic_twoBlockers() {
+    // Phase A: only mic + AX are blocking; IM is NOT in blockingPermissions even when missing.
     let eval = OnboardingStateMachine.evaluate(
         microphone: .notDetermined,
         accessibility: .notDetermined,
@@ -130,12 +171,14 @@ func allMissing_firstStepIsMic() {
         hasCompletedOnboarding: false
     )
     #expect(eval.currentStep == .microphone)
-    #expect(eval.blockingPermissions == [.microphone, .accessibility, .inputMonitoring])
+    // Only 2 blocking permissions (mic + AX); IM is excluded.
+    #expect(eval.blockingPermissions == [.microphone, .accessibility])
     #expect(eval.isComplete == false)
 }
 
 @Test
 func accessibilityAndInputMissing_firstStepIsAccessibility() {
+    // IM missing but not blocking — AX still is.
     let eval = OnboardingStateMachine.evaluate(
         microphone: .granted,
         accessibility: .denied,
@@ -143,10 +186,11 @@ func accessibilityAndInputMissing_firstStepIsAccessibility() {
         hasCompletedOnboarding: false
     )
     #expect(eval.currentStep == .accessibility)
-    #expect(eval.blockingPermissions == [.accessibility, .inputMonitoring])
+    // Only AX is blocking; IM is not.
+    #expect(eval.blockingPermissions == [.accessibility])
 }
 
-// MARK: - Restricted state (counts as not-granted)
+// MARK: - Restricted state (counts as not-granted for blocking permissions)
 
 @Test
 func micRestricted_isMicStep() {
@@ -161,13 +205,11 @@ func micRestricted_isMicStep() {
     #expect(eval.isComplete == false)
 }
 
-// MARK: - hasCompletedOnboarding true but permissions missing (re-show path)
+// MARK: - hasCompletedOnboarding true but required permissions missing (re-show path)
 
 @Test
 func completedFlagTrueButMicDenied_notComplete() {
-    // If the user revokes microphone after completing onboarding, they should
-    // be re-shown onboarding when the app starts (the OR clause in show-on-launch).
-    // The machine correctly reflects incomplete state regardless of the flag.
+    // If the user revokes microphone after completing onboarding, re-show onboarding.
     let eval = OnboardingStateMachine.evaluate(
         microphone: .denied,
         accessibility: .granted,
@@ -179,7 +221,8 @@ func completedFlagTrueButMicDenied_notComplete() {
 }
 
 @Test
-func completedFlagTrueButAllDenied_notComplete() {
+func completedFlagTrueButMicAndAxDenied_twoBlockers() {
+    // Phase A: only mic + AX block. Even with IM denied, only 2 blockers.
     let eval = OnboardingStateMachine.evaluate(
         microphone: .denied,
         accessibility: .denied,
@@ -187,7 +230,10 @@ func completedFlagTrueButAllDenied_notComplete() {
         hasCompletedOnboarding: true
     )
     #expect(eval.isComplete == false)
-    #expect(eval.blockingPermissions.count == 3)
+    #expect(eval.blockingPermissions.count == 2, "Only mic + AX block; IM is non-blocking")
+    #expect(eval.blockingPermissions.contains(.microphone))
+    #expect(eval.blockingPermissions.contains(.accessibility))
+    #expect(!eval.blockingPermissions.contains(.inputMonitoring))
 }
 
 // MARK: - PermissionState coverage
@@ -195,7 +241,6 @@ func completedFlagTrueButAllDenied_notComplete() {
 @Test
 func requestingStateCountsAsNotGranted() {
     // `.requesting` is a transient state while the mic dialog is open.
-    // The machine treats it as not-yet-granted so the step doesn't advance.
     let eval = OnboardingStateMachine.evaluate(
         microphone: .requesting,
         accessibility: .granted,
