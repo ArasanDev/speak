@@ -115,4 +115,71 @@ final class TranscriptOverlayPanelTests: XCTestCase {
             "from Cmd+` window cycling (§COLLECTION BEHAVIOR [decision] spec §4)."
         )
     }
+
+    // MARK: - Screen-selection helper (pure, testable over CGRect)
+    //
+    // `indexOfScreen(containing:frames:)` is a pure function that takes a list of
+    // screen `CGRect` frames and a CGPoint and returns the index of the first frame
+    // containing the point — or nil if none does. Testing with synthetic CGRects lets
+    // us cover the multi-display logic without real hardware.
+    //
+    // Live multi-display mouse-tracking behaviour (actual HUD appearing on the right
+    // display) is NOT covered here — that requires human dogfood.
+    // [unverified — live multi-display mouse-tracking requires human dogfood.]
+
+    /// Synthetic screen layout used by all screen-selection tests:
+    ///   screen 0 (primary):  x=[0..1920),   y=[0..1080)
+    ///   screen 1 (secondary): x=[1920..3840), y=[0..1080)
+    private let syntheticFrames: [CGRect] = [
+        CGRect(x: 0, y: 0, width: 1920, height: 1080),
+        CGRect(x: 1920, y: 0, width: 1920, height: 1080)
+    ]
+
+    /// A point clearly inside screen 0 should return index 0.
+    func testIndexOfScreen_pointInFirstScreen_returnsZero() {
+        let point = CGPoint(x: 960, y: 540)
+        let result = TranscriptOverlayPanel.indexOfScreen(containing: point, frames: syntheticFrames)
+        XCTAssertEqual(result, 0,
+            "A point inside screen 0 must return index 0.")
+    }
+
+    /// A point clearly inside screen 1 should return index 1.
+    func testIndexOfScreen_pointInSecondScreen_returnsOne() {
+        let point = CGPoint(x: 2880, y: 540)
+        let result = TranscriptOverlayPanel.indexOfScreen(containing: point, frames: syntheticFrames)
+        XCTAssertEqual(result, 1,
+            "A point inside screen 1 must return index 1.")
+    }
+
+    /// A point outside all screens (e.g. between displays in a gap layout) must
+    /// return nil so the caller falls back to NSScreen.main.
+    func testIndexOfScreen_pointOutsideAllScreens_returnsNil() {
+        // Place the point well above the top of both synthetic screens.
+        let point = CGPoint(x: 960, y: 9999)
+        let result = TranscriptOverlayPanel.indexOfScreen(containing: point, frames: syntheticFrames)
+        XCTAssertNil(result,
+            "A point outside all screen frames must return nil (triggers NSScreen.main fallback).")
+    }
+
+    /// Empty screen list must return nil without crashing.
+    func testIndexOfScreen_emptyFrameList_returnsNil() {
+        let result = TranscriptOverlayPanel.indexOfScreen(
+            containing: CGPoint(x: 100, y: 100),
+            frames: []
+        )
+        XCTAssertNil(result,
+            "An empty frame list must return nil without crashing.")
+    }
+
+    /// Point exactly on the left edge of screen 1 (the boundary between screens)
+    /// is considered inside screen 1 by CGRect.contains (closed lower bound).
+    func testIndexOfScreen_pointOnBoundaryBetweenScreens_returnsSecond() {
+        // CGRect.contains uses half-open intervals [min, max) for each axis —
+        // x=1920 is inside screen 1 (origin x=1920) but NOT inside screen 0
+        // (origin x=0, width=1920 → maxX=1920, exclusive). [inferred from CGRect semantics]
+        let point = CGPoint(x: 1920, y: 540)
+        let result = TranscriptOverlayPanel.indexOfScreen(containing: point, frames: syntheticFrames)
+        XCTAssertEqual(result, 1,
+            "A point at x=1920 is the origin of screen 1 and must map to index 1.")
+    }
 }

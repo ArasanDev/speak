@@ -28,9 +28,16 @@
 //    and Hex both set these to prevent the HUD from interfering with the user's
 //    window management while dictating. benchmark.md §7.]
 //
-// POSITION (Phase C): bottom-center of the focused screen (spec §4).
-//   VoiceInk, Wispr, and Handy all anchor to bottom-center; top placement risks
-//   collision with the menubar or notch on MacBook. [decision: spec §4 consensus]
+// POSITION (Phase C): bottom-center of the active screen (spec §4).
+//   "Active screen" = the screen whose `frame` contains the current mouse
+//   location. This is the pragmatic signal used by VoiceInk-class apps: it
+//   reliably follows the user without requiring Accessibility API access to the
+//   focused window's frame (which can fail and requires an extra permission check).
+//   Fallback: `NSScreen.main` (the menu-bar screen) when no screen contains the
+//   mouse (edge case: pointer between screens in an unusual layout).
+//   [decision: mouse-location-with-fallback per spec §4 + VoiceInk precedent;
+//    AX-focused-window approach is more precise but heavier and failure-prone.]
+//   [unverified — live multi-display mouse-tracking requires human dogfood.]
 //   `yFromBottom` = 24 pt — breathing room above the Dock / screen edge. [decision:
 //    spec §4 specifies "~24pt from minY"; matches standard Dock-gap heuristic.]
 //   Repositioned on `NSApplication.didChangeScreenParametersNotification` so
@@ -78,9 +85,9 @@ final class TranscriptOverlayPanel: NSPanel {
             .borderless
         ]
 
-        // Use the main screen; fall back to a unit rect if no screen is available
-        // (shouldn't happen on a real Mac, but guard to avoid force-unwrap).
-        let frame = Self.frameForMainScreen()
+        // Use the active screen (screen containing the mouse cursor); falls back to
+        // NSScreen.main then a safe unit rect if no screen is available.
+        let frame = Self.frameForActiveScreen()
 
         super.init(
             contentRect: frame,
@@ -137,7 +144,7 @@ final class TranscriptOverlayPanel: NSPanel {
 
     /// Show the panel (non-activating — does NOT steal focus).
     func show() {
-        // Re-center on the current main screen in case the user moved windows.
+        // Re-center on the active screen at show-time so the HUD follows the cursor.
         reposition()
         // `orderFrontRegardless()` brings the panel to front from an LSUIElement
         // app without activating it. `makeKeyAndOrderFront` must NOT be used here.
@@ -151,10 +158,48 @@ final class TranscriptOverlayPanel: NSPanel {
 
     // MARK: - Private
 
-    /// Compute the panel frame anchored to the bottom-center of the main screen's
-    /// visible frame. Falls back to a safe default if no screen is available.
-    private static func frameForMainScreen() -> CGRect {
-        let sf = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+    /// Returns the index of the first screen whose `frame` contains `point`, or
+    /// `nil` if no screen does (e.g. pointer between displays in an unusual layout).
+    ///
+    /// Factored as a pure function over `[CGRect]` so it can be unit-tested with
+    /// synthetic screen geometries without requiring real `NSScreen` instances.
+    ///
+    /// Selection uses each screen's `frame` (full physical bounds) rather than
+    /// `visibleFrame` because the mouse cursor can sit in the Dock/menu-bar band
+    /// that is excluded from `visibleFrame`. The bottom-center placement math is
+    /// then applied against that screen's `visibleFrame`.
+    ///
+    /// `NSEvent.mouseLocation` and `NSScreen.frame` share the same global screen
+    /// coordinate space (bottom-left origin, y-up on macOS), so no coordinate
+    /// conversion is needed. [verified: swiftc -typecheck against macOS 26 SDK]
+    ///
+    /// [unverified — live multi-display mouse-tracking requires human dogfood.]
+    nonisolated static func indexOfScreen(containing point: CGPoint, frames: [CGRect]) -> Int? {
+        frames.firstIndex { $0.contains(point) }
+    }
+
+    /// Compute the panel frame anchored to the bottom-center of the active screen's
+    /// visible frame. The active screen is the one whose physical `frame` contains
+    /// the current mouse location — the pragmatic, reliable signal for "the screen
+    /// the user is working on." Falls back to `NSScreen.main` (the menu-bar screen)
+    /// if no screen contains the mouse, then to a safe default if no screen exists.
+    ///
+    /// [decision: mouse-location-with-fallback; see §POSITION comment above.]
+    /// [unverified — live multi-display mouse-tracking requires human dogfood.]
+    private static func frameForActiveScreen() -> CGRect {
+        let mousePoint = NSEvent.mouseLocation  // [verified: macOS 26 SDK]
+        let allScreens = NSScreen.screens       // [verified: macOS 26 SDK]
+
+        // Pick the screen containing the mouse; fall back to NSScreen.main.
+        let activeScreen: NSScreen?
+        if let idx = indexOfScreen(containing: mousePoint, frames: allScreens.map(\.frame)) {
+            activeScreen = allScreens[idx]
+        } else {
+            activeScreen = NSScreen.main
+        }
+
+        // Use visibleFrame for placement so we respect the Dock and menu-bar insets.
+        let sf = activeScreen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
         let xCenter = sf.midX - panelWidth / 2
         // Bottom-center: `minY` is the screen's lowest visible point (above Dock).
         // [decision: +24 pt gap per spec §4 — ~24pt from minY.]
@@ -163,7 +208,7 @@ final class TranscriptOverlayPanel: NSPanel {
     }
 
     private func reposition() {
-        let newOrigin = Self.frameForMainScreen().origin
+        let newOrigin = Self.frameForActiveScreen().origin
         setFrameOrigin(newOrigin)
     }
 }
