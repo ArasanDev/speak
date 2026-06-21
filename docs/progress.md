@@ -8,7 +8,51 @@
 
 ## Current phase
 
-> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-21, W2.1+W2.2 HUD rebuild)
+> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-22, P0 correctness fix: long-dictation truncation)
+> **P0 TRUNCATION BUG FIX — BUILT & ALL 4 GATES GREEN.**
+> Build ✅ · Tests ✅ (all pass, 5 pre-existing XCTSkip, 2 new regression tests added) · Lint ✅ (0 serious) · Moat ✅ (7/7).
+> **Uncommitted in worktree** — orchestrator reviews diff and owns the commit.
+>
+> **Bug:** Long dictation pasted only the last few words even though the HUD displayed the full text.
+>
+> **Root cause confirmed:** `CaptureSession.ingest()` did `latestChunk = chunk` (replace) on every
+> chunk. `SpeechAnalyzer` with `.progressiveTranscription` emits one `isFinal == true` chunk per
+> *speech window* (not per utterance) — each containing only that window's text. So `latestChunk`
+> held only the last window's text. `OverlayTextAccumulator` is NOT to blame: it uses
+> newest-non-empty-wins (also replace, not concat), but it works because volatile chunks for a
+> given window are cumulative — each successive volatile contains more of that window's hypothesis.
+> The HUD shows the last volatile (the best hypothesis) per window, which looks complete because
+> volatiles grow within each window. The final-path bug only manifests across windows.
+>
+> **Fix:** Added `private var finalizedText: String = ""` to `CaptureSession`. `ingest()` now
+> appends each `isFinal` chunk's text to `finalizedText` (space-separated). `stop()` uses
+> `finalizedText` when non-empty, falling back to `latestChunk?.text` for short speech where no
+> isFinal chunk arrived (volatile-only sessions). `latestChunk` still updates on every chunk
+> for the partials/HUD path — behavior unchanged there.
+>
+> **Trailing-volatile-after-finals edge case:** if a session ends with isFinal chunks + a dangling
+> volatile that was never finalized, that volatile tail is not included in `finalizedText`. In
+> production this is safe: `AppleSpeechTranscriber.stop()` calls
+> `finalizeAndFinishThroughEndOfInput()` which promotes the pending volatile to isFinal before the
+> stream closes, so `ingest()` captures it as a final chunk. [decision: relying on this behavior]
+>
+> **paste == HUD note:** this fix makes paste contain the full transcript (all finalized windows).
+> Whether paste byte-matches the HUD end-state string depends on separator spacing between windows —
+> tagged `[unverified]` (cannot confirm without a live multi-segment audio corpus). The correctness
+> claim is: paste now contains the full utterance text, not just the last window's words.
+>
+> **Files changed:** `SpeakCore/Engine/CaptureSession.swift` (+18 lines fix, +15 lines comment)
+> and `SpeakTests/CaptureSessionTests.swift` (+89 lines: 2 new regression tests).
+>
+> **New tests (fail→pass demonstrated by stash run):**
+>   - `testMultiSegmentFinalChunksAreJoinedInResult` (FAIL pre-fix → PASS post-fix, verified by stash run):
+>     simulates 2 speech windows (3 volatile + 1 isFinal each); asserts `rawText == "hello world how are you"`.
+>     Pre-fix result was `"how are you"` (last isFinal only).
+>   - `testShortUtteranceWithNoFinalChunkUsesLastVolatile` (PASS pre-fix and post-fix — fallback guard):
+>     volatile-only session; verifies latestChunk fallback still works when no isFinal chunks arrived.
+>     This test is a regression guard, not a fail→pass test (volatile-only path was never broken).
+
+> ## OLD BANNER (2026-06-21, W2.1+W2.2 HUD rebuild)
 > **W2.1 + W2.2 — ACTIVE-DICTATION HUD → native-Apple quality — BUILT & ALL 4 GATES GREEN.**
 > Build ✅ · Tests ✅ (all pass, 5 pre-existing XCTSkip) · Lint ✅ (0 serious) · Moat ✅ (7/7).
 > **Uncommitted in worktree** — orchestrator reviews diff and owns the commit.
