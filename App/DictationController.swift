@@ -318,15 +318,23 @@ final class DictationController: ObservableObject {
 
     private func endDictation() async {
         do {
+            // Phase C: transition overlay to .processing before the cleanup await.
+            // This keeps the panel visible showing "Cleaning up…" during the LLM pass.
+            // The panel is hidden AFTER the done flash, not immediately on stop.
             icon = .processing
+            transitionOverlay(to: .processing)
             _ = try await engine.endDictation()
-            stopOverlay()
             icon = .done
+            // Phase C: show done state briefly before hiding the panel.
+            transitionOverlay(to: .done)
             SpeakLog.engine.info("DictationController: endDictation succeeded → .done")
             // 600ms done-flash — roadmap.md P8 [decision].
-            try? await Task.sleep(nanoseconds: 600_000_000)
+            let doneFlashNanoseconds: UInt64 = 600_000_000  // [decision] roadmap.md P8
+            try? await Task.sleep(nanoseconds: doneFlashNanoseconds)
+            stopOverlay()
             icon = .idle
         } catch {
+            // Error: hide the panel immediately — no done flash on failure.
             stopOverlay()
             icon = .error
             SpeakLog.engine.error(
@@ -335,10 +343,12 @@ final class DictationController: ObservableObject {
         }
     }
 
-    // MARK: - Overlay lifecycle (P4)
+    // MARK: - Overlay lifecycle (Phase C)
 
     private func startOverlay() {
+        // Reset to listening state with empty text before showing.
         overlayModel.partialText = ""
+        overlayModel.overlayState = .listening
         overlayPanel?.show()
         partialsTask?.cancel()
         partialsTask = nil
@@ -363,10 +373,28 @@ final class DictationController: ObservableObject {
         }
     }
 
+    /// Transition the overlay to a new visual state.
+    /// Cancels the partials task when moving to .processing (no more partials coming).
+    /// Does NOT hide the panel — `stopOverlay()` is responsible for hiding.
+    private func transitionOverlay(to state: OverlayState) {
+        overlayModel.overlayState = state
+        if state == .processing {
+            // No more partial text will arrive once processing begins.
+            partialsTask?.cancel()
+            partialsTask = nil
+        }
+        SpeakLog.engine.info(
+            "DictationController: overlay transitioned to .\(String(describing: state), privacy: .public)"
+        )
+    }
+
+    /// Hide the overlay panel and reset all overlay state.
+    /// Call this only AFTER the done flash is complete (or immediately on error).
     private func stopOverlay() {
         partialsTask?.cancel()
         partialsTask = nil
         overlayModel.partialText = ""
+        overlayModel.overlayState = .listening   // reset for next dictation
         partialText = ""
         overlayPanel?.hide()
         SpeakLog.engine.info("DictationController: overlay hidden.")

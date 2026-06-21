@@ -54,7 +54,13 @@ enum DebugTarget: String {
     case onboardingDone          = "onboarding-done"
     case settings                = "settings"
     case history                 = "history"
+    // Overlay demo targets (Phase C — one per visual state for screenshot verification):
+    //   overlay-demo            → .listening state, sample partial text, mid-level meter
+    //   overlay-demo-processing → .processing state, "Cleaning up…" + spinner
+    //   overlay-demo-done       → .done state, checkmark
     case overlayDemo             = "overlay-demo"
+    case overlayDemoProcessing   = "overlay-demo-processing"
+    case overlayDemoDone         = "overlay-demo-done"
     case simulateDictation       = "simulate-dictation"
 }
 
@@ -122,7 +128,13 @@ final class DebugLaunchDispatcher {
             openHistory(controller: controller)
             return false
         case .overlayDemo:
-            openOverlayDemo(controller: controller)
+            openOverlayDemo(state: .listening, controller: controller)
+            return false
+        case .overlayDemoProcessing:
+            openOverlayDemo(state: .processing, controller: controller)
+            return false
+        case .overlayDemoDone:
+            openOverlayDemo(state: .done, controller: controller)
             return false
         case .simulateDictation:
             // Simulate-dictation must not call startMonitoring() — it needs focus
@@ -186,24 +198,48 @@ final class DebugLaunchDispatcher {
         log.info("DebugLaunchDispatcher: History window opened.")
     }
 
-    // MARK: - Overlay demo target
+    // MARK: - Overlay demo target (Phase C)
+    //
+    // Three debug targets cover the three visual states for screenshot verification:
+    //
+    //   overlay-demo            → .listening state, sample partial text, level=0.6 (mid)
+    //   overlay-demo-processing → .processing state
+    //   overlay-demo-done       → .done state
+    //
+    // Setting a static level (0.6) for the listening screenshot is honest — the demo
+    // is a rendering test, not a real mic feed. The level drives the bar-height math
+    // but the animation is the same idle-breathing used when no real feed is available.
+    //
+    // Invocations (replace <path> with the built Speak.app path):
+    //   open <path> --args --debug-open overlay-demo
+    //   open <path> --args --debug-open overlay-demo-processing
+    //   open <path> --args --debug-open overlay-demo-done
 
-    private func openOverlayDemo(controller: DictationController) {
-        // The overlay panel is owned by DictationController and created in
-        // startMonitoring(). We replicate the panel construction here for the
-        // debug path. The sample string exercises the overlay's text rendering.
-        //
-        // "the quick brown fox" — chosen to provide readable, renderable text
-        // that demonstrates the overlay panel visually. [decision: hardcoded
-        // sample; sufficient for screenshot verification of rendering]
-        let samplePartial = "the quick brown fox"
+    private func openOverlayDemo(state: OverlayState, controller: DictationController) {
         let overlayModel = OverlayViewModel()
-        overlayModel.partialText = samplePartial
+        overlayModel.overlayState = state
+
+        switch state {
+        case .listening:
+            // [decision: "the quick brown fox" — readable sample that exercises
+            //  the partial-text rendering path. Static level 0.6 shows mid-range bars.]
+            overlayModel.partialText = "the quick brown fox"
+            overlayModel.level = 0.6   // [decision: 0.6 = mid-level, visually interesting]
+        case .processing:
+            // Processing shows spinner + label, no text needed.
+            overlayModel.partialText = ""
+        case .done:
+            // Done shows checkmark only.
+            overlayModel.partialText = ""
+        }
+
         let panel = TranscriptOverlayPanel(overlayModel: overlayModel)
         panel.show()
         keepAlive(panel)
         keepAlive(overlayModel)
-        log.info("DebugLaunchDispatcher: overlay panel shown with sample text '\(samplePartial, privacy: .public)'")
+        log.info(
+            "DebugLaunchDispatcher: overlay demo shown in state .\(String(describing: state), privacy: .public)"
+        )
     }
 
     // MARK: - Simulate dictation target

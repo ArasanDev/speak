@@ -2,20 +2,35 @@
 //
 // The SwiftUI content hosted inside `TranscriptOverlayPanel`.
 //
-// Three view states:
-//   • Empty (listening, no partials yet) — "Listening…" placeholder with a
-//     pulsing dot, so the user has immediate feedback that the mic is live.
-//   • In-flight (partials arriving)      — live partial text in a rounded card.
-//   • (Error / done)                     — panel is hidden; this view is never shown.
+// Visual states (Phase C):
+//   • .listening  — live level meter + partial text ("Listening…" before first partial).
+//   • .processing — "Cleaning up…" label + a ProgressView spinner.
+//   • .done       — brief checkmark, then panel hides.
+//   (Panel is hidden on idle/error — this view is never shown then.)
+//
+// Level meter:
+//   `level: Double` (0…1) is the wire point for a future real mic-RMS feed from
+//   the AVAudioEngine tap (builder-audio-stt + builder-engine seam — tracked follow-up).
+//   For this phase the bars use a neutral idle-breathing animation that is clearly
+//   decorative, not a VU meter. Nothing in the animation looks mic-reactive.
 //
 // Design intent (v0 — functional first, polish at P8):
 //   - Translucent rounded card with vibrancy, small drop shadow (panel provides).
-//   - Subtle "listening" pulse on the mic dot (driven by @State animation).
-//   - Partial text in a secondary-font color — it's *in progress*, not finished.
 //   - No hard-coded colors; uses `VisualEffectView` + system materials.
 
 import SwiftUI
 import AppKit
+import SpeakCore
+
+// MARK: - OverlayState
+
+/// The visual state of the recording HUD. Driven by `DictationController`
+/// as the dictation lifecycle transitions (listening → processing → done).
+public enum OverlayState: Sendable {
+    case listening
+    case processing
+    case done
+}
 
 // MARK: - OverlayViewModel
 
@@ -24,6 +39,16 @@ import AppKit
 @MainActor
 final class OverlayViewModel: ObservableObject {
     @Published var partialText: String = ""
+    @Published var overlayState: OverlayState = .listening
+
+    /// Microphone level (0…1), linearized from dB via `pow(10, dB/20)`.
+    /// Currently unused as a live feed — the bars run a neutral idle animation.
+    /// Wire this to the AVAudioEngine RMS output when the real feed is plumbed
+    /// (builder-audio-stt + builder-engine cross-seam work, deferred from Phase C).
+    /// Pure math: `levelLinear(fromDB:)`, `levelSmoothed(previous:target:)`,
+    /// `levelBarHeights(level:barCount:minHeight:maxHeight:)` live in
+    /// `SpeakCore/Overlay/LevelMath.swift` and are unit-tested in `OverlayLevelTests`.
+    @Published var level: Double = 0.0
 }
 
 // MARK: - VisualEffectView
@@ -48,14 +73,84 @@ private struct VisualEffectView: NSViewRepresentable {
     }
 }
 
+// MARK: - LevelMeterView
+
+/// A small N-bar waveform driven by `level` (0…1).
+///
+/// Bars use a neutral idle-breathing animation in the listening state. This animation
+/// is deliberately uniform (all bars breathe together) so it does not look like a VU
+/// meter. Once the real mic-level feed is plumbed from the AVAudioEngine tap, `level`
+/// will be set per-frame and the breathing animation will be removed.
+private struct LevelMeterView: View {
+    let level: Double
+    let isActive: Bool   // true = listening (use level); false = idle breathing
+
+    // [decision: 5 bars — Handy waveform reference; fits HUD width. benchmark.md §7.]
+    private static let barCount: Int = 5
+    // [decision: 3 pt min, 20 pt max — fits 80 pt panel height. benchmark.md §7.]
+    private static let minBarHeight: Double = 3.0
+    private static let maxBarHeight: Double = 20.0
+    // [decision: 2 pt bar width — narrow waveform look, matches Handy style.]
+    private static let barWidth: CGFloat = 3.0
+    // [decision: 3 pt gap — breathing room between bars.]
+    private static let barGap: CGFloat = 3.0
+
+    /// Breathing phase for the idle animation (0…1).
+    @State private var breathPhase: Double = 0.0
+
+    var body: some View {
+        HStack(spacing: Self.barGap) {
+            ForEach(Array(barHeights.enumerated()), id: \.offset) { _, height in
+                RoundedRectangle(cornerRadius: Self.barWidth / 2, style: .continuous)
+                    .fill(Color.primary.opacity(0.6))
+                    .frame(width: Self.barWidth, height: CGFloat(height))
+            }
+        }
+        .animation(.easeInOut(duration: 0.12), value: level)   // [decision: 0.12 s — snappy but not jarring]
+        .onAppear { startBreathing() }
+    }
+
+    private var barHeights: [Double] {
+        if isActive {
+            // Real or placeholder level drives bar heights.
+            return levelBarHeights(
+                level: level,
+                barCount: Self.barCount,
+                minHeight: Self.minBarHeight,
+                maxHeight: Self.maxBarHeight
+            )
+        } else {
+            // Idle breathing: uniform gentle pulse. [decision: 0.3 amplitude at rest —
+            // clearly decorative, not mic-reactive.]
+            let breathLevel = 0.15 + 0.15 * breathPhase   // [decision: 0.15…0.30 range]
+            return levelBarHeights(
+                level: breathLevel,
+                barCount: Self.barCount,
+                minHeight: Self.minBarHeight,
+                maxHeight: Self.maxBarHeight
+            )
+        }
+    }
+
+    private func startBreathing() {
+        withAnimation(
+            Animation
+                // [decision: 1.2 s cycle — natural breath rhythm, clearly not mic-reactive]
+                .easeInOut(duration: 1.2)
+                .repeatForever(autoreverses: true)
+        ) {
+            breathPhase = 1.0
+        }
+    }
+}
+
 // MARK: - TranscriptOverlayView
 
 /// The visible card shown during live dictation.
+/// Renders three visual states: listening (level meter + text), processing (spinner),
+/// and done (checkmark). The panel hides on idle/error — this view is not shown then.
 struct TranscriptOverlayView: View {
     @ObservedObject var model: OverlayViewModel
-
-    /// Animation state for the "listening" pulse dot.
-    @State private var isPulsing: Bool = false
 
     var body: some View {
         ZStack {
@@ -72,50 +167,76 @@ struct TranscriptOverlayView: View {
 
     @ViewBuilder
     private var contentLayer: some View {
-        HStack(alignment: .top, spacing: 10) {
-            listeningDot
+        switch model.overlayState {
+        case .listening:
+            listeningContent
+        case .processing:
+            processingContent
+        case .done:
+            doneContent
+        }
+    }
+
+    // MARK: - Listening state
+
+    private var listeningContent: some View {
+        HStack(alignment: .center, spacing: 10) {
+            LevelMeterView(level: model.level, isActive: true)
+                .frame(width: 27)   // 5 bars × 3 pt + 4 gaps × 3 pt = 27 pt [decision]
             textContent
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
     }
-
-    // MARK: - Listening dot
-
-    private var listeningDot: some View {
-        Circle()
-            .fill(Color.red)
-            .frame(width: 8, height: 8)
-            .opacity(isPulsing ? 0.4 : 1.0)
-            .animation(
-                Animation
-                    .easeInOut(duration: 0.8)   // [decision] 0.8 s gives a natural breath rhythm
-                    .repeatForever(autoreverses: true),
-                value: isPulsing
-            )
-            .onAppear { isPulsing = true }
-            .onDisappear { isPulsing = false }
-            .padding(.top, 4)  // align with cap-height of the text
-    }
-
-    // MARK: - Text content
 
     @ViewBuilder
     private var textContent: some View {
         if model.partialText.isEmpty {
-            // Empty state: "Listening…" placeholder shown while awaiting first partial.
+            // Empty listening state: placeholder before first partial arrives.
             Text("Listening\u{2026}")
                 .font(.system(size: 13, weight: .regular, design: .default))
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            // In-flight state: display the running partial transcript.
+            // In-flight: live partial transcript.
             Text(model.partialText)
                 .font(.system(size: 13, weight: .regular, design: .default))
                 .foregroundStyle(.primary)
                 .lineLimit(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    // MARK: - Processing state
+
+    private var processingContent: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .scaleEffect(0.7)
+                .frame(width: 16, height: 16)
+            Text("Cleaning up\u{2026}")
+                .font(.system(size: 13, weight: .regular, design: .default))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Done state
+
+    private var doneContent: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(.system(size: 15))
+            Text("Done")
+                .font(.system(size: 13, weight: .regular, design: .default))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
