@@ -73,6 +73,59 @@ mute **chord** (the mute menu toggle ships; the chord is live-gated follow-up).
 
 ---
 
+## Done (this session — 2026-06-21, loop run #19 — Phase B: push-to-talk + trigger mode UI)
+
+Phase B of `specs/dictation-flow.md` — two trigger modes, user-selectable:
+
+- [x] **`HotkeyBinding.Trigger` cleaned up:** removed `.singleTapToggle` (was never
+      implemented; documented in `HotkeyMonitor.swift` with rationale). Changed to
+      `String` RawValue so UserDefaults persistence uses stable string keys (`"doubleTap"`,
+      `"hold"`). Old persisted payloads (synthesized Codable format) fail `try?` in
+      `UserDefaultsBindingStore.load()` → `nil` → fallback to `defaultBinding` —
+      exactly the spec's "fall back cleanly" requirement. Added `HotkeyBinding.with(trigger:)`
+      helper for `DictationController` to apply a trigger change without losing
+      keyCode/modifiers/window.
+- [x] **`holdEdge(isFnDown:wasDown:)` pure free function (Phase B):** maps Fn key
+      state transitions to `HotkeyEvent?`. Press leading edge (false→true) → `.startCapture`;
+      release trailing edge (true→false) → `.stopCapture`; no transition → `nil`. No
+      clock, no CGEventTap, no side effects — directly unit-testable.
+- [x] **`HotkeyMonitor.handle(proxy:type:event:)` dual-mode dispatch:** `lastFnDown`
+      updated BEFORE the branch so both modes see correct edge state. `.doubleTap` branch:
+      unchanged behavior — guard on press leading edge, call `detector.register(tapAt:window:)`.
+      `.hold` branch: call `holdEdge(isFnDown:wasDown:)` on every edge — no timestamp,
+      no window. Comment documents the synthetic-release safety guarantee: `buildTap()`
+      resets `lastFnDown=false` on every tap teardown (Phase A), so a mid-hold teardown
+      never leaves hold stuck "on".
+- [x] **`SettingsStore.triggerMode`:** `HotkeyBinding.Trigger` property persisted as
+      `rawValue` String under key `speak.settings.triggerMode`. Default `.doubleTap`. Getter
+      falls back to `.doubleTap` on unknown raw value. Parallel to `pasteMode` pattern.
+- [x] **`SettingsView` Activation section (Phase B):** inline `Picker` "Double-tap Fn
+      (toggle)" | "Hold Fn (push-to-talk)" + contextual hint text. Writes directly to
+      `store.triggerMode` (ObservableObject); frame height bumped to 380 for the new section.
+- [x] **`DictationController` trigger-mode wiring:**
+      - On init: reads `settingsStore.triggerMode` → builds updated binding via
+        `monitor.binding.with(trigger:)` → calls `monitor.updateBinding(_:)`. Keeps
+        `SettingsStore` and `UserDefaultsBindingStore` in sync from first launch.
+      - Combine subscription on `settingsStore.objectWillChange` → `DispatchQueue.main.async`
+        hop (allows the write to commit before reading) → `monitor.updateBinding(binding.with(trigger:))`.
+        Mode switch is live, no relaunch. `AnyCancellable` stored in `triggerModeCancellable`.
+- [x] **Synthetic-release safety (Phase A coordination):** no new hold-state variable
+      was added. Existing `buildTap()` already calls `detector.reset(); lastFnDown = false`
+      on every arm/re-arm — so a mid-hold tap teardown clears `lastFnDown`, and the next
+      Fn press is treated as a fresh start. No additional reset path needed.
+- [x] **Tests (new, all passing):**
+      - `HotkeyBindingCodableTests`: added `testHoldTriggerRoundTrip`,
+        `testDoubleTapTriggerRoundTrip`, `testStalePersistedTriggerDecodesNilAndFallsBack`.
+        Fixed `testRoundTripWithModifiers` to use `.hold` instead of removed `.singleTapToggle`.
+      - `HoldEdgeTests` (5 tests): `testPressEdgeEmitsStartCapture`,
+        `testReleaseEdgeEmitsStopCapture`, `testKeyRepeatWhileHeldEmitsNil`,
+        `testNoChangeWhileReleasedEmitsNil`, `testPressReleaseCycle`.
+- [x] `make build` ✓, `make test` **175 tests (153 XCTest + 22 Swift Testing; 5 XCTSkip),
+      0 failures**, `make lint` 0 serious, `make verify-moat` **7/7**.
+
+Done-when (spec §6-B): hold-to-talk and double-tap-lock both work from Fn; pure-unit-tested
+with injected state. Live OS behavior [deferred — human verification] per standard rows.
+
 ## Done (this session — 2026-06-21, loop run #18 — Phase A: hotkey re-arm + lifecycle fixes)
 
 Phase A of `specs/dictation-flow.md` — the "make it fire without relaunch" set:
