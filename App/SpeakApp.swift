@@ -170,6 +170,10 @@ private struct SpeakMenu: View {
 
         Divider()
 
+        QuickSettingsMenu(store: controller.settingsStore)
+
+        Divider()
+
         Button("Open speak\u{2026}") {
             controller.showDashboard()
         }
@@ -206,6 +210,40 @@ private struct SpeakMenu: View {
         case .processing: return "speak — processing…"
         case .done:       return "speak — done"
         case .error:      return "speak — error (try again)"
+        }
+    }
+}
+
+// MARK: - QuickSettingsMenu
+
+/// Menubar quick-control submenus (Wispr's quick-control surface): the neat-writing
+/// Style and the transcription Language, both bound to `SettingsStore` so a change
+/// applies on the next dictation. Observes the store so the checkmark stays in sync.
+private struct QuickSettingsMenu: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        Menu("Style") {
+            Picker("Style", selection: Binding(
+                get: { store.cleanupStyle },
+                set: { store.cleanupStyle = $0 }
+            )) {
+                ForEach(CleanupStyle.allCases, id: \.self) { style in
+                    Text(style.displayName).tag(style)
+                }
+            }
+            .pickerStyle(.inline)
+        }
+
+        Menu("Language") {
+            Picker("Language", selection: Binding(
+                get: { store.language.identifier },
+                set: { store.language = Locale(identifier: $0) }
+            )) {
+                Text("English (US)").tag("en-US")
+                Text("English (UK)").tag("en-GB")
+            }
+            .pickerStyle(.inline)
         }
     }
 }
