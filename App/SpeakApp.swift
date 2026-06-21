@@ -36,6 +36,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var controller: DictationController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // H2: XCTest startup gate — must come FIRST, before the single-instance
+        // guard below. When SpeakTests runs with TEST_HOST=Speak, the app binary
+        // is launched as the test host. Without this guard the single-instance
+        // terminate() call (lines below) would fire if a dev instance of speak is
+        // already running, non-deterministically killing the test runner process.
+        // [decision: gate on XCTestConfigurationFilePath per XCTest convention;
+        //  this env var is set by xcodebuild/Xcode for every test run.]
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return  // hosted as TEST_HOST: skip monitoring, single-instance guard, and onboarding
+        }
+
         // Single-instance guard (spec §1.4).
         // Detect any OTHER running instance of this app (exclude self).
         // Uses `com.speak.app` — the PRODUCT_BUNDLE_IDENTIFIER from project.yml.

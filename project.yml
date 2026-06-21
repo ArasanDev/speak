@@ -70,9 +70,15 @@ targets:
       - SpeakTests
     dependencies:
       - target: SpeakCore
+      - target: Speak          # H2: TEST_HOST — gives tests access to the App shell
+        embed: false           # test bundle embeds nothing; the host app carries it
     settings:
       base:
         GENERATE_INFOPLIST_FILE: "YES"
+        # H2: host the Speak app so App-shell types (TranscriptOverlayPanel, AppDelegate…)
+        # become unit-testable via @testable import Speak.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Speak.app/Contents/MacOS/Speak"
+        BUNDLE_LOADER: "$(TEST_HOST)"
 
 schemes:
   Speak:
