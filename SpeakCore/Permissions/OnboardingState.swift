@@ -135,14 +135,14 @@ public enum OnboardingStateMachine {
         )
     }
 
-    /// Convenience: evaluate from a live `PermissionManager` instance.
+    /// Convenience: evaluate from a live `PermissionManaging` instance.
     ///
     /// - Parameters:
-    ///   - manager: The live permission manager. Called on `@MainActor`.
+    ///   - manager: Any type conforming to `PermissionManaging`. Called on `@MainActor`.
     ///   - hasCompletedOnboarding: The flag from `SettingsStore`.
     @MainActor
     public static func evaluate(
-        manager: PermissionManager,
+        manager: any PermissionManaging,
         hasCompletedOnboarding: Bool
     ) -> OnboardingEvaluation {
         evaluate(

@@ -19,7 +19,7 @@ import IOKit.hid
 import os
 
 @MainActor
-public final class PermissionManager {
+public final class PermissionManager: PermissionManaging {
 
     public init() {}
 
