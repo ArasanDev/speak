@@ -7,20 +7,18 @@
 // without any AppKit/SwiftUI involvement. The onboarding window reads these
 // values and feeds them to its SwiftUI views.
 //
-// Step order matches product.md §7.3 and roadmap.md P7:
-//   welcome → microphone → accessibility → inputMonitoring → done
+// Step order (product.md §7.3, roadmap P7):
+//   welcome → microphone → accessibility → hotkey → done
 //
-// The machine is a pure function of the three `PermissionState`s and the
+// The machine is a pure function of the two `PermissionState`s and the
 // `hasCompletedOnboarding` flag — calling `evaluate(...)` is idempotent and
 // never has side-effects.
 //
-// --- Permission model (Phase A, spec §2) ---
-// Mic + Accessibility are *blocking* permissions: missing either keeps isComplete
-// == false and prevents onboarding from completing. Input Monitoring is a
-// *surfaced-but-non-blocking* permission: it gets its own onboarding step so
-// the user is shown how to grant it, but its absence does NOT block completion
-// or tap arming. The Fn .flagsChanged tap is gated on Accessibility alone
-// (research-verified: AltTab/Hex use AX only for a listen-only tap).
+// --- Permission model ---
+// Mic + Accessibility are the only two required permissions in v0.
+// Input Monitoring was removed: the CGEventTap uses .defaultTap and is gated
+// on Accessibility alone (verified: HotkeyMonitor.swift §84–86). The IM step
+// was vestigial scaffolding from an earlier listen-only-tap design.
 
 import Foundation
 
@@ -34,10 +32,7 @@ public enum OnboardingStep: Sendable, Equatable, CaseIterable {
     case microphone
     /// Accessibility permission step.
     case accessibility
-    /// Input Monitoring permission step.
-    /// Surfaced in the UI but does NOT block completion (spec §2).
-    case inputMonitoring
-    /// Explains the double-tap Fn hotkey. No permission required.
+    /// Explains the double-tap hotkey. No permission required.
     case hotkey
     /// Final confirmation — the flow is complete.
     case done
@@ -50,10 +45,9 @@ public struct OnboardingEvaluation: Sendable, Equatable {
     /// The step the onboarding UI should currently display.
     public let currentStep: OnboardingStep
     /// `true` when Mic + Accessibility are granted AND `hasCompletedOnboarding == true`.
-    /// Input Monitoring absence does NOT prevent completion (spec §2).
     public let isComplete: Bool
     /// The permissions still missing that BLOCK completion.
-    /// Contains only `.microphone` and/or `.accessibility` — never `.inputMonitoring`.
+    /// Contains only `.microphone` and/or `.accessibility`.
     /// Empty when `isComplete == true`.
     public let blockingPermissions: [PermissionKind]
 
@@ -70,7 +64,7 @@ public struct OnboardingEvaluation: Sendable, Equatable {
 
 // MARK: - OnboardingStateMachine
 
-/// Evaluates the current onboarding step from the three permission states and
+/// Evaluates the current onboarding step from the two permission states and
 /// the completion flag. This is a pure function — it has no stored state and
 /// never calls `PermissionManager` directly, making it trivially unit-testable.
 public enum OnboardingStateMachine {
@@ -80,7 +74,6 @@ public enum OnboardingStateMachine {
     /// - Parameters:
     ///   - microphone: Current `PermissionState` for `.microphone`.
     ///   - accessibility: Current `PermissionState` for `.accessibility`.
-    ///   - inputMonitoring: Current `PermissionState` for `.inputMonitoring`.
     ///   - hasCompletedOnboarding: Whether the user has previously finished or
     ///     explicitly skipped the flow.
     /// - Returns: An `OnboardingEvaluation` with the current step, completion
@@ -88,17 +81,15 @@ public enum OnboardingStateMachine {
     public static func evaluate(
         microphone: PermissionState,
         accessibility: PermissionState,
-        inputMonitoring: PermissionState,
         hasCompletedOnboarding: Bool
     ) -> OnboardingEvaluation {
 
         // Blocking permissions: Mic + AX only.
-        // Input Monitoring is surfaced as a step but does NOT block completion (spec §2).
         var blocking: [PermissionKind] = []
         if !microphone.isGranted { blocking.append(.microphone) }
         if !accessibility.isGranted { blocking.append(.accessibility) }
 
-        // The flow is complete when the two required permissions are granted AND flag is set.
+        // The flow is complete when both required permissions are granted AND flag is set.
         let allRequiredGranted = blocking.isEmpty
         let isComplete = allRequiredGranted && hasCompletedOnboarding
 
@@ -116,12 +107,8 @@ public enum OnboardingStateMachine {
             currentStep = .microphone
         } else if !accessibility.isGranted {
             currentStep = .accessibility
-        } else if !inputMonitoring.isGranted {
-            // IM not granted: show the IM step so the user can grant it,
-            // but this does NOT set isComplete = false for the blocking gate.
-            currentStep = .inputMonitoring
         } else if !hasCompletedOnboarding {
-            // All permissions granted, flag not yet set — hotkey explanation.
+            // Both permissions granted, flag not yet set — hotkey explanation.
             currentStep = .hotkey
         } else {
             // Shouldn't reach here given the isComplete guard above.
@@ -148,7 +135,6 @@ public enum OnboardingStateMachine {
         evaluate(
             microphone: manager.status(.microphone),
             accessibility: manager.status(.accessibility),
-            inputMonitoring: manager.status(.inputMonitoring),
             hasCompletedOnboarding: hasCompletedOnboarding
         )
     }

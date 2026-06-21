@@ -6,12 +6,12 @@
 //   - Owns a `PermissionManager` reference (shared from DictationController).
 //   - Exposes the current `OnboardingEvaluation` as a `@Published` property.
 //   - Handles the "Grant Microphone" action (async prompt) and the
-//     "Open System Settings" deep-link for Accessibility + Input Monitoring.
-//   - Polls `PermissionManager.status()` for the two manual-grant permissions
+//     "Open System Settings" deep-link for Accessibility.
+//   - Polls `PermissionManager.status()` for manual-grant permissions
 //     when onboarding is visible (they can only change in System Settings).
 //   - Calls `settings.hasCompletedOnboarding = true` on finish.
 //
-// POLL INTERVAL: 1.5 s [decision: long enough to avoid hammering TCC/IOKit
+// POLL INTERVAL: 1.5 s [decision: long enough to avoid hammering TCC
 //   but short enough that the checkmark appears within ~2 s of a System
 //   Settings toggle. 0.5 s was considered but doubled the call rate with no
 //   perceivable UX benefit — 1.5 s is the tradeoff point.]
@@ -48,9 +48,6 @@ final class OnboardingViewModel: ObservableObject {
     /// Used by the view to disable the primary button and show "Waiting…" label.
     @Published private(set) var isWaitingForAccessibility: Bool = false
 
-    /// `true` for Input Monitoring after the first tap — same pattern as accessibility.
-    @Published private(set) var isWaitingForInputMonitoring: Bool = false
-
     // MARK: - Private
 
     private let permissionManager: any PermissionManaging
@@ -62,9 +59,7 @@ final class OnboardingViewModel: ObservableObject {
 
     /// Tracks which manual-grant permissions have had their TCC registration
     /// prompt fired this session. Guards against re-firing `AXIsProcessTrustedWithOptions`
-    /// or `IOHIDRequestAccess` on subsequent taps (which would spawn a second system
-    /// dialog). Only Accessibility and Input Monitoring need this guard — Microphone
-    /// uses AVFoundation which has its own idempotency.
+    /// on subsequent taps (which would spawn a second system dialog).
     ///
     /// A `true` entry means the prompt has been shown; subsequent taps only open
     /// System Settings, never re-trigger the TCC dialog.
@@ -191,11 +186,6 @@ final class OnboardingViewModel: ObservableObject {
     /// case where the user dismissed the system dialog without navigating.
     ///
     /// If already granted at tap time: auto-advances immediately (no dialog shown).
-    ///
-    /// CHOICE RATIONALE: Option A (prompt-once) is correct regardless of whether
-    /// `IOHIDCheckAccess` or `AXIsProcessTrusted()` register the app without prompting.
-    /// Option B (Settings-only) would land on an empty pane if silent checks don't
-    /// register, which is unverifiable in this environment. A dominates under uncertainty.
     func requestAccessibility() {
         // Already granted — advance immediately without touching TCC.
         if permissionManager.status(.accessibility) == .granted {
@@ -224,40 +214,10 @@ final class OnboardingViewModel: ObservableObject {
         // when `.accessibility` transitions to `.granted` and auto-advances the step.
     }
 
-    /// Primary action for the Input Monitoring step.
-    ///
-    /// Identical single-action pattern to `requestAccessibility()`. See that method's
-    /// doc comment for the full rationale.
-    func requestInputMonitoring() {
-        // Already granted — advance immediately.
-        if permissionManager.status(.inputMonitoring) == .granted {
-            refreshEvaluation()
-            advanceStepIfGranted(kind: .inputMonitoring)
-            return
-        }
-
-        if hasPrompted.contains(.inputMonitoring) {
-            // Re-tap: open Settings only.
-            openSystemSettings(for: .inputMonitoring)
-            return
-        }
-
-        // First tap: register + fire TCC dialog once.
-        hasPrompted.insert(.inputMonitoring)
-        isWaitingForInputMonitoring = true
-        let granted = permissionManager.requestInputMonitoring()
-        refreshEvaluation()
-        if granted {
-            isWaitingForInputMonitoring = false
-            advanceStepIfGranted(kind: .inputMonitoring)
-        }
-        // If not granted: leave isWaitingForInputMonitoring = true until poll detects grant.
-    }
-
     /// Opens System Settings to the given privacy pane via deep-link.
     ///
-    /// Deep-link anchors on macOS 13+ (`Privacy_Accessibility`,
-    /// `Privacy_ListenEvent`) open the correct pane directly.
+    /// Deep-link anchors on macOS 13+ (`Privacy_Accessibility`) open the correct
+    /// pane directly.
     /// [deferred — needs human verification that the correct sub-pane opens on
     ///  macOS 26 Tahoe: human-verification.md §4.4]
     func openSystemSettings(for kind: PermissionKind) {
@@ -269,8 +229,6 @@ final class OnboardingViewModel: ObservableObject {
             urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
         case .accessibility:
             urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-        case .inputMonitoring:
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
         }
         guard let url = URL(string: urlString) else {
             let kindDescription = String(describing: kind)
@@ -334,16 +292,14 @@ final class OnboardingViewModel: ObservableObject {
         switch step {
         case .welcome:        return .microphone
         case .microphone:     return .accessibility
-        case .accessibility:  return .inputMonitoring
-        case .inputMonitoring: return .hotkey
+        case .accessibility:  return .hotkey
         case .hotkey:         return .done
         case .done:           return .done
         }
     }
 
-    /// Start polling `PermissionManager.status()` for the two manual-grant
-    /// permissions (accessibility + inputMonitoring). The poll runs until
-    /// onboarding is complete or the view model is deallocated.
+    /// Start polling `PermissionManager.status()` for the Accessibility permission.
+    /// The poll runs until onboarding is complete or the view model is deallocated.
     ///
     /// Poll interval: 1.5 s [decision: see file header]
     private func startPolling() {
@@ -362,11 +318,6 @@ final class OnboardingViewModel: ObservableObject {
                 case .accessibility:
                     if self.permissionManager.status(.accessibility) == .granted {
                         self.isWaitingForAccessibility = false
-                        self.displayedStep = .inputMonitoring
-                    }
-                case .inputMonitoring:
-                    if self.permissionManager.status(.inputMonitoring) == .granted {
-                        self.isWaitingForInputMonitoring = false
                         self.displayedStep = .hotkey
                     }
                 default:

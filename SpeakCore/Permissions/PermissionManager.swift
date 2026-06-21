@@ -1,21 +1,16 @@
 // SpeakCore/Permissions/PermissionManager.swift
 //
 // Tracks and requests the OS permissions speak needs (AGENTS.md §2.2):
-// Microphone (P2), Accessibility + Input Monitoring (P5/P7). v0 P2 implements
-// the microphone path fully; accessibility is queryable now (used at P5), and
-// input monitoring is wired here at P7 using IOHIDCheckAccess.
+// Microphone (P2) and Accessibility (P5/P7). v0 requires exactly these two.
 //
 // State/kind enums are verbatim from architecture.md §6.
 //
-// IOKit/HID note (P7): IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) is the
-// documented way to query Input Monitoring ("listen event") authorization without
-// prompting. Returns IOHIDAccessType: kIOHIDAccessTypeGranted / kIOHIDAccessTypeDenied
-// / kIOHIDAccessTypeUnknown. [verified: swiftc -typecheck against macOS 26 SDK, 2026-06-21]
-// Grant can only be done via System Settings; no programmatic grant API exists.
+// Input Monitoring was removed: the CGEventTap uses .defaultTap and is gated
+// on Accessibility alone — IOHIDCheckAccess/IOHIDRequestAccess are no longer
+// called. [verified: HotkeyMonitor.swift §84–86, 2026-06-22]
 
 import AVFoundation
 import ApplicationServices
-import IOKit.hid
 import os
 
 @MainActor
@@ -30,24 +25,6 @@ public final class PermissionManager: PermissionManaging {
             return Self.map(AVCaptureDevice.authorizationStatus(for: .audio))
         case .accessibility:
             return AXIsProcessTrusted() ? .granted : .denied
-        case .inputMonitoring:
-            // IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) queries the Input
-            // Monitoring TCC permission without prompting. This is the approved
-            // IOKit/HID way to read the "listen event" (keyboard monitoring) gate.
-            // [verified: swiftc -typecheck against macOS 26 SDK, 2026-06-21]
-            // Live correctness (grant → granted, deny → denied) is
-            // [deferred — needs human verification with TCC prompt in real app].
-            let access = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
-            switch access {
-            case kIOHIDAccessTypeGranted:
-                return .granted
-            case kIOHIDAccessTypeUnknown:
-                // Not yet determined — user has never been asked.
-                return .notDetermined
-            default:
-                // kIOHIDAccessTypeDenied and any future values map to denied.
-                return .denied
-            }
         }
     }
 
@@ -75,18 +52,6 @@ public final class PermissionManager: PermissionManaging {
         let trusted = AXIsProcessTrustedWithOptions(options)
         SpeakLog.permissions.info("accessibility prompt → trusted=\(trusted, privacy: .public)")
         return trusted
-    }
-
-    /// Requests Input Monitoring ("listen event") access. Registers the app in
-    /// the Input Monitoring list and shows the system prompt when not yet granted
-    /// — the counterpart to the silent `IOHIDCheckAccess` read in `status(_:)`.
-    /// Returns whether access is already granted.
-    /// [verified: swiftc -typecheck against macOS 26 SDK, 2026-06-21]
-    @discardableResult
-    public func requestInputMonitoring() -> Bool {
-        let granted = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
-        SpeakLog.permissions.info("inputMonitoring prompt → granted=\(granted, privacy: .public)")
-        return granted
     }
 
     private static func map(_ status: AVAuthorizationStatus) -> PermissionState {

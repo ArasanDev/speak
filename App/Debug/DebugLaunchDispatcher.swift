@@ -11,7 +11,6 @@
 //     onboarding-welcome          → onboarding window forced to .welcome
 //     onboarding-microphone       → onboarding window forced to .microphone
 //     onboarding-accessibility    → onboarding window forced to .accessibility
-//     onboarding-inputmonitoring  → onboarding window forced to .inputMonitoring
 //     onboarding-hotkey           → onboarding window forced to .hotkey
 //     onboarding-done             → onboarding window forced to .done
 //     settings                    → Settings window, frontmost
@@ -49,7 +48,6 @@ enum DebugTarget: String {
     case onboardingWelcome       = "onboarding-welcome"
     case onboardingMicrophone    = "onboarding-microphone"
     case onboardingAccessibility = "onboarding-accessibility"
-    case onboardingInputMonitoring = "onboarding-inputmonitoring"
     case onboardingHotkey        = "onboarding-hotkey"
     case onboardingDone          = "onboarding-done"
     case settings                = "settings"
@@ -116,9 +114,6 @@ final class DebugLaunchDispatcher {
             return false
         case .onboardingAccessibility:
             openOnboarding(step: .accessibility, controller: controller)
-            return false
-        case .onboardingInputMonitoring:
-            openOnboarding(step: .inputMonitoring, controller: controller)
             return false
         case .onboardingHotkey:
             openOnboarding(step: .hotkey, controller: controller)

@@ -8,44 +8,30 @@
 
 ## Current phase
 
-> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-22, cleanup-hang HUD fix)
-> **HUD "Cleaning up…" HANG BUG — FIXED & ALL 4 GATES GREEN.**
-> Build ✅ · Tests ✅ (384+22 tests / 5 XCTSkip / 0 failures; +4 new cleanup-timeout tests) · Lint ✅ (0 serious) · Moat ✅ (7/7).
-> **Uncommitted in worktree** — orchestrator reviews diff and owns the commit.
+> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-22, Wave 0 live-bug cleanup — MERGED)
+> **Two live bugs fixed + integrated to master. ALL 4 GATES GREEN on combined master.**
+> Per `specs/acceleration-roadmap.md` Wave 0. The core loop works live (owner dictated this session).
 >
-> **Bug:** After pressing Right-Command to stop dictation, the HUD overlay showed "Cleaning up…"
-> with a spinner and never closed. Root cause: `CaptureSession.runCleanup()` called `cleaner.clean()`
-> (Foundation Models `LanguageModelSession.respond()`) with no timeout. If FM hangs (model loading
-> stuck, Neural Engine unavailable, etc.), the `await` never returns, leaving `endDictation()` blocked,
-> the overlay stuck in `.processing`, and the panel never hidden.
+> **0.1 — HUD "Cleaning up…" hang FIXED** (`SpeakCore/Engine/CaptureSession.swift`):
+>   - Root cause: `runCleanup()` called `cleaner.clean()` (Foundation Models `respond()`) with no
+>     timeout; if FM hangs, the `await` never returns → `endDictation()` blocked → overlay stuck in
+>     `.processing` forever. Secondary: a thrown cleanup error surfaced an un-dismissable error HUD.
+>   - Fix: `runCleanup()` is now `async` (never throws). `clean()` is raced against `T_cleanup = 10 s`
+>     (unstructured `Task` + `CheckedContinuation`, double-resume guarded by `OSAllocatedUnfairLock<Bool>`).
+>     ALL outcomes — off / unavailable / timeout / throw — fall back to raw transcript → session reaches
+>     `.done` → overlay always hides. `T_cleanup = 10 s` (4× architecture p95 budget) added to `benchmark.md §7`.
+>   - +4 tests in `CaptureSessionTests.swift` (throw→raw, generic-error→raw, hang→timeout→raw, slow-but-valid→cleaned).
 >
-> **Secondary bug also fixed:** When `clean()` threw (e.g. `llmCleanupFailed`), `runCleanup()` re-threw it.
-> `DictationController.endDictation()` caught it and called `overlayController.showError()`, which left
-> the panel visible with no auto-dismiss path. The Escape guard (`icon == .listening`) blocked dismiss via
-> Escape too. The panel was permanently visible in the error state.
->
-> **Fix (`SpeakCore/Engine/CaptureSession.swift`):**
->   - `runCleanup()` is now `async` (no longer `async throws`).
->   - All outcomes — off, unavailable, timeout, throw — produce `(nil, transcriber.id)` (raw fallback → `.done`).
->   - `clean()` is raced against a `T_cleanup = 10 s` deadline using an unstructured `Task` +
->     `CheckedContinuation` pattern. Double-resume is prevented by `OSAllocatedUnfairLock<Bool>`.
->   - On timeout, the cleanup `Task` is `cancel()`ed (best-effort; non-cooperative models may finish in
->     background). The continuation is already resumed; the session proceeds to `.done` unconditionally.
->   - [decision: cleanup failure ≡ cleanup unavailability — both fall back to raw transcript. See
->     `CaptureSession.runCleanup()` doc comment for full rationale.]
->   - `T_cleanup = 10 s` added to `benchmark.md §7` derivation ledger (4× architecture p95 budget of 2.5 s).
->
-> **Test coverage (`SpeakTests/CaptureSessionTests.swift`, +4 tests):**
->   - `testStopWithCleanerThrowingFallsBackToRawTranscript` — SpeakError throw → raw fallback → .done
->   - `testStopWithCleanerThrowingGenericErrorFallsBackToRaw` — generic Error throw → raw fallback → .done
->   - `testStopWithHangingCleanerTimesOutAndFallsBackToRaw` — non-cooperative hang (CheckedContinuation
->     never resumed → Task.cancel() cannot unblock it) → T_cleanup fires → raw fallback → .done (~10 s)
->   - `testStopWithSlowButReturnableCleanerSucceeds` — 200 ms slow cleaner → cleaned result (no premature timeout)
->
-> **Files changed:**
->   - `SpeakCore/Engine/CaptureSession.swift` — `runCleanup()` redesign + timeout
->   - `SpeakTests/CaptureSessionTests.swift` — updated 2 old tests + added 2 new mock types + 4 new tests
->   - `docs/benchmark.md §7` — `T_cleanup` entry added
+> **0.2 — Input Monitoring REMOVED** → onboarding asks **Microphone + Accessibility only** (matches VoiceInk/Wispr):
+>   - Why: the CGEventTap is `.defaultTap` → gated on Accessibility alone; IM was vestigial scaffolding from
+>     an earlier listen-only-tap design, and the onboarding step *falsely* claimed IM was needed for the hotkey.
+>     Empirically confirmed: the hotkey fires with IM NOT granted on the live machine. The tap itself was NOT touched.
+>   - New step order: **welcome → microphone → accessibility → hotkey → done** (4 steps, was 5).
+>   - Removed across 15 files: `PermissionKind.inputMonitoring`, `requestInputMonitoring()`, `IOHIDCheckAccess`/
+>     `IOHIDRequestAccess`/`import IOKit.hid`, `SpeakError.inputMonitoringDenied`, the onboarding step + false copy,
+>     the debug route, and all IM tests (`IOKit.hid` dropped from the moat allowlist).
+>   - **Docs re-grounded by orchestrator (this commit):** `AGENTS.md §2.2`, `.claude/skills/swift-code-review.md`,
+>     `docs/architecture.md`, `docs/product.md §7.3`, `specs/verification-ledger.md` — all updated to "Mic + Accessibility only".
 
 > ## OLD BANNER (handoff banner — 2026-06-22, secure-field paste guard)
 > **SECURE-FIELD PASTE GUARD — BUILT & ALL 4 GATES GREEN.**

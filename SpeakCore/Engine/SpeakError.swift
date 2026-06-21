@@ -31,7 +31,6 @@
 public enum SpeakError: Error, Sendable {
     case microphoneDenied
     case accessibilityDenied
-    case inputMonitoringDenied
     case transcriberUnavailable(String)
     case pasteboardBusy
     case llmCleanupFailed(String)
@@ -52,8 +51,6 @@ public enum SpeakError: Error, Sendable {
             return "Open System Settings → Privacy → Microphone and enable speak."
         case .accessibilityDenied:
             return "Open System Settings → Privacy → Accessibility and enable speak."
-        case .inputMonitoringDenied:
-            return "Open System Settings → Privacy → Input Monitoring and enable speak."
         case .transcriberUnavailable(let detail):
             return "Speech engine unavailable: \(detail). Try a fallback engine in Settings."
         case .pasteboardBusy:
