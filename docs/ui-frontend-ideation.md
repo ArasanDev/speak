@@ -2250,3 +2250,949 @@ targeted move, not a rewrite).
 above; the v0.1 surface list is in §9. Both are ideation, not
 contract — promote to `roadmap.md` / `product.md` when the human
 approves the dashboard + the IA changes.*
+
+---
+
+## 11. Wispr Flow surface deep-dive (recall-based — awaiting screenshot verification)
+
+> **Honesty boundary:** this section is built from **memory of Wispr Flow's
+> UI** as of 2025–2026. I have only **one verified screenshot** (the Home
+> dashboard in §1.6). Every claim below is tagged:
+> - `[verified]` — corroborated by the Home dashboard screenshot
+> - `[recall:high]` — well-documented public UX, multiple sources
+> - `[recall:med]` — known feature, but specific UI details uncertain
+> - `[recall:low]` — educated guess; needs screenshot verification
+>
+> **What I need from you to upgrade this section to `[verified]`:**
+> 1. Screenshot of the **recording HUD / voice capture** (the floating pill
+>    in active recording state)
+> 2. Screenshot of the **edit-before-paste expansion** (the post-stop
+>    review state)
+> 3. Screenshot of the **device / microphone picker**
+> 4. Screenshot of the **Settings** main page (or any Settings tab)
+> 5. Screenshot of the **voice profile setup** during onboarding
+> 6. Screenshot of the **Dictionary** editor
+> 7. Screenshot of the **Snippets** editor
+> 8. Screenshot of the **Style / Modes** editor
+> 9. Screenshot of the **Transforms** editor
+> 10. Screenshot of the **Insights** page (analytics / gamification)
+> 11. Screenshot of the **Scratchpad** view
+> 12. Screenshot of the **menubar dropdown** (the click-menu)
+>
+> Each surface below has the screenshot it needs called out in the
+> "Verification" subsection. Send them in any order; I'll iterate.
+
+### 11.1 Device input / microphone picker `[recall:med]`
+
+**Goal:** Let the user pick which microphone `speak` listens on, see
+the live level for each device, and detect when devices are added /
+removed (e.g., AirPods connect).
+
+**Where it lives in Wispr:** Settings → Audio & Devices, OR a tab in
+the main settings pane. `[recall:med]`
+
+**The `speak` shape (proposed):**
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ speak — Audio & Devices                                  ⊕ ⊗   │
+├────────────────────────────────────────────────────────────────┤
+│  Microphone                                                    │
+│  ─────────────────────────────────────────────────              │
+│  ○ MacBook Pro Microphone          [▌▌▌▌▌▌]  −12 dB             │  ← live level
+│  ● AirPods Pro                     [▌▌▌]      −24 dB  ✓         │  ← selected
+│  ○ USB Microphone (Apogee)         [▌▌▌▌▌▌▌] −8  dB             │
+│  ○ Plantronics Headset             [▌]        −48 dB             │
+│  ─────────────────────────────────────────────────              │
+│  [+ Refresh]  [System Sound Settings…]                         │
+│                                                                │
+│  When dictation starts                                          │
+│  ○ Auto-select last used                                          │
+│  ● Always prompt (v1)                                            │
+│                                                                │
+│  Noise suppression (v0.1)                                       │
+│  ☐ Use macOS noise suppression when available                  │
+│                                                                │
+│  Test microphone                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  [▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌]  −6 dB                  │  │
+│  │  Say "testing, testing, one two three"                   │  │
+│  │  [Stop test]                                             │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────┘
+```
+
+**Components used:** `List` with radio-style selection, `LevelMeterView`
+(§3.3, large variant for the test), `Toggle` for noise suppression,
+`Button` for the test.
+
+**Per-row live level:** every device in the list shows a real-time
+level meter when it's selected (or when the user hovers). This is the
+"is my mic actually picking up sound" affordance — invaluable when
+diagnosing "Wispr / speak isn't hearing me." The level source is
+`AVAudioEngine` input-node RMS for each device.
+
+**Verification needed:** screenshot of Wispr's audio device picker. The
+device list, the level meter placement, the noise suppression toggle,
+and the test affordance are all `[recall:med]` — Wispr has had varying
+UIs here over the last 2 years.
+
+**Edge cases:**
+- Bluetooth device disconnects mid-dictation → fall back to system
+  default with a toast: "AirPods disconnected — using MacBook mic."
+- Multiple input devices with the same name (e.g., two AirPods) →
+  show "AirPods Pro — A" / "AirPods Pro — B" using BT address
+  disambiguation. `[recall:low]`
+- No input device available → block the start, show a recovery banner
+  (matches the existing permission recovery surface §2.6).
+
+### 11.2 Voice capture / recording HUD (the pill) `[recall:high]`
+
+**Goal:** Show the user that dictation is in progress, stream the
+partial transcript live, and provide post-stop edit + paste affordances.
+
+**Where it lives:** a **top-center floating NSPanel**, always on top,
+non-focus-stealing. Wispr's signature surface.
+
+**The `speak` shape (we built this in §2.3; recalling Wispr's variant
+here for the comparison):**
+
+```
+   ┌──────────────────────────────────────────────────────────┐
+   │                                                          │
+   │             ┌──────────────────────────────────┐         │
+   │             │  ▌▌▌▌▌▌▌  "the quick brown fox"  │         │   ← top-center floating pill
+   │             │                                  │         │     ~480 × 80 pt
+   │             │  [paste in 1.4s]                 │         │     frosted glass
+   │             └──────────────────────────────────┘         │
+   │                                                          │
+   └──────────────────────────────────────────────────────────┘
+```
+
+**Three Wispr states `[recall:high]`:**
+
+#### 11.2.1 Recording (the active pill)
+
+- **Position:** top-center of the focused screen, ~80pt from the
+  top edge (clear of the menubar/notch).
+- **Shape:** rounded pill, ~480 × 80 pt, frosted glass.
+- **Content (left → right):**
+  - **Sound wave** (5–7 vertical bars) — the live mic level
+  - **Live partial transcript** — streaming text, single line
+  - **Duration counter** — "0:04" in 11pt secondary, right-aligned
+  - **Cancel button** — small `x` in the top-right
+- **Animation:** the wave bars react to the mic level in real time
+  (not a breathing animation — actual mic data). `[recall:high]`
+- **Color:** white text on translucent dark background OR dark text
+  on translucent light, depending on the system appearance. Adaptive.
+- **Reference:** this is the cautionary tale referenced in
+  `dictation-flow.md` §4. The "top-center" position is what we
+  *reject* in favor of bottom-center. We adopt every other detail.
+
+#### 11.2.2 Edit-before-paste (the expansion) `[recall:high]`
+
+This is Wispr's **killer feature**. After the user stops, the pill
+**expands** vertically to ~480 × 220 pt, showing:
+
+```
+   ┌──────────────────────────────────────────────────────────┐
+   │  ┌──────────────────────────────────────────────────┐   │
+   │  │ "the quick brown fox jumps over the lazy dog"    │   │   ← editable text
+   │  │                                                    │   │     (TextEditor)
+   │  │ "send it."                                          │   │
+   │  └──────────────────────────────────────────────────┘   │
+   │                                                            │
+   │  [Cancel]                  Editing · paste in 1.2s         │
+   │                                                            │
+   │  [Paste]   ⌘↩                                              │   ← default action
+   └──────────────────────────────────────────────────────────┘
+```
+
+**Key details `[recall:high]`:**
+- **Auto-paste countdown** — visible in the footer ("paste in 1.2s").
+  The user can tap anywhere in the text to **pause** the countdown
+  (so the user has time to edit). This is a genius UX move: the
+  default is "paste immediately" but the user can intervene by
+  tapping. No explicit "Edit" toggle needed.
+- **Edit affordance:** the text is a real `TextEditor` — the user
+  can click in, fix a word, delete a word, add a word. The partial
+  transcript becomes a *real* document for 2 seconds.
+- **Default action:** `⌘↩` to paste, `Esc` to cancel. Power-user
+  shortcuts.
+- **Sub-second per-word delays** are visible — the pill flickers
+  open and then auto-pastes. The animation is so smooth that the
+  user *thinks* they pasted directly, but they actually had a 2s
+  review window.
+- **Tap-to-pause** the countdown is the killer pattern. We adopt
+  it.
+
+**The `speak` v1 plan:** this is the "edit-before-paste toggle" from
+the original §2.3.5 ideation. We deferred it to v1 because (a) it
+breaks the "feels like the cursor typed it" magic, and (b) it's a
+v1 surface that needs its own design pass. The Wispr version gives
+us the template: countdown + tap-to-pause.
+
+#### 11.2.3 Done (auto-fade)
+
+- After paste (or after the countdown elapses), the pill collapses
+  back to ~80 pt and shows a green ✓ for 400 ms.
+- Then it fades out over 200 ms.
+- The auto-fade is **fast** — the user shouldn't be left staring
+  at a "done" indicator for more than half a second.
+
+**Verification needed:** screenshots of (1) the active recording pill,
+(2) the edit-before-paste expansion. The exact dimensions, the
+countdown visibility, and the auto-paste timing are `[recall:med]`.
+
+### 11.3 Settings (the main settings page) `[recall:high]`
+
+**Goal:** Surface every user-tunable in a discoverable, organized way.
+
+**Where it lives:** in the sidebar — `Settings` is one of the 4 footer
+items (matches §1.6 observation #21). The Settings "tab" replaces the
+content area of the dashboard.
+
+**The `speak` shape (Wispr-style):**
+
+```
+┌──────────────┬─────────────────────────────────────────────────────┐
+│              │                                                     │
+│  ⏶ speak     │  Settings                                           │  ← content title
+│              │  ───────────────────────────────────────            │
+│  ▦ Home      │                                                     │
+│  📖 History  │  General                                            │  ← section
+│  ⚙  Settings │  ───────────────────────────────                   │
+│  ?  Help     │  Display name          [Tamilarasan           ]    │  ← text field
+│              │  Language              [English (US)        ▾]    │
+│  ───v1+ ───  │  Hotkey                [fn (double-tap)      ▾]    │
+│              │  Theme                 [● System  ○ Light  ○ Dark]  │
+│  📖 Dict.    │                                                     │
+│  ✂ Snippets   │  Audio                                                 │
+│  Tt Style    │  ───────────────────────────────                   │
+│  ✨ Transform│  Microphone           [AirPods Pro          ▾]    │
+│  📄 Scratchp │  Noise suppression    [☐ Use macOS]                │
+│  📊 Insights │  Audio feedback       [● On  ○ Off]                │
+│              │                                                     │
+│              │  Cleanup                                                 │
+│              │  ───────────────────────────────                   │
+│              │  AI cleanup           [● On  ○ Off]                │
+│              │  Cleanup model        [Foundation Models   ▾]    │
+│              │  Cleanup level        [Balanced             ▾]    │
+│              │                                                     │
+│              │  Privacy                                                │
+│              │  ───────────────────────────────                   │
+│              │  ✓ Audio never leaves this Mac                     │
+│              │  History retention     [30 days  ▾]                │
+│              │  [Export history]  [Delete all history]            │
+│              │                                                     │
+└──────────────┴─────────────────────────────────────────────────────┘
+```
+
+**Sections (Wispr-style, 5 sections vs my 4):**
+1. **General** — display name, language, hotkey, theme
+2. **Audio** — microphone picker, noise suppression, audio feedback
+3. **Cleanup** — AI cleanup toggle, model, level (Basic / Balanced / Thorough)
+4. **Privacy** — the moat claim, history retention, export/delete
+5. **Account** — Wispr has this; speak skips (no account)
+
+**What I missed in my original §2.4:**
+- **Display name** (the user sets their name in onboarding → used in
+  dashboard hero and reports)
+- **Theme override** (System / Light / Dark — a Mac idiom that
+  native SwiftUI handles for free)
+- **Cleanup level** (a single picker for "how much should the AI
+  rewrite" — Basic / Balanced / Thorough. Maps to different
+  `LLMCleaning` prompts)
+- **Audio feedback** (a sound when dictation starts/stops — like
+  VoiceInk's "ka-chunk" sound. Optional, off by default)
+- **History retention** (30 days / 90 days / forever — currently
+  speak has a `maxEntries` cap; retention is a different axis)
+
+**Privacy section:** this is the **most important section** for `speak`.
+Wispr's privacy section is buried; we put it **second from the
+bottom**, prominent, with the moat claim as a read-only green
+check. The export/delete affordances live here too.
+
+**Verification needed:** a screenshot of Wispr's Settings to confirm
+the section breakdown and the order. The exact names of the sections
+(`General / Audio / Cleanup / Privacy` vs. my `Activation /
+Transcription / AI Cleanup / Text Insertion`) are `[recall:med]`.
+
+### 11.4 Voice profile setup (onboarding-specific) `[recall:med]`
+
+**Goal:** Record 2–3 sample sentences from the user to "personalize"
+the voice model. Wispr uses this for the "Voice Profile" feature
+that unlocks after enough data; `speak` can skip this (Apple
+SpeechAnalyzer personalizes automatically based on usage).
+
+**Where it lives:** after the accessibility permission step, before
+the hotkey step in onboarding. Optional, with a "Skip" link.
+
+**The shape (Wispr):**
+
+```
+┌────────────────────────────────────────────────┐
+│  ● ● ● ● ●                                     │
+│                                                │
+│           ┌────────────────────┐               │
+│           │ 🎙  (microphone)   │               │
+│           └────────────────────┘               │
+│                                                │
+│      Personalize your voice profile            │  ← title
+│                                                │
+│   Read these 3 sentences aloud so we can       │  ← body
+│   learn how you speak. Takes 30 seconds.       │
+│                                                │
+│   ┌────────────────────────────────────────┐   │
+│   │ Sentence 1 of 3                         │   │  ← sample text
+│   │ "The quick brown fox jumps over the     │   │     in a card
+│   │  lazy dog while the rain patters        │   │
+│   │  softly on the window."                 │   │
+│   └────────────────────────────────────────┘   │
+│                                                │
+│            ┌──────────────┐                    │
+│            │  I'm Ready   │                    │
+│            └──────────────┘                    │
+│                                                │
+│   ☐ Skip — I don't want a profile              │
+│                                                │
+└────────────────────────────────────────────────┘
+```
+
+**On click "I'm Ready":**
+- The card becomes a recording indicator
+- The user reads the sentence
+- A progress bar fills
+- "Great! Next sentence →"
+- Repeat 3 times
+- "All done! Your voice profile is ready."
+- Auto-advance
+
+**For `speak`:** this is **explicitly skipped**. Apple `SpeechAnalyzer`
+adapts to the user's voice over time without explicit enrollment. We
+do NOT need this step. The onboarding stays at 5 steps (welcome →
+mic → ax → im → hotkey → done).
+
+**However:** the "Voice Profile Unlocked" milestone from the Home
+dashboard *could* be repurposed. After ~50 dictations, show a
+celebration: "speak has learned your voice — your transcripts are now
+~X% more accurate on average." (We'd need to measure this; speculative.)
+
+**Verification needed:** screenshot of Wispr's voice profile setup
+flow. The exact copy, the number of sentences (I've assumed 3), and
+the skip flow are all `[recall:med]`.
+
+### 11.5 Dictionary (custom vocabulary) `[recall:med]`
+
+**Goal:** Manage the user's list of custom words the STT engine
+should listen for. Useful for names, jargon, technical terms.
+
+**Where it lives:** a sidebar item (renamed from "Custom Vocabulary"
+in §9.2). A new dashboard tab.
+
+**The `speak` shape (Wispr-style):**
+
+```
+┌──────────────┬─────────────────────────────────────────────────────┐
+│              │                                                     │
+│   ...        │  Dictionary                                         │
+│              │  ───────────────────────────────────────            │
+│  📖 Dict. ←  │                                                     │
+│              │  🔍 Search words                                     │
+│              │  ───────────────────────────────────────            │
+│              │  ┌─────────────────────────────────────────────┐  │
+│              │  │ Word         Pronunciation?   Source          │  │
+│              │  │ ────────────────────────────────────────    │  │
+│              │  │ Tamil        (auto)            Manual         │  │
+│              │  │ Speakanalyzer(speak-AN-al-yzer)Manual         │  │
+│              │  │ WisprFlow    (wisper-flow)      Manual         │  │
+│              │  │ AppIntents   (app-IN-tents)     Manual         │  │
+│              │  │ Cgeventtap   (cg-EVENT-tap)     Manual         │  │
+│              │  │ ...                                           │  │
+│              │  └─────────────────────────────────────────────┘  │
+│              │                                                     │
+│              │  [+ Add Word]  [Import from contacts]  [Export]     │
+└──────────────┴─────────────────────────────────────────────────────┘
+```
+
+**Components:**
+- Search bar at the top (matches History's pattern, §3.12)
+- Table view with columns: word, pronunciation hint, source
+- Source column: "Manual" (user-added) / "Contacts" (imported) /
+  "Auto-learned" (speak detected a repeated word and added it)
+
+**The pronunciation hint column** is interesting — Wispr lets you
+specify how a word is pronounced, which the STT engine uses as a
+bias. For `speak`, Apple `SpeechAnalyzer` supports a
+`SFSpeechLanguageModel` with `addToVocabulary(phrase:pronunciation:)`
+method `[recall:med]`.
+
+**"+ Add Word" affordance:**
+- Inline form with two fields: Word, Pronunciation (optional)
+- `Return` to save
+- Validation: no duplicates (case-insensitive), max 100 chars,
+  no whitespace inside a single word
+
+**"Import from contacts"** (v1.1):
+- Opens the macOS Contacts picker
+- User picks which contacts to import
+- We add first name, last name, organization from each
+- Permission: `NSContactsUsageDescription` in Info.plist
+- `[recall:med]` — Wispr has this feature; we add it in v1.1
+
+**Verification needed:** screenshot of Wispr's Dictionary editor.
+The exact columns, the pronunciation field, the contacts import
+flow, and the "auto-learned" source are all `[recall:med]`.
+
+### 11.6 Snippets (voice commands) `[recall:high]`
+
+**Goal:** Manage voice commands — trigger phrases that expand to
+text. Wispr ships with ~50 built-in snippets; users can add their own.
+
+**Where it lives:** a sidebar item. A new dashboard tab.
+
+**The `speak` shape (Wispr-style):**
+
+```
+┌──────────────┬─────────────────────────────────────────────────────┐
+│              │                                                     │
+│   ...        │  Snippets                                           │
+│              │  ───────────────────────────────────────            │
+│  ✂ Snippets ←│                                                     │
+│              │  🔍 Search snippets                                  │
+│              │  [Built-in ▾]  [Personal]  [All]                    │  ← tabs
+│              │  ───────────────────────────────────────            │
+│              │  ┌─────────────────────────────────────────────┐  │
+│              │  │ Trigger           → Expansion              │  │
+│              │  │ ────────────────────────────────────────    │  │
+│              │  │ "period"          → .                      │  │
+│              │  │ "comma"           → ,                      │  │
+│              │  │ "question mark"   → ?                      │  │
+│              │  │ "exclamation"     → !                      │  │
+│              │  │ "new line"        → \n                     │  │
+│              │  │ "new paragraph"   → \n\n                   │  │
+│              │  │ "open paren"      → (                      │  │
+│              │  │ "close paren"     → )                      │  │
+│              │  │ "colon"           → :                      │  │
+│              │  │ "semicolon"       → ;                      │  │
+│              │  │ ─── Personal ───                            │  │
+│              │  │ "my email"        → tamil@example.com      │  │
+│              │  │ "lgtm"            → Looks good to me.      │  │
+│              │  │ "ship it"         → 🚀                     │  │
+│              │  └─────────────────────────────────────────────┘  │
+│              │                                                     │
+│              │  [+ Add Snippet]  [Import…]  [Export…]             │
+└──────────────┴─────────────────────────────────────────────────────┘
+```
+
+**Components:**
+- Search bar
+- Tabbed filter: Built-in / Personal / All
+- Table view with two columns: Trigger, Expansion
+- A subtle separator between "Built-in" and "Personal" snippets
+  (this is a design detail Wispr does well — it visually
+  distinguishes "shipped" from "yours")
+
+**Built-in snippets (v1 ships):**
+- The 10 voice punctuation commands from §2.8
+- Plus a few common developer shortcuts: "code block" → "```\n\n```",
+  "bullet" → "  - ", "tab" → "  " (configurable 2 or 4)
+
+**"+ Add Snippet" affordance:**
+- Inline form: Trigger, Expansion, optional Description
+- Validation: trigger must be unique (case-insensitive),
+  trigger must contain only lowercase + spaces (enforced pattern)
+- Trigger phrases should be 1–3 words (UX guideline)
+
+**Per-app snippets (v1.1):** `[recall:med]`
+- Wispr lets you scope a snippet to a specific app (e.g., "send it"
+  in Slack → 🚀, in email → "Best, Tamil")
+- `speak` v1.1: optional per-app scope. The picker shows
+  "Global / This app only" radio.
+
+**The interaction order is important `[recall:high]`:**
+- Snippets run **before** the LLM cleanup (so a snippet like
+  "period" becomes "." and the LLM doesn't re-process it)
+- A snippet that inserts punctuation *tells* the cleanup engine
+  to skip punctuation (via a special token in the transcript)
+- This is the open question from §2.8. Wispr's behavior is the
+  reference.
+
+**Verification needed:** screenshot of Wispr's Snippets editor.
+The exact built-in snippet list, the per-app scope UI, the
+trigger-phrase validation, and the import/export format are all
+`[recall:med]`.
+
+### 11.7 Style (modes / formatting presets) `[recall:high]`
+
+**Goal:** Define named formatting presets that bundle a cleanup
+prompt + optional formatting rules. The user picks a mode before
+dictating (or it auto-switches per-app).
+
+**Where it lives:** a sidebar item. A new dashboard tab.
+
+**The `speak` shape (Wispr-style):**
+
+```
+┌──────────────┬─────────────────────────────────────────────────────┐
+│              │                                                     │
+│   ...        │  Style                                              │
+│              │  ───────────────────────────────────────            │
+│  Tt Style  ← │                                                     │
+│              │  ┌─────────────────────────────────────────────┐  │
+│              │  │  ●  Default                                  │  │  ← active mode
+│              │  │     Casual, friendly, with filler removal   │  │     (radio button)
+│              │  │                                                │  │
+│              │  │  ○  Professional                               │  │
+│              │  │     Formal, no contractions, terse           │  │
+│              │  │                                                │  │
+│              │  │  ○  Casual                                     │  │
+│              │  │     Relaxed, keeps "yeah" and "gonna"        │  │
+│              │  │                                                │  │
+│              │  │  ○  Code                                       │  │
+│              │  │     Code-aware, preserves variable names     │  │
+│              │  │                                                │  │
+│              │  │  ○  Email                                      │  │
+│              │  │     Greeting/sign-off aware, formal           │  │
+│              │  └─────────────────────────────────────────────┘  │
+│              │                                                     │
+│              │  Active mode: Default                               │
+│              │  [Edit cleanup prompt…]   [Reset to default]         │
+│              │                                                     │
+│              │  [Apply to all apps]  [Per-app overrides →]         │
+└──────────────┴─────────────────────────────────────────────────────┘
+```
+
+**5 built-in modes (Wispr-style):**
+1. **Default** — casual, friendly, with filler removal
+2. **Professional** — formal, no contractions, terse
+3. **Casual** — relaxed, keeps "yeah" and "gonna"
+4. **Code** — code-aware, preserves variable names, no filler
+5. **Email** — greeting/sign-off aware, formal
+
+**`[recall:med]`** — Wispr's mode list is more dynamic (users can
+create custom modes). The 5 above are the most common shipped modes
+across the category.
+
+**Per-app overrides (v1.1) `[recall:med]`:**
+- "Per-app overrides →" opens a sub-view
+- Lists frontmost apps seen (from `NSWorkspace.runningApplications`)
+- User picks a default mode per app
+- The mode auto-switches when the frontmost app changes (with a
+  brief menubar icon update)
+
+**"Edit cleanup prompt…" affordance:**
+- Opens a sheet with a multi-line text editor
+- Shows the current prompt (the `LLMCleaning` system prompt for
+  this mode)
+- User can edit; `Save` writes back to the per-mode setting
+- `Reset to default` restores the shipped prompt
+
+**Implementation in `speak`:** `[decision]`
+- v0.1: ship the 5 built-in modes + 1 active mode selection
+- v1: custom mode editor (name + prompt + optional icon)
+- v1.1: per-app overrides
+
+**Verification needed:** screenshot of Wispr's Style editor.
+The exact built-in mode names, the per-app override UI, the
+custom-mode editor, and the active-mode indicator are all
+`[recall:med]`.
+
+### 11.8 Transforms (AI commands) `[recall:high]`
+
+**Goal:** Define text-rewrite commands. User selects text in any
+app, invokes a transform via hotkey, and the local LLM applies it.
+
+**Where it lives:** a sidebar item. A new dashboard tab.
+
+**The `speak` shape (Wispr-style):**
+
+```
+┌──────────────┬─────────────────────────────────────────────────────┐
+│              │                                                     │
+│   ...        │  Transforms                                         │
+│              │  ───────────────────────────────────────            │
+│  ✨ Transf. ←│                                                     │
+│              │  Select text in any app, then:                      │
+│              │                                                     │
+│              │  ┌─────────────────────────────────────────────┐  │
+│              │  │  Hotkey    Name              Description      │  │
+│              │  │ ────────────────────────────────────────    │  │
+│              │  │  ⌥⌘R      Rephrase           Rewrite clearly │  │
+│              │  │  ⌥⌘S      Make shorter       Condense        │  │
+│              │  │  ⌥⌘L      Make longer        Expand          │  │
+│              │  │  ⌥⌘F      Fix grammar        Correct         │  │
+│              │  │  ⌥⌘T      Translate          Pick language…  │  │
+│              │  │  ⌥⌘B      Bullet list        • item 1        │  │
+│              │  │  ⌥⌘N      Numbered list      1. item 1       │  │
+│              │  │  ⌥⌘E      Explain (for code) Add comments     │  │
+│              │  │  ⌥⌘P      Proofread          Tighten copy    │  │
+│              │  │  ⌥⌘H      Humanize           Less robotic    │  │
+│              │  │ ─── Custom ───                              │  │
+│              │  │  ⌥⌘1      Friendlier         …               │  │
+│              │  │  ⌥⌘2      Shakespearean      …               │  │
+│              │  └─────────────────────────────────────────────┘  │
+│              │                                                     │
+│              │  [+ Add Transform]  [Reset all to defaults]         │
+└──────────────┴─────────────────────────────────────────────────────┘
+```
+
+**Built-in transforms (Wispr ships ~10–12):**
+1. **Rephrase** ⌥⌘R
+2. **Make shorter** ⌥⌘S
+3. **Make longer** ⌥⌘L
+4. **Fix grammar** ⌥⌘F
+5. **Translate** ⌥⌘T (opens language picker)
+6. **Bullet list** ⌥⌘B
+7. **Numbered list** ⌥⌘N
+8. **Explain (for code)** ⌥⌘E
+9. **Proofread** ⌥⌘P
+10. **Humanize** ⌥⌘H
+
+**The interaction flow `[recall:high]`:**
+- User selects text in any app (Slack, email, code editor)
+- Presses the transform hotkey (e.g., ⌥⌘S)
+- A small **popover** appears near the selection with:
+  - Loading spinner + "Rewriting…"
+  - After ~1–2s, the rewritten text
+  - **Undo** button (restores the original)
+  - **Apply** button (replaces the selection, default action)
+  - `Esc` to cancel
+
+**Why this is a v2 surface (not v0.1) `[recall:high]`:**
+- Requires text-selection detection (`AXUIElement` focused range)
+- Requires per-app integration (text replacement varies — rich text
+  fields, code editors, terminal, all behave differently)
+- The LLM cost is non-trivial (rewriting 100 words = ~300 tokens
+  in/out, ~1.5s on Apple Foundation Models)
+- The user-facing risk is high: "my text got rewritten and I lost
+  what I wrote" is a bad outcome
+
+**`speak` v2 plan:**
+- Ship the 10 built-in transforms with hardcoded `⌥⌘` + letter
+  hotkeys
+- Use a single "Transform" popover for all transforms (with the
+  result + Apply/Undo)
+- Per-app selection extraction (rich text vs plain text vs
+  markdown) is the engineering risk
+
+**Verification needed:** screenshot of Wispr's Transforms editor
+AND the live popover. The exact hotkey letters, the popover layout,
+and the per-app behavior are all `[recall:med]`.
+
+### 11.9 Insights (analytics / gamification) `[recall:med]`
+
+**Goal:** Show the user how much they've dictated, their speed
+(WPM), their consistency (streak), and a few other vanity metrics.
+
+**Where it lives:** a sidebar item. A new dashboard tab.
+
+**The `speak` shape (Wispr-style):**
+
+```
+┌──────────────┬─────────────────────────────────────────────────────┐
+│              │                                                     │
+│   ...        │  Insights                                           │
+│              │  ───────────────────────────────────────            │
+│  📊 Insights←│                                                     │
+│              │  This week                                           │
+│              │  ┌─────────────────────────────────────────────┐  │
+│              │  │  1,565  total words                           │  │   ← hero stats
+│              │  │     94  wpm                                  │  │     (serif)
+│              │  │      2  day streak                           │  │
+│              │  └─────────────────────────────────────────────┘  │
+│              │                                                     │
+│              │  Activity (last 12 weeks)                          │
+│              │  ┌─────────────────────────────────────────────┐  │
+│              │  │     ▁▂▅█▇▃▁▂▄▁                             │  │   ← bar chart
+│              │  │  W1 W2 W3 W4 W5 W6 W7 W8 W9 W10 W11 W12    │  │
+│              │  └─────────────────────────────────────────────┘  │
+│              │                                                     │
+│              │  Top snippets                                       │
+│              │  • period (×147)                                    │
+│              │  • new line (×83)                                   │
+│              │  • my email (×21)                                   │
+│              │                                                     │
+│              │  Top apps                                           │
+│              │  • TextEdit (×234)                                  │
+│              │  • Slack (×189)                                     │
+│              │  • Cursor (×87)                                     │
+│              │                                                     │
+│              │  Active hours (heatmap)                            │
+│              │  ┌─────────────────────────────────────────────┐  │
+│              │  │  12a ┌──┐                                   │  │
+│              │  │  6a  │  │                                   │  │
+│              │  │  12p ┌──┐  ┌──┐                            │  │
+│              │  │  6p  │  │  │  │                            │  │
+│              │  └─────────────────────────────────────────────┘  │
+└──────────────┴─────────────────────────────────────────────────────┘
+```
+
+**Sections (Wispr's pattern):**
+1. **Hero stats** — 3 large numbers (total words, WPM, streak)
+2. **Activity chart** — bar chart of weekly word count (12 weeks)
+3. **Top snippets** — most-used voice commands
+4. **Top apps** — most-dictated-into apps (from the focused app
+   at the time of dictation)
+5. **Active hours** — a heatmap of when the user dictates
+6. **Achievements** — milestone unlocks ("First 100 words",
+   "1-week streak", "1,000 total words", etc.)
+
+**`[recall:med]`** on the exact layout. Wispr's Insights has had
+several redesigns in 2025; the above is the most common shape.
+
+**For `speak`:**
+- v2 ships 4 of the 6 sections (skip Top apps and Achievements —
+  Top apps has privacy implications, Achievements is freemium
+  growth lever we don't need)
+- v3 ships Achievements as a freemium-style "milestone" surface
+  (for free, no paywall — just delightful)
+- Top apps is **privacy-sensitive** — it requires logging which
+  app was frontmost at dictation time. v2: opt-in (default OFF).
+  v3: removed (the data isn't needed).
+
+**Data sources:**
+- total words: `HistoryEntry.cleanedText.wordCount` (or
+  `rawText.wordCount` if cleaned is nil)
+- WPM: `HistoryEntry.wordCount / duration.minutes`
+- streak: consecutive days with at least one entry
+- weekly chart: grouped by week
+- top snippets: requires the snippet usage to be logged (v2 only)
+
+**Verification needed:** screenshot of Wispr's Insights page. The
+exact chart types, the metrics, the achievements, and the
+heatmap are all `[recall:med]`.
+
+### 11.10 Scratchpad (quick notes) `[recall:med]`
+
+**Goal:** A persistent note-taking surface inside `speak`. The user
+can dictate into the scratchpad without focusing an external app.
+
+**Where it lives:** a sidebar item. A new dashboard tab.
+
+**The `speak` shape (Wispr-style):**
+
+```
+┌──────────────┬─────────────────────────────────────────────────────┐
+│              │                                                     │
+│   ...        │  Scratchpad                                         │
+│              │  ───────────────────────────────────────            │
+│  📄 Scratch.←│                                                     │
+│              │  ┌─────────────────────────────────────────────┐  │
+│              │  │ Today                                         │  │
+│              │  │ ────────────────────────────────────────    │  │
+│              │  │  10:32 am                                     │  │
+│              │  │  "The .env file has real API keys and        │  │
+│              │  │   credentials. We need to test and            │  │
+│              │  │   validate everything…"                       │  │
+│              │  │                                                │  │
+│              │  │ Yesterday                                     │  │
+│              │  │ ────────────────────────────────────────    │  │
+│              │  │  4:36 am                                      │  │
+│              │  │  "Understand the project, explore deeply,    │  │
+│              │  │   ideate the current state."                  │  │
+│              │  └─────────────────────────────────────────────┘  │
+│              │                                                     │
+│              │  [New Entry]  [Search…]  [Export…]                  │
+└──────────────┴─────────────────────────────────────────────────────┘
+```
+
+**Differences from Home (conversation log):**
+- Home = the *destination of every dictation* (whatever app was
+  focused). Each entry is a dictation that ended with a paste.
+- Scratchpad = the *destination when no app is focused* (or when
+  the user explicitly chose "dictate to scratchpad"). Each entry
+  is a dictation that ended with text written to the scratchpad.
+
+**The flow `[recall:high]`:**
+- User opens the scratchpad (or it's already open)
+- User double-taps Fn
+- HUD appears bottom-center (NOT top-center — we rejected that)
+- User speaks
+- User single-taps Fn
+- **HUD shows "Saving to Scratchpad"** instead of "Cleaning up…"
+- The text lands in the scratchpad
+- HUD shows "Done" + fade
+- The scratchpad view auto-scrolls to the new entry
+
+**`[decision]`:**
+- v0.1: scratchpad is the manual destination (user clicks "New
+  Entry" then dictates). Auto-route is v1.
+- v1: detect "no focused text field" via `AXUIElement` → auto-route
+  to scratchpad. The "no focused field" affordance: the HUD shows
+  a small "↳ Scratchpad" label so the user knows where it's going.
+
+**`[recall:med]`** on the exact UI. The Home-vs-Scratchpad
+distinction is well-known; the implementation details vary.
+
+**Verification needed:** screenshot of Wispr's Scratchpad view.
+The exact layout, the auto-route behavior, and the HUD label
+("Saving to Scratchpad" vs "Pasting at cursor") are all
+`[recall:med]`.
+
+### 11.11 Menubar dropdown menu `[recall:high]`
+
+**Goal:** One-tap access to the most common actions from the
+menubar — start/stop, mute, history, settings, account, quit.
+
+**The `speak` shape (Wispr-style):**
+
+```
+speak — ready (double-tap Fn to start)        ← status line
+─────────────────────────────────────
+▶ Start Dictation                  ⌥⌘Space
+🔇 Mute Microphone
+─────────────────────────────────────
+  Mode ▸                            ← submenu: Default / Professional / Casual / Code / Email
+  Language ▸                        ← submenu: English (US) / English (GB) / Spanish / …
+  Style ▾  Default                  ← quick mode indicator
+─────────────────────────────────────
+  Open Dashboard…                    ⇧⌘D
+  History…                            ⌘H
+  Settings…                           ⌘,
+  Help                                 ⌘?
+─────────────────────────────────────
+  About speak…                        ⌘A
+─────────────────────────────────────
+  Quit speak                          ⌘Q
+```
+
+**Submenus (Wispr's pattern):**
+- **Mode ▸** — Default / Professional / Casual / Code / Email /
+  More… (opens the Style tab)
+- **Language ▸** — en-US / en-GB / fr-FR / de-DE / es-ES / More…
+  (opens the dictionary tab)
+- **Engine ▸** (Wispr has this) — Auto / Apple Speech / WhisperKit
+  / Cloud (for Pro users)
+
+**`[recall:high]`** on the submenu structure. Wispr's menubar is
+the most-iterated surface in the app; the pattern is well-known.
+
+**`speak` v0.1 plan:**
+- Add the "Mode ▸" submenu (5 modes)
+- Add the "Language ▸" submenu (starts at 2, grows with v1)
+- Add the "Open Dashboard…" item (the new dashboard surface)
+- Keep the current "Start Dictation / Mute / History / Settings /
+  About / Quit" items
+
+**Status line `[recall:med]`:**
+- Wispr shows the dictation count for the day: "12 dictations
+  today · 1,247 words"
+- We adopt this in v0.1 (a single line: "12 dictations today")
+
+**Verification needed:** screenshot of Wispr's menubar dropdown
+(in idle, listening, and muted states). The submenu structure, the
+status line, and the engine submenu are all `[recall:med]`.
+
+### 11.12 UI components catalog (additions to §3)
+
+These components are inferred from the recall-based surface analysis
+above. They augment the component catalog from §3.
+
+#### 11.12.1 `KeyCapView` (already in §3.13)
+
+#### 11.12.2 `Sidebar` (already in §3.14)
+
+#### 11.12.3 `DayGroupedList` (already in §3.15)
+
+#### 11.12.4 `StatTile` (already in §3.16)
+
+#### 11.12.5 `DevicePickerRow` (new) `[recall:med]`
+
+A row in the device picker: device name + live level meter + selection
+radio. Used in §11.1.
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ ● AirPods Pro    [▌▌▌▌▌▌▌▌]  −12 dB                          │
+│ ○ MacBook Mic    [▌▌▌▌]      −24 dB                          │
+└────────────────────────────────────────────────────────────┘
+```
+
+**Components:** `LevelMeterView` (large variant), `Color.primary`
+text, `Toggle` (or radio-style button), 13pt secondary for dB.
+
+#### 11.12.6 `PlanBadge(plan: String)` (new) `[verified:from Home]`
+
+A small outline pill that says "Basic" / "Pro" / "v0.1". Verified
+from the Home dashboard. For `speak`, we'd render the version
+(`v0.1`) instead of a plan tier.
+
+#### 11.12.7 `UpgradeCard(title: String, body: String, cta: String)` (new) `[verified:from Home]`
+
+The light-purple card in the sidebar bottom of Wispr's Home.
+Verified from the Home dashboard. For `speak`, we'd repurpose as
+a "What's new" card (showing the latest feature, with a
+"Learn more →" link).
+
+#### 11.12.8 `HotkeyRow(hotkey: HotkeyBinding, onRecord: () -> Void)` (new)
+
+The hotkey row in Settings — current binding + Record button.
+Used in §2.4.2.
+
+#### 11.12.9 `EditBeforePastePill` (new) `[recall:med]`
+
+The expanded post-stop pill with the editable text + countdown +
+Apply/Cancel buttons. Used in §11.2.2.
+
+#### 11.12.10 `TransformPopover` (new) `[recall:med]`
+
+The popover that appears near a text selection when a transform
+hotkey is pressed. Shows "Rewriting…" spinner → result + Apply/Undo.
+
+#### 11.12.11 `SnippetRow(trigger: String, expansion: String, isBuiltIn: Bool)` (new)
+
+A row in the Snippets list. Two columns: trigger + expansion. The
+"Built-in / Personal" separator is a section header, not a row
+property.
+
+#### 11.12.12 `ModeCard(name: String, description: String, isActive: Bool, onSelect: () -> Void)` (new)
+
+A radio-style card for the Style tab. The active mode has a filled
+radio + a thin border accent.
+
+#### 11.12.13 `HeatmapView(data: [Date: Int], bucket: Calendar.Component)` (new, v2) `[recall:med]`
+
+The 7x24 (or 7x12) heatmap for "Active hours" in Insights.
+
+#### 11.12.14 `BarChart(data: [Int], labels: [String])` (new, v2) `[recall:med]`
+
+The 12-week bar chart for "Activity" in Insights.
+
+#### 11.12.15 `MilestoneCard(milestone: String, unlockedAt: Date?)` (new, v3) `[recall:med]`
+
+A celebration card shown in the dashboard when a milestone is
+reached ("First 100 words", "1-week streak", etc.).
+
+### 11.13 Summary: the screenshot wishlist
+
+To upgrade this section from `[recall]` to `[verified]`, share
+screenshots of the following Wispr Flow surfaces. I'll redo each
+sub-section as a verified deep-dive (same template, much higher
+fidelity):
+
+| # | Surface | Why it matters | `[recall]` tier |
+|---|---|---|---|
+| 1 | Recording HUD — active state | The cautionary tale top-center pill | `[recall:high]` |
+| 2 | Recording HUD — edit-before-paste expansion | The killer feature (countdown + tap-to-pause) | `[recall:high]` |
+| 3 | Audio / device picker | The device list + live level + noise suppression | `[recall:med]` |
+| 4 | Settings main page | Section breakdown, theme, display name | `[recall:med]` |
+| 5 | Voice profile setup (onboarding) | The 3-sentence recording flow | `[recall:med]` |
+| 6 | Dictionary editor | The custom-words UI with pronunciation | `[recall:med]` |
+| 7 | Snippets editor | The built-in + personal list | `[recall:high]` |
+| 8 | Style / Modes editor | The 5 built-in modes | `[recall:high]` |
+| 9 | Transforms editor | The 10 built-in AI commands | `[recall:high]` |
+| 10 | Insights page | The 6 sections of analytics | `[recall:med]` |
+| 11 | Scratchpad view | The dictation-without-cursor surface | `[recall:med]` |
+| 12 | Menubar dropdown | The click-menu with submenus | `[recall:high]` |
+| 13 | Onboarding full flow | The 5–7 step flow (welcome → permissions → voice profile → done) | `[recall:high]` |
+
+**Even 3–4 of the most important (1, 2, 6, 7, 8, 12) would let me
+upgrade ~80% of this section to `[verified]`.** Send them when you
+have a chance and I'll iterate.
+
+---
+
+*End of recall-based deep-dive. The original §0–§10 are preserved
+verbatim. §11 is the recall-based analysis of the other Wispr
+surfaces, awaiting screenshot verification per §11.13.*
