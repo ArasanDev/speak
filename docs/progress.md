@@ -8,26 +8,42 @@
 
 ## Current phase
 
-> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-21, loop #25)
-> **The v0 base is CONFIRMED WORKING LIVE** (the user dictated their own instructions
-> *through speak* — see `human-verification.md` "LIVE RUN #1"). We have **pivoted from
-> finishing v0 to building the FULL PRODUCT.**
+> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-21, loop #26)
+> **PHASE 1 (base-hardening) is COMPLETE and GREEN.** All five surgical tasks from
+> `specs/acceleration-plan.md` are merged on `master`, verified by an independent
+> orchestrator gate from a **wiped DerivedData**: build ✅ · **199 tests / 5 XCTSkip /
+> 0 failures** ✅ · lint **0 serious** ✅ · moat **7/7** ✅.
+>   - **H1** `6dbe029` — multi-language seam (locale read at `newSession()`; `en-US` default preserved → behavior-neutral)
+>   - **H2** `4a3ad09` — app-test infra (`TEST_HOST`) + XCTest startup gate + `TranscriptOverlayPanel` guard tests
+>   - **H4** `9bdc20d` — `customVocabulary` seam (`AnalysisContext.contextualStrings[.general]`, SDK-verified via `.swiftinterface`)
+>   - **H5** `f2b1d1f` — `StreamingTextInserting` protocol (define-only; forward seam for streaming paste)
+>   - **H3** `9a3c8c4` — decompose `DictationController` 415→361 → extract `OverlayController` + `WindowPresenter`
+> Plus **`30e99f2`** (paste test-hygiene fix, user-reported — see Done loop #26) and
+> two agent-memory commits (`b675318`, `126b7d5`). Tree clean at `126b7d5`; no agents/worktrees running.
 >
-> **The active execution contract is now `specs/acceleration-plan.md`** — it
-> SUPERSEDES the lowest-numbered-roadmap-task loop for this push. Read it.
+> **Phase-1 exit gate:** code-complete + all automated gates green. The remaining exit
+> item — *re-run the LIVE RUN core loop once* — is **human-gated** (permissions + real
+> dictation). So Phase 1 = **CODE-COMPLETE, live-reverify pending user.**
 >
-> **Two-phase plan:** *Phase 1* = surgical base-hardening (H1–H5: multi-language seam,
-> `TEST_HOST` app-test infra, decompose `DictationController`, `customVocabulary` seam,
-> `StreamingTextInserting` protocol). *Phase 2* = full-product feature waves on the
-> hardened base. **Locked user decisions:** (1) **base-hardening FIRST**, (2)
-> **local-first, pluggable later** (Apple default + only dep; alt engines are optional
-> plugins the arch is ready for), (3) **full-window dashboard** is the Phase-2 UI spine
-> (sidebar IA), (4) **Monaco** is the typographic theme ([[monaco-font-theme]] memory).
+> **Locked user decisions (carry into Phase 2):** (1) base-hardening FIRST ✅ done,
+> (2) **local-first, pluggable later** (Apple default + only dep; alt engines optional),
+> (3) **full-window dashboard** = Phase-2 UI spine (sidebar IA), (4) **Monaco**
+> typographic theme ([[monaco-font-theme]]). Base hard rules (`CLAUDE.md`/`AGENTS.md`) still bind.
 >
-> **NEXT ACTION (not yet started):** launch Phase 1 — fan out `H1`/`H2`/`H4`/`H5` in
-> parallel worktrees (independent), then `H3` after `H2`. Owners + file refs + gates
-> are in `specs/acceleration-plan.md` Phase 1 table. Tree clean at `e60a665`; no
-> agents/worktrees running. Base hard rules (`CLAUDE.md`/`AGENTS.md`) still bind.
+> **NEXT ACTION:** Phase 2 (full-product waves — Wave A dashboard first). This is the
+> large strategic surface; it **wants the user in the loop** — held here deliberately,
+> not blocked. The base is now *designed for the full roadmap*.
+>
+> **Two durable orchestration lessons from loop #26 (METHOD — re-verify live, NOT version-pinned fact):**
+> (1) `Agent(isolation:"worktree")` did **not** produce isolated worktrees for the
+> background teammate agents — all four ran on the shared main checkout. It resolved
+> into a clean linear history only by luck (disjoint files + sequential commits).
+> **Before fanning out file-mutating agents, verify isolation actually took effect
+> (`git worktree list --porcelain`); if it didn't, serialize them.** (2) SourceKit/editor
+> diagnostics go **stale/phantom** after `xcodegen generate` + file moves (false "cannot
+> find type", "extra argument", type-mismatch). **A clean `make build` is the only
+> authority — never the LSP** (this loop alone produced 3 phantom-error episodes, all
+> disproved by a green build). [[agent-first-acceleration-model]]
 
 
 **The entire v0 surface is built — engine, pipeline, AND all UI — and the app is
@@ -94,6 +110,69 @@ mute **chord** (the mute menu toggle ships; the chord is live-gated follow-up).
 > CFRunLoop thread leaks per instance (fine for a single app-lifetime monitor).
 
 ---
+
+## Done (this session — 2026-06-21, loop run #26 — PHASE 1 base-hardening COMPLETE + paste test-hygiene fix)
+
+**Executed all of Phase 1 from `specs/acceleration-plan.md` (autonomous loop).** Five
+surgical, mostly-additive seam-hardening tasks, all merged on `master` and verified by
+an independent orchestrator gate from a wiped DerivedData (**build ✅ · 199 tests / 5
+XCTSkip / 0 failures · lint 0 serious · moat 7/7**):
+
+- **H1 `6dbe029` — multi-language seam** (builder-engine). `SpeakEngine.newSession()`
+  reads `settings.language` at call-time (mirrors the `cleanupEnabled` per-call
+  pattern); dropped the baked-in `locale` stored property + init param. **Behavior-
+  neutral** — `SettingsStore.language` already defaults `en-US`. `DictationController`
+  needed zero change. +`SpeakEngineLanguageTests` (3 tests).
+- **H2 `4a3ad09` — app-test infra `TEST_HOST`** (builder-release). `SpeakTests` now
+  HOSTS the `Speak` app target (`TEST_HOST`/`BUNDLE_LOADER = $(BUILT_PRODUCTS_DIR)/
+  Speak.app/Contents/MacOS/Speak`), so App-shell types are unit-testable. XCTest
+  startup gate in `App/SpeakApp.swift` skips `startMonitoring()` under
+  `XCTestConfigurationFilePath` (no live hotkey/permission machinery in tests).
+  +`TranscriptOverlayPanelTests` (6-test focus-steal guard — guard only, not live proof).
+- **H4 `9bdc20d` — `customVocabulary` seam** (builder-audio-stt). Optional
+  `vocabulary: [String] = []` on `AppleSpeechTranscriber`, wired into
+  `AnalysisContext.contextualStrings[.general]` via `setContext` before `start`.
+  `SettingsStore.customVocabulary` slot. **API SDK-verified** against the
+  `arm64e-apple-macos.swiftinterface` (the docs MCP returned nothing — the swiftinterface
+  was the source of truth); empty-default guard keeps it behavior-neutral. Whether the
+  model biases on hints is `[inferred]` (needs a live corpus). +7 tests.
+- **H5 `f2b1d1f` — `StreamingTextInserting` protocol** (builder-input). Define-only
+  (`insertChunk(_:) async throws` / `finalize()`) beside `TextInserting` — the forward
+  seam for word-by-word streaming paste. No conformer.
+- **H3 `9a3c8c4` — decompose `DictationController`** (builder-app; backlog #6, now DONE).
+  415→**361** lines (lint file_length warning cleared). Extracted `OverlayController`
+  (overlay model+panel+partials lifecycle) + `WindowPresenter` (History/Onboarding
+  windows). Behavior identical; public surface unchanged. Now unit-testable via H2's
+  TEST_HOST — +`OverlayControllerTests` (8) + `WindowPresenterTests` (4).
+
+**Paste test-hygiene fix — `30e99f2` (USER-REPORTED, mid-loop).** While running
+`make test`, the user saw a fixture string (`SPEAK_PHASE_D_AX_TEST_<uuid>`) **paste into
+their focused terminal**. Root cause: the two `PasteboardWriterTests` exercised the REAL
+`insert()` path — real `NSPasteboard.general` write + real 4-event Cmd+V to
+`.cghidEventTap`. With AX trusted, that Cmd+V landed in whatever window had focus (the
+terminal running the suite) and pasted the clipboard; it also clobbered the user's
+clipboard every run. **Fix:** two injectable `@Sendable` seams on `PasteboardWriter` —
+`writeClipboard` + `postEvent` — with production defaults byte-for-byte identical to the
+prior behavior; the tests inject a `PasteSideEffectRecorder` and assert against it (AX-
+trusted → 4 events to the recorder, not the tap; AX-untrusted → clipboard floor via
+recorder then throw, 0 events). Confirmed `grep`-clean of real `.post(tap`/
+`NSPasteboard.general` in tests + a re-run produced **no paste into the user's terminal**.
+This was the ONLY non-hermetic test (H2's startup gate already blocks the live hotkey tap).
+
+**Orchestration incident + recovery (durable lesson, see handoff banner).**
+`Agent(isolation:"worktree")` did NOT isolate — all four parallel agents wrote the shared
+main checkout. Caught a live race mid-flight (intermingled uncommitted edits + a non-
+compiling `SpeakEngine.swift`), halted writers via SendMessage, and serialized. It
+happened to land a clean linear history (disjoint files), which I verified by
+`git worktree list --porcelain` + my own clean gate rather than trusting agent reports.
+H3 then ran as plain serial sole-writer. Also: SourceKit threw 3 separate phantom-error
+episodes (false "cannot find type"/"extra argument"/type-mismatch) after
+`xcodegen generate` + file moves — each disproved by a clean `make build`. **The clean
+build is the only authority; verify worktree isolation before fan-out.**
+
+**Held at the Phase-1 exit gate (deliberate):** code-complete + automated gates green;
+the *re-run LIVE RUN core loop* exit item is human-gated. Did NOT roll into Phase 2 —
+that large strategic surface (Wave A dashboard etc.) wants the user in the loop.
 
 ## Done (this session — 2026-06-21, loop run #25 — LIVE base verified + full-product acceleration plan)
 
