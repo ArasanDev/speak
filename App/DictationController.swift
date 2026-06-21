@@ -292,11 +292,13 @@ final class DictationController: ObservableObject {
     }
 
     /// The current hotkey rendered as keycap labels for the dashboard.
-    /// Double-tap shows the key twice (["Fn", "Fn"]); hold shows it once (["Fn"]).
-    /// v0 binds the Fn key only, so the label is fixed; the count reflects the trigger.
+    /// Double-tap shows the key symbol twice; hold shows it once.
+    /// The symbol is derived from `HotkeyBinding.keySymbol` so it updates
+    /// automatically when the user changes the binding (e.g., Fn → Right-Command).
     private func currentHotkeyCombo() -> [String] {
-        let keyLabel = "Fn"  // [decision] v0 binds kVK_Function only (HotkeyBinding.defaultBinding)
-        switch monitor.binding.trigger {
+        let currentBinding = monitor.binding
+        let keyLabel = currentBinding.keySymbol  // "Fn", "⌘", etc.
+        switch currentBinding.trigger {
         case .doubleTap: return [keyLabel, keyLabel]
         case .hold:      return [keyLabel]
         }

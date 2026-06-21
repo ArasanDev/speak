@@ -12,16 +12,20 @@
 //        d. Single slow tap → no event
 //        e. reset() clears state
 //     3. UserDefaultsBindingStore save/load round-trip
+//     4. modifierMask(forKeyCode:) — binding-aware flag lookup (W1.1 landmine guard)
+//     5. FnDebouncer — 40 ms Fn-burst filter (VoiceInk pattern)
+//     6. HotkeyBinding.displayString + keySymbol — shared display helpers (W1.1)
 //
 // NOT tested here (deferred — needs human verification with live OS):
 //   - CGEventTap fires while another app has focus
-//   - Fn keypress is detected via flagsChanged + maskSecondaryFn
+//   - Right-Command / Fn keypress detected on live OS via flagsChanged + correct mask
 //   - Accessibility + Input Monitoring permission prompts on first run
 //   - False-trigger rate < 1/30 min in Notes (benchmark.md §7 F_rate, P13)
 //
-// The Fn-event model (flagsChanged + maskSecondaryFn) is reasoned in
-// HotkeyMonitor.swift [inferred]; runtime confirmation is deferred to P5
-// human verification. Green tests here prove the pure detector logic only.
+// The event model (flagsChanged, modifier-bit, keyCode disambiguation) is
+// [inferred] by symmetry with the verified Fn model; runtime confirmation
+// is deferred to the W1.3 human gate. Green tests here prove the pure
+// detector + mapping logic only.
 
 import XCTest
 @testable import SpeakCore
@@ -106,9 +110,11 @@ final class HotkeyBindingCodableTests: XCTestCase {
         XCTAssertEqual(decoded.trigger, .hold)
     }
 
-    func testDefaultBindingKeyCodeIsKVKFunction() {
-        // kVK_Function = 0x3F = 63 [verified: Carbon/HIToolbox, 2026-06-20]
-        XCTAssertEqual(HotkeyBinding.defaultBinding.keyCode, 63)
+    func testDefaultBindingKeyCodeIsKVKRightCommand() {
+        // W1.1: default changed from kVK_Function (63) to kVK_RightCommand (54)
+        // [decision: next-iteration-plan.md §2, 2026-06-21]
+        // kVK_RightCommand = 0x36 = 54 [verified: swiftc + macOS 26 SDK, 2026-06-21]
+        XCTAssertEqual(HotkeyBinding.defaultBinding.keyCode, 54)
     }
 
     func testDefaultBindingWindowIs400ms() {
@@ -118,6 +124,11 @@ final class HotkeyBindingCodableTests: XCTestCase {
 
     func testDefaultBindingTriggerIsDoubleTap() {
         XCTAssertEqual(HotkeyBinding.defaultBinding.trigger, .doubleTap)
+    }
+
+    func testFnBindingKeyCodeIsKVKFunction() {
+        // kVK_Function = 0x3F = 63 [verified: Carbon/HIToolbox]
+        XCTAssertEqual(HotkeyBinding.fnBinding.keyCode, 63)
     }
 }
 
@@ -331,4 +342,140 @@ final class InMemoryBindingStore: BindingStoring, @unchecked Sendable {
 
     func load() -> HotkeyBinding? { stored }
     func save(_ binding: HotkeyBinding) { stored = binding }
+}
+
+// MARK: - modifierMask(forKeyCode:) Tests (W1.1 landmine guard)
+
+/// These tests guard the binding-aware flag lookup introduced in W1.1.
+/// The landmine: if the monitor used .maskSecondaryFn for a Right-Command binding,
+/// isBoundKeyDown would always be false and double-tap would never fire.
+final class ModifierMaskTests: XCTestCase {
+
+    func testFnKeyCodeReturnsMaskSecondaryFn() {
+        // kVK_Function = 63 → .maskSecondaryFn [verified: SDK, 2026-06-21]
+        let mask = modifierMask(forKeyCode: 63)
+        XCTAssertEqual(mask, .maskSecondaryFn,
+            "Fn (keyCode 63) must map to .maskSecondaryFn — wrong mask means Fn events never fire")
+    }
+
+    func testRightCommandKeyCodeReturnsMaskCommand() {
+        // kVK_RightCommand = 54 → .maskCommand [verified: SDK, 2026-06-21]
+        let mask = modifierMask(forKeyCode: 54)
+        XCTAssertEqual(mask, .maskCommand,
+            "Right-Command (keyCode 54) must map to .maskCommand — wrong mask means ⌘⌘ never fires")
+    }
+
+    func testLeftCommandKeyCodeReturnsMaskCommand() {
+        // kVK_Command = 55 [verified: SDK, 2026-06-21]
+        let mask = modifierMask(forKeyCode: 55)
+        XCTAssertEqual(mask, .maskCommand)
+    }
+
+    func testRightCommandMaskDiffersFromFnMask() {
+        // Core correctness: the two keys must NOT share a mask, otherwise
+        // the binding switch would produce identical down-edge behaviour.
+        let fnMask = modifierMask(forKeyCode: 63)
+        let rcmdMask = modifierMask(forKeyCode: 54)
+        XCTAssertNotEqual(fnMask, rcmdMask,
+            "Fn and Right-Command must map to different CGEventFlags — otherwise binding switch is a no-op")
+    }
+}
+
+// MARK: - FnDebouncer Tests (W1.1)
+
+/// Tests for the 40 ms Fn-burst debouncer (VoiceInk pattern).
+/// All timestamps are injected — no wall-clock dependency.
+final class FnDebouncerTests: XCTestCase {
+
+    func testFirstEventAlwaysPasses() {
+        var debouncer = FnDebouncer()
+        XCTAssertTrue(debouncer.shouldProcess(now: 0.0), "First event must always pass through")
+    }
+
+    func testEventWithinWindowIsDropped() {
+        var debouncer = FnDebouncer()
+        _ = debouncer.shouldProcess(now: 0.0)         // pass
+        let result = debouncer.shouldProcess(now: 0.02)  // 20 ms < 40 ms window → drop
+        XCTAssertFalse(result, "Event within 40 ms debounce window must be dropped")
+    }
+
+    func testEventExactlyAtWindowBoundaryPasses() {
+        // The debounce condition is `(now - last) < debounceWindow`:
+        //   strict less-than → at exactly debounceWindow the event passes through.
+        // This matches VoiceInk semantics: "drop events that arrive WITHIN the window".
+        var debouncer = FnDebouncer()
+        _ = debouncer.shouldProcess(now: 0.0)
+        let result = debouncer.shouldProcess(now: FnDebouncer.debounceWindow)
+        XCTAssertTrue(result, "Event at exactly the 40 ms boundary must pass (condition is strict <)")
+    }
+
+    func testEventAfterWindowPasses() {
+        var debouncer = FnDebouncer()
+        _ = debouncer.shouldProcess(now: 0.0)
+        let result = debouncer.shouldProcess(now: 0.05)  // 50 ms > 40 ms → pass
+        XCTAssertTrue(result, "Event after the 40 ms window must pass through")
+    }
+
+    func testDebounceWindowIs40ms() {
+        // Constant trace: VoiceInk 40 ms pattern [decision: benchmark.md §7]
+        XCTAssertEqual(FnDebouncer.debounceWindow, 0.04, accuracy: 1e-9,
+            "Debounce window must be 40 ms — VoiceInk pattern, benchmark.md §7 [decision]")
+    }
+
+    func testResetAllowsImmediateProcessing() {
+        var debouncer = FnDebouncer()
+        _ = debouncer.shouldProcess(now: 0.0)      // pass
+        _ = debouncer.shouldProcess(now: 0.01)     // drop (within window)
+        debouncer.reset()
+        XCTAssertTrue(debouncer.shouldProcess(now: 0.01),
+            "After reset, even an event at t=0.01 should pass (fresh state)")
+    }
+
+    func testSequentialEventsOutsideWindowAllPass() {
+        var debouncer = FnDebouncer()
+        let times: [TimeInterval] = [0.0, 0.05, 0.10, 0.15]
+        for time in times {
+            XCTAssertTrue(debouncer.shouldProcess(now: time),
+                "Event at t=\(time) should pass — all are >40 ms apart")
+        }
+    }
+}
+
+// MARK: - HotkeyBinding Display Helpers Tests (W1.1)
+
+/// Tests for `HotkeyBinding.displayString` and `keySymbol`.
+final class HotkeyBindingDisplayTests: XCTestCase {
+
+    func testDefaultBindingDisplayString() {
+        // Default = Right-Command double-tap
+        XCTAssertEqual(HotkeyBinding.defaultBinding.displayString, "⌘⌘ Right Command")
+    }
+
+    func testFnBindingDisplayString() {
+        XCTAssertEqual(HotkeyBinding.fnBinding.displayString, "Fn ×2")
+    }
+
+    func testRightCommandHoldDisplayString() {
+        let binding = HotkeyBinding.defaultBinding.with(trigger: .hold)
+        XCTAssertEqual(binding.displayString, "⌘ Right Command (hold)")
+    }
+
+    func testFnHoldDisplayString() {
+        let binding = HotkeyBinding.fnBinding.with(trigger: .hold)
+        XCTAssertEqual(binding.displayString, "Fn (hold)")
+    }
+
+    func testDefaultBindingKeySymbolIsCommandSign() {
+        XCTAssertEqual(HotkeyBinding.defaultBinding.keySymbol, "⌘")
+    }
+
+    func testFnBindingKeySymbolIsFn() {
+        XCTAssertEqual(HotkeyBinding.fnBinding.keySymbol, "Fn")
+    }
+
+    func testDoubleTapKeySymbolRepeatsInDisplayString() {
+        // "⌘⌘ Right Command" — symbol appears twice for double-tap
+        let display = HotkeyBinding.defaultBinding.displayString
+        XCTAssertTrue(display.hasPrefix("⌘⌘"), "Double-tap Right-Command display must start with ⌘⌘")
+    }
 }

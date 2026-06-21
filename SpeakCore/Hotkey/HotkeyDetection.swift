@@ -3,11 +3,95 @@
 // Pure, testable hotkey detection primitives — no CGEventTap dependency.
 // Moved from HotkeyMonitor.swift.
 //
-//   holdEdge()          — free function for hold-mode (push-to-talk) edge detection
-//   DoubleTapDetector   — pure value-type double-tap state machine
-//   TapRestartRateLimiter — rate limiter for CGEventTap re-enable events
+//   modifierMask(forKeyCode:) — maps a bound key's Carbon keyCode to the
+//                               CGEventFlags bit that tracks its down state
+//   FnDebouncer              — 40 ms debounce for Fn flagsChanged events
+//                              (VoiceInk pattern; filters OS-internal Fn bursts)
+//   holdEdge()               — free function for hold-mode (push-to-talk) edge detection
+//   DoubleTapDetector        — pure value-type double-tap state machine
+//   TapRestartRateLimiter    — rate limiter for CGEventTap re-enable events
 
+import CoreGraphics
+import Carbon.HIToolbox
 import Foundation
+
+// MARK: - Modifier mask helper
+
+/// Returns the CGEventFlags bit that is SET when the key with `keyCode` is
+/// held down, as observed on a `CGEventType.flagsChanged` event.
+///
+/// Modifier keys never produce keyDown/keyUp — they arrive exclusively as
+/// `flagsChanged` events. The *which-key* question is answered by the keyCode
+/// field; the *is-key-down* question is answered by a specific bit in
+/// `CGEventFlags`. This function centralises that mapping so callers need not
+/// hard-code flag values.
+///
+/// Mapping (verified against macOS 26 SDK via `swiftc -typecheck`, 2026-06-21):
+///   kVK_Function (0x3F = 63)  → `.maskSecondaryFn`  (rawValue 8388608)
+///   kVK_RightCommand (0x36 = 54) → `.maskCommand`   (rawValue 1048576)
+///   kVK_Command (0x37 = 55) [left] → `.maskCommand` (rawValue 1048576)
+///   Any other keyCode          → `.maskCommand` (safe fallback; modifier is
+///                                unusual for a hotkey binding, so "down when
+///                                maskCommand set" is the least-surprising default)
+///
+/// Left vs Right Command both set `.maskCommand`; they are disambiguated by
+/// the keyCode field on the same flagsChanged event — not by a separate flag.
+/// [verified: kVK_RightCommand = 54, kVK_Command = 55, swiftc + SDK, 2026-06-21]
+public func modifierMask(forKeyCode keyCode: Int) -> CGEventFlags {
+    switch keyCode {
+    case Int(kVK_Function):     return .maskSecondaryFn  // 0x3F = 63 [verified]
+    case Int(kVK_RightCommand): return .maskCommand      // 0x36 = 54 [verified]
+    case Int(kVK_Command):      return .maskCommand      // 0x37 = 55 [verified] (left ⌘)
+    default:                    return .maskCommand      // safe fallback for future bindings
+    }
+}
+
+// MARK: - Fn debouncer
+
+/// A pure, testable debouncer for Fn `flagsChanged` events.
+///
+/// macOS emits a burst of spurious `flagsChanged` events when the Fn/Globe key
+/// is pressed for its own dictation feature — these arrive within ~10 ms of
+/// each other. VoiceInk (github.com/Beingpax/VoiceInk) filters them with a
+/// 40 ms window. We apply the same strategy.
+///
+/// **Applied on the Fn path only** (keyCode == `kVK_Function`). Right-Command
+/// does not trigger the macOS dictation feature and therefore does not produce
+/// the spurious burst; the debouncer is a no-op when the binding is
+/// Right-Command.
+///
+/// A debounced event is **dropped**; `lastFnDown` is NOT updated for dropped
+/// events, so a dropped press does not advance edge state (no stale-state bug).
+///
+/// Source: VoiceInk 40 ms debounce [decision: VoiceInk pattern, `benchmark.md §7`].
+public struct FnDebouncer: Sendable {
+    /// The debounce window in seconds.
+    /// 40 ms — VoiceInk pattern [decision: benchmark.md §7].
+    public static let debounceWindow: TimeInterval = 0.04  // 40 ms [decision: VoiceInk / benchmark.md §7]
+
+    /// Timestamp of the last event that was PASSED through (not debounced).
+    private var lastPassTimestamp: TimeInterval?
+
+    public init() {}
+
+    /// Record an event at `now` (seconds, monotonic).
+    /// Returns `true` if the event should be processed, `false` if it should be dropped.
+    ///
+    /// Only the first event in a burst is passed through; subsequent events
+    /// within `debounceWindow` seconds of the last accepted event are dropped.
+    public mutating func shouldProcess(now: TimeInterval) -> Bool {
+        if let last = lastPassTimestamp, (now - last) < FnDebouncer.debounceWindow {
+            return false  // within window of last accepted event — drop
+        }
+        lastPassTimestamp = now
+        return true
+    }
+
+    /// Reset the debouncer (e.g. on tap re-arm).
+    public mutating func reset() {
+        lastPassTimestamp = nil
+    }
+}
 
 // MARK: - Hold-mode edge detection
 

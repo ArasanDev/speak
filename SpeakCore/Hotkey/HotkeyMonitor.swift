@@ -63,6 +63,7 @@ import CoreFoundation
 import CoreGraphics
 import ApplicationServices
 import AppKit
+import Carbon.HIToolbox
 import os
 
 // MARK: - HotkeyMonitor
@@ -167,8 +168,19 @@ public final class HotkeyMonitor: @unchecked Sendable {
     /// callback thread (same as `detector`).
     private var commandChord = CommandChordDetector()
 
-    /// Edge tracking for Fn up/down. Mutated only in the tap callback thread.
+    /// Edge tracking for Fn up/down (used for the Fn+Ctrl chord detector only).
+    /// Mutated only in the tap callback thread.
     private var lastFnDown: Bool = false
+
+    /// Edge tracking for the *currently bound key* (key distinguished by `binding.keyCode`).
+    /// Mutated only in the tap callback thread.
+    /// Kept separate from `lastFnDown` so the Fn+Ctrl chord path is unaffected
+    /// when the bound key is Right-Command (keyCode 54).
+    private var lastBoundKeyDown: Bool = false
+
+    /// Debouncer for Fn `flagsChanged` bursts — active only when binding.keyCode == kVK_Function.
+    /// VoiceInk 40 ms pattern [decision: benchmark.md §7].
+    private var fnDebouncer = FnDebouncer()
 
     private let store: any BindingStoring
 
@@ -338,6 +350,8 @@ public final class HotkeyMonitor: @unchecked Sendable {
         detector.reset()
         commandChord.reset()
         lastFnDown = false
+        lastBoundKeyDown = false
+        fnDebouncer.reset()
 
         let mask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
@@ -416,17 +430,21 @@ public final class HotkeyMonitor: @unchecked Sendable {
 
     /// Handle an incoming CGEvent on the tap's run loop thread.
     ///
-    /// Both trigger modes read `lastFnDown` for edge detection and update it
-    /// before dispatching — this keeps edge state correct regardless of mode.
+    /// Both trigger modes read `lastBoundKeyDown` for edge detection — derived from
+    /// the binding's keyCode via `modifierMask(forKeyCode:)`. This is separate from
+    /// `lastFnDown`, which tracks the physical Fn key and is used solely by the
+    /// Fn+Ctrl chord detector. Keeping them distinct means the chord path is
+    /// unaffected when the binding is Right-Command (keyCode 54).
     ///
     /// - `.doubleTap`: acts only on the press leading edge (false→true) and
-    ///   delegates to `DoubleTapDetector`.
-    /// - `.hold`: acts on BOTH edges via `holdEdge(isFnDown:wasDown:)` —
+    ///   delegates to `DoubleTapDetector`. On the Fn path, `FnDebouncer` is applied
+    ///   first (VoiceInk 40 ms pattern) to filter OS dictation spurious events.
+    /// - `.hold`: acts on BOTH edges via `holdEdge(isDown:wasDown:)` —
     ///   press → startCapture, release → stopCapture. No timestamp or window needed.
     ///
     /// If the tap is torn down mid-hold (Phase A watchdog, rate-limiter, or wake
-    /// re-arm), `buildTap()` resets `lastFnDown = false` (line ~519) so the next
-    /// press after re-arm is treated as a fresh start — hold cannot stick "on".
+    /// re-arm), `buildTap()` resets `lastBoundKeyDown = false` so the next press
+    /// after re-arm is treated as a fresh start — hold cannot stick "on".
     private func handle(proxy: CGEventTapProxy, type eventType: CGEventType, event: CGEvent) {
         if eventType == .tapDisabledByTimeout || eventType == .tapDisabledByUserInput {
             handleTapDisabled()
@@ -435,23 +453,27 @@ public final class HotkeyMonitor: @unchecked Sendable {
 
         guard eventType == .flagsChanged else { return }
 
-        // Read modifier state from the event flags. flags always reflect the CURRENT
-        // modifier state regardless of which key changed, so this is read BEFORE the
-        // keyCode guard so the chord sees Ctrl-key events too (keyCode != Fn).
+        // Read modifier state from the event flags. flags ALWAYS reflect the CURRENT
+        // state of ALL modifiers, regardless of which specific key changed. We read
+        // before any keyCode guard so the chord detector sees Ctrl-key events too.
         // [verified: CGEventFlags.maskSecondaryFn rawValue = 8388608, SDK 2026-06-20]
         let flags = event.flags
-        let isFnDown = flags.contains(.maskSecondaryFn)
+        let isFnDown = flags.contains(.maskSecondaryFn)   // for Fn+Ctrl chord only
         let isCtrlDown = flags.contains(.maskControl)
 
         // Command Mode chord (Wave D): processed on EVERY flagsChanged event so a Ctrl
-        // press while Fn is held is seen. It only ever activates when Ctrl is held — when
-        // Ctrl is up the detector stays inactive and the normal Fn path below is byte-for-
-        // byte unchanged. [deferred — human verification: the live chord gesture.]
+        // press while Fn is held is seen. Only activates when Ctrl is held — Ctrl is up
+        // → detector stays inactive and the normal binding path below is unaffected.
+        // [deferred — human verification: the live chord gesture.]
         if let chordEvent = commandChord.update(isFnDown: isFnDown, isCtrlDown: isCtrlDown) {
             SpeakLog.hotkey.info("CommandChord: \(String(describing: chordEvent), privacy: .public)")
             commandChordContinuation.yield(chordEvent)
         }
         let chordActive = commandChord.isActive
+
+        // Update lastFnDown HERE (after chord update, before binding guard) so the
+        // chord detector gets accurate Fn state even when the bound key is not Fn.
+        lastFnDown = isFnDown
 
         // Snapshot the binding once (lock-guarded getter) so a concurrent
         // updateBinding() on the main thread can't tear this multi-field read.
@@ -459,24 +481,43 @@ public final class HotkeyMonitor: @unchecked Sendable {
         let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
         guard keyCode == currentBinding.keyCode else { return }
 
-        let wasDown = lastFnDown
-        lastFnDown = isFnDown   // update BEFORE branching so both modes see current state
+        // Determine whether the bound key is down using its specific modifier flag.
+        // `modifierMask(forKeyCode:)` maps keyCode → CGEventFlags bit.
+        // For Right-Command (54): flag = .maskCommand; for Fn (63): flag = .maskSecondaryFn.
+        // This is the fix for the landmine: using .maskSecondaryFn for a Command binding
+        // would always be false, causing the down-edge guard to never fire.
+        let boundMask = modifierMask(forKeyCode: currentBinding.keyCode)
+        let isBoundKeyDown = flags.contains(boundMask)
 
-        // Suppress the normal Fn dictation trigger while the command chord (Ctrl+Fn) is
-        // held, so the chord doesn't also start a dictation. No effect when Ctrl is up
-        // (chordActive == false) — normal dictation is unchanged.
+        // Fn-path debounce (VoiceInk 40 ms pattern [decision: benchmark.md §7]).
+        // macOS emits a burst of spurious flagsChanged events for the Fn key when its
+        // own dictation feature fires. Debounce only on the Fn path — Right-Command
+        // does not trigger macOS dictation and does not produce the burst.
+        if currentBinding.keyCode == Int(kVK_Function) {
+            let nowSec = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000.0
+            guard fnDebouncer.shouldProcess(now: nowSec) else {
+                SpeakLog.hotkey.debug("HotkeyMonitor: Fn event debounced (within 40 ms window).")
+                return  // drop the event; do NOT update lastBoundKeyDown
+            }
+        }
+
+        let wasDown = lastBoundKeyDown
+        lastBoundKeyDown = isBoundKeyDown  // update AFTER debounce so dropped events don't advance state
+
+        // Suppress the hotkey trigger while the Fn+Ctrl chord is active, so a
+        // Ctrl+Fn chord doesn't also start a dictation session.
         guard !chordActive else { return }
 
         switch currentBinding.trigger {
 
         case .doubleTap:
             // Act only on the press leading edge — release edge is ignored.
-            guard isFnDown && !wasDown else { return }
+            guard isBoundKeyDown && !wasDown else { return }
 
             // Timestamp: use DispatchTime.uptimeNanoseconds (nanoseconds, monotonic)
             // converted to seconds. Avoids CGEvent.timestamp unit ambiguity (mach
             // absolute time is not nanoseconds on Apple Silicon without conversion).
-            // HID delivery latency is sub-ms; "now" ≈ press time for a 0.4s window.
+            // HID delivery latency is sub-ms; "now" ≈ press time for a 0.4 s window.
             let timestampSec = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000.0
             let window = currentBinding.doubleTapWindow
             if let hotkeyEvent = detector.register(tapAt: timestampSec, window: window) {
@@ -487,7 +528,7 @@ public final class HotkeyMonitor: @unchecked Sendable {
         case .hold:
             // Act on BOTH edges: press → startCapture, release → stopCapture.
             // No timestamp or window needed — the gesture is defined by key state.
-            if let hotkeyEvent = holdEdge(isFnDown: isFnDown, wasDown: wasDown) {
+            if let hotkeyEvent = holdEdge(isFnDown: isBoundKeyDown, wasDown: wasDown) {
                 SpeakLog.hotkey.info("HotkeyEvent (hold): \(String(describing: hotkeyEvent), privacy: .public)")
                 continuation.yield(hotkeyEvent)
             }
