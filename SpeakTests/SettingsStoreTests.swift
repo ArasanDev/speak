@@ -302,6 +302,62 @@ final class SettingsStoreTests: XCTestCase {
             "Clearing customVocabulary to [] must persist and reload as [].")
     }
 
+    // MARK: - effectiveCleanupLevel (W3.1 collapse)
+
+    /// Legacy back-compat: a user who toggled `cleanupEnabled=false` under the old UI
+    /// has `enabled=false, level=medium`. The effective picker must show `.none` (not "Medium").
+    func testEffectiveCleanupLevelReturnsNoneWhenCleanupDisabled() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.cleanupEnabled = false
+        store.cleanupLevel = .medium  // legacy state: off toggle but level still stored as medium
+        XCTAssertEqual(store.effectiveCleanupLevel, .none,
+            "effectiveCleanupLevel must return .none when cleanupEnabled==false, regardless of stored level.")
+    }
+
+    func testEffectiveCleanupLevelReturnsMediumWhenEnabled() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.cleanupEnabled = true
+        store.cleanupLevel = .medium
+        XCTAssertEqual(store.effectiveCleanupLevel, .medium,
+            "effectiveCleanupLevel must return the stored level when cleanupEnabled==true.")
+    }
+
+    func testEffectiveCleanupLevelSetterNoneDisablesCleanup() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.cleanupEnabled = true
+        store.cleanupLevel = .high
+        store.effectiveCleanupLevel = .none  // user picks "None"
+        XCTAssertFalse(store.cleanupEnabled,
+            "Setting effectiveCleanupLevel to .none must set cleanupEnabled=false.")
+        XCTAssertEqual(store.cleanupLevel, .none,
+            "Setting effectiveCleanupLevel to .none must also set cleanupLevel=.none.")
+    }
+
+    func testEffectiveCleanupLevelSetterNonNoneEnablesCleanup() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.cleanupEnabled = false
+        store.effectiveCleanupLevel = .light  // user picks a level from the off state
+        XCTAssertTrue(store.cleanupEnabled,
+            "Setting effectiveCleanupLevel to a non-none level must set cleanupEnabled=true.")
+        XCTAssertEqual(store.cleanupLevel, .light,
+            "Setting effectiveCleanupLevel to .light must set cleanupLevel=.light.")
+    }
+
+    func testEffectiveCleanupLevelRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        for level in CleanupLevel.allCases {
+            store.effectiveCleanupLevel = level
+            let reloaded = freshStore(on: defaults)
+            XCTAssertEqual(reloaded.effectiveCleanupLevel, level,
+                "effectiveCleanupLevel=.\(level) must survive a SettingsStore reload.")
+        }
+    }
+
     // MARK: - Multiple properties persist independently
 
     func testMultiplePropertiesPersistIndependently() throws {

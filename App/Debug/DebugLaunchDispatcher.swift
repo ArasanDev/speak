@@ -177,7 +177,7 @@ final class DebugLaunchDispatcher {
         // [decision: NSWindow + NSHostingView mirrors OnboardingWindowController
         //  and HistoryWindowController; avoids relying on NSApp.sendAction
         //  Selector("showSettingsWindow:") which is runtime-fragile on macOS 26]
-        let view = SettingsView(store: controller.settingsStore)
+        let view = SettingsView(controller: controller)
         let hosting = NSHostingView(rootView: view)
         let win = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 460, height: 400),

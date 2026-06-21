@@ -1,169 +1,652 @@
 // App/Settings/SettingsView.swift
 //
-// The Settings window content for `speak`.
+// The Settings window — a TabView-based multi-section preferences UI.
 //
-// DESIGN:
-//   - One `Form` with labelled sections matching the settings taxonomy.
-//   - Binds directly to `SettingsStore` (ObservableObject), so every toggle/
-//     picker write is immediately persisted to UserDefaults.
-//   - Hotkey rebinding shows the current binding label + a "Record…" button.
-//     Full record-flow UX is P10 polish; the current binding is displayed
-//     read-only here (the full HotkeyMonitor.updateBinding path is wired
-//     but the key-capture UI is [deferred — human verification]).
-//   - STT and Ollama cleanup engine pickers show v0.1/v1 cases as disabled
-//     labels so the user can see what is coming without being able to select
-//     unbuilt engines.
+// ARCHITECTURE (W3.1):
+//   Replaced the flat 4-section Form with a 7-tab TabView following the macOS
+//   `Settings` scene idiom (`tabItem` + SF Symbol). Sections:
+//     General · Shortcuts · Transcription · AI Cleanup · Dictionary · Privacy · About
 //
-// HONESTY BOUNDARY:
-//   Whether this window opens correctly from the menubar and all controls
-//   persist live is [deferred — human verification]. The SettingsStore
-//   persistence layer is unit-tested independently.
+//   Progressive disclosure: each tab puts the common, day-to-day control up top;
+//   advanced/future options (alt engines) are clearly secondary below a divider.
+//
+// CLEANUP-ENABLED COLLAPSE (W3.1):
+//   The legacy `cleanupEnabled` boolean and the 4-level `cleanupLevel` picker were
+//   two overlapping "no cleanup" controls. They are now unified:
+//     - The AI Cleanup tab shows ONE picker (`effectiveCleanupLevel`, computed on
+//       `SettingsStore`) instead of a Toggle + Picker pair.
+//     - `.none` = off (equivalent to the old toggle being false).
+//     - Style/engine pickers are disabled when level == .none (progressive disclosure).
+//   `SettingsStore.cleanupEnabled` and `.cleanupLevel` remain the stored source of
+//   truth so `SpeakEngine` and the dashboard StylePane continue to work unchanged.
+//   The `effectiveCleanupLevel` setter keeps both in sync. [decision: W3.1]
+//
+// EXTENSION POINTS (do NOT fill in — later waves own these):
+//   - Shortcuts / hotkey recorder: W3.2 (builder-input + builder-app)
+//   - Pasting / restore-clipboard: W3.4 (builder-input)
+//   - Snippets section: future wave
 //
 // THREADING:
-//   - `@MainActor` is implicit for SwiftUI `View` bodies.
-//   - `SettingsStore` is `@unchecked Sendable`; its properties are read
-//     synchronously on main — no cross-actor hop needed.
+//   All SwiftUI view bodies are implicitly @MainActor.
+//   SettingsStore is @unchecked Sendable and safe to read on main.
+//
+// DESIGN LANGUAGE:
+//   Monaco tokens for content/data text (SpeakTheme). System font for tab chrome,
+//   labels, and picker text (per SpeakTheme header contract). SpeakSpacing grid
+//   for all padding/spacing — no magic numbers.
 
 import SwiftUI
 import SpeakCore
 
-// MARK: - SettingsView
+// MARK: - SettingsView (root)
 
 struct SettingsView: View {
+
+    // The controller is needed for the Shortcuts tab's read-only hotkey display.
+    // `store` is extracted at init and observed separately to avoid propagating the
+    // whole controller as an observed dependency through all child tabs.
+    @ObservedObject var store: SettingsStore
+    let hotkeyDisplayString: String
+
+    // [decision: W3.1 — default tab is General; user re-selects across launches]
+    @State private var selectedTab: SettingsTab = .general
+
+    init(controller: DictationController) {
+        self.store = controller.settingsStore
+        self.hotkeyDisplayString = controller.currentHotkeyDisplayString
+    }
+
+    var body: some View {
+        TabView(selection: $selectedTab) {
+
+            // 1 — General
+            GeneralSettingsTab(store: store)
+                .tabItem { Label("General",  systemImage: "gearshape") }
+                .tag(SettingsTab.general)
+
+            // 2 — Shortcuts (hotkey — read-only in W3.1; recorder is W3.2)
+            ShortcutsSettingsTab(store: store, hotkeyDisplayString: hotkeyDisplayString)
+                .tabItem { Label("Shortcuts", systemImage: "keyboard") }
+                .tag(SettingsTab.shortcuts)
+
+            // 3 — Transcription
+            TranscriptionSettingsTab(store: store)
+                .tabItem { Label("Transcription", systemImage: "mic") }
+                .tag(SettingsTab.transcription)
+
+            // 4 — AI Cleanup (effectiveCleanupLevel collapse lives here)
+            AICleanupSettingsTab(store: store)
+                .tabItem { Label("AI Cleanup",   systemImage: "wand.and.stars") }
+                .tag(SettingsTab.aiCleanup)
+
+            // 5 — Dictionary (custom vocabulary — matches DictionaryPaneView binding)
+            DictionarySettingsTab(store: store)
+                .tabItem { Label("Dictionary",   systemImage: "character.book.closed") }
+                .tag(SettingsTab.dictionary)
+
+            // 6 — Privacy (moat surface)
+            PrivacySettingsTab()
+                .tabItem { Label("Privacy",      systemImage: "lock.shield") }
+                .tag(SettingsTab.privacy)
+
+            // 7 — About
+            AboutSettingsTab()
+                .tabItem { Label("About",        systemImage: "info.circle") }
+                .tag(SettingsTab.about)
+        }
+        // [decision: W3.1 — 560pt wide suits a 7-tab layout; 480pt min-height
+        //  fits the Privacy section with its badge + four claims. SpeakSpacing.xl = 32,
+        //  so 560 = 32 * ~17.5; rounded to the nearest clean value.]
+        .frame(minWidth: 560, minHeight: 480)
+    }
+}
+
+// MARK: - Tab identifier
+
+private enum SettingsTab: Hashable {
+    case general, shortcuts, transcription, aiCleanup, dictionary, privacy, about
+}
+
+// MARK: - 1. General
+
+/// General: paste mode + future general controls.
+/// `pasteMode` was previously in "Text Insertion" — folded here per W3.1 scope note.
+private struct GeneralSettingsTab: View {
     @ObservedObject var store: SettingsStore
 
     var body: some View {
         Form {
-            activationSection
-            transcriptionSection
-            cleanupSection
-            pasteSection
+            Section {
+                Picker("Paste Mode", selection: Binding(
+                    get: { store.pasteMode },
+                    set: { store.pasteMode = $0 }
+                )) {
+                    Text("Cmd+V (default)").tag(PasteMode.cmdV)
+                    Text("Accessibility API  (v1 — coming soon)")
+                        .tag(PasteMode.accessibility)
+                        .disabled(true)
+                        .foregroundStyle(.secondary)
+                }
+                .pickerStyle(.menu)
+                Text("Cmd+V is the default and works in almost every app.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Text Insertion")
+            }
+
+            // W3.4 extension point — Pasting / restore-clipboard belongs here.
+            // [stub: W3.4 (builder-input) owns the restore-clipboard toggle]
+            Section {
+                HStack {
+                    Image(systemName: "arrow.uturn.left.circle")
+                        .foregroundStyle(.secondary)
+                    Text("Restore clipboard after paste")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("Coming in W3.4")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            } header: {
+                Text("Clipboard")
+            }
         }
         .formStyle(.grouped)
-        .padding()
-        .frame(minWidth: 420, minHeight: 380)
+        .padding(SpeakSpacing.md)
     }
+}
 
-    // MARK: - Activation section (Phase B)
+// MARK: - 2. Shortcuts
 
-    private var activationSection: some View {
-        Section("Activation") {
-            // Trigger mode picker — Phase B (specs/dictation-flow.md §6-B).
-            // Writing to `store.triggerMode` persists the choice to UserDefaults.
-            // `DictationController` subscribes to `settingsStore.objectWillChange`
-            // and calls `monitor.updateBinding(_:)` on change so the live monitor
-            // switches mode without relaunch.
-            Picker("Hotkey Mode", selection: Binding(
-                get: { store.triggerMode },
-                set: { store.triggerMode = $0 }
-            )) {
-                Text("Double-tap Fn (toggle)").tag(HotkeyBinding.Trigger.doubleTap)
-                Text("Hold Fn (push-to-talk)").tag(HotkeyBinding.Trigger.hold)
+/// Shortcuts: shows the current hotkey binding read-only.
+/// The hotkey recorder (record-a-combo UI) is W3.2 — a clear "Record…" stub seam.
+private struct ShortcutsSettingsTab: View {
+    @ObservedObject var store: SettingsStore
+    let hotkeyDisplayString: String
+
+    var body: some View {
+        Form {
+            Section {
+                // Trigger mode picker — key-agnostic labels (W1.1 changes the
+                // default key, so labels must not hard-code "Fn"). The actual key
+                // is shown via `hotkeyDisplayString` below.
+                Picker("Activation Mode", selection: Binding(
+                    get: { store.triggerMode },
+                    set: { store.triggerMode = $0 }
+                )) {
+                    Text("Double-tap (toggle)").tag(HotkeyBinding.Trigger.doubleTap)
+                    Text("Hold (push-to-talk)").tag(HotkeyBinding.Trigger.hold)
+                }
+                .pickerStyle(.inline)
+
+                Group {
+                    switch store.triggerMode {
+                    case .doubleTap:
+                        Text("Tap the hotkey twice to start; tap once to stop.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    case .hold:
+                        Text("Hold the hotkey to record; release to stop and paste.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Activation")
             }
-            .pickerStyle(.inline)
 
-            // Contextual hint so the user understands what each mode does.
-            Group {
-                switch store.triggerMode {
-                case .doubleTap:
-                    Text("Tap Fn twice to start recording; tap once to stop.")
-                        .font(.caption)
+            Section {
+                HStack {
+                    Text("Current Hotkey")
+                    Spacer()
+                    // Monaco for the keybinding label (data, not chrome). [decision: W3.1]
+                    Text(hotkeyDisplayString)
+                        .font(.speakMonoBody)
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, SpeakSpacing.sm)
+                        .padding(.vertical, SpeakSpacing.xs)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color.speakSurface)
+                        )
+                }
+
+                // W3.2 extension point — hotkey recorder lives here.
+                // [stub: W3.2 (builder-input + builder-app) adds the Record… sheet]
+                Button("Record\u{2026}") {}
+                    .disabled(true)
+                    .help("Hotkey recorder — coming in W3.2")
+            } header: {
+                Text("Hotkey")
+            } footer: {
+                Text("Hotkey recording and per-binding mode (Hybrid) are coming in the next update.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .padding(SpeakSpacing.md)
+    }
+}
+
+// MARK: - 3. Transcription
+
+private struct TranscriptionSettingsTab: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Language", selection: Binding(
+                    get: { store.language.identifier },
+                    set: { store.language = Locale(identifier: $0) }
+                )) {
+                    Text("English (US)").tag("en-US")
+                    Text("English (UK)").tag("en-GB")
+                }
+                .pickerStyle(.menu)
+            } header: {
+                Text("Language")
+            }
+
+            Section {
+                Picker("Speech Engine", selection: Binding(
+                    get: { store.sttEngine },
+                    set: { store.sttEngine = $0 }
+                )) {
+                    Text("Apple SpeechAnalyzer (default)")
+                        .tag(STTEngine.appleSpeech)
+                    Text("WhisperKit  (v0.1 — coming soon)")
+                        .tag(STTEngine.whisperKit)
+                        .disabled(true)
                         .foregroundStyle(.secondary)
-                case .hold:
-                    Text("Hold Fn to record; release to stop and paste.")
+                    Text("whisper.cpp  (v1 — coming soon)")
+                        .tag(STTEngine.whisperCpp)
+                        .disabled(true)
+                        .foregroundStyle(.secondary)
+                }
+                .pickerStyle(.menu)
+                Text("Apple SpeechAnalyzer runs 100% on-device — no audio ever leaves your Mac.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Engine")
+                    .font(.caption)
+            } footer: {
+                Text("Alternative engines (WhisperKit, whisper.cpp) arrive in v0.1 and v1.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .padding(SpeakSpacing.md)
+    }
+}
+
+// MARK: - 4. AI Cleanup
+
+/// AI Cleanup: unified effectiveCleanupLevel picker collapses the old toggle + level pair.
+/// Style and Engine pickers are disabled when level == .none (progressive disclosure).
+private struct AICleanupSettingsTab: View {
+    @ObservedObject var store: SettingsStore
+
+    /// Derived: cleanup is active when effectiveCleanupLevel != .none.
+    private var cleanupActive: Bool { store.effectiveCleanupLevel != .none }
+
+    var body: some View {
+        Form {
+            // Primary control — the collapsed single picker.
+            Section {
+                Picker("Cleanup Level", selection: Binding(
+                    get: { store.effectiveCleanupLevel },
+                    set: { store.effectiveCleanupLevel = $0 }
+                )) {
+                    ForEach(CleanupLevel.allCases, id: \.self) { level in
+                        Text(level.displayName).tag(level)
+                    }
+                }
+                .pickerStyle(.inline)
+
+                // Description updates live with the selection.
+                Text(store.effectiveCleanupLevel.levelDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Intensity")
+            } footer: {
+                Text("None = raw transcript pasted with no AI changes.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Voice / style — disabled when cleanup is off.
+            Section {
+                Picker("Voice", selection: Binding(
+                    get: { store.cleanupStyle },
+                    set: { store.cleanupStyle = $0 }
+                )) {
+                    ForEach(CleanupStyle.allCases, id: \.self) { style in
+                        Text(style.displayName).tag(style)
+                    }
+                }
+                .pickerStyle(.menu)
+                .disabled(!cleanupActive)
+                if !cleanupActive {
+                    Text("Set a cleanup level above to enable voice selection.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            } header: {
+                Text("Voice")
+            }
+
+            // Engine — secondary / advanced. Disabled for future engines in v0.
+            Section {
+                Picker("Cleanup Engine", selection: Binding(
+                    get: { store.cleanupEngine },
+                    set: { store.cleanupEngine = $0 }
+                )) {
+                    Text("Foundation Models (default)")
+                        .tag(CleanupEngine.foundationModels)
+                    Text("Ollama  (v0.1 — coming soon)")
+                        .tag(CleanupEngine.ollama(model: ""))
+                        .disabled(true)
+                        .foregroundStyle(.secondary)
+                }
+                .pickerStyle(.menu)
+                .disabled(!cleanupActive)
+                Text("Foundation Models runs on-device — no network, no account.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Engine")
+            } footer: {
+                Text("Alternative engines (Ollama) arrive in v0.1.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .padding(SpeakSpacing.md)
+    }
+}
+
+// MARK: - 5. Dictionary
+
+/// Dictionary: custom vocabulary for the STT recognizer.
+/// Binding pattern mirrors DictionaryPaneView to stay consistent — the store
+/// is the single source of truth for both surfaces.
+private struct DictionarySettingsTab: View {
+    @ObservedObject var store: SettingsStore
+    @State private var newTerm: String = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+            // Add bar
+            HStack(spacing: SpeakSpacing.sm) {
+                TextField("Add a word or name\u{2026}", text: $newTerm)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.speakMonoBody)
+                    .onSubmit(addTerm)
+                Button("Add", action: addTerm)
+                    .disabled(newTerm.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(.horizontal, SpeakSpacing.md)
+            .padding(.top, SpeakSpacing.md)
+
+            Text("Custom words are fed to the speech recogniser as contextual hints so speak spells your names and terms correctly.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, SpeakSpacing.md)
+
+            Divider()
+
+            let terms = store.customVocabulary
+            if terms.isEmpty {
+                VStack(spacing: SpeakSpacing.sm) {
+                    Image(systemName: "character.book.closed")
+                        .font(.system(size: 32))
+                        .foregroundStyle(.tertiary)
+                    Text("No custom words yet.")
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(SpeakSpacing.lg)
+            } else {
+                List {
+                    ForEach(terms, id: \.self) { term in
+                        HStack {
+                            Text(term)
+                                .font(.speakMonoBody)
+                            Spacer()
+                            Button {
+                                removeTerm(term)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Remove \(term)")
+                        }
+                        .padding(.vertical, SpeakSpacing.xs)
+                    }
+                }
+                .listStyle(.inset)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(SpeakSpacing.md)
+    }
+
+    private func addTerm() {
+        let updated = CustomVocabulary.adding(newTerm, to: store.customVocabulary)
+        store.customVocabulary = updated
+        newTerm = ""
+    }
+
+    private func removeTerm(_ term: String) {
+        store.customVocabulary = CustomVocabulary.removing(term, from: store.customVocabulary)
+    }
+}
+
+// MARK: - 6. Privacy (moat surface)
+
+/// Privacy: the structural moat — four concrete on-device guarantees, calm and premium.
+/// This is marketing AND trust: a local-first app's clearest differentiator.
+private struct PrivacySettingsTab: View {
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
+
+                // Badge block — lock icon + headline
+                HStack(alignment: .top, spacing: SpeakSpacing.md) {
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 40))
+                        // Teal/green conveys "safe" without overriding the amber accent.
+                        // [decision: system green — native macOS feel, no custom color needed]
+                        .foregroundStyle(.green)
+                    VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                        Text("100% On-Device")
+                            .font(.speakMonoTitle)
+                        Text("speak never sends your voice, your words, or your clipboard anywhere.")
+                            .font(.speakMonoCaption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(SpeakSpacing.lg)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.speakSurface)
+                )
+
+                // Four guarantee rows
+                VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+                    PrivacyGuaranteeRow(
+                        icon: "mic.slash.fill",
+                        title: "No cloud audio",
+                        detail: "Speech is processed by Apple SpeechAnalyzer entirely on your Mac. Audio never leaves the device."
+                    )
+                    Divider()
+                    PrivacyGuaranteeRow(
+                        icon: "brain.head.profile",
+                        title: "No cloud AI",
+                        detail: "Neat-writing uses Apple Foundation Models — the neural engine on your chip. No API call, no account, no quota."
+                    )
+                    Divider()
+                    PrivacyGuaranteeRow(
+                        icon: "person.slash",
+                        title: "No account required",
+                        detail: "speak is free, open-source, and MIT-licensed. There is no sign-in, no subscription, and no usage metering."
+                    )
+                    Divider()
+                    PrivacyGuaranteeRow(
+                        icon: "clipboard.fill",  // clipboard → icon for the clipboard topic
+                        title: "Never reads your clipboard",
+                        detail: "speak only writes to the clipboard to paste your dictation. It never reads what is already there."
+                    )
+                }
+                .padding(SpeakSpacing.lg)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.speakSurface)
+                )
+
+                // W3.3 extension point — auto-delete transcript policy belongs here.
+                // [stub: W3.3 owns transcript auto-delete and audio-retention policy]
+                HStack {
+                    Image(systemName: "timer")
+                        .foregroundStyle(.secondary)
+                    Text("Transcript auto-delete policy")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("Coming in W3.3")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(SpeakSpacing.md)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.speakSurface)
+                )
+            }
+            .padding(SpeakSpacing.lg)
+        }
+    }
+}
+
+/// A single privacy guarantee row: icon + title + detail.
+private struct PrivacyGuaranteeRow: View {
+    let icon: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: SpeakSpacing.md) {
+            Image(systemName: icon)
+                .font(.system(size: 18))
+                .foregroundStyle(.green)
+                .frame(width: 24)  // [decision: 24pt icon column width = 3× SpeakSpacing.sm]
+            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                Text(title)
+                    .font(.speakMonoBody)
+                Text(detail)
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
+}
 
-    // MARK: - Transcription section
+// MARK: - 7. About
 
-    private var transcriptionSection: some View {
-        Section("Transcription") {
-            // Language picker (two offered locales in v0; more in v1)
-            Picker("Language", selection: Binding(
-                get: { store.language.identifier },
-                set: { store.language = Locale(identifier: $0) }
-            )) {
-                Text("English (US)").tag("en-US")
-                Text("English (UK)").tag("en-GB")
-            }
-            .pickerStyle(.menu)
+private struct AboutSettingsTab: View {
 
-            // STT engine picker — v0.1/v1 cases shown disabled
-            Picker("Speech Engine", selection: Binding(
-                get: { store.sttEngine },
-                set: { store.sttEngine = $0 }
-            )) {
-                Text("Apple Speech (default)")
-                    .tag(STTEngine.appleSpeech)
-                Text("WhisperKit  (v0.1 — coming soon)")
-                    .tag(STTEngine.whisperKit)
-                    .disabled(true)
-                    .foregroundStyle(.secondary)
-                Text("whisper.cpp  (v1 — coming soon)")
-                    .tag(STTEngine.whisperCpp)
-                    .disabled(true)
-                    .foregroundStyle(.secondary)
-            }
-            .pickerStyle(.menu)
-            // Disable pickers for non-default engines so the user cannot
-            // select unbuilt options even if the tag is rendered.
-            // The Picker selection binding already rejects non-active values
-            // when the associated rows are disabled.
-        }
+    // Static URL constants — compile-time literals guaranteed non-nil, but
+    // URL(string:) returns Optional so we store as URL? and map at the call site
+    // rather than force-unwrap. [decision: W3.1 — no force-unwrap rule]
+    fileprivate static let githubURL = URL(string: "https://github.com/tamilarasanraja/speak")
+    fileprivate static let issuesURL = URL(string: "https://github.com/tamilarasanraja/speak/issues")
+
+    // Version string from the bundle — zero magic strings. [decision: W3.1]
+    private var appVersion: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
+        return [version, build.map { "(\($0))" }]
+            .compactMap { $0 }
+            .joined(separator: " ")
     }
 
-    // MARK: - AI cleanup section
+    var body: some View {
+        VStack(spacing: SpeakSpacing.lg) {
+            Spacer()
 
-    private var cleanupSection: some View {
-        Section("AI Cleanup") {
-            Toggle("Enable AI neat-writing", isOn: Binding(
-                get: { store.cleanupEnabled },
-                set: { store.cleanupEnabled = $0 }
-            ))
-
-            Picker("Cleanup Engine", selection: Binding(
-                get: { store.cleanupEngine },
-                set: { store.cleanupEngine = $0 }
-            )) {
-                Text("Foundation Models (default)")
-                    .tag(CleanupEngine.foundationModels)
-                Text("Ollama  (v0.1 — coming soon)")
-                    .tag(CleanupEngine.ollama(model: ""))
-                    .disabled(true)
+            // App name + version in Monaco — content voice, not chrome.
+            VStack(spacing: SpeakSpacing.sm) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 48))
+                    .foregroundStyle(Color.speakAccent)
+                Text("speak")
+                    .font(.speakMonoTitle)
+                if !appVersion.isEmpty {
+                    Text("v\(appVersion)")
+                        .font(.speakMonoCaption)
+                        .foregroundStyle(.secondary)
+                }
+                Text("Free · Open-source · MIT")
+                    .font(.speakMonoCaption)
                     .foregroundStyle(.secondary)
             }
-            .pickerStyle(.menu)
-            .disabled(!store.cleanupEnabled)
-        }
-    }
 
-    // MARK: - Paste / insertion section
+            Divider()
+                .frame(maxWidth: 200)  // [decision: short decorative divider, visual balance]
 
-    private var pasteSection: some View {
-        Section("Text Insertion") {
-            Picker("Paste Mode", selection: Binding(
-                get: { store.pasteMode },
-                set: { store.pasteMode = $0 }
-            )) {
-                Text("Cmd+V (default)").tag(PasteMode.cmdV)
-                Text("Accessibility API  (v1 — coming soon)")
-                    .tag(PasteMode.accessibility)
-                    .disabled(true)
-                    .foregroundStyle(.secondary)
+            // Links — URL(string:) with compile-time literals always succeeds, but
+            // force-unwrap is banned by the hard rules. Use static lets so the
+            // compiler can prove the optionality at the call site. [decision: W3.1]
+            VStack(spacing: SpeakSpacing.sm) {
+                AboutSettingsTab.githubURL.map { url in
+                    Link("View on GitHub", destination: url)
+                        .font(.speakMonoCaption)
+                }
+                AboutSettingsTab.issuesURL.map { url in
+                    Link("Report an issue", destination: url)
+                        .font(.speakMonoCaption)
+                }
             }
-            .pickerStyle(.menu)
+
+            Spacer()
         }
+        .frame(maxWidth: .infinity)
+        .padding(SpeakSpacing.lg)
     }
 }
 
 // MARK: - Preview
 
 #if DEBUG
-#Preview {
-    SettingsView(store: SettingsStore())
+#Preview("Settings — General") {
+    // Preview with a stub DictationController is not practical (it starts a
+    // CGEventTap). Use a simplified init path for the preview.
+    SettingsPreviewWrapper()
+}
+
+private struct SettingsPreviewWrapper: View {
+    private let store = SettingsStore()
+    var body: some View {
+        TabView {
+            GeneralSettingsTab(store: store)
+                .tabItem { Label("General", systemImage: "gearshape") }
+            AICleanupSettingsTab(store: store)
+                .tabItem { Label("AI Cleanup", systemImage: "wand.and.stars") }
+            PrivacySettingsTab()
+                .tabItem { Label("Privacy", systemImage: "lock.shield") }
+            AboutSettingsTab()
+                .tabItem { Label("About", systemImage: "info.circle") }
+        }
+        .frame(minWidth: 560, minHeight: 480)
+    }
 }
 #endif

@@ -1343,4 +1343,24 @@ thrash, since the next work (Phase 0) is blocked on a human gate.
   Unit-tested in `SpeakTests/TextDiffTests.swift` (edge cases + level mapping + prompt
   traceability). All 4 gates green: `make build`, `make test` (301 tests, 5 XCTSkip,
   0 failures), `make lint` (0 errors), `make verify-moat` (7/7 PASS).
+- **2026-06-21 (W3.1)**: Settings screen IA redesign. Replaced the flat 4-section Form
+  with a 7-tab `TabView` (General · Shortcuts · Transcription · AI Cleanup · Dictionary ·
+  Privacy · About). Monaco `SpeakTheme` design language throughout; SpeakSpacing grid, no
+  magic numbers. Key changes: (1) **cleanupEnabled/cleanupLevel collapse** — single
+  `effectiveCleanupLevel` computed property on `SettingsStore` (getter gates on
+  `cleanupEnabled` for back-compat with legacy `enabled=false/level=medium` state; setter
+  keeps both in sync). The AI Cleanup tab shows one picker, not Toggle+Picker. Progressive
+  disclosure: Style/Engine pickers disabled when level==.none. (2) **Shortcuts tab** shows
+  current hotkey binding read-only via `DictationController.currentHotkeyDisplayString`
+  (forwarded from `monitor.binding.displayString`); mode labels are key-agnostic (W1.1 safe);
+  "Record…" button stub for W3.2. (3) **Privacy tab** — moat surface: lock badge headline +
+  four on-device guarantee rows (no cloud audio/AI, no account, never reads clipboard).
+  (4) Extension point stubs: restore-clipboard (W3.4), transcript auto-delete (W3.3).
+  Files changed: `App/Settings/SettingsView.swift` (full rewrite), `SpeakCore/Storage/
+  SettingsStore.swift` (+effectiveCleanupLevel), `App/DictationController.swift`
+  (+currentHotkeyDisplayString), `App/SpeakApp.swift` (SettingsView init update),
+  `App/Debug/DebugLaunchDispatcher.swift` (SettingsView init update),
+  `SpeakTests/SettingsStoreTests.swift` (+5 effectiveCleanupLevel tests, all pass).
+  All 4 gates green: `make build` ✅ · `make test` ✅ · `make lint` 0 errors ✅ ·
+  `make verify-moat` 7/7 ✅. Left uncommitted in worktree for orchestrator review.
 - **2026-06-19**: Doc restructure into `AGENTS.md` + `docs/` + `research/`.
