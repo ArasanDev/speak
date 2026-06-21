@@ -123,6 +123,12 @@ final class DictationController: ObservableObject {
 
     private(set) var settingsStore: SettingsStore
 
+    /// The human-readable label for the current hotkey binding, e.g. "⌘ Right Command ×2".
+    /// Forwarded from the live `HotkeyMonitor.binding.displayString` so the Settings
+    /// Shortcuts tab can show a read-only summary without accessing the private monitor.
+    /// [decision: W3.1 — Settings shows binding read-only; W3.2 will add the record UI]
+    var currentHotkeyDisplayString: String { monitor.binding.displayString }
+
     // MARK: - Trigger-mode wiring (Phase B)
 
     /// Holds the Combine subscription that applies `settingsStore.triggerMode`

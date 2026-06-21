@@ -109,7 +109,7 @@ struct SpeakApp: App {
 
         Settings {
             if let ctrl = appDelegate.controller {
-                SettingsView(store: ctrl.settingsStore)
+                SettingsView(controller: ctrl)
             }
         }
     }

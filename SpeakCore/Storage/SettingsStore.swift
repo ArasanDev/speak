@@ -281,6 +281,33 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
         }
     }
 
+    // MARK: - Effective cleanup level (W3.1 collapse seam)
+
+    /// The single picker-facing cleanup control. Collapses the legacy
+    /// `cleanupEnabled` boolean and the 4-level `cleanupLevel` into one value.
+    ///
+    /// **Getter:** returns `.none` when `cleanupEnabled == false` (preserves the
+    /// legacy "off" state for users who toggled via the old boolean), otherwise
+    /// returns the stored `cleanupLevel`.
+    /// **Setter:** `.none` sets both `cleanupEnabled = false` and `cleanupLevel = .none`;
+    /// any other level sets `cleanupEnabled = true` and `cleanupLevel = <value>`.
+    ///
+    /// `SpeakEngine.newSession()` already reads `cleanupEnabled` and `cleanupLevel`
+    /// independently — those remain the authoritative values. This is purely a
+    /// UI-facing convenience that keeps both in sync from one picker. [decision: W3.1]
+    public var effectiveCleanupLevel: CleanupLevel {
+        get { cleanupEnabled ? cleanupLevel : .none }
+        set {
+            if newValue == .none {
+                cleanupEnabled = false
+                cleanupLevel = .none
+            } else {
+                cleanupEnabled = true
+                cleanupLevel = newValue
+            }
+        }
+    }
+
     // MARK: - Custom vocabulary (H4 seam)
 
     /// User-supplied term list passed to the STT recognizer as contextual hints.
