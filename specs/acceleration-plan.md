@@ -72,8 +72,12 @@ consequential unsettled decision. Wispr's evidence: the **Home dashboard is the 
 reason users open the app daily**, and a sidebar (Home · Insights · Dictionary ·
 Snippets · Style · Transforms) is the only IA that scales once v1 features land
 without modal-stacking. You said "full product, full application UI, everything" —
-which points hard at **building the dashboard**. I recommend it; it is the spine
-Phase 2's UI hangs on. *Confirm and Phase 2 Wave A is the dashboard.*
+which points hard at **building the dashboard**.
+
+**RESOLVED (user, 2026-06-21): BUILD THE FULL-WINDOW DASHBOARD.** Sidebar IA (Home ·
+History · Dictionary · Snippets · Style · Insights) + day-grouped history in Monaco.
+This is the Phase-2 UI spine; every v1 feature lands as a sidebar item, not a modal.
+The menubar stays as the quick-control surface; the dashboard is the daily-open home.
 
 ### Design system (locked by the user, 2026-06-21)
 **Typographic theme: `Monaco`** — the macOS-native monospace, chosen for its calm,
@@ -84,9 +88,9 @@ e.g. `Font.speakMono`). Pair with the system UI font for chrome/labels; Monaco f
 *content + data* (the "log-file" feel the competitor research calls for). One source
 of truth — define the token once, never hardcode the family string per view.
 
-### Wave A — UI spine (the dashboard, if confirmed)
+### Wave A — UI spine (the dashboard — CONFIRMED)
 Full-window app with sidebar IA + day-grouped history dashboard (TODAY/YESTERDAY,
-SF-Mono timestamps, full-text no-truncation, preserved empty rows). User-facing
+Monaco timestamps, full-text no-truncation, preserved empty rows). User-facing
 naming (Style/Dictionary/Snippets/Transforms). `KeyCapView` (orange keycap) for
 hotkeys. Beats Wispr's top-center attention-steal; we keep the bottom-center HUD.
 
