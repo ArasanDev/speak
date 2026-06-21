@@ -35,7 +35,7 @@ runtime dependency added. `make release` orchestrates the whole chain.
 - Exact `notarytool`/`codesign` flag sets and entitlements **drift by OS/Xcode
   version** — re-check against current Apple docs at P11; tag inferred bits
   `[inferred]`, mark untested ones `[unverified]`.
-- App is **not sandboxed** in v0 (intentional — needs Accessibility/Input Monitoring).
+- App is **not sandboxed** in v0 (intentional — needs Accessibility + Cmd+V paste simulation).
   Notarization still applies; sandbox entitlement does not.
 
 `fastlane` is deliberately **not** used — `xcrun notarytool` + `codesign` cover

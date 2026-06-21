@@ -175,7 +175,7 @@ release. The version ladder (v0 → v3+) is defined in `docs/product.md` §9.
 
 Tracked in [`docs/human-verification.md`](docs/human-verification.md):
 - Live paste into TextEdit, Slack, and Terminal (Terminal paste-provenance)
-- Global hotkey with Accessibility + Input Monitoring granted
+- Global hotkey with Accessibility permission granted
 - Apple Intelligence / Foundation Models live cleanup quality
 - WER corpus (~20 clips, human-supplied)
 - Developer ID signing + notarization (`make release`)

@@ -142,14 +142,13 @@ make run      # launch the menubar app
 
 ### Required permissions (first run)
 
-`speak` needs three OS permissions — explained in the onboarding flow on first
+`speak` needs two OS permissions — explained in the onboarding flow on first
 launch:
 
 | Permission | Why |
 |---|---|
 | **Microphone** | Capture audio for transcription |
-| **Accessibility** | Global hotkey (CGEventTap) + synthetic Cmd+V paste |
-| **Input Monitoring** | Detect the Fn key globally (outside the app) |
+| **Accessibility** | Global hotkey (CGEventTap `.defaultTap`) + synthetic Cmd+V paste |
 
 ---
 
@@ -173,7 +172,7 @@ launch:
 **What remains before v0 ships** (irreducibly live — tracked in
 [`docs/human-verification.md`](docs/human-verification.md)):
 
-- Grant Accessibility + Input Monitoring permissions; enable Apple Intelligence
+- Grant Accessibility permission (Microphone already granted); enable Apple Intelligence
 - Verify live paste into TextEdit, Slack, and Terminal (Terminal paste-provenance
   is the project's #1 unverified item — macOS 26.4 added a paste-provenance check)
 - Verify hotkey fires globally while another app has focus

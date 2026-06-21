@@ -271,13 +271,13 @@ Wispr's cloud cleanup.
 | Done | green flash → gray | fades out, neat text pasted |
 | Error | red X | error message + retry |
 
-### 5.5 First-run onboarding (3 permissions, clearly explained)
+### 5.5 First-run onboarding (2 permissions, clearly explained)
 
-Welcome → **Microphone** → **Accessibility** → **Input Monitoring** (each with
-*why* + a deep-link to System Settings) → hotkey picker → test dictation → done.
-Three prompts is a lot; the flow justifies each with a screenshot. The bar is "a
-fresh user reaches a working dictation with no confusion" — comprehension, not a
-stopwatch. Onboarding drop-off is a top risk.
+Welcome → **Microphone** → **Accessibility** (each with *why* + a deep-link to
+System Settings) → hotkey picker → test dictation → done. Two prompts is
+manageable; the flow justifies each with a screenshot. The bar is "a fresh user
+reaches a working dictation with no confusion" — comprehension, not a stopwatch.
+Onboarding drop-off is a top risk.
 
 ### 5.6 History & settings
 
@@ -319,7 +319,7 @@ drops in:
 `HotkeyMonitor` (`CGEventTap`, global Fn detection, double-tap, rebinding);
 `PasteboardWriter` (`NSPasteboard` **write-never-read** + simulated `Cmd+V`);
 `HistoryStore` (SQLite); `SettingsStore` (typed `UserDefaults`);
-`PermissionManager` (mic / Accessibility / Input Monitoring state machine);
+`PermissionManager` (mic / Accessibility state machine);
 logging via `os.Logger` only (no `print`). Concurrency: `SpeakEngine` and
 `CaptureSession` are actors; UI and hotkey callbacks on `@MainActor`; the main
 thread is never blocked.

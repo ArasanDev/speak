@@ -97,9 +97,9 @@ and ask — do not silently violate it.
 
 1. **100% local by default.** No cloud audio. No telemetry to a server. No
    accounts. No login. (Cloud STT is a v1 *opt-in* escape hatch only.)
-2. **Three OS permissions, no more**: Microphone, Accessibility, Input
-   Monitoring. Onboarding must explain *why* each is needed and deep-link to
-   System Settings.
+2. **Two OS permissions, no more**: Microphone + Accessibility. (The global-hotkey
+   `CGEventTap` is `.defaultTap` → Accessibility-gated; Input Monitoring is NOT used
+   in v0.) Onboarding must explain *why* each is needed and deep-link to System Settings.
 3. **Swift 5.9+ / SwiftUI**, deployment target **macOS 26.0**,
    **Apple Silicon only** in v0.
 4. **No third-party dependencies in v0.** Apple frameworks only. WhisperKit /

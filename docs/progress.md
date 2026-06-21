@@ -252,7 +252,7 @@ was already done+tested) and **hardware mute** (SPEC §7.4 / product.md §8 #4 �
 **The autonomously-buildable scope is now genuinely exhausted (re-confirmed by a
 SPEC §5–§7 feature scan).** What remains for the v0 ship gate is **irreducibly live
 or a data dependency**, all tracked in **`docs/human-verification.md`**: grant
-Accessibility + Input Monitoring + enable Apple Intelligence; the live UI screens
+Accessibility (Microphone handled in onboarding) + enable Apple Intelligence; the live UI screens
 (§4.1–4.6, now incl. the History window §4.5 and the mute behavior §4.6); the
 global hotkey firing; paste into TextEdit/Slack/**Terminal** (the #1 `[unverified]`
 — macOS 26.4 paste-provenance); live Foundation Models cleanup quality; the §6

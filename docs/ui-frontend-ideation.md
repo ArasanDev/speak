@@ -244,14 +244,14 @@ which is the cautionary tale referenced in `dictation-flow.md` §4.
 ### 2.1 Onboarding window
 
 **Goal:** Get a fresh install to a working dictation in ≤90 seconds, with full
-understanding of *why* each of the three permissions is needed. Onboarding
+understanding of *why* each of the two permissions is needed. Onboarding
 drop-off is the #1 risk (per `product.md` §7.3) — every step must earn its
 60 seconds.
 
-**Status:** **Built** (5 steps + done, P7, loop #16). The logic is
+**Status:** **Built** (4 steps + done, P7, loop #16). The logic is
 unit-tested; rendered behavior is `[deferred — human verification: §4.4]`.
 The current built step list is: **welcome → microphone → accessibility →
-input monitoring → hotkey → done**. This ideation refines the copy and
+hotkey → done** (Input Monitoring removed in v0.2 — `.defaultTap` is Accessibility-gated). This ideation refines the copy and
 adds (v1): a "Privacy" interlude and a "Test dictation" step.
 
 **Reference patterns:**
@@ -391,28 +391,12 @@ in code).
 - Deep-link anchor (`?Privacy_Accessibility`) — `[verified]` for macOS 13+
   but `[unverified]` for macOS 26 Tahoe; verify on first run.
 
-#### 2.1.4 Step 4 — Input Monitoring
+#### 2.1.4 Step 4 — Input Monitoring — **REMOVED (v0.2)**
 
-**Layout:** same as 2.1.2, icon `keyboard.fill`.
-
-**Body copy (current):**
-> Input Monitoring lets speak detect your double-tap Fn hotkey so it can
-> start listening while another app has focus.
-
-**Body copy (proposed v0.1):**
-> Input Monitoring lets speak see your Fn key (or any hotkey you bind).
-> You'll enable it in System Settings — this is a one-time grant.
-
-**States:** same. **Edge case:** this is the one permission that does NOT
-block the app; even if denied, Accessibility is enough to fire a
-`CGEventTap` (per `dictation-flow.md` §2). The UX should communicate that
-this is a *quality* permission, not a *gate* — if denied, show a "won't
-detect Fn reliably" warning but still let the user proceed.
-
-**Open question:** should we still show this step if Accessibility is
-granted and the user picked a non-Fn hotkey (e.g., Cmd+Shift+Space)? In
-that case Input Monitoring is unnecessary. **v0:** keep it simple, always
-show the step. **v1:** skip-if-not-needed.
+This step was deleted. The hotkey tap is `.defaultTap` → gated on Accessibility
+alone, so Input Monitoring was never required; the step even *falsely* told users
+it was needed to detect the hotkey. Onboarding is now **Welcome → Microphone →
+Accessibility → Hotkey → Done** (4 steps). See `dictation-flow.md` §2.
 
 #### 2.1.5 Step 5 — Hotkey
 

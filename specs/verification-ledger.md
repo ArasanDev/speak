@@ -36,7 +36,7 @@
 | Locales | `[verified]` | EN/ES/FR/DE/IT/JA/KO/ZH/PT+; `supportedLocales`/`installedLocales`; on-demand model download via `AssetInventory` | WWDC25 s277 |
 | Apple Silicon only | `[verified]`(inferred) | Runs on Neural Engine; no Intel support found — treat as AS-only (reasonable) | dev forums; 3rd-party benchmarks |
 | macOS 26 ship date | `[corrected]` | **Sept 15 2025 (Q3)**, name **Tahoe**, year-based numbering | isc.upenn.edu; 9to5mac |
-| `CGEventTap` needs Accessibility (active tap) / Input Monitoring (listen-only) | `[verified]` | Confirmed; Accessibility implicitly satisfies Input Monitoring | dev forums/thread/122492 |
+| `CGEventTap` (`.defaultTap`) → Accessibility only; `.listenOnly` → Input Monitoring | `[verified]` | `.defaultTap` (active) → Accessibility; `.listenOnly` (passive) → Input Monitoring. speak uses `.defaultTap`, so **only Accessibility is required**; Input Monitoring is NOT requested in v0. Confirmed empirically (hotkey fires with IM not granted) + VoiceInk uses the same `.cgSessionEventTap`+`.defaultTap` AX-only model. | dev forums; VoiceInk/MacWhisper patterns |
 | Fn = `kVK_Function` 0x3F | `[verified]` | 0x3F = Fn/Globe; note Fn not always forwarded on all keyboards | gist eegrok/949034 |
 | Apple Intelligence Writing Tools API | `[verified]` | `NSWritingToolsCoordinator` real; Apple Intelligence needs M1+; Intel unsupported | developer.apple.com; support.apple.com/121115 |
 | **Bonus**: `Foundation Models` framework | `[verified]` | macOS 26 adds on-device LLM access (same model as Writing Tools), AS+NE | WWDC/3rd-party |

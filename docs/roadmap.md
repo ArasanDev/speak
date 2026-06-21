@@ -157,10 +157,10 @@ doubleTapWindow: 0.4)`.
 - [~] Double-tap Fn triggers start while **another app has focus** —
       `[verified]` pure detector logic (DoubleTapDetector tests, injected
       timestamps); `[deferred — needs human verification]` live OS + other-app
-      focus with Accessibility + Input Monitoring granted
+      focus with Accessibility granted
 - [~] Single-tap Fn triggers stop while another app has focus —
       `[verified]` pure detector logic; `[deferred — needs human verification]` live OS
-- [~] First run triggers Accessibility + Input Monitoring permission prompts —
+- [~] First run triggers Accessibility permission prompt (Microphone handled separately) —
       `[deferred — needs human verification]` (requires live non-sandboxed run)
 - [ ] False-trigger rate < 1 per 30 min in normal typing, tested in Notes
       (single source for `F_rate` in `benchmark.md` §7) — P13 dogfood
@@ -198,16 +198,16 @@ cases.
 
 ## Phase 7 — Permissions flow
 
-**Task**: Full 3-permission onboarding window. Microphone (runtime prompt),
-Accessibility + Input Monitoring (deep-link to
-`x-apple.systempreferences:com.apple.preference.security` with the app
-selected). Explain *why* each is needed with a screenshot per permission.
+**Task**: Full 2-permission onboarding window. Microphone (runtime prompt),
+Accessibility (deep-link to `x-apple.systempreferences:com.apple.preference.security`
+with the app selected). Explain *why* each is needed with a screenshot per permission.
+Input Monitoring removed in v0.2 — `.defaultTap` is Accessibility-gated only.
 
 **Done when**:
-- [~] A fresh user can grant all 3 permissions and reach a working dictation
+- [~] A fresh user can grant both permissions and reach a working dictation
       with no confusion — `[verified]` the step-state machine
-      (`OnboardingStateMachine`, 14 tests) + mic/accessibility/inputMonitoring
-      status backends; **the rendered flow + comprehension** `[deferred — visual]`
+      (`OnboardingStateMachine`, 14 tests) + mic/accessibility status backends;
+      **the rendered flow + comprehension** `[deferred — visual]`
       (§4.4)
 - [~] Deep-links open the correct System Settings pane — `[verified]` the
       deep-link URLs are wired; **that they open the right pane** `[deferred —

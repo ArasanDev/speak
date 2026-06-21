@@ -69,7 +69,7 @@ v1+ (maybe): Speak.app (SwiftUI) ──► SpeakCore (Swift) ──ffi──► 
 | Cleanup (default) | **Apple `Foundation Models`** framework | `[verified]` macOS 26+, on-device LLM, AS+NE; Apple framework — no third-party dep |
 | Cleanup (protocol) | **pluggable `LLMCleaning` protocol** | same pattern as STT; skippable via settings toggle |
 | Cleanup (v0.1 alt) | **Ollama MLX** (Qwen 2.5 3B / Gemma 3 4B / Phi-4-mini) | local, user-swappable; requires Ollama installed |
-| Hotkey | **`CGEventTap`** (Accessibility + Input Monitoring) | only way to detect Fn globally |
+| Hotkey | **`CGEventTap`** (`.defaultTap` → **Accessibility only**) | session-level active tap; AX covers both hotkey + paste |
 | Paste | **`NSPasteboard` write + `CGEvent` Cmd+V** | write-never-read; avoids read prompt `[verified]`; bypass itself `[unverified]` — test empirically at P6 |
 | Menubar | **`NSStatusItem` / `MenuBarExtra`** | native surface |
 | Persistence | **SQLite** (history) + **`UserDefaults`** (settings) | standard |
@@ -231,7 +231,7 @@ public enum PermissionState: Sendable {
 }
 
 public enum PermissionKind: Sendable, CaseIterable {
-    case microphone, accessibility, inputMonitoring
+    case microphone, accessibility
 }
 
 // SpeakCore/Storage/HistoryStore.swift
@@ -300,7 +300,6 @@ public final class FoundationModelsCleaner: LLMCleaning, @unchecked Sendable {
 public enum SpeakError: Error, Sendable {
     case microphoneDenied
     case accessibilityDenied
-    case inputMonitoringDenied
     case transcriberUnavailable(String)
     case pasteboardBusy
     case llmCleanupFailed(String)
@@ -311,7 +310,6 @@ public enum SpeakError: Error, Sendable {
         switch self {
         case .microphoneDenied:      return "Open System Settings → Privacy → Microphone and enable speak."
         case .accessibilityDenied:   return "Open System Settings → Privacy → Accessibility and enable speak."
-        case .inputMonitoringDenied: return "Open System Settings → Privacy → Input Monitoring and enable speak."
         case .transcriberUnavailable(let m): return "Speech engine unavailable: \(m). Try a fallback engine in Settings."
         case .pasteboardBusy:        return "Pasteboard busy. Retry in a moment."
         case .llmCleanupFailed(let m): return "LLM cleanup failed: \(m). Showing raw transcript."
@@ -567,8 +565,9 @@ are `[verified]` as of 2026-06-18; re-check on first build.
    at paste time. No primary source confirms the write+Cmd+V path bypasses it.
    **Empirically test at P6, especially Terminal and iTerm, before relying on
    it.** Reference: Michael Tsai blog, 2026-04-03.
-4. **`CGEventTap`** requires Accessibility + Input Monitoring on macOS 26.
-   `[verified]`
+4. **`CGEventTap` (`.defaultTap`) requires Accessibility only on macOS 26.**
+   `[verified]` (`.defaultTap` → Accessibility; `.listenOnly` → Input Monitoring — we use
+   `.defaultTap`, so IM is not needed.)
 5. **`WhisperKit`** (Argmax) current version, MIT license, Apple Silicon.
    `[verified]`
    — [github.com/argmaxinc/argmax-oss-swift](https://github.com/argmaxinc/argmax-oss-swift)

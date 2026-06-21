@@ -31,14 +31,16 @@ inserted **at the cursor**. Two trigger gestures on one key:
 
 ## 2. Permission model — [verified research]
 
-- **The Fn `.flagsChanged` tap is gated by Accessibility OR Input Monitoring;
-  Accessibility alone is sufficient** (AltTab/Hex create their keyboard tap under
-  AX only). We need Accessibility regardless for the synthetic Cmd+V paste.
-- **Decision:** gate the tap on **Accessibility**; request **Input Monitoring**
-  (`CGRequestListenEventAccess()` registers + prompts) but **do NOT hard-block
-  onboarding on it** — treat it as the "expected/correct" grant, not a gate.
-- **Re-arm signal:** no distributed notification exists for Input Monitoring; poll
-  `AXIsProcessTrustedWithOptions([prompt:false])` + `IOHIDCheckAccess(.listenEvent)`
+- **The `.flagsChanged` tap is `.defaultTap` (active) → gated by Accessibility
+  alone.** (`.defaultTap`→Accessibility; `.listenOnly`→Input Monitoring — we use
+  `.defaultTap`.) We need Accessibility regardless for the synthetic Cmd+V paste,
+  so a single permission covers both the hotkey and the paste.
+- **Decision (v0.2):** gate the tap on **Accessibility** and **do NOT request
+  Input Monitoring at all** — it was vestigial (the tap never needed it; the
+  onboarding step even falsely claimed it). Removed in v0.2. Confirmed empirically
+  (hotkey fires with IM not granted) + VoiceInk uses the same `.defaultTap` AX-only model.
+- **Re-arm signal:** no distributed notification for AX grant; poll
+  `AXIsProcessTrustedWithOptions([prompt:false])`
   at ~100 ms while ungranted, back off once granted. AX also has the (undocumented)
   `com.apple.accessibility.api` notification (250 ms settle) as an optional fast path.
 - Escape hatch for stale entries: `make reset-permissions` (tccutil reset). [done]

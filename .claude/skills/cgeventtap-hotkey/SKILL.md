@@ -1,6 +1,6 @@
 ---
 name: cgeventtap-hotkey
-description: Use when implementing or modifying the CGEventTap-based global hotkey monitor in SpeakCore — specifically HotkeyMonitor, double-tap Fn detection, HotkeyBinding persistence, or Accessibility/Input Monitoring permission integration.
+description: Use when implementing or modifying the CGEventTap-based global hotkey monitor in SpeakCore — specifically HotkeyMonitor, double-tap Fn detection, HotkeyBinding persistence, or Accessibility permission integration.
 ---
 
 # CGEventTap Hotkey Monitor — Implementation Pointer
@@ -25,7 +25,7 @@ Default binding: double-tap Fn key (`keyCode kVK_Function = 0x3F`), detection wi
 ## Hard Constraints
 
 - The tap must fire while **another app has focus** — this is a system-wide event tap, not an in-app key listener.
-- Requires two OS permissions: **Accessibility** and **Input Monitoring**. The tap must not be installed until both are granted; attempting without them silently fails or crashes.
+- Requires one OS permission: **Accessibility** only (`.defaultTap` is Accessibility-gated; `.listenOnly` requires Input Monitoring, but speak uses `.defaultTap`). The tap must not be installed until Accessibility is granted; attempting without it silently fails or crashes.
 - **False-trigger rate target**: fewer than 1 unintended activation per 30 minutes of normal use (`benchmark.md` metric `F_rate`). The 400 ms window is the primary tuning knob.
 - Double-tap logic must be stateful: record first Fn keydown timestamp, check second Fn keydown against the window, emit `startCapture`. A second double-tap (or an explicit binding) emits `stopCapture`.
 - Use `os.Logger`. No `print`. No force-unwrap. No main-thread blocking (the CGEventTap callback runs on a dedicated run loop thread).

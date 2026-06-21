@@ -181,12 +181,12 @@ settings choice, not a rebuild. This is the architecture done properly — see
 | Done | green flash → gray | fades out, neat text pasted |
 | Error | red X | error message + retry |
 
-### 7.3 First-run onboarding (3 permissions, clearly explained)
-Welcome → **Microphone** → **Accessibility** → **Input Monitoring** (each with
-*why* + deep-link to System Settings) → hotkey picker → test dictation → done.
-Three prompts is a lot; the flow must justify each with a screenshot. Onboarding
-drop-off is a top risk — the bar is "a fresh user gets to a working dictation
-with no confusion," not a stopwatch.
+### 7.3 First-run onboarding (2 permissions, clearly explained)
+Welcome → **Microphone** → **Accessibility** (each with *why* + deep-link to
+System Settings) → hotkey picker → test dictation → done. Two prompts is
+manageable; the flow must justify each with a screenshot. Onboarding drop-off
+is a top risk — the bar is "a fresh user gets to a working dictation with no
+confusion," not a stopwatch.
 
 ---
 
