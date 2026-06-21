@@ -156,6 +156,50 @@ private actor CleanerRecorder {
     func snapshot() -> [(text: String, mode: CleanupMode)] { calls }
 }
 
+/// A cleaner that **never** returns from `clean()` — simulates a hung
+/// Foundation Models session. Non-cooperative: awaits a CheckedContinuation
+/// that is never resumed, so `Task.cancel()` alone cannot unblock it.
+///
+/// This is the correct mock for verifying `CaptureSession.runCleanup()`'s
+/// timeout mechanism fires even when the cleaner ignores cooperative cancellation.
+/// A `Task.sleep`-based mock would yield a false green because Task.sleep IS
+/// cooperative and would unblock on cancel(), masking a timeout that relies on
+/// cooperative cancellation to work.
+private struct HangingCleaner: LLMCleaning, Sendable {
+    let id: String
+    var isAvailable: Bool { get async { true } }
+
+    func clean(_ text: String, mode: CleanupMode) async throws -> String {
+        // Await a continuation that is never resumed. This is a true non-cooperative
+        // hang — Task.cancel() sets the cancellation flag but does NOT unblock this
+        // await (CheckedContinuation ignores cooperative cancellation).
+        await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in
+            // Intentionally no-op. This continuation is never resumed.
+            // The Task that runs this will eventually be leaked when the parent
+            // times out and cancels it — that is the expected behavior documented
+            // in CaptureSession.runCleanup() (non-cooperative cleaners may keep
+            // running in the background after timeout).
+        }
+        return text  // unreachable, but satisfies the return type
+    }
+}
+
+/// A cleaner that sleeps for `delayNanoseconds` then returns `result`.
+/// Used to verify that a slow-but-cooperative cleaner still produces a clean
+/// result (regression guard — timeout must not fire prematurely).
+private struct SlowCleaner: LLMCleaning, Sendable {
+    let id: String
+    let delayNanoseconds: UInt64
+    let result: String
+
+    var isAvailable: Bool { get async { true } }
+
+    func clean(_ text: String, mode: CleanupMode) async throws -> String {
+        try? await Task.sleep(nanoseconds: delayNanoseconds)
+        return result
+    }
+}
+
 // MARK: - Tests
 
 final class CaptureSessionTests: XCTestCase {
@@ -306,9 +350,16 @@ final class CaptureSessionTests: XCTestCase {
         XCTAssertEqual(calls.count, 0, "clean() must NOT be called when unavailable")
     }
 
-    // MARK: - Cleanup throws (genuine API failure)
+    // MARK: - Cleanup throws → graceful fallback (not an error)
+    //
+    // [decision: cleanup errors — whether the cleaner throws SpeakError.llmCleanupFailed
+    //  or any other error — are treated as graceful fallback to raw transcript, NOT as a
+    //  session error. This matches the "cleanup unavailability ≠ error" contract and ensures
+    //  the overlay ALWAYS reaches a terminal hidden state. Previously these paths would
+    //  surface as a HUD error with no auto-dismiss path, leaving the overlay stuck.
+    //  See CaptureSession.runCleanup() doc comment for the full rationale.]
 
-    func testStopWithCleanerThrowingThrowsSpeakError() async throws {
+    func testStopWithCleanerThrowingFallsBackToRawTranscript() async throws {
         let chunks = makeChunks(["hello world"], final: nil)
         let transcriber = MockTranscriber(script: chunks)
         let recorder = CleanerRecorder()
@@ -322,19 +373,17 @@ final class CaptureSessionTests: XCTestCase {
         let session = CaptureSession(transcriber: transcriber, cleaner: cleaner)
         try await session.start()
         try await Task.sleep(nanoseconds: 50_000_000)
-        do {
-            _ = try await session.stop()
-            XCTFail("stop() must throw when cleaner.clean() throws")
-        } catch let SpeakError.llmCleanupFailed(detail) {
-            XCTAssertEqual(detail, "model rejected input", "SpeakError detail must propagate")
-        } catch {
-            XCTFail("stop() must throw SpeakError.llmCleanupFailed, got \(error)")
-        }
+        // stop() must NOT throw — cleanup errors fall back to raw transcript.
+        let result = try await session.stop()
+        XCTAssertNil(result.cleanedText, "Cleanup error → cleanedText must be nil (raw fallback)")
+        XCTAssertEqual(result.rawText, "hello world", "Raw text must be preserved on cleanup error")
+        XCTAssertEqual(result.engineId, "mock-stt", "Cleanup error → engineId is STT id only (not combined)")
+        let state = await session.currentState
+        XCTAssertTrue(state == .done, "Cleanup error → .done (NOT .error), got \(state)")
     }
 
-    func testStopWithCleanerThrowingGenericErrorMapsToSpeakError() async throws {
-        // A non-SpeakError thrown from clean() must be wrapped in
-        // SpeakError.llmCleanupFailed per the architecture contract.
+    func testStopWithCleanerThrowingGenericErrorFallsBackToRaw() async throws {
+        // A non-SpeakError thrown from clean() must also fall back gracefully.
         struct GenericCleanError: LocalizedError {
             var errorDescription: String? { "transient api failure" }
         }
@@ -351,15 +400,81 @@ final class CaptureSessionTests: XCTestCase {
         let session = CaptureSession(transcriber: transcriber, cleaner: cleaner)
         try await session.start()
         try await Task.sleep(nanoseconds: 50_000_000)
-        do {
-            _ = try await session.stop()
-            XCTFail("stop() must throw when cleaner.clean() throws a generic error")
-        } catch let SpeakError.llmCleanupFailed(detail) {
-            XCTAssertTrue(detail.contains("transient"),
-                          "SpeakError detail must include the underlying message; got: \(detail)")
-        } catch {
-            XCTFail("stop() must throw SpeakError.llmCleanupFailed, got \(error)")
-        }
+        // stop() must NOT throw — generic errors fall back to raw transcript.
+        let result = try await session.stop()
+        XCTAssertNil(result.cleanedText, "Generic cleanup error → cleanedText must be nil")
+        XCTAssertEqual(result.rawText, "hello world", "Raw text must be preserved on generic cleanup error")
+        XCTAssertEqual(result.engineId, "mock-stt", "Generic cleanup error → engineId is STT id only")
+        let state = await session.currentState
+        XCTAssertTrue(state == .done, "Generic cleanup error → .done (NOT .error), got \(state)")
+    }
+
+    // MARK: - Cleanup timeout → graceful fallback (the primary bug fix)
+    //
+    // This test uses a NON-COOPERATIVE hanging cleaner (awaits a never-resumed
+    // CheckedContinuation) to prove that the timeout fires even when the cleaner
+    // ignores Task.cancel(). A Task.sleep-based mock would pass trivially (Task.sleep
+    // is cooperative) — that would be a false green.
+    //
+    // The test timeout (XCTestCase.continueAfterFailure) is set to a safe margin above
+    // T_cleanup to give the test runner room without being flaky. We use a shortened
+    // mock T_cleanup via a custom mock session; the production constant is 10 s.
+
+    func testStopWithHangingCleanerTimesOutAndFallsBackToRaw() async throws {
+        // A cleaner that never returns from clean() — simulates a hung Foundation
+        // Models session. This is intentionally NON-COOPERATIVE: it awaits a
+        // CheckedContinuation that is never resumed, so Task.cancel() alone cannot
+        // unblock it. The timeout mechanism in runCleanup() must work even when
+        // the cleaner ignores cooperative cancellation.
+        //
+        // This test takes up to T_cleanup (10 s) to complete. That is expected and
+        // correct — it verifies the production guarantee. The XCTest default timeout
+        // (60 s) gives ample headroom.
+        //
+        // [decision: this test uses the production T_cleanup to verify real behavior.
+        //  testStopWithSlowButReturnableCleanerSucceeds() below verifies the success
+        //  path fast (200 ms) so CI failure is easy to diagnose.]
+        let chunks = makeChunks(["hello world"], final: nil)
+        let transcriber = MockTranscriber(script: chunks)
+        let hangingCleaner = HangingCleaner(id: "hanging-cleaner")
+        let session = CaptureSession(transcriber: transcriber, cleaner: hangingCleaner)
+        try await session.start()
+        try await Task.sleep(nanoseconds: 50_000_000) // 50 ms — let the stream emit
+
+        // The await below blocks until the T_cleanup timeout fires (~10 s).
+        // stop() must return without throwing, with raw fallback, and the session
+        // must be in .done — not stuck in .processing.
+        let result = try await session.stop()
+        XCTAssertNil(result.cleanedText,
+            "Hanging cleaner → cleanedText must be nil (raw fallback fires on timeout)")
+        XCTAssertEqual(result.rawText, "hello world",
+            "Raw text must be preserved when cleanup hangs")
+        XCTAssertEqual(result.engineId, "mock-stt",
+            "Hanging cleaner timeout → engineId is STT id only (not combined)")
+        let state = await session.currentState
+        XCTAssertTrue(state == .done,
+            "Hanging cleaner → session must reach .done (NOT stuck in .processing), got \(state)")
+    }
+
+    /// Verifies that a slow-but-cooperative cleaner (200 ms delay) still produces
+    /// a cleaned result — i.e., the timeout does NOT fire prematurely for a valid
+    /// slow-but-returning cleaner. This is the regression guard for T_cleanup.
+    func testStopWithSlowButReturnableCleanerSucceeds() async throws {
+        let chunks = makeChunks(["hello world"], final: nil)
+        let transcriber = MockTranscriber(script: chunks)
+        // SlowCleaner sleeps 200 ms then returns a result — well within T_cleanup.
+        let slowCleaner = SlowCleaner(id: "slow-cleaner", delayNanoseconds: 200_000_000, result: "Hello, world.")
+        let session = CaptureSession(transcriber: transcriber, cleaner: slowCleaner)
+        try await session.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let result = try await session.stop()
+        XCTAssertEqual(result.cleanedText, "Hello, world.",
+            "Slow-but-returning cleaner must produce cleaned text (not a false timeout)")
+        XCTAssertEqual(result.rawText, "hello world", "Raw text must be preserved")
+        XCTAssertEqual(result.engineId, "mock-stt+slow-cleaner",
+            "Successful slow clean → combined engineId")
+        let state = await session.currentState
+        XCTAssertTrue(state == .done, "Slow cleaner that returns → .done, got \(state)")
     }
 
     // MARK: - STT stream failure

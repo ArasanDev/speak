@@ -180,6 +180,7 @@ No magic numbers elsewhere; matrix/gate values reference these symbols.
 |---|---|---|---|
 | `T_wer` | +3 pts | tolerance over Wispr's ~97% EN; tune after first §6 run | `[decision]` (revisit P13) |
 | `L_e2e` | < 2.0 s median (incl. on-device cleanup) | beats Wispr's cloud cleanup path (~1–2s) while staying local; raw-only path (cleanup off) target < 1.0s; consistent w/ `architecture.md` §12 | `[decision]` from frontier latency `[verified]` |
+| `T_cleanup` | 10 s | cleanup timeout in `CaptureSession.runCleanup()`. Architecture §12 budgets happy-path < 1.5 s, p95 < 2.5 s; 10 s is 4× p95, catching only genuine model hangs (Foundation Models loading stuck, Neural Engine unavailable), not slow-but-valid runs. On timeout the overlay falls back to raw transcript and hides, honoring "cleanup unavailability ≠ error". | `[decision]` |
 | `L_partial` | < 200 ms | matches `architecture.md` §12 first-partial p95; SpeechAnalyzer volatile results are near-instant `[verified]` | platform-derived |
 | `N/M` | ≥ 13/16 | = `quality.md` §3 compatibility matrix size + ship gate; **measured, not assumed** | `[decision]`, single source = `quality.md` §3 |
 | `F_rate` | < 1 / 30 min | = `roadmap.md` P5 done-when (typing test in Notes) | `[decision]`, single source = `roadmap.md` P5 |

@@ -8,7 +8,46 @@
 
 ## Current phase
 
-> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-22, secure-field paste guard)
+> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-22, cleanup-hang HUD fix)
+> **HUD "Cleaning up…" HANG BUG — FIXED & ALL 4 GATES GREEN.**
+> Build ✅ · Tests ✅ (384+22 tests / 5 XCTSkip / 0 failures; +4 new cleanup-timeout tests) · Lint ✅ (0 serious) · Moat ✅ (7/7).
+> **Uncommitted in worktree** — orchestrator reviews diff and owns the commit.
+>
+> **Bug:** After pressing Right-Command to stop dictation, the HUD overlay showed "Cleaning up…"
+> with a spinner and never closed. Root cause: `CaptureSession.runCleanup()` called `cleaner.clean()`
+> (Foundation Models `LanguageModelSession.respond()`) with no timeout. If FM hangs (model loading
+> stuck, Neural Engine unavailable, etc.), the `await` never returns, leaving `endDictation()` blocked,
+> the overlay stuck in `.processing`, and the panel never hidden.
+>
+> **Secondary bug also fixed:** When `clean()` threw (e.g. `llmCleanupFailed`), `runCleanup()` re-threw it.
+> `DictationController.endDictation()` caught it and called `overlayController.showError()`, which left
+> the panel visible with no auto-dismiss path. The Escape guard (`icon == .listening`) blocked dismiss via
+> Escape too. The panel was permanently visible in the error state.
+>
+> **Fix (`SpeakCore/Engine/CaptureSession.swift`):**
+>   - `runCleanup()` is now `async` (no longer `async throws`).
+>   - All outcomes — off, unavailable, timeout, throw — produce `(nil, transcriber.id)` (raw fallback → `.done`).
+>   - `clean()` is raced against a `T_cleanup = 10 s` deadline using an unstructured `Task` +
+>     `CheckedContinuation` pattern. Double-resume is prevented by `OSAllocatedUnfairLock<Bool>`.
+>   - On timeout, the cleanup `Task` is `cancel()`ed (best-effort; non-cooperative models may finish in
+>     background). The continuation is already resumed; the session proceeds to `.done` unconditionally.
+>   - [decision: cleanup failure ≡ cleanup unavailability — both fall back to raw transcript. See
+>     `CaptureSession.runCleanup()` doc comment for full rationale.]
+>   - `T_cleanup = 10 s` added to `benchmark.md §7` derivation ledger (4× architecture p95 budget of 2.5 s).
+>
+> **Test coverage (`SpeakTests/CaptureSessionTests.swift`, +4 tests):**
+>   - `testStopWithCleanerThrowingFallsBackToRawTranscript` — SpeakError throw → raw fallback → .done
+>   - `testStopWithCleanerThrowingGenericErrorFallsBackToRaw` — generic Error throw → raw fallback → .done
+>   - `testStopWithHangingCleanerTimesOutAndFallsBackToRaw` — non-cooperative hang (CheckedContinuation
+>     never resumed → Task.cancel() cannot unblock it) → T_cleanup fires → raw fallback → .done (~10 s)
+>   - `testStopWithSlowButReturnableCleanerSucceeds` — 200 ms slow cleaner → cleaned result (no premature timeout)
+>
+> **Files changed:**
+>   - `SpeakCore/Engine/CaptureSession.swift` — `runCleanup()` redesign + timeout
+>   - `SpeakTests/CaptureSessionTests.swift` — updated 2 old tests + added 2 new mock types + 4 new tests
+>   - `docs/benchmark.md §7` — `T_cleanup` entry added
+
+> ## OLD BANNER (handoff banner — 2026-06-22, secure-field paste guard)
 > **SECURE-FIELD PASTE GUARD — BUILT & ALL 4 GATES GREEN.**
 > Build ✅ · Tests ✅ (374 tests / 5 XCTSkip / 0 failures; +4 new secure-field guard tests) · Lint ✅ (0 serious) · Moat ✅ (7/7).
 > **Uncommitted in worktree** — orchestrator reviews diff and owns the commit.

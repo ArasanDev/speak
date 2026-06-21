@@ -244,8 +244,8 @@ public actor CaptureSession {
         let duration = Date().timeIntervalSince(sessionStartTime ?? Date())
         let sessionEndedAt = Date()
 
-        // Run cleanup. Throws on genuine API failure (caller handles).
-        let (cleanedText, engineId) = try await runCleanup(rawText: rawText)
+        // Run cleanup. Never throws — all failure/timeout paths return raw fallback.
+        let (cleanedText, engineId) = await runCleanup(rawText: rawText)
 
         let result = TranscriptionResult(
             rawText: rawText,
@@ -359,10 +359,28 @@ public actor CaptureSession {
     /// - `cleaner.isAvailable == false` (engine unavailable):
     ///   `cleanedText = nil`, **no error** — graceful fallback. The session
     ///   reaches `.done` and the caller pastes the raw transcript.
-    /// - `cleaner.clean()` throws: rethrown to the caller. On a genuine
-    ///   API failure the caller decides whether to surface `.error` or
-    ///   recover; unavailability is **never** an error.
-    private func runCleanup(rawText: String) async throws -> (cleanedText: String?, engineId: String) {
+    /// - `cleaner.clean()` times out or throws:
+    ///   `cleanedText = nil`, **no error** — graceful fallback with logged reason.
+    ///   [decision: cleanup failure ≡ cleanup unavailability — both fall back to raw
+    ///    transcript and reach `.done`. This honors the hard rule "cleanup unavailability
+    ///    ≠ error" and ensures the overlay ALWAYS reaches a terminal hidden state after
+    ///    stop, even when Foundation Models hangs or returns a GenerationError.
+    ///    Previously, a thrown SpeakError.llmCleanupFailed was rethrown and surfaced as
+    ///    an un-dismissable HUD error — that was a UX fault. Raw transcript is always
+    ///    available and is the correct degradation target.]
+    ///
+    /// **Timeout (T_cleanup — benchmark.md §7):** `clean()` is wrapped in an
+    /// unstructured `Task` raced against a deadline via a `CheckedContinuation`
+    /// that resumes exactly once (double-resume guard via `didResume` flag).
+    /// On timeout the cleanup task is cancelled (best-effort — if the on-device
+    /// model does not honor cooperative cancellation, the task finishes in the
+    /// background; the continuation has already resumed and the session proceeds
+    /// without awaiting it). This guarantees the overlay always hides within
+    /// `T_cleanup` of stop, regardless of the cleaner's implementation.
+    ///
+    /// Does NOT throw. All outcomes — off, unavailable, timeout, error — produce
+    /// `(nil, transcriber.id)`. Only a successful clean produces `(cleaned, combinedId)`.
+    private func runCleanup(rawText: String) async -> (cleanedText: String?, engineId: String) {
         guard let cleaner = cleaner else {
             // Cleanup off — raw transcript, STT engine id only.
             return (nil, transcriber.id)
@@ -375,26 +393,91 @@ public actor CaptureSession {
             )
             return (nil, transcriber.id)
         }
-        do {
-            let cleaned = try await cleaner.clean(rawText, mode: cleanupMode)
+
+        // Bounded timeout: race the cleanup call against T_cleanup.
+        // We cannot guarantee Foundation Models' respond() honors cooperative
+        // cancellation, so we use an unstructured Task + CheckedContinuation
+        // pattern that resumes the parent without awaiting the child.
+        // [decision: T_cleanup = 10 s — see benchmark.md §7. Architecture §12
+        //  budgets cleanup at < 1.5 s happy-path and < 2.5 s p95; 10 s sits
+        //  4× above p95 so it only fires on genuine hangs, not slow-but-valid runs.]
+        let cleanupTimeoutNanoseconds: UInt64 = 10_000_000_000  // 10 s [decision T_cleanup benchmark.md §7]
+        let cleanerId = cleaner.id
+        let mode = cleanupMode
+        let sttId = transcriber.id
+
+        enum CleanupOutcome {
+            case success(String)
+            case failure(String)   // logged reason; caller falls back to raw
+            case timedOut
+        }
+
+        let outcome: CleanupOutcome = await withCheckedContinuation { continuation in
+            // `resumeOnce` guards the continuation against double-resume: both the
+            // cleanup task and the timeout task race to resume it; only the first
+            // wins. `OSAllocatedUnfairLock<Bool>` gives a data-race-free
+            // test-and-set across the two unstructured Tasks running off-actor.
+            // [verified: OSAllocatedUnfairLock is available from macOS 13+;
+            //  this project targets macOS 26. `withLockIfAvailable` is the
+            //  recommended tryLock alternative; `withLock` is the blocking form
+            //  used here — the critical section is a single Bool flip, so
+            //  contention is essentially zero.]
+            let resumeOnce = OSAllocatedUnfairLock<Bool>(initialState: false)
+
+            // Unstructured task: runs the actual clean() call. Not awaited —
+            // if it times out, the continuation is already resumed and this task
+            // finishes (or hangs) in the background without blocking the session.
+            let cleanTask = Task {
+                do {
+                    let cleaned = try await cleaner.clean(rawText, mode: mode)
+                    resumeOnce.withLock { alreadyResumed in
+                        guard !alreadyResumed else { return }
+                        alreadyResumed = true
+                        continuation.resume(returning: .success(cleaned))
+                    }
+                } catch {
+                    let detail = error.localizedDescription
+                    resumeOnce.withLock { alreadyResumed in
+                        guard !alreadyResumed else { return }
+                        alreadyResumed = true
+                        continuation.resume(returning: .failure(detail))
+                    }
+                }
+            }
+
+            // Timeout task: resumes the continuation with .timedOut after T_cleanup.
+            Task {
+                try? await Task.sleep(nanoseconds: cleanupTimeoutNanoseconds)
+                resumeOnce.withLock { alreadyResumed in
+                    guard !alreadyResumed else { return }
+                    alreadyResumed = true
+                    cleanTask.cancel()   // best-effort — non-cooperative cleaners ignore this
+                    continuation.resume(returning: .timedOut)
+                }
+            }
+        }
+
+        switch outcome {
+        case .success(let cleaned):
             SpeakLog.engine.info("""
                 CaptureSession: cleanup produced \(cleaned.count, privacy: .public) chars \
                 from \(rawText.count, privacy: .public) raw chars
                 """)
-            return (cleaned, "\(transcriber.id)+\(cleaner.id)")
-        } catch let speakError as SpeakError {
-            // Already a SpeakError — propagate unchanged.
+            return (cleaned, "\(sttId)+\(cleanerId)")
+        case .failure(let detail):
+            // [decision: cleanup error → graceful fallback to raw transcript, NOT .error.
+            //  See runCleanup() doc comment above for the full rationale.]
             SpeakLog.engine.error(
-                "CaptureSession: cleanup SpeakError — \(speakError.recoverySuggestion, privacy: .public)"
+                "CaptureSession: cleanup failed — falling back to raw transcript. Detail: \(detail, privacy: .public)"
             )
-            throw speakError
-        } catch {
-            // Map any other error to the canonical cleanup-failed type.
-            let detail = error.localizedDescription
+            return (nil, sttId)
+        case .timedOut:
+            // [decision: cleanup timeout → graceful fallback to raw transcript.
+            //  The cleanup task was cancelled (best-effort). The overlay must hide.]
             SpeakLog.engine.error(
-                "CaptureSession: cleanup failed — \(detail, privacy: .public)"
+                "CaptureSession: cleanup timed out after T_cleanup — falling back to raw transcript."
             )
-            throw SpeakError.llmCleanupFailed(detail)
+            return (nil, sttId)
         }
     }
 }
