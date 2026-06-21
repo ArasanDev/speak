@@ -48,11 +48,13 @@ struct DashboardView: View {
     private func detail(for section: DashboardSection) -> some View {
         switch section {
         case .home:       HomePaneView(context: context)
-        case .history:    HistoryPaneView(context: context)
+        case .insights:   InsightsPaneView(context: context)
         case .dictionary: DictionaryPaneView(context: context)
         case .snippets:   SnippetsPaneView(context: context)
         case .style:      StylePaneView(context: context)
-        case .insights:   InsightsPaneView(context: context)
+        case .transforms: TransformsPaneView(context: context)
+        case .scratchpad: ScratchpadPaneView(context: context)
+        case .history:    HistoryPaneView(context: context)
         }
     }
 }

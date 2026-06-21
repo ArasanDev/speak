@@ -1,14 +1,14 @@
 // App/Dashboard/Panes/HomePaneView.swift
 //
-// The Home pane — the daily-open landing surface (acceleration-plan.md Wave A).
-// Shows the dictation hotkey as a keycap combo, the live cleanup status, and the
-// three most-recent dictations (Wave A.2 enrichment).
+// The Home pane — the daily-open landing surface. Per the verified Wispr layout
+// (research/wispr-flow-ui-verified.md), Home IS the day-grouped dictation feed with a
+// stats rail on the right — NOT a status page (History is the deeper searchable archive).
 //
-// Reads `SettingsStore` reactively via `@ObservedObject` so the cleanup status
-// reflects changes made in the Style pane without a refresh.
+// Layout:
+//   [ personalized greeting + TODAY/YESTERDAY feed ]   [ stats rail: words/avg/streak ]
 //
-// Recent entries are fetched off-main via `.task` (same pattern as HistoryViewModel)
-// and stored in `@State` — no extra ObservableObject needed for a read-only display.
+// Reads `SettingsStore` reactively (cleanup status) and fetches history off-main via
+// `.task`. Content is Monaco; chrome/labels use the system font.
 
 import SwiftUI
 import SpeakCore
@@ -19,10 +19,8 @@ struct HomePaneView: View {
     let context: DashboardContext
 
     @ObservedObject private var settings: SettingsStore
-
-    // [decision: 3 recent entries — enough for a quick "what did I just say" glance
-    // without making the pane feel like a history window]
-    @State private var recentEntries: [HistoryEntry] = []
+    @State private var entries: [HistoryEntry] = []
+    @State private var loaded = false
 
     init(context: DashboardContext) {
         self.context = context
@@ -30,125 +28,174 @@ struct HomePaneView: View {
     }
 
     var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            feedColumn
+            Divider()
+            statsRail
+                // [decision: 260pt rail — fits the stat card + status without crowding the feed]
+                .frame(width: 260)
+        }
+        .task { await loadEntries() }
+    }
+
+    // MARK: - Feed column (greeting + day-grouped history)
+
+    private var feedColumn: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PaneHeader(title: "speak", subtitle: "Local-first voice dictation, neat-written on-device.")
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
-                    hotkeyCard
-                    statusCard
-                    recentSection
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, SpeakSpacing.lg)
-                .padding(.bottom, SpeakSpacing.lg)
-            }
-        }
-        .task {
-            await loadRecent()
-        }
-    }
-
-    // MARK: - Hotkey card
-
-    private var hotkeyCard: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-            Text("Start dictating")
-                .font(.speakMonoBody)
-            HStack(spacing: SpeakSpacing.sm) {
-                KeyComboView(keys: context.hotkeyCombo)
-                Text("to talk — text is neat-written and pasted at your cursor.")
-                    .font(.speakMonoCaption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(SpeakSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.speakSurface))
-    }
-
-    // MARK: - Status card
-
-    private var statusCard: some View {
-        HStack(spacing: SpeakSpacing.md) {
-            Image(systemName: settings.cleanupEnabled ? "wand.and.stars" : "text.alignleft")
-                .font(.system(size: 22))
-                .foregroundStyle(settings.cleanupEnabled ? Color.speakAccent : Color.secondary)
-            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                Text(settings.cleanupEnabled ? "AI neat-writing is on" : "Raw transcript mode")
-                    .font(.speakMonoBody)
-                Text(settings.cleanupEnabled
-                     ? "Foundation Models cleans your dictation on-device before pasting."
-                     : "Text is pasted exactly as transcribed, with no AI pass.")
-                    .font(.speakMonoCaption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(SpeakSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.speakSurface))
-    }
-
-    // MARK: - Recent dictations
-
-    private var recentSection: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-            Text("Recent")
-                .font(.speakMonoBody)
-
-            if recentEntries.isEmpty {
-                Text("No dictations yet — try your first one.")
-                    .font(.speakMonoCaption)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, SpeakSpacing.xs)
+            greeting
+            if loaded && entries.isEmpty {
+                emptyFeed
             } else {
-                VStack(spacing: SpeakSpacing.xs) {
-                    ForEach(recentEntries) { entry in
-                        RecentEntryRow(entry: entry)
+                feedList
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var greeting: some View {
+        HStack(spacing: SpeakSpacing.sm) {
+            Text("Hey \(firstName), get back into the flow with")
+                .font(.speakMonoTitle)
+                .fixedSize(horizontal: false, vertical: true)
+            KeyCapView(label: "fn", isAccented: true)
+        }
+        .padding(.horizontal, SpeakSpacing.lg)
+        .padding(.top, SpeakSpacing.lg)
+        .padding(.bottom, SpeakSpacing.md)
+    }
+
+    private var feedList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: SpeakSpacing.lg) {
+                ForEach(groupedEntries, id: \.title) { group in
+                    VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+                        Text(group.title)
+                            .font(.speakMonoCaption)
+                            .foregroundStyle(.secondary)
+                        ForEach(group.entries) { entry in
+                            FeedRow(entry: entry)
+                        }
                     }
                 }
             }
+            .padding(.horizontal, SpeakSpacing.lg)
+            .padding(.bottom, SpeakSpacing.lg)
         }
     }
 
-    // MARK: - Async fetch
+    private var emptyFeed: some View {
+        PanePlaceholder(
+            systemImage: "waveform",
+            message: "No dictations yet. Double-tap fn anywhere and start talking —\n"
+                + "your words land here, neat-written."
+        )
+    }
 
-    private func loadRecent() async {
-        do {
-            // [decision: fetch 3 — matches the "Recent" section's display limit]
-            recentEntries = try await context.historyStore.recent(limit: 3)
-        } catch {
-            recentEntries = []
+    // MARK: - Stats rail
+
+    private var statsRail: some View {
+        let stats = InsightsStats(entries: entries, now: Date(), calendar: .current)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+                statRow(value: "\(stats.totalWords)", label: "total words")
+                statRow(value: "\(stats.averageWordsPerDictation)", label: "avg words / session")
+                statRow(value: "\(stats.currentStreakDays)", label: "day streak")
+                Divider().padding(.vertical, SpeakSpacing.xs)
+                cleanupStatus
+            }
+            .padding(SpeakSpacing.lg)
         }
+    }
+
+    private func statRow(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            Text(value)
+                .font(.speakMonoStat)
+                .foregroundStyle(Color.speakAccent)
+            Text(label)
+                .font(.speakMonoCaption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var cleanupStatus: some View {
+        HStack(spacing: SpeakSpacing.sm) {
+            Image(systemName: settings.cleanupEnabled ? "wand.and.stars" : "text.alignleft")
+                .foregroundStyle(settings.cleanupEnabled ? Color.speakAccent : Color.secondary)
+            Text(settings.cleanupEnabled ? "AI neat-writing on" : "Raw transcript mode")
+                .font(.speakMonoCaption)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: - Data
+
+    /// The current user's first name for the greeting; falls back to "there".
+    private var firstName: String {
+        let full = NSFullUserName().split(separator: " ").first.map(String.init) ?? ""
+        return full.isEmpty ? "there" : full
+    }
+
+    private func loadEntries() async {
+        do {
+            // [decision: 200 recent entries — plenty for the Home feed + stats rail at
+            //  negligible SQLite cost; the full archive lives in the History pane.]
+            entries = try await context.historyStore.recent(limit: 200)
+        } catch {
+            entries = []
+        }
+        loaded = true
+    }
+
+    /// Groups entries into day buckets labelled TODAY / YESTERDAY / a date, newest first.
+    private var groupedEntries: [DayGroup] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let buckets = Dictionary(grouping: entries) { calendar.startOfDay(for: $0.createdAt) }
+        return buckets.keys.sorted(by: >).map { day in
+            DayGroup(day: day, title: label(for: day, today: today, calendar: calendar),
+                     entries: (buckets[day] ?? []).sorted { $0.createdAt > $1.createdAt })
+        }
+    }
+
+    private func label(for day: Date, today: Date, calendar: Calendar) -> String {
+        if day == today { return "TODAY" }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: today), day == yesterday {
+            return "YESTERDAY"
+        }
+        return day.formatted(.dateTime.weekday(.wide).month().day()).uppercased()
     }
 }
 
-// MARK: - RecentEntryRow
+// MARK: - DayGroup
 
-/// A compact row showing a truncated preview of a single dictation entry.
-private struct RecentEntryRow: View {
+private struct DayGroup {
+    let day: Date
+    let title: String
+    let entries: [HistoryEntry]
+}
+
+// MARK: - FeedRow
+
+/// A single dictation row: timestamp on the left, full neat-written text on the right.
+private struct FeedRow: View {
     let entry: HistoryEntry
 
-    // [decision: 2 lines of text — enough to recognise the dictation without taking
-    // vertical space away from the rest of the Home pane]
-    private static let lineLimit = 2
-
     var body: some View {
-        HStack(alignment: .top, spacing: SpeakSpacing.sm) {
-            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                Text(entry.cleanedText ?? entry.rawText)
-                    .font(.speakMonoCaption)
-                    .lineLimit(Self.lineLimit)
-                    .truncationMode(.tail)
-                Text(entry.createdAt, format: .dateTime.month().day().hour().minute())
-                    .font(.speakMonoCaption)
-                    .foregroundStyle(.tertiary)
-            }
-            Spacer(minLength: 0)
+        HStack(alignment: .top, spacing: SpeakSpacing.md) {
+            Text(entry.createdAt, format: .dateTime.hour().minute())
+                // [decision: 72pt timestamp gutter — aligns the text column like Wispr's feed]
+                .frame(width: 72, alignment: .leading)
+                .font(.speakMonoCaption)
+                .foregroundStyle(.secondary)
+            Text(entry.cleanedText ?? entry.rawText)
+                .font(.speakMonoBody)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(SpeakSpacing.sm)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.speakSurface))
+        .padding(.vertical, SpeakSpacing.xs)
     }
 }
 
@@ -161,6 +208,6 @@ private struct RecentEntryRow: View {
         historyStore: PreviewNullHistoryStore(),
         hotkeyCombo: ["Fn", "Fn"]
     ))
-    .frame(width: 360, height: 520)
+    .frame(width: 820, height: 560)
 }
 #endif
