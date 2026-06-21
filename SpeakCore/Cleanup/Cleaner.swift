@@ -18,4 +18,52 @@ public enum CleanupMode: Sendable {
     case codeAware
     case toneAdjust
     case translate(Locale)
+    /// The user-facing neat-writing mode (Wave B): a writing *voice*
+    /// (`CleanupStyle`) crossed with a polish *intensity* (`CleanupLevel`).
+    /// `SpeakEngine.newSession()` derives this from `SettingsStore` at call time
+    /// (the H1 pattern), so a Style-pane change applies on the next dictation with
+    /// no engine restart. The legacy single-axis cases above remain for direct
+    /// callers and tests.
+    case styled(CleanupStyle, CleanupLevel)
+}
+
+/// The neat-writing *voice* — how the cleaned text should read. User-facing in the
+/// dashboard Style pane (acceleration-plan.md Wave B). `CaseIterable` order ==
+/// the picker order; `.default` is the behavior-neutral baseline (≈ legacy
+/// `.punctuation`).
+public enum CleanupStyle: String, Codable, Sendable, CaseIterable, Equatable {
+    case `default`
+    case professional
+    case casual
+    case code
+    case email
+
+    /// The picker label.
+    public var displayName: String {
+        switch self {
+        case .default:      return "Default"
+        case .professional: return "Professional"
+        case .casual:       return "Casual"
+        case .code:         return "Code"
+        case .email:        return "Email"
+        }
+    }
+}
+
+/// The neat-writing *intensity* — how aggressively the transcript is rewritten. A
+/// friendly abstraction over prompt strength (acceleration-plan.md Wave B).
+/// `.balanced` is the default.
+public enum CleanupLevel: String, Codable, Sendable, CaseIterable, Equatable {
+    case basic
+    case balanced
+    case thorough
+
+    /// The picker label.
+    public var displayName: String {
+        switch self {
+        case .basic:    return "Basic"
+        case .balanced: return "Balanced"
+        case .thorough: return "Thorough"
+        }
+    }
 }

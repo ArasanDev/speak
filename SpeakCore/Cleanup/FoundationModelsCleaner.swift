@@ -122,7 +122,9 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
     /// Returns the system instructions string for the given cleanup mode.
     /// Inlined here (not in `SpeakLLM/`) because `SpeakLLM/` targets the
     /// Ollama v0.1 engine and is a separate module not available in SpeakCore.
-    private static func instructions(for mode: CleanupMode) -> String {
+    /// `internal` (not `private`) so the prompt mapping is unit-testable without a
+    /// live Foundation Models pass (StyleModeTests). [decision Wave B]
+    static func instructions(for mode: CleanupMode) -> String {
         switch mode {
 
         case .fillersOnly:
@@ -185,7 +187,67 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
                 translate meaningfully. Return only the translated text with no \
                 commentary, no quotes, and no introduction.
                 """
+
+        case .styled(let style, let level):
+            // Wave B: compose a writing voice (style) with a polish intensity (level).
+            // The base task + footer are shared; the voice and the intensity are the
+            // two variable clauses. Kept as composed strings (not a fixed table) so a
+            // new style or level is one clause, not a combinatorial rewrite.
+            return Self.styledInstructions(style: style, level: level)
         }
+    }
+
+    /// Compose the system instructions for a `.styled(style, level)` mode.
+    /// `style` selects the voice clause; `level` selects how aggressively to rewrite.
+    /// `internal` for unit-test access (StyleModeTests). [decision Wave B]
+    static func styledInstructions(style: CleanupStyle, level: CleanupLevel) -> String {
+        let voice: String
+        switch style {
+        case .default:
+            voice = "Convert the raw spoken transcript into clean, natural written text, " +
+                    "preserving the speaker's own wording and voice."
+        case .professional:
+            voice = "Convert the raw spoken transcript into polished, professional prose " +
+                    "suitable for written workplace communication. Smooth informal phrasing " +
+                    "and sentence fragments into complete, well-formed sentences."
+        case .casual:
+            voice = "Convert the raw spoken transcript into relaxed, friendly written text. " +
+                    "Keep it conversational and natural — contractions are welcome — without " +
+                    "sounding stiff or formal."
+        case .code:
+            voice = "Convert the raw spoken transcript into clean written text for a software " +
+                    "developer. Preserve technical identifiers verbatim — variable, function, " +
+                    "and method names, acronyms, command-line flags, and file paths. Do not " +
+                    "autocorrect, camelCase, or alter technical terms. Honor spelled-out or " +
+                    "\"capital H\" intent."
+        case .email:
+            voice = "Convert the raw spoken transcript into a clear, courteous email body. " +
+                    "Organize the thoughts into coherent sentences and short paragraphs with " +
+                    "a natural greeting/closing only if the speaker dictated one — do not " +
+                    "invent recipients, subjects, or signatures."
+        }
+
+        let intensity: String
+        switch level {
+        case .basic:
+            intensity = "Apply a light touch: add punctuation and fix capitalization, and " +
+                        "remove only obvious filler sounds (um, uh, hmm). Otherwise leave the " +
+                        "speaker's words and structure intact."
+        case .balanced:
+            intensity = "Apply standard cleanup: correct punctuation, capitalization, and " +
+                        "grammar, and remove filler words (um, uh, like, you know, kind of, " +
+                        "sort of). Do not paraphrase or change the speaker's meaning."
+        case .thorough:
+            intensity = "Apply a thorough polish: in addition to punctuation, capitalization, " +
+                        "grammar, and filler removal, tighten rambling phrasing and redundancy " +
+                        "into concise, well-structured prose — while preserving the speaker's " +
+                        "meaning and key vocabulary."
+        }
+
+        return """
+            You are a transcript editor. \(voice) \(intensity) Return only the edited \
+            text with no commentary, no quotes, and no introduction.
+            """
     }
 
     // MARK: - Init

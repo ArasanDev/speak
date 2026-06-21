@@ -79,6 +79,8 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
         static let hasCompletedOnboarding = "speak.settings.hasCompletedOnboarding"
         static let triggerMode           = "speak.settings.triggerMode"
         static let customVocabulary      = "speak.settings.customVocabulary"
+        static let cleanupStyle          = "speak.settings.cleanupStyle"
+        static let cleanupLevel          = "speak.settings.cleanupLevel"
     }
 
     // MARK: - Injected defaults (the testability seam)
@@ -101,6 +103,8 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
             Keys.cleanupEnabled: true,
             Keys.language: "en-US",
             Keys.pasteMode: PasteMode.cmdV.rawValue,
+            Keys.cleanupStyle: CleanupStyle.default.rawValue,
+            Keys.cleanupLevel: CleanupLevel.balanced.rawValue
         ])
         // Enum defaults are handled via `?? fallback` at the getter level because
         // Codable JSON cannot be registered as a `[String: Any]` literal.
@@ -238,6 +242,36 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
         set {
             objectWillChange.send()
             defaults.set(newValue.rawValue, forKey: Keys.triggerMode)
+        }
+    }
+
+    // MARK: - Cleanup style + level (Wave B — neat-writing voice)
+
+    /// The neat-writing *voice* applied during AI cleanup. Default: `.default`
+    /// (behavior-neutral baseline). Read by `SpeakEngine.newSession()` at call time
+    /// (H1 pattern), so a Style-pane change applies on the next dictation. Persisted
+    /// as the enum's `rawValue` String — `defaults.register` seeds the default.
+    public var cleanupStyle: CleanupStyle {
+        get {
+            let raw = defaults.string(forKey: Keys.cleanupStyle) ?? CleanupStyle.default.rawValue
+            return CleanupStyle(rawValue: raw) ?? .default
+        }
+        set {
+            objectWillChange.send()
+            defaults.set(newValue.rawValue, forKey: Keys.cleanupStyle)
+        }
+    }
+
+    /// The neat-writing *intensity* applied during AI cleanup. Default: `.balanced`.
+    /// Read alongside `cleanupStyle` at `newSession()` time.
+    public var cleanupLevel: CleanupLevel {
+        get {
+            let raw = defaults.string(forKey: Keys.cleanupLevel) ?? CleanupLevel.balanced.rawValue
+            return CleanupLevel(rawValue: raw) ?? .balanced
+        }
+        set {
+            objectWillChange.send()
+            defaults.set(newValue.rawValue, forKey: Keys.cleanupLevel)
         }
     }
 

@@ -152,7 +152,6 @@ final class SpeakEngineIntegrationTests: XCTestCase {
             cleaner: FoundationModelsCleaner(),   // isAvailable==false → raw fallback
             inserter: mockInserter,
             history: historyStore,
-            cleanupMode: .punctuation,
             settings: testSettings
         )
 

@@ -8,6 +8,9 @@
 //   until their specialist fills the body. Replace the placeholder, keep the header.
 
 import SwiftUI
+#if DEBUG
+import SpeakCore
+#endif
 
 // MARK: - PaneHeader
 
@@ -55,3 +58,17 @@ struct PanePlaceholder: View {
         .padding(SpeakSpacing.xl)
     }
 }
+
+// MARK: - Preview support
+
+#if DEBUG
+/// A no-op `HistoryStoring` for SwiftUI previews of dashboard panes that require a
+/// `DashboardContext`. Every method succeeds with empty results.
+final class PreviewNullHistoryStore: HistoryStoring, @unchecked Sendable {
+    func save(_ entry: HistoryEntry) throws {}
+    func recent(limit: Int) throws -> [HistoryEntry] { [] }
+    func search(_ substring: String) throws -> [HistoryEntry] { [] }
+    func clear() throws {}
+    func export() throws -> String { "[]" }
+}
+#endif

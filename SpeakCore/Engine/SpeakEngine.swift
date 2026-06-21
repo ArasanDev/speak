@@ -58,7 +58,6 @@ public actor SpeakEngine {
     private let cleaner: (any LLMCleaning)?
     private let inserter: (any TextInserting)?
     private let history: any HistoryStoring
-    private let cleanupMode: CleanupMode
 
     /// The settings store. Read at `newSession()` time so both the cleanup toggle
     /// and the transcription locale take effect on the next dictation without
@@ -97,31 +96,31 @@ public actor SpeakEngine {
     ///     live paste (write-never-read, hard constraint §2).
     ///   - history: Persistence store for completed dictations. Injected so tests
     ///     can substitute an in-memory or temp-file store.
-    ///   - cleanupMode: The LLM cleanup mode passed to the cleaner. Defaults to
-    ///     `.punctuation` (the most common use-case).
-    ///   - settings: The `SettingsStore` whose `cleanupEnabled` and `language` are
-    ///     both read at each `newSession()` call. Both the cleanup toggle and the
-    ///     transcription locale apply per-dictation — no restart required. Inject
-    ///     a test `SettingsStore` in tests to control behavior.
+    ///   - settings: The `SettingsStore` whose `cleanupEnabled`, `language`, and
+    ///     `cleanupStyle`/`cleanupLevel` are all read at each `newSession()` call.
+    ///     The cleanup toggle, transcription locale, and neat-writing mode apply
+    ///     per-dictation — no restart required. Inject a test `SettingsStore` in
+    ///     tests to control behavior. [decision Wave B: cleanup mode is no longer
+    ///     baked at init — it is derived from settings at call time, mirroring the
+    ///     H1 locale migration.]
     public init(transcriber: any Transcribing,
                 cleaner: (any LLMCleaning)? = nil,
                 inserter: (any TextInserting)? = nil,
                 history: any HistoryStoring,
-                cleanupMode: CleanupMode = .punctuation,
                 settings: SettingsStore) {
         self.transcriber = transcriber
         self.cleaner = cleaner
         self.inserter = inserter
         self.history = history
-        self.cleanupMode = cleanupMode
         self.settings = settings
     }
 
     // MARK: - Session factory
 
     /// Create and return a new `CaptureSession` wired with the engine's
-    /// transcriber, cleaner, inserter, and cleanupMode — reading both the
-    /// cleanup toggle and the transcription locale from `settings` at call time.
+    /// transcriber, cleaner, and inserter — reading the cleanup toggle, the
+    /// transcription locale, and the neat-writing mode (style + level) from
+    /// `settings` at call time.
     ///
     /// **Cleanup gating** (`settings.cleanupEnabled`):
     /// - `true` → the injected `cleaner` is passed (cleanup runs).
@@ -145,13 +144,16 @@ public actor SpeakEngine {
         // (SettingsStore is @unchecked Sendable — actor read is safe).
         let activeCleaner: (any LLMCleaning)? = settings.cleanupEnabled ? cleaner : nil
         let activeLocale: Locale = settings.language
+        // Wave B: derive the neat-writing mode from settings at call time (H1 pattern)
+        // so a Style-pane change applies on the next dictation with no engine restart.
+        let activeMode: CleanupMode = .styled(settings.cleanupStyle, settings.cleanupLevel)
 
         let session = CaptureSession(
             transcriber: transcriber,
             cleaner: activeCleaner,
             inserter: inserter,
             locale: activeLocale,
-            cleanupMode: cleanupMode
+            cleanupMode: activeMode
         )
         currentSession = session
         return session
