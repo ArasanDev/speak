@@ -47,11 +47,14 @@
 > `AccessibilitySelection` AX read/replace (`a67dfdd`). Final gate: **259 tests / 0 fail**.
 >
 > **REMAINING — all HUMAN-GATED by nature (need live testing the agent cannot do):**
->   1. **Command Mode live TRIGGER only** — the `Fn+Ctrl` chord + capturing the spoken
->      instruction audio to call `CommandModeService.run(instruction:)`. The whole
->      transform pipeline (AX read → `.command` clean → AX replace) is **built + tested**;
->      this last hookup means extending the leave-alone-list `HotkeyMonitor` and can't be
->      verified without a real app + selection → left for a live session. Like #8.
+>   1. **Command Mode — one live hookup only.** Built + tested: `.command` transform
+>      prompt, `CommandModeService` orchestration, `AccessibilitySelection` AX read/replace,
+>      **and `CommandChordDetector`** (pure Fn+Ctrl edge logic, 6 tests). The ONLY un-built
+>      piece: feeding the tap's live `CGEventFlags` into the detector AND **disambiguating
+>      Fn+Ctrl from the normal Fn dictation hotkey** so the chord doesn't false-trigger a
+>      dictation. That modifies the **critical Fn-detection path** in `HotkeyMonitor` and
+>      MUST be live-tested (a blind change could break *core dictation*) → human-gated, #8.
+>      Capturing the spoken-instruction audio reuses a transcriber session (also live).
 >   2. **Scratchpad paste-failure routing** — needs paste-error plumbing to surface the
 >      failed text + a live paste-failure to verify. (Text is already clipboard-safe today.)
 >   3. **Live render/run verification** of overlay + every dashboard pane (Home already
