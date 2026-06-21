@@ -78,8 +78,12 @@ struct InsightsPaneView: View {
                 StatCard(value: "\(stats.totalWords)", label: "total words")
             }
             HStack(spacing: SpeakSpacing.sm) {
+                StatCard(value: "\(stats.wordsPerMinute)", label: "words / min")
                 StatCard(value: "\(stats.averageWordsPerDictation)", label: "avg words / session")
+            }
+            HStack(spacing: SpeakSpacing.sm) {
                 StatCard(value: "\(stats.currentStreakDays)", label: "day streak")
+                Color.clear.frame(maxWidth: .infinity)   // keep the 2-column grid aligned
             }
         }
     }

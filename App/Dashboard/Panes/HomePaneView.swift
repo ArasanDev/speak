@@ -103,6 +103,7 @@ struct HomePaneView: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: SpeakSpacing.md) {
                 statRow(value: "\(stats.totalWords)", label: "total words")
+                statRow(value: "\(stats.wordsPerMinute)", label: "words / min")
                 statRow(value: "\(stats.averageWordsPerDictation)", label: "avg words / session")
                 statRow(value: "\(stats.currentStreakDays)", label: "day streak")
                 Divider().padding(.vertical, SpeakSpacing.xs)

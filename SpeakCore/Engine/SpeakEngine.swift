@@ -253,7 +253,8 @@ public actor SpeakEngine {
             rawText: result.rawText,
             cleanedText: result.cleanedText,
             createdAt: result.createdAt,
-            engineId: result.engineId
+            engineId: result.engineId,
+            duration: result.duration
         )
         do {
             try await history.save(entry)

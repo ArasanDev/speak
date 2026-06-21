@@ -380,9 +380,14 @@ private final class DebugSeededHistoryStore: HistoryStoring, @unchecked Sendable
         let hour: TimeInterval = 3600
         let day: TimeInterval = 86_400
         func entry(_ raw: String, _ cleaned: String, ago: TimeInterval) -> HistoryEntry {
-            HistoryEntry(rawText: raw, cleanedText: cleaned,
-                         createdAt: now.addingTimeInterval(-ago),
-                         engineId: "apple-speech-en-US+foundation-models")
+            // Derive a plausible duration from the cleaned word count at ~130 wpm so the
+            // seeded dashboard shows a realistic words/min figure.
+            let words = cleaned.split(whereSeparator: \.isWhitespace).count
+            let duration = Double(words) / 130.0 * 60.0
+            return HistoryEntry(rawText: raw, cleanedText: cleaned,
+                                createdAt: now.addingTimeInterval(-ago),
+                                engineId: "apple-speech-en-US+foundation-models",
+                                duration: duration)
         }
         entries = [
             entry("um can you hear me",

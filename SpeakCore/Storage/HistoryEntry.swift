@@ -14,18 +14,24 @@ public struct HistoryEntry: Sendable, Identifiable, Equatable {
     public let cleanedText: String?
     public let createdAt: Date
     public let engineId: String
+    /// Wall-clock dictation duration in seconds (from `TranscriptionResult.duration`).
+    /// Used to compute words-per-minute in Insights. Defaults to 0 for back-compat
+    /// (rows migrated from the pre-duration schema, and call sites that don't supply it).
+    public let duration: TimeInterval
 
     public init(
         id: UUID = UUID(),
         rawText: String,
         cleanedText: String?,
         createdAt: Date = Date(),
-        engineId: String
+        engineId: String,
+        duration: TimeInterval = 0
     ) {
         self.id = id
         self.rawText = rawText
         self.cleanedText = cleanedText
         self.createdAt = createdAt
         self.engineId = engineId
+        self.duration = duration
     }
 }

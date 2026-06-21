@@ -106,8 +106,8 @@ public actor HistoryStore: HistoryStoring {
 
     public func save(_ entry: HistoryEntry) throws {
         let sql = """
-            INSERT OR REPLACE INTO history (id, rawText, cleanedText, createdAt, engineId)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO history (id, rawText, cleanedText, createdAt, engineId, duration)
+            VALUES (?, ?, ?, ?, ?, ?)
             """
         try execute(sql: sql) { stmt in
             let idStr = entry.id.uuidString
@@ -127,6 +127,9 @@ public actor HistoryStore: HistoryStoring {
                 throw dbError("bind createdAt")
             }
             try bind(stmt, index: 5, text: entry.engineId)
+            guard sqlite3_bind_double(stmt, 6, entry.duration) == SQLITE_OK else {
+                throw dbError("bind duration")
+            }
         }
         try trimToCapacity()
         SpeakLog.storage.debug("HistoryStore saved entry \(entry.id.uuidString, privacy: .private)")
@@ -134,7 +137,7 @@ public actor HistoryStore: HistoryStoring {
 
     public func recent(limit: Int) throws -> [HistoryEntry] {
         let sql = """
-            SELECT id, rawText, cleanedText, createdAt, engineId
+            SELECT id, rawText, cleanedText, createdAt, engineId, duration
             FROM history
             ORDER BY createdAt DESC, rowid DESC
             LIMIT ?
@@ -152,7 +155,7 @@ public actor HistoryStore: HistoryStoring {
         // `instr(col, ?) > 0` is a true substring match — no wildcard escaping
         // needed (unlike LIKE '%x%'). Default BINARY collation → case-sensitive.
         let sql = """
-            SELECT id, rawText, cleanedText, createdAt, engineId
+            SELECT id, rawText, cleanedText, createdAt, engineId, duration
             FROM history
             WHERE instr(rawText, ?) > 0 OR instr(cleanedText, ?) > 0
             ORDER BY createdAt DESC, rowid DESC
@@ -213,7 +216,8 @@ public actor HistoryStore: HistoryStoring {
                 rawText    TEXT NOT NULL,
                 cleanedText TEXT,
                 createdAt  REAL NOT NULL,
-                engineId   TEXT NOT NULL
+                engineId   TEXT NOT NULL,
+                duration   REAL NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS idx_history_createdAt ON history (createdAt DESC);
             """
@@ -225,6 +229,12 @@ public actor HistoryStore: HistoryStoring {
             SpeakLog.storage.error("HistoryStore schema error: \(msg, privacy: .public)")
             throw SpeakError.unknown("SQLite schema: \(msg)")
         }
+
+        // Migration: add `duration` to DBs created before it existed. ALTER errors with
+        // "duplicate column name" when the column is already present (fresh DBs, or a
+        // prior migration) — that is the idempotent no-op case, so the result is ignored.
+        // [decision: column-add migration over PRAGMA user_version — single additive column]
+        sqlite3_exec(db, "ALTER TABLE history ADD COLUMN duration REAL NOT NULL DEFAULT 0", nil, nil, nil)
     }
 
     // MARK: - Capacity trim
@@ -292,12 +302,14 @@ public actor HistoryStore: HistoryStoring {
                 : sqlite3_column_text(stmt, 2).map { String(cString: $0) }
             let createdAt = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 3))
             let engineId = sqlite3_column_text(stmt, 4).map { String(cString: $0) } ?? ""
+            let duration = sqlite3_column_double(stmt, 5)
             entries.append(HistoryEntry(
                 id: id,
                 rawText: rawText,
                 cleanedText: cleanedText,
                 createdAt: createdAt,
-                engineId: engineId
+                engineId: engineId,
+                duration: duration
             ))
         }
         return entries

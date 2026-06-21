@@ -25,6 +25,10 @@ public struct InsightsStats: Sendable, Equatable {
     /// Rounded average words per dictation session. 0 when there are no dictations.
     public let averageWordsPerDictation: Int
 
+    /// Rounded words-per-minute across dictations that recorded a duration.
+    /// 0 when no entry has a duration (e.g. all rows predate the duration column).
+    public let wordsPerMinute: Int
+
     /// Consecutive calendar days ending today (or yesterday if none today) that each
     /// have at least one dictation. 0 when the most-recent activity is ≥2 days stale.
     public let currentStreakDays: Int
@@ -61,6 +65,17 @@ public struct InsightsStats: Sendable, Equatable {
 
         // --- Average (rounded, 0 on empty) ---
         averageWordsPerDictation = total == 0 ? 0 : Int((Double(wordTotal) / Double(total)).rounded())
+
+        // --- Words per minute (only entries that recorded a duration) ---
+        // Pre-migration rows have duration 0 and are excluded so they don't deflate WPM.
+        var timedWords = 0
+        var timedSeconds: TimeInterval = 0
+        for (entry, wordCount) in zip(entries, words) where entry.duration > 0 {
+            timedWords += wordCount
+            timedSeconds += entry.duration
+        }
+        let timedMinutes = timedSeconds / 60
+        wordsPerMinute = timedMinutes > 0 ? Int((Double(timedWords) / timedMinutes).rounded()) : 0
 
         // --- Streak ---
         // Build a set of start-of-day dates that have ≥1 dictation entry.
@@ -119,6 +134,7 @@ extension InsightsStats {
         guard lhs.totalDictations == rhs.totalDictations,
               lhs.totalWords == rhs.totalWords,
               lhs.averageWordsPerDictation == rhs.averageWordsPerDictation,
+              lhs.wordsPerMinute == rhs.wordsPerMinute,
               lhs.currentStreakDays == rhs.currentStreakDays,
               lhs.dictationsPerDay.count == rhs.dictationsPerDay.count else { return false }
         for (left, right) in zip(lhs.dictationsPerDay, rhs.dictationsPerDay) {

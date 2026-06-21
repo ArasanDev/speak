@@ -47,13 +47,15 @@ final class InsightsStatsTests: XCTestCase {
         cleanedText: String? = nil,
         on day: Date,
         secondsOffset: TimeInterval = 0,
-        engineId: String = "test"
+        engineId: String = "test",
+        duration: TimeInterval = 0
     ) -> HistoryEntry {
         HistoryEntry(
             rawText: rawText,
             cleanedText: cleanedText,
             createdAt: day.addingTimeInterval(secondsOffset),
-            engineId: engineId
+            engineId: engineId,
+            duration: duration
         )
     }
 
@@ -146,6 +148,39 @@ final class InsightsStatsTests: XCTestCase {
         let now = try makeDay(year: 2026, month: 6, day: 21)
         let stats = InsightsStats(entries: [], now: now, calendar: calendar)
         XCTAssertEqual(stats.averageWordsPerDictation, 0)
+    }
+
+    // MARK: - Words per minute
+
+    func testWPM_computedFromTimedEntries() throws {
+        let now = try makeDay(year: 2026, month: 6, day: 21)
+        // 30 words over 60 seconds total → 30 wpm.
+        let entries = [
+            entry(rawText: "one two three four five six seven eight nine ten", on: now,
+                  secondsOffset: 0, duration: 20),   // 10 words / 20s
+            entry(rawText: "one two three four five six seven eight nine ten "
+                  + "one two three four five six seven eight nine ten", on: now,
+                  secondsOffset: 100, duration: 40)  // 20 words / 40s
+        ]
+        let stats = InsightsStats(entries: entries, now: now, calendar: calendar)
+        // 30 words / (60s = 1 min) = 30 wpm
+        XCTAssertEqual(stats.wordsPerMinute, 30)
+    }
+
+    func testWPM_excludesZeroDurationEntries() throws {
+        let now = try makeDay(year: 2026, month: 6, day: 21)
+        let entries = [
+            entry(rawText: "ten words here a b c d e f g", on: now, duration: 0),   // excluded
+            entry(rawText: "one two three four", on: now, secondsOffset: 10, duration: 60) // 4 words / 1 min
+        ]
+        let stats = InsightsStats(entries: entries, now: now, calendar: calendar)
+        XCTAssertEqual(stats.wordsPerMinute, 4, "Zero-duration rows must be excluded from WPM.")
+    }
+
+    func testWPM_zeroWhenNoTimedEntries() throws {
+        let now = try makeDay(year: 2026, month: 6, day: 21)
+        let stats = InsightsStats(entries: [entry(rawText: "a b c", on: now)], now: now, calendar: calendar)
+        XCTAssertEqual(stats.wordsPerMinute, 0)
     }
 
     // MARK: - Streak: zero cases
