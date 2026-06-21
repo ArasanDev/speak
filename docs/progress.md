@@ -8,7 +8,37 @@
 
 ## Current phase
 
-> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-21, Phase 2 build)
+> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-21, W2.1+W2.2 HUD rebuild)
+> **W2.1 + W2.2 — ACTIVE-DICTATION HUD → native-Apple quality — BUILT & ALL 4 GATES GREEN.**
+> Build ✅ · Tests ✅ (all pass, 5 pre-existing XCTSkip) · Lint ✅ (0 serious) · Moat ✅ (7/7).
+> **Uncommitted in worktree** — orchestrator reviews diff and owns the commit.
+>
+> **What changed:**
+>   - **W2.1 Live mic level wiring**: `AudioCapture` now computes RMS on each input buffer
+>     (new static `rmsLevel(buffer:)`) and yields it on a parallel `AsyncStream<Double>`
+>     (`startLevelStream()`). `AudioCaptureProviding` protocol + `AppleSpeechTranscriber`
+>     conformance exposes the live `AudioCapture` to `CaptureSession.levels()` and
+>     `SpeakEngine.currentLevels()`. `OverlayController` drains the level stream in a
+>     parallel `levelsTask` (like `partialsTask`) with one-pole smoothing via `levelSmoothed`.
+>   - **W2.2 HUD rebuild**: `OverlayState` gains `.error` (payload-free; reason in separate
+>     `errorReason: String?` property). `OverlayViewModel` gains `errorReason` + `isCleaningUp`.
+>     `TranscriptOverlayView` rebuilt: 15-bar `WaveformView` (VoiceInk blueprint) with per-bar
+>     phase ripple (`levelBarHeightsPhased`), Monaco font tokens, `.error` red-pill state,
+>     "Cleaning up…" vs "Pasting…" copy keyed on `isCleaningUp`, Reduce-Motion aware,
+>     VoiceOver announcements on every state transition.
+>   - **Escape-to-cancel**: global `NSEvent` monitor in `OverlayController` observes Escape
+>     while panel is visible; fires `onEscapeCancel` → `DictationController.cancelDictation()`.
+>   - `DictationController` wired: `showError()` on begin/end failure, `cancelDictation()` verb,
+>     honest `isCleaningUp` flag passed at `start()`.
+>   - `DebugLaunchDispatcher`: new `overlay-demo-error` target for the error state.
+>   - **7 new tests**: error state transitions, level reset, isCleaningUp propagation,
+>     `AudioCapture.rmsLevel`, `levelBarHeightsPhased` (5 cases).
+>
+> **Note on VoiceOver API:** `NSAccessibility.post(element:notification:userInfo:)` with
+> `.announcementRequested` + `NSAccessibility.NotificationUserInfoKey` is the macOS 26
+> renamed API — used correctly (compile-verified against local SDK).
+
+> ## OLD BANNER (2026-06-21, Phase 2 build)
 > **PHASE 2 (full-product dashboard) — EVERY FEATURE BUILT & GREEN; only live human
 > verification remains** (running the app on a real Mac — the pre-existing `#8` gate).
 > The full-window Wispr-style app is complete; Home screen **visually verified on-screen**.

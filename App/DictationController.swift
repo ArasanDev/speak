@@ -235,6 +235,11 @@ final class DictationController: ObservableObject {
         // Delegate panel creation to OverlayController — panel is expensive and
         // must be created once, not per-dictation.
         overlayController.createPanel()
+        // W2.2: wire Escape cancel — when the user presses Escape while dictating,
+        // cancel the current session without pasting.
+        overlayController.onEscapeCancel = { [weak self] in
+            self?.cancelDictation()
+        }
         SpeakLog.hotkey.info("DictationController: startMonitoring() — arming monitor.")
 
         // Check immediate AX state to set the initial permissionsNeeded hint.
@@ -284,6 +289,20 @@ final class DictationController: ObservableObject {
     /// Delegates to `WindowPresenter.showDashboard()`.
     func showDashboard() {
         windowPresenter?.showDashboard()
+    }
+
+    /// Cancel the current dictation without pasting. Called by the Escape key handler
+    /// in the overlay (W2.2). Safe to call when idle — the engine no-ops in that case.
+    ///
+    /// Hides the overlay immediately (no done-flash on cancel) and resets to idle.
+    func cancelDictation() {
+        Task { [weak self] in
+            guard let self else { return }
+            await self.engine.cancelDictation()
+            self.overlayController.cancelImmediate()
+            self.icon = .idle
+            SpeakLog.engine.info("DictationController: dictation cancelled by user (Escape).")
+        }
     }
 
     /// Re-paste the most recent finished transcript at the current cursor (Wispr's
@@ -410,14 +429,21 @@ final class DictationController: ObservableObject {
             icon = .listening
             SpeakLog.engine.info("DictationController: beginDictation succeeded → .listening")
             let engineRef = engine
-            overlayController.start {
-                await engineRef.currentPartials()
-            }
+            // W2.1: pass both the partials provider and the levels provider to OverlayController.
+            // The cleanup flag drives the "Pasting…" vs "Cleaning up…" copy (W2.2).
+            let willCleanup = settingsStore.cleanupEnabled && settingsStore.cleanupLevel != .none
+            overlayController.start(
+                partialsProvider: { await engineRef.currentPartials() },
+                levelsProvider: { await engineRef.currentLevels() },
+                isCleaningUp: willCleanup
+            )
         } catch SpeakError.microphoneMuted {
             icon = .idle
             SpeakLog.engine.info("DictationController: start ignored — microphone muted.")
         } catch {
             icon = .error
+            // W2.2: show an error state in the HUD instead of silently hiding.
+            overlayController.showError(error.localizedDescription)
             SpeakLog.engine.error(
                 "DictationController: beginDictation failed — \(error.localizedDescription, privacy: .public)"
             )
@@ -427,8 +453,8 @@ final class DictationController: ObservableObject {
     private func endDictation() async {
         do {
             // Phase C: transition overlay to .processing before the cleanup await.
-            // This keeps the panel visible showing "Cleaning up…" during the LLM pass.
-            // The panel is hidden AFTER the done flash, not immediately on stop.
+            // This keeps the panel visible showing "Cleaning up…" / "Pasting…" during
+            // the LLM pass. The panel is hidden AFTER the done flash, not immediately on stop.
             icon = .processing
             overlayController.transition(to: .processing)
             let result = try await engine.endDictation()
@@ -461,8 +487,8 @@ final class DictationController: ObservableObject {
                 "DictationController: paste fell back to clipboard + Scratchpad — Accessibility needed"
             )
         } catch {
-            // Error: hide the panel immediately — no done flash on failure.
-            overlayController.stop()
+            // W2.2: show an error state in the HUD with a short reason instead of silently hiding.
+            overlayController.showError(error.localizedDescription)
             icon = .error
             SpeakLog.engine.error(
                 "DictationController: endDictation failed — \(error.localizedDescription, privacy: .public)"
