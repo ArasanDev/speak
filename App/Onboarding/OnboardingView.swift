@@ -69,6 +69,7 @@ struct OnboardingView: View {
                 status: viewModel.evaluation.blockingPermissions.contains(.microphone)
                     ? .needed : .granted,
                 isLoading: viewModel.isRequestingMic,
+                isWaiting: false,
                 onAction: { viewModel.requestMicrophone() },
                 onContinue: { viewModel.advance() },
                 onOpenSettings: { viewModel.openSystemSettings(for: .microphone) }
@@ -79,6 +80,7 @@ struct OnboardingView: View {
                 status: viewModel.evaluation.blockingPermissions.contains(.accessibility)
                     ? .needed : .granted,
                 isLoading: false,
+                isWaiting: viewModel.isWaitingForAccessibility,
                 onAction: { viewModel.requestAccessibility() },
                 onContinue: { viewModel.advance() },
                 onOpenSettings: { viewModel.openSystemSettings(for: .accessibility) }
@@ -89,6 +91,7 @@ struct OnboardingView: View {
                 status: viewModel.evaluation.blockingPermissions.contains(.inputMonitoring)
                     ? .needed : .granted,
                 isLoading: false,
+                isWaiting: viewModel.isWaitingForInputMonitoring,
                 onAction: { viewModel.requestInputMonitoring() },
                 onContinue: { viewModel.advance() },
                 onOpenSettings: { viewModel.openSystemSettings(for: .inputMonitoring) }
@@ -177,6 +180,11 @@ private struct PermissionStepView: View {
     let kind: PermissionKind
     let status: PermissionStatus
     let isLoading: Bool
+    /// `true` for Accessibility/InputMonitoring after the first tap while waiting
+    /// for the user to toggle the permission in System Settings. Disables the
+    /// primary button and relabels it "Waiting for permission…" so re-taps cannot
+    /// spawn a second TCC dialog. The "Open System Settings" link remains enabled.
+    let isWaiting: Bool
     let onAction: () -> Void
     let onContinue: () -> Void
     let onOpenSettings: () -> Void
@@ -209,7 +217,7 @@ private struct PermissionStepView: View {
             switch status {
             case .needed:
                 if isLoading {
-                    // Loading state: in-progress spinner
+                    // Loading state: in-progress spinner (microphone request in-flight)
                     HStack(spacing: 8) {
                         ProgressView()
                             .controlSize(.small)
@@ -218,15 +226,30 @@ private struct PermissionStepView: View {
                     }
                 } else {
                     VStack(spacing: 10) {
-                        Button(actionLabel) {
+                        // Primary button: disabled in the "waiting" state so the user
+                        // cannot tap again and trigger a second TCC dialog. The label
+                        // communicates that we're waiting, not broken.
+                        Button(isWaiting ? "Waiting for permission\u{2026}" : actionLabel) {
                             onAction()
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
+                        .disabled(isWaiting)
 
-                        // For mic denied, also offer Settings deep-link.
+                        // Open System Settings link — always enabled for
+                        // Accessibility and Input Monitoring steps, so the user
+                        // can navigate back to the pane if they missed the prompt's
+                        // own button, or if TCC already had a record (no prompt shown).
+                        // For mic, shown only as a fallback when denied.
                         if kind == .microphone {
                             Button("Open System Settings instead") {
+                                onOpenSettings()
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                        } else {
+                            Button("Open System Settings") {
                                 onOpenSettings()
                             }
                             .buttonStyle(.plain)

@@ -43,14 +43,32 @@ final class OnboardingViewModel: ObservableObject {
     /// Turns the "Try it now" pill green.
     @Published private(set) var hotkeyTriggered: Bool = false
 
+    /// `true` for Accessibility after the first tap — TCC prompt has been fired,
+    /// waiting for the user to toggle the switch in System Settings.
+    /// Used by the view to disable the primary button and show "Waiting…" label.
+    @Published private(set) var isWaitingForAccessibility: Bool = false
+
+    /// `true` for Input Monitoring after the first tap — same pattern as accessibility.
+    @Published private(set) var isWaitingForInputMonitoring: Bool = false
+
     // MARK: - Private
 
-    private let permissionManager: PermissionManager
+    private let permissionManager: any PermissionManaging
     private let settings: SettingsStore
 
     /// The displayed step while navigating forward. Starts at `.welcome` so
     /// the user sees the title card first, regardless of permission state.
     @Published private(set) var displayedStep: OnboardingStep = .welcome
+
+    /// Tracks which manual-grant permissions have had their TCC registration
+    /// prompt fired this session. Guards against re-firing `AXIsProcessTrustedWithOptions`
+    /// or `IOHIDRequestAccess` on subsequent taps (which would spawn a second system
+    /// dialog). Only Accessibility and Input Monitoring need this guard — Microphone
+    /// uses AVFoundation which has its own idempotency.
+    ///
+    /// A `true` entry means the prompt has been shown; subsequent taps only open
+    /// System Settings, never re-trigger the TCC dialog.
+    private var hasPrompted: Set<PermissionKind> = []
 
     /// Backing poll task — cancelled when the view model is deallocated.
     private var pollTask: Task<Void, Never>?
@@ -63,7 +81,7 @@ final class OnboardingViewModel: ObservableObject {
 
     // MARK: - Init
 
-    init(permissionManager: PermissionManager, settings: SettingsStore) {
+    init(permissionManager: any PermissionManaging, settings: SettingsStore) {
         self.permissionManager = permissionManager
         self.settings = settings
         // Evaluate once at init so the initial state is accurate.
@@ -158,32 +176,82 @@ final class OnboardingViewModel: ObservableObject {
         }
     }
 
-    /// Primary action for the Accessibility step. Calls the prompting API so the
-    /// app is **registered in the Accessibility list** (and a system prompt shows
-    /// when not yet trusted), then opens System Settings so the user can toggle it
-    /// on. Without this, the app never appears in the list and the deep-link lands
-    /// on an empty pane — the toggle has nothing to act on.
+    /// Primary action for the Accessibility step.
+    ///
+    /// SINGLE-ACTION DESIGN:
+    /// On the first tap: fires `AXIsProcessTrustedWithOptions(prompt:true)` to
+    /// **register `speak` in the Accessibility list** and show the system TCC dialog.
+    /// The system dialog's own "Open System Settings" button navigates the user to the
+    /// correct pane — we do NOT also call `NSWorkspace.open` in the same tap (that was
+    /// the double-fire bug). Then the button becomes "Waiting for permission…" (disabled)
+    /// so re-tapping cannot spawn a second TCC dialog.
+    ///
+    /// On subsequent taps (already prompted, not yet granted): calls `openSystemSettings`
+    /// only — brings the user back to the pane without re-prompting. This handles the
+    /// case where the user dismissed the system dialog without navigating.
+    ///
+    /// If already granted at tap time: auto-advances immediately (no dialog shown).
+    ///
+    /// CHOICE RATIONALE: Option A (prompt-once) is correct regardless of whether
+    /// `IOHIDCheckAccess` or `AXIsProcessTrusted()` register the app without prompting.
+    /// Option B (Settings-only) would land on an empty pane if silent checks don't
+    /// register, which is unverifiable in this environment. A dominates under uncertainty.
     func requestAccessibility() {
+        // Already granted — advance immediately without touching TCC.
+        if permissionManager.status(.accessibility) == .granted {
+            refreshEvaluation()
+            advanceStepIfGranted(kind: .accessibility)
+            return
+        }
+
+        if hasPrompted.contains(.accessibility) {
+            // Re-tap after prompt already fired: open Settings only, never re-prompt.
+            openSystemSettings(for: .accessibility)
+            return
+        }
+
+        // First tap: register in Accessibility list + fire TCC dialog (once only).
+        hasPrompted.insert(.accessibility)
+        isWaitingForAccessibility = true
         let trusted = permissionManager.requestAccessibility()
         refreshEvaluation()
         if trusted {
+            // Already trusted (e.g. granted in a prior run). Clear waiting state and advance.
+            isWaitingForAccessibility = false
             advanceStepIfGranted(kind: .accessibility)
-        } else {
-            openSystemSettings(for: .accessibility)
         }
+        // If not trusted: leave isWaitingForAccessibility = true. The poll loop clears it
+        // when `.accessibility` transitions to `.granted` and auto-advances the step.
     }
 
-    /// Primary action for the Input Monitoring step. Registers the app in the
-    /// Input Monitoring list (and prompts), then opens System Settings. Same
-    /// rationale as `requestAccessibility()`.
+    /// Primary action for the Input Monitoring step.
+    ///
+    /// Identical single-action pattern to `requestAccessibility()`. See that method's
+    /// doc comment for the full rationale.
     func requestInputMonitoring() {
+        // Already granted — advance immediately.
+        if permissionManager.status(.inputMonitoring) == .granted {
+            refreshEvaluation()
+            advanceStepIfGranted(kind: .inputMonitoring)
+            return
+        }
+
+        if hasPrompted.contains(.inputMonitoring) {
+            // Re-tap: open Settings only.
+            openSystemSettings(for: .inputMonitoring)
+            return
+        }
+
+        // First tap: register + fire TCC dialog once.
+        hasPrompted.insert(.inputMonitoring)
+        isWaitingForInputMonitoring = true
         let granted = permissionManager.requestInputMonitoring()
         refreshEvaluation()
         if granted {
+            isWaitingForInputMonitoring = false
             advanceStepIfGranted(kind: .inputMonitoring)
-        } else {
-            openSystemSettings(for: .inputMonitoring)
         }
+        // If not granted: leave isWaitingForInputMonitoring = true until poll detects grant.
     }
 
     /// Opens System Settings to the given privacy pane via deep-link.
@@ -289,14 +357,16 @@ final class OnboardingViewModel: ObservableObject {
                 guard let self, !Task.isCancelled else { break }
                 self.refreshEvaluation()
                 // If the currently displayed step's permission just became granted,
-                // auto-advance so the user doesn't need to tap a button.
+                // auto-advance and clear any "waiting" state so no stale widget lingers.
                 switch self.displayedStep {
                 case .accessibility:
                     if self.permissionManager.status(.accessibility) == .granted {
+                        self.isWaitingForAccessibility = false
                         self.displayedStep = .inputMonitoring
                     }
                 case .inputMonitoring:
                     if self.permissionManager.status(.inputMonitoring) == .granted {
+                        self.isWaitingForInputMonitoring = false
                         self.displayedStep = .hotkey
                     }
                 default:
