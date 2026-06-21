@@ -120,10 +120,17 @@ public final class HotkeyMonitor: @unchecked Sendable {
     /// Used by `DictationController` to clear `permissionsNeeded` on the main actor.
     public let armStateChanges: AsyncStream<Bool>
 
+    /// The stream of Command Mode chord (`Fn`+`Ctrl`) edges (Wave D). `.begin` when both
+    /// go down, `.end` on release. Independent of `events` — consumed by the App's
+    /// `CommandModeController`. Only ever fires while Ctrl is held, so it never interferes
+    /// with the normal Fn dictation hotkey on `events`.
+    public let commandChordEvents: AsyncStream<CommandChordEvent>
+
     // MARK: Private — stream internals
 
     private let continuation: AsyncStream<HotkeyEvent>.Continuation
     private let armContinuation: AsyncStream<Bool>.Continuation
+    private let commandChordContinuation: AsyncStream<CommandChordEvent>.Continuation
 
     // MARK: Private — state (guarded by lock)
 
@@ -156,6 +163,10 @@ public final class HotkeyMonitor: @unchecked Sendable {
     /// Detector: pure value type, mutated only on the run-loop callback thread.
     private var detector = DoubleTapDetector()
 
+    /// Command Mode chord detector. Pure value type, mutated only on the run-loop
+    /// callback thread (same as `detector`).
+    private var commandChord = CommandChordDetector()
+
     /// Edge tracking for Fn up/down. Mutated only in the tap callback thread.
     private var lastFnDown: Bool = false
 
@@ -185,6 +196,10 @@ public final class HotkeyMonitor: @unchecked Sendable {
         self.armStateChanges = armStream
         self.armContinuation = armCont
 
+        let (chordStream, chordCont) = AsyncStream<CommandChordEvent>.makeStream()
+        self.commandChordEvents = chordStream
+        self.commandChordContinuation = chordCont
+
         // Spawn the dedicated run-loop thread. This is the ONLY place we touch
         // the thread; everything tap-related thereafter runs on that thread.
         // No semaphore, no wait — init returns before the thread starts.
@@ -202,6 +217,7 @@ public final class HotkeyMonitor: @unchecked Sendable {
         tearDownTap()
         continuation.finish()
         armContinuation.finish()
+        commandChordContinuation.finish()
     }
 
     // MARK: Tap lifecycle (called from any thread; work handed to run-loop thread)
@@ -320,6 +336,7 @@ public final class HotkeyMonitor: @unchecked Sendable {
     private func buildTap() {
         tearDownTap()
         detector.reset()
+        commandChord.reset()
         lastFnDown = false
 
         let mask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
@@ -418,18 +435,37 @@ public final class HotkeyMonitor: @unchecked Sendable {
 
         guard eventType == .flagsChanged else { return }
 
+        // Read modifier state from the event flags. flags always reflect the CURRENT
+        // modifier state regardless of which key changed, so this is read BEFORE the
+        // keyCode guard so the chord sees Ctrl-key events too (keyCode != Fn).
+        // [verified: CGEventFlags.maskSecondaryFn rawValue = 8388608, SDK 2026-06-20]
+        let flags = event.flags
+        let isFnDown = flags.contains(.maskSecondaryFn)
+        let isCtrlDown = flags.contains(.maskControl)
+
+        // Command Mode chord (Wave D): processed on EVERY flagsChanged event so a Ctrl
+        // press while Fn is held is seen. It only ever activates when Ctrl is held — when
+        // Ctrl is up the detector stays inactive and the normal Fn path below is byte-for-
+        // byte unchanged. [deferred — human verification: the live chord gesture.]
+        if let chordEvent = commandChord.update(isFnDown: isFnDown, isCtrlDown: isCtrlDown) {
+            SpeakLog.hotkey.info("CommandChord: \(String(describing: chordEvent), privacy: .public)")
+            commandChordContinuation.yield(chordEvent)
+        }
+        let chordActive = commandChord.isActive
+
         // Snapshot the binding once (lock-guarded getter) so a concurrent
         // updateBinding() on the main thread can't tear this multi-field read.
         let currentBinding = binding
         let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
         guard keyCode == currentBinding.keyCode else { return }
 
-        // Fn-press edge detection: maskSecondaryFn bit set = key down.
-        // [verified: CGEventFlags.maskSecondaryFn rawValue = 8388608, SDK 2026-06-20]
-        let flags = event.flags
-        let isFnDown = flags.contains(.maskSecondaryFn)
         let wasDown = lastFnDown
         lastFnDown = isFnDown   // update BEFORE branching so both modes see current state
+
+        // Suppress the normal Fn dictation trigger while the command chord (Ctrl+Fn) is
+        // held, so the chord doesn't also start a dictation. No effect when Ctrl is up
+        // (chordActive == false) — normal dictation is unchanged.
+        guard !chordActive else { return }
 
         switch currentBinding.trigger {
 

@@ -114,6 +114,11 @@ final class DictationController: ObservableObject {
     /// Owns History and Onboarding window presentation.
     private var windowPresenter: WindowPresenter?
 
+    /// Drives Command Mode (Wave D) from the Fn+Ctrl chord. Constructed in
+    /// `startMonitoring()`; consumes `monitor.commandChordEvents`.
+    private var commandModeController: CommandModeController?
+    private var commandChordTask: Task<Void, Never>?
+
     // MARK: - Settings store
 
     private(set) var settingsStore: SettingsStore
@@ -233,6 +238,14 @@ final class DictationController: ObservableObject {
         // events arrive once the tap is armed. Starting the consume task early
         // (before arm) is safe — it just waits on the AsyncStream.
         startEventTask()
+
+        // Command Mode (Wave D): construct the controller + consume the Fn+Ctrl chord
+        // stream. [deferred — human verification: the live chord gesture + AX edit.]
+        commandModeController = CommandModeController(
+            settings: settingsStore,
+            cleaner: defaultCleaner(for: settingsStore)
+        )
+        startCommandChordTask()
     }
 
     // MARK: - Window presentation (delegates to WindowPresenter)
@@ -321,6 +334,25 @@ final class DictationController: ObservableObject {
                     } else {
                         self.permissionsNeeded = true
                         SpeakLog.hotkey.warning("DictationController: tap disarmed — permissionsNeeded set.")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Consume `monitor.commandChordEvents` and drive Command Mode. Begin starts the
+    /// instruction capture; end runs the transform. Hops to the main actor (the
+    /// controller is `@MainActor`).
+    private func startCommandChordTask() {
+        commandChordTask?.cancel()
+        let chordEvents = monitor.commandChordEvents
+        commandChordTask = Task { [weak self] in
+            for await event in chordEvents {
+                await MainActor.run { [weak self] in
+                    guard let self, let controller = self.commandModeController else { return }
+                    switch event {
+                    case .begin: controller.begin()
+                    case .end:   controller.end()
                     }
                 }
             }
