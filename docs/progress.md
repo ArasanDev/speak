@@ -73,6 +73,50 @@ mute **chord** (the mute menu toggle ships; the chord is live-gated follow-up).
 
 ---
 
+## Done (this session — 2026-06-21, loop run #22 — P11 release scaffolding + QA ship-gate audit)
+
+Orchestrated fan-out (3 agents: builder-input Phase D, builder-release P11,
+builder-qa audit). Phase D landed in #21 below. This entry covers P11 + the audit.
+
+**P11 — release pipeline scaffolding (`d790b72`, builder-release in a worktree;
+orchestrator reviewed + fixed + merged):** replaced the stubbed `make release`
+with the full Developer ID pipeline — `generate → release-preflight (guards
+DEV_ID/NOTARY_PROFILE/export plist) → xcodebuild archive (Release) →
+-exportArchive (developer-id, signs SpeakCore.framework inside-out) → codesign
+--verify + spctl --assess → hdiutil .dmg → notarytool submit --wait → stapler
+staple → spctl gate`. New: `scripts/export-options.plist` (developer-id /
+automatic), `dist/speak.cask.rb` (Cask Cookbook; `depends_on macos: ">= :tahoe"`
+— macOS 26 floor, `:tahoe == "26"` [verified Homebrew macos_version.rb]; version
+`0.0.1` matches the roadmap v0 ship tag), `docs/release.md` (cert + notarytool
+one-time setup). CI hardened: concurrency cancel-in-progress + a `verify-moat`
+pre-build step. No secrets committed (env-injected). **Orchestrator caught + fixed
+3 nits pre-merge:** cask `>= :sequoia` (macOS 15) → `>= :tahoe` (macOS 26 — the
+app can't run on Sequoia); version `0.1.0` → `0.0.1`; a dangling
+`make release-export-plist` reference. Validated: `make -n release` parses,
+`ruby -c` cask OK, `plutil` OK, ci.yml YAML OK, **moat 7/7**. Live notarization is
+`[deferred — human]`: needs the user's Developer ID cert + App-Store-Connect/notary
+credential — the pipeline runs to that boundary, can't cross it headlessly.
+
+**QA ship-gate audit (builder-qa, read-only):** audited every `benchmark.md` §3
+BEAT / §4 MATCH row + `quality.md` §9 against the code. **Verdict: ZERO
+bucket-(b) unimplemented code paths hidden behind unchecked roadmap boxes** — the
+"v0 code surface is essentially complete" assumption is confirmed. Specifically
+traced the highest-doubt P2 (mic prompt, PCM logging, clean stop) + P3 (partial/
+final transcripts, engine id) boxes → all unchecked for *live-only* reasons, code
+is present + wired (cited file:line). Only genuine remaining code gaps: **(1) P11**
+(now scaffolded above) and **(2) the §6 WER corpus** — `computeWER` harness is
+ready but `SpeakTests/Fixtures/` has only `hello_speech.caf`; needs ~20 real-speech
+clips + reference transcripts a **human** must supply. Everything else is human-only
+live/visual verification. Independent test run during the audit: **191 tests
+(169 XCTest + 22 Swift Testing), 5 XCTSkip (live FM), 0 failures; moat 7/7.**
+
+**Net after loop #22:** the agent-doable v0 code work is now genuinely exhausted —
+QA-confirmed. The v0 ship gate is blocked solely on the **human live-verification
+pass** (`human-verification.md`) + the **WER corpus** + the **cert-gated
+notarization**. Two optional non-v0-gating code-health refactors remain queued
+(split `HotkeyMonitor` 775 ln; decompose `DictationController` 402 ln) — awaiting
+user green-light.
+
 ## Done (this session — 2026-06-21, loop run #21 — Phase D: robust paste)
 
 Phase D of `specs/dictation-flow.md` — robust paste with graceful AX fallback:
