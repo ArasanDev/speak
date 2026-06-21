@@ -258,23 +258,55 @@ final class OverlayController {
 
     // MARK: - W2.1: Level drain
 
-    /// Drain the RMS level stream and write `overlayModel.level` with one-pole
-    /// smoothing. Cancelled automatically on `transition(to: .processing)` and `stop()`.
+    /// Drain the RMS level stream and write `overlayModel.level` with perceptual
+    /// mapping and asymmetric smoothing (W2.3). Cancelled automatically on
+    /// `transition(to: .processing)` and `stop()`.
+    ///
+    /// Cold-start retry: on the first dictation, `AudioCapture.start()` runs inside
+    /// a background Task launched by `AppleSpeechTranscriber.startStream()`. There is
+    /// a narrow race window where `startLevelStream()` is called before that Task has
+    /// had a chance to set `pendingLevelStream`. We retry up to `levelStreamRetryCount`
+    /// times with `levelStreamRetryIntervalNs` between attempts so the first dictation
+    /// behaves identically to subsequent warm ones.
+    /// [decision W2.3: 5 retries × 50 ms = 250 ms maximum wait; audio engine start
+    ///  is observed to complete in < 100 ms on Apple Silicon. benchmark.md §7]
+    private static let levelStreamRetryCount: Int    = 5
+    // [decision W2.3: 50 ms retry interval — short enough to not delay waveform start,
+    //  long enough for the audio Task to schedule. benchmark.md §7]
+    private static let levelStreamRetryIntervalNs: UInt64 = 50_000_000  // 50 ms
+
     private func startLevelsDrain(provider: @escaping () async -> AsyncStream<Double>?) {
         levelsTask?.cancel()
         levelsTask = nil
 
         levelsTask = Task { [weak self] in
             guard let self else { return }
-            guard let stream = await provider() else {
-                SpeakLog.engine.info("OverlayController: level stream unavailable — bars use idle animation.")
+
+            // Cold-start retry loop: the first dictation may hit a race where
+            // AudioCapture.pendingLevelStream is not yet set when we call currentLevels().
+            var stream: AsyncStream<Double>?
+            for attempt in 0 ..< Self.levelStreamRetryCount {
+                stream = await provider()
+                if stream != nil { break }
+                guard !Task.isCancelled else { return }
+                if attempt < Self.levelStreamRetryCount - 1 {
+                    try? await Task.sleep(nanoseconds: Self.levelStreamRetryIntervalNs)
+                }
+            }
+
+            guard let stream else {
+                SpeakLog.engine.info("OverlayController: level stream unavailable after retries — bars use idle animation.")
                 return
             }
+
             var smoothed = 0.0
             for await rawLevel in stream {
                 if Task.isCancelled { break }
-                // Apply one-pole low-pass smoothing (see LevelMath.swift for constants).
-                let next = levelSmoothed(previous: smoothed, target: rawLevel)
+                // W2.3: Perceptual mapping (dB normalization) then asymmetric smoothing.
+                // Maps speech RMS (typically 0.01–0.08) to a healthy bar range,
+                // with fast attack and natural release (see LevelMath.swift §W2.3).
+                let perceptual = levelPerceptual(rms: rawLevel)
+                let next = levelSmoothedAsymmetric(previous: smoothed, target: perceptual)
                 smoothed = next
                 let levelToSet = next
                 await MainActor.run { [weak self] in
