@@ -142,6 +142,9 @@ final class SpeakEngineIntegrationTests: XCTestCase {
         let testSettings = SettingsStore(defaults: testDefaults)
         testSettings.cleanupEnabled = true   // exercise FM-unavailable path, not toggle-off
 
+        // H1: locale no longer baked at init — SpeakEngine reads settings.language at
+        // newSession() time. testSettings defaults to en-US (SettingsStore default),
+        // preserving the prior behavior for this test.
         let engine = SpeakEngine(
             transcriber: AppleSpeechTranscriber(
                 audioProducer: SpeechTranscriberTests.FixtureAudioProducer(fileURL: fixtureURL)
@@ -149,7 +152,6 @@ final class SpeakEngineIntegrationTests: XCTestCase {
             cleaner: FoundationModelsCleaner(),   // isAvailable==false → raw fallback
             inserter: mockInserter,
             history: historyStore,
-            locale: enUS,
             cleanupMode: .punctuation,
             settings: testSettings
         )
