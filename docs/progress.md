@@ -73,6 +73,48 @@ mute **chord** (the mute menu toggle ships; the chord is live-gated follow-up).
 
 ---
 
+## Done (this session — 2026-06-21, loop run #24 — HotkeyMonitor split + human-gate 3-bucket map)
+
+**`HotkeyMonitor.swift` split 775→527 (`3ea2804`, builder-input main-tree sole
+writer; orchestrator verified from clean + committed).** Pure intra-module file-move
+— all symbols are `public` in the single `SpeakCore` module, so relocating them is
+invisible to every consumer. Extracted: `HotkeyBinding.swift` (109 — `HotkeyEvent`,
+`HotkeyBinding`+Codable), `HotkeyDetection.swift` (130 — `holdEdge`,
+`DoubleTapDetector`, `TapRestartRateLimiter`), `BindingStore.swift` (36 —
+`BindingStoring`, `UserDefaultsBindingStore`); `HotkeyMonitor.swift` keeps the class
+only. Each symbol now in exactly one file (verified by grep); `Carbon.HIToolbox`
+followed `kVK_Function`; `MoatAuditTests` enumerates `SpeakCore/` by directory so the
+new files are picked up with no change. **Note:** the editor LSP flashed false
+"Invalid redeclaration" diagnostics post-split — stale SourceKit index after
+`xcodegen generate`, NOT real (a fresh `make build` from clean SUCCEEDED). Gates
+(orchestrator re-ran from clean): build SUCCEEDED, **test 191 (5 XCTSkip, 0 failures
+— identical baseline)**, lint 0 serious, moat 7/7.
+
+**`human-verification.md` per-row 3-bucket classification (`94e5163`).** Every §4 UI
+row now tagged `[B-render ✓]` (already agent-verified by the `verify-visual.sh`
+screenshot harness) / `[B-config → #6]` (a config input assertable in code once
+App-test-infra exists — a **regression guard, NOT behaviour proof**) / `[C-live]`
+(irreducibly human: needs real input + permissions + the window server). The
+distinction is **advisor-corrected**: focus-steal / full-screen / timing rows are
+window-server *behaviours* and stay `[C-live]` — a passing config assertion must NOT
+check a behaviour box (the §3.1 false-pass trap). The mute gate `[B-unit ✓]` is the
+one already-closed Bucket-B (`SpeakEngineMuteTests`, headless in SpeakCore).
+
+**Decision — #6 (DictationController decomposition) recommended DEFERRED, not run.**
+Grounded read: the 402-line controller is *not in pain* (clean MARK sections, strong
+docs, launch-harness-tested). Decomposing it is modest-value polish carrying real
+regression risk on the app's central wiring, and it is **non-v0-gating**. With the v0
+ship gate now **100% human-blocked**, the critical path is the **human verification
+pass (#8)**, not more agent refactoring. #6 is left **execute-ready** (recommended
+seam: extract an `OverlayPresenter`; coupled with the `TEST_HOST` app-test infra that
+would unlock Bucket-B closure) for when the maintainability investment is wanted.
+
+**Net after loop #24:** every clearly-justified agent-doable item is done — the one
+real defect found+fixed (#9), the human gate honestly mapped, one low-risk refactor
+landed (#5). What remains is (a) the human-only ship gate (#8) and (b) optional,
+non-gating maintainability polish (#6, execute-ready). The runnable app + the
+fully-classified `human-verification.md` is the complete handoff.
+
 ## Done (this session — 2026-06-21, loop run #23 — live Xcode-MCP autonomy + History/overlay previews)
 
 **The Xcode MCP bridge is now a live verification oracle (orchestrator, encoded
