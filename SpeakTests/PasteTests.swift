@@ -398,6 +398,165 @@ final class PasteboardWriterTests: XCTestCase {
     }
 }
 
+// MARK: - Phase D+: SecureField guard tests (PasteboardWriter injection)
+
+final class SecureFieldGuardTests: XCTestCase {
+
+    // MARK: - Secure field → throw + clipboard floor ran + no events posted
+
+    /// When the focused element is a secure text field, `insert` must throw
+    /// `.pasteIntoSecureField`, the clipboard floor must still have run (text is
+    /// recoverable), and no Cmd+V events must be posted.
+    ///
+    /// This is the core invariant: text is NEVER lost (clipboard floor always
+    /// runs) AND text is NEVER pasted into a credential field.
+    func testInsertRefusesPasteIntoSecureField() async throws {
+        let uniqueText = "SPEAK_SECURE_FIELD_TEST_\(UUID().uuidString)"
+        let recorder = PasteSideEffectRecorder()
+        let writer = PasteboardWriter(
+            isAccessibilityTrusted: { true },         // AX granted
+            isFocusedFieldSecure: { true },           // simulate password field
+            settle: .zero,
+            writeClipboard: { recorder.recordClipboardWrite($0) },
+            postEvent: { recorder.recordPostedEvent($0) }
+        )
+
+        do {
+            try await writer.insert(uniqueText)
+            XCTFail("insert() must throw when focused element is a secure field")
+        } catch SpeakError.pasteIntoSecureField(let text) {
+            // Expected — error must carry the text so the app shell can route it.
+            XCTAssertEqual(text, uniqueText,
+                           ".pasteIntoSecureField must carry the text for Scratchpad routing")
+        } catch {
+            XCTFail("Expected SpeakError.pasteIntoSecureField, got \(error)")
+        }
+
+        // Clipboard floor must have run — text is recoverable even on refusal.
+        XCTAssertEqual(
+            recorder.clipboardWrites, [uniqueText],
+            "Clipboard floor must write text before the secure-field gate"
+        )
+        // No Cmd+V must be posted — the paste was refused.
+        XCTAssertEqual(
+            recorder.postedEventCount, 0,
+            "Secure-field refusal must not post any Cmd+V events"
+        )
+    }
+
+    // MARK: - Non-secure field → normal 4-event paste proceeds
+
+    /// When the focused element is NOT a secure field, the secure-field gate
+    /// must pass and the normal 4-event Cmd+V chord must be posted.
+    ///
+    /// Verifies the fail-safe direction: a non-secure (or query-failed) element
+    /// does not block paste. The `isFocusedFieldSecure` injector returns `false`.
+    func testInsertProceedsWhenFieldIsNotSecure() async throws {
+        let recorder = PasteSideEffectRecorder()
+        let writer = PasteboardWriter(
+            isAccessibilityTrusted: { true },         // AX granted
+            isFocusedFieldSecure: { false },          // simulate non-secure field
+            settle: .zero,
+            writeClipboard: { recorder.recordClipboardWrite($0) },
+            postEvent: { recorder.recordPostedEvent($0) }
+        )
+
+        do {
+            try await writer.insert("normal text")
+        } catch SpeakError.pasteboardBusy {
+            // Acceptable in headless CI where CGEvent infrastructure is unavailable.
+            return
+        } catch SpeakError.pasteIntoSecureField(_) {
+            XCTFail("Must not throw .pasteIntoSecureField when field is not secure")
+            return
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+            return
+        }
+
+        // Clipboard floor ran.
+        XCTAssertEqual(recorder.clipboardWrites, ["normal text"],
+                       "Non-secure field: clipboard floor must run exactly once")
+        // All 4 Cmd+V events posted.
+        XCTAssertEqual(recorder.postedEventCount, 4,
+                       "Non-secure field: 4-event Cmd+V chord must be posted")
+    }
+
+    // MARK: - Fail-safe: AX gate fires before secure-field gate
+
+    /// The AX-trust gate (step 2) fires BEFORE the secure-field gate (step 3).
+    /// When AX is not trusted, `.pasteRequiresAccessibility` is thrown regardless
+    /// of the secure-field check — the secure-field gate is never reached.
+    ///
+    /// This test verifies that gate ordering is correct and that the clipbaord
+    /// floor still runs in the AX-not-trusted path even when secure=true.
+    func testAXGateFiresBeforeSecureFieldGate() async throws {
+        let recorder = PasteSideEffectRecorder()
+        let writer = PasteboardWriter(
+            isAccessibilityTrusted: { false },        // AX NOT granted
+            isFocusedFieldSecure: { true },           // secure field (should not matter)
+            settle: .zero,
+            writeClipboard: { recorder.recordClipboardWrite($0) },
+            postEvent: { recorder.recordPostedEvent($0) }
+        )
+
+        do {
+            try await writer.insert("AX gate text")
+            XCTFail("insert() must throw when AX is not trusted")
+        } catch SpeakError.pasteRequiresAccessibility(let text) {
+            // Expected — AX gate fires first.
+            XCTAssertEqual(text, "AX gate text",
+                           ".pasteRequiresAccessibility must carry the text")
+        } catch SpeakError.pasteIntoSecureField(_) {
+            XCTFail("AX gate must fire before secure-field gate — wrong error type")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        // Clipboard floor still ran (step 1 is unconditional).
+        XCTAssertEqual(recorder.clipboardWrites, ["AX gate text"],
+                       "Clipboard floor must run before any gate")
+        XCTAssertEqual(recorder.postedEventCount, 0,
+                       "No events posted when AX gate fires")
+    }
+
+    // MARK: - Fail-safe: secure-field query failure → paste proceeds
+
+    /// When `isFocusedFieldSecure` returns `false` (which is what the production
+    /// implementation does on any AX query failure), paste must proceed normally.
+    /// This exercises the fail-safe direction: a broken AX stack never silently
+    /// swallows dictated text.
+    ///
+    /// This is covered by `testInsertProceedsWhenFieldIsNotSecure` above (the
+    /// injector already models "query returned false"). This test makes the
+    /// fail-safe intent explicit.
+    func testFailSafeSecureFieldQueryFailurePasteProceedsNormally() async throws {
+        let recorder = PasteSideEffectRecorder()
+        // Inject a closure that mimics what `focusedElementIsSecureField()` returns
+        // when the AX query fails (kAXErrorAPIDisabled, no focused element, etc.).
+        let writer = PasteboardWriter(
+            isAccessibilityTrusted: { true },
+            isFocusedFieldSecure: { false },          // fail-safe: query failure → false
+            settle: .zero,
+            writeClipboard: { recorder.recordClipboardWrite($0) },
+            postEvent: { recorder.recordPostedEvent($0) }
+        )
+
+        do {
+            try await writer.insert("fail-safe text")
+        } catch SpeakError.pasteboardBusy {
+            return  // headless CI — acceptable
+        } catch {
+            XCTFail("Unexpected error in fail-safe path: \(error)")
+            return
+        }
+
+        XCTAssertEqual(recorder.clipboardWrites, ["fail-safe text"])
+        XCTAssertEqual(recorder.postedEventCount, 4,
+                       "Fail-safe: paste must proceed when secure-field query fails")
+    }
+}
+
 // MARK: - State == State (Equatable for assertions — mirrors CaptureSessionTests.swift)
 // NOTE: This extension must be consistent with the one in CaptureSessionTests.swift.
 // Both files are in SpeakTests; Swift allows @retroactive conformances in test
