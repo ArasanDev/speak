@@ -73,10 +73,12 @@ public protocol AudioBufferProducing: Sendable {
 }
 
 /// Default live-mic implementation — delegates directly to `AudioCapture`.
+/// Exposes `captureInstance` so `AppleSpeechTranscriber` can surface it via
+/// `AudioCaptureProviding` for the W2.1 level stream. [decision W2.1]
 final class LiveAudioCapture: AudioBufferProducing, @unchecked Sendable {
-    private let capture = AudioCapture()
-    func start() throws -> AsyncStream<AVAudioPCMBuffer> { try capture.start() }
-    func stop() { capture.stop() }
+    let captureInstance = AudioCapture()
+    func start() throws -> AsyncStream<AVAudioPCMBuffer> { try captureInstance.start() }
+    func stop() { captureInstance.stop() }
 }
 
 // MARK: - AppleSpeechTranscriber
@@ -86,13 +88,26 @@ final class LiveAudioCapture: AudioBufferProducing, @unchecked Sendable {
 /// Threading: `startStream` launches a background Task and returns immediately.
 /// All SpeechAnalyzer/actor interactions are awaited inside that Task (off-main).
 /// Mutable state is protected by the private `actor SessionState`.
+///
+/// W2.1: Conforms to `AudioCaptureProviding` to expose the live `AudioCapture`
+/// instance for the HUD level stream. Fixture-backed init returns `nil` from
+/// `audioCapture` so the HUD falls back gracefully to the idle animation.
 @available(macOS 26.0, *)
-public final class AppleSpeechTranscriber: Transcribing {
+public final class AppleSpeechTranscriber: Transcribing, AudioCaptureProviding {
 
     public let id = "apple-speech-en-US"
 
     private let audioProducer: any AudioBufferProducing
     private let state = SessionState()
+
+    // MARK: - W2.1: AudioCaptureProviding
+
+    /// The live `AudioCapture` instance if the live-mic producer is in use.
+    /// `nil` when a test fixture producer was injected — in that case the HUD
+    /// falls back to idle-breathing animation with no error. [decision W2.1]
+    public var audioCapture: AudioCapture? {
+        (audioProducer as? LiveAudioCapture)?.captureInstance
+    }
 
     /// Optional custom-vocabulary terms hinting to the recognizer.
     ///

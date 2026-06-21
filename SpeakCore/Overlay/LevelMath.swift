@@ -89,3 +89,55 @@ public func levelBarHeights(
         return min(max(height, minHeight), maxHeight)
     }
 }
+
+// MARK: - Level → bar heights with per-bar phase offset (W2.2)
+
+/// Map a level (0…1) to bar heights with a per-bar sinusoidal phase offset.
+///
+/// This produces the VoiceInk-style "ripple" effect: each bar is driven by a
+/// slightly different phase of the animation cycle, making the waveform look
+/// organic and alive rather than uniform. The `phase` parameter (0…1) is
+/// advanced by the caller's animation state and wraps cyclically.
+///
+/// Formula per bar i:
+///   phaseOffset = sin(2π × (i / barCount) + 2π × phase) × phaseDepth × level
+///   height = baseHeight + phaseOffset
+///
+/// [decision W2.2: VoiceInk uses averagePower + per-bar phase; this is our
+///  analogous pure-math implementation. phase is caller-controlled so the
+///  function stays deterministic and unit-testable. benchmark.md §7]
+///
+/// - Parameters:
+///   - level:      Smoothed linear amplitude (0…1). Higher level → taller bars + more ripple.
+///   - phase:      Animation phase (0…1); advances monotonically, wraps every cycle.
+///   - barCount:   Number of bars. Must be > 0; returns empty array otherwise.
+///   - minHeight:  Minimum bar height in points.
+///   - maxHeight:  Maximum bar height in points.
+///   - phaseDepth: Fraction of the range that the phase modulation occupies (0…1).
+///                 [decision: 0.4 — 40% ripple depth feels natural without jarring. benchmark.md §7]
+/// - Returns: Array of `barCount` heights, each in `[minHeight, maxHeight]`.
+public func levelBarHeightsPhased(
+    level: Double,
+    phase: Double,
+    barCount: Int = 15,
+    minHeight: Double = 3.0,
+    maxHeight: Double = 20.0,
+    phaseDepth: Double = 0.4  // [decision W2.2: 40% ripple depth, benchmark.md §7]
+) -> [Double] {
+    guard barCount > 0 else { return [] }
+    let range = maxHeight - minHeight
+    return (0 ..< barCount).map { i in
+        // Cosine envelope — same as `levelBarHeights`: center bar is tallest.
+        let center = Double(barCount - 1) / 2.0
+        let t = (Double(i) - center) / max(center, 1.0)   // -1…1
+        let envelope = cos(t * .pi / 2.0)
+        // Base height from the level × cosine envelope.
+        let baseHeight = minHeight + range * level * envelope
+        // Per-bar sinusoidal ripple: adds organic variation across bars.
+        // Only active at non-zero level (silent = flat bars).
+        let barPhase = 2.0 * .pi * (Double(i) / Double(barCount)) + 2.0 * .pi * phase
+        let ripple = range * level * phaseDepth * sin(barPhase) * 0.5
+        let height = baseHeight + ripple
+        return min(max(height, minHeight), maxHeight)
+    }
+}

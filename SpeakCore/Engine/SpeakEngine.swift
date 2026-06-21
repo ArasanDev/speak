@@ -311,4 +311,18 @@ public actor SpeakEngine {
         guard let session = currentSession else { return nil }
         return await session.partials()
     }
+
+    // MARK: - W2.1: Live level stream for the HUD waveform
+
+    /// Return the live mic RMS level stream for the current session (for the
+    /// overlay HUD waveform — W2.1). Returns `nil` when no session is active
+    /// or when the transcriber does not expose its AudioCapture (fixture mode).
+    ///
+    /// The stream finishes when `stop()` is called on the underlying AudioCapture.
+    /// Each emitted value is a linear RMS amplitude in [0, 1]; callers should
+    /// apply `levelSmoothed(previous:target:)` before driving bar heights.
+    public func currentLevels() async -> AsyncStream<Double>? {
+        guard let session = currentSession else { return nil }
+        return await session.levels()
+    }
 }

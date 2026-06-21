@@ -63,16 +63,16 @@ final class OverlayControllerTests: XCTestCase {
 
     // MARK: - start() transitions to .listening
 
-    /// `start(partialsProvider:)` resets the model to .listening and clears partialText.
+    /// `start(partialsProvider:levelsProvider:isCleaningUp:)` resets to .listening.
     func testStart_setsListeningState() async {
         // Put the model in a dirty state first.
         controller.overlayModel.overlayState = .done
         controller.overlayModel.partialText = "stale text"
 
-        // Start with a nil-returning provider (no stream to drain).
-        controller.start { nil }
+        // Start with nil-returning providers (no stream to drain).
+        controller.start(partialsProvider: { nil }, levelsProvider: { nil }, isCleaningUp: false)
 
-        // The transition is synchronous before the async drain task starts.
+        // The transition is synchronous before the async drain tasks start.
         XCTAssertEqual(
             controller.overlayModel.overlayState, .listening,
             "start() must set overlayState to .listening before the partials drain starts."
@@ -117,7 +117,7 @@ final class OverlayControllerTests: XCTestCase {
     /// This mirrors the happy-path flow in `DictationController.endDictation()`.
     func testStateMachine_listeningToProcessingToDone() {
         // Simulate start().
-        controller.start { nil }
+        controller.start(partialsProvider: { nil }, levelsProvider: { nil }, isCleaningUp: false)
         XCTAssertEqual(controller.overlayModel.overlayState, .listening)
 
         // Simulate endDictation() phase 1: transition to processing.
@@ -164,13 +164,112 @@ final class OverlayControllerTests: XCTestCase {
     // MARK: - createPanel() is idempotent
 
     /// Calling createPanel() twice must not crash or create a second panel.
-    /// (The panel is private; we verify there's no crash or assertion failure.)
     func testCreatePanel_isIdempotent() {
-        // The panel constructor touches AppKit; calling it in a test is safe
-        // because H2 TEST_HOST provides a running NSApplication.
-        // [honesty boundary: we only verify no crash; we don't assert on the
-        //  panel's internal state because it's private.]
         XCTAssertNoThrow(controller.createPanel(), "First createPanel() must not throw or crash.")
         XCTAssertNoThrow(controller.createPanel(), "Second createPanel() must be a no-op (idempotent).")
+    }
+
+    // MARK: - W2.2: .error state
+
+    /// showError(_:) transitions overlay to .error state.
+    func testShowError_setsErrorState() {
+        controller.showError("Speech engine unavailable")
+        XCTAssertEqual(
+            controller.overlayModel.overlayState, .error,
+            "showError must set overlayState to .error."
+        )
+    }
+
+    /// showError(_:) stores the reason in errorReason.
+    func testShowError_storesReason() {
+        let reason = "Test failure reason"
+        controller.showError(reason)
+        XCTAssertEqual(
+            controller.overlayModel.errorReason, reason,
+            "showError must store reason in overlayModel.errorReason."
+        )
+    }
+
+    /// showError(_:) with empty reason stores an empty string.
+    func testShowError_emptyReasonStored() {
+        controller.showError("")
+        XCTAssertEqual(
+            controller.overlayModel.errorReason, "",
+            "showError with empty reason must store empty string."
+        )
+    }
+
+    /// stop() after showError clears errorReason and resets state.
+    func testStop_afterError_clearsErrorReason() {
+        controller.showError("Some error")
+        controller.stop()
+        XCTAssertNil(
+            controller.overlayModel.errorReason,
+            "stop() must clear errorReason."
+        )
+        XCTAssertEqual(
+            controller.overlayModel.overlayState, .listening,
+            "stop() must reset overlayState to .listening after error."
+        )
+    }
+
+    /// cancelImmediate() hides overlay and resets all state (including error).
+    func testCancelImmediate_resetsAllState() {
+        controller.showError("Some error")
+        controller.cancelImmediate()
+        XCTAssertNil(controller.overlayModel.errorReason)
+        XCTAssertEqual(controller.overlayModel.overlayState, .listening)
+        XCTAssertEqual(controller.overlayModel.level, 0.0)
+        XCTAssertEqual(controller.overlayModel.partialText, "")
+        XCTAssertEqual(controller.overlayModel.elapsedSeconds, 0)
+    }
+
+    /// transition(to: .error) sets the error state via the transition path.
+    func testTransition_toError_setsState() {
+        controller.transition(to: .error)
+        XCTAssertEqual(
+            controller.overlayModel.overlayState, .error,
+            "transition(to: .error) must set overlayState to .error."
+        )
+    }
+
+    // MARK: - W2.2: isCleaningUp propagation
+
+    /// start() with isCleaningUp=true sets the model flag.
+    func testStart_withCleanupOn_setsIsCleaningUp() {
+        controller.start(
+            partialsProvider: { nil },
+            levelsProvider: { nil },
+            isCleaningUp: true
+        )
+        XCTAssertTrue(
+            controller.overlayModel.isCleaningUp,
+            "start(isCleaningUp:true) must set overlayModel.isCleaningUp."
+        )
+    }
+
+    /// start() with isCleaningUp=false clears the model flag.
+    func testStart_withCleanupOff_clearsIsCleaningUp() {
+        controller.start(
+            partialsProvider: { nil },
+            levelsProvider: { nil },
+            isCleaningUp: false
+        )
+        XCTAssertFalse(
+            controller.overlayModel.isCleaningUp,
+            "start(isCleaningUp:false) must clear overlayModel.isCleaningUp."
+        )
+    }
+
+    // MARK: - W2.2: level reset on transition
+
+    /// transition(to: .processing) resets level to 0.
+    func testTransition_toProcessing_resetsLevel() {
+        controller.overlayModel.level = 0.8
+        controller.transition(to: .processing)
+        XCTAssertEqual(
+            controller.overlayModel.level, 0.0, accuracy: 1e-9,
+            "transition(to: .processing) must reset level to 0."
+        )
     }
 }

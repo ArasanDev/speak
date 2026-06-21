@@ -123,6 +123,32 @@ public actor CaptureSession {
         return stream
     }
 
+    // MARK: - W2.1: Level stream (consumed by the overlay HUD waveform)
+
+    /// The `AudioCapture` instance providing both the PCM buffer stream (to the
+    /// transcriber) and the live level stream (to the HUD). Stored so we can
+    /// call `startLevelStream()` after `start()` initiates capture.
+    ///
+    /// Injected via `levels()` — the transcriber owns the capture object but the
+    /// level stream is a parallel read-only side channel. We hold a weak reference
+    /// only if the transcriber exposes it; see the note in `levels()` below.
+    ///
+    /// [decision W2.1: level stream is threaded through the transcriber's AudioCapture.
+    ///  We call `transcriber.audioCapture?.startLevelStream()` when available.
+    ///  AppleSpeechTranscriber exposes its AudioCapture for this purpose.]
+    public func levels() -> AsyncStream<Double>? {
+        // The level stream is produced by AudioCapture inside the transcriber.
+        // `Transcribing` does not expose `audioCapture` in the protocol — only
+        // `AppleSpeechTranscriber` does. We use protocol-existential type checking
+        // here, which is the narrowest possible coupling: this stays in CaptureSession
+        // (the session's own start() already called transcriber.startStream), so the
+        // AudioCapture is already running.
+        if let sttTranscriber = transcriber as? AudioCaptureProviding {
+            return sttTranscriber.audioCapture?.startLevelStream()
+        }
+        return nil
+    }
+
     // MARK: - Lifecycle
 
     /// Begin a new dictation. Transitions `.idle → .listening`. Throws

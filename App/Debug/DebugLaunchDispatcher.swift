@@ -59,9 +59,11 @@ enum DebugTarget: String {
     //   overlay-demo            → .listening state, sample partial text, mid-level meter
     //   overlay-demo-processing → .processing state, "Cleaning up…" + spinner
     //   overlay-demo-done       → .done state, checkmark
+    //   overlay-demo-error      → W2.2 .error state, red pill + reason
     case overlayDemo             = "overlay-demo"
     case overlayDemoProcessing   = "overlay-demo-processing"
     case overlayDemoDone         = "overlay-demo-done"
+    case overlayDemoError        = "overlay-demo-error"
     case simulateDictation       = "simulate-dictation"
 }
 
@@ -141,6 +143,9 @@ final class DebugLaunchDispatcher {
             return false
         case .overlayDemoDone:
             openOverlayDemo(state: .done, controller: controller)
+            return false
+        case .overlayDemoError:
+            openOverlayDemo(state: .error, controller: controller)
             return false
         case .simulateDictation:
             // Simulate-dictation must not call startMonitoring() — it needs focus
@@ -255,6 +260,7 @@ final class DebugLaunchDispatcher {
     //   overlay-demo            → .listening state, sample partial text, level=0.6 (mid)
     //   overlay-demo-processing → .processing state
     //   overlay-demo-done       → .done state
+    //   overlay-demo-error      → W2.2 .error state, red pill + sample reason
     //
     // Setting a static level (0.6) for the listening screenshot is honest — the demo
     // is a rendering test, not a real mic feed. The level drives the bar-height math
@@ -280,6 +286,10 @@ final class DebugLaunchDispatcher {
             overlayModel.partialText = ""
         case .done:
             // Done shows checkmark only.
+            overlayModel.partialText = ""
+        case .error:
+            // W2.2: error demo — show a sample reason in the red pill.
+            overlayModel.errorReason = "Speech engine unavailable"
             overlayModel.partialText = ""
         }
 

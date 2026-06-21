@@ -1,38 +1,45 @@
 // App/Overlay/OverlayController.swift
 //
 // Owns the overlay lifecycle: OverlayViewModel, TranscriptOverlayPanel,
-// the partials-drain Task, and the start / transition(to:) / stop surface.
+// the partials-drain Task, the W2.1 level-drain Task, the Escape-cancel monitor,
+// and the start / transition(to:) / stop surface.
 //
 // Responsibilities:
 //   - Holds the `OverlayViewModel` (the model that drives `TranscriptOverlayView`).
 //   - Constructs and owns the single `TranscriptOverlayPanel` (created lazily at
 //     `createPanel()`, called from `DictationController.startMonitoring()` so the
-//     NSHostingView cost is paid once, not per-dictation, matching the original
-//     panel-creation timing in `DictationController`).
-//   - `start(partialsProvider:)` — resets the model, shows the panel, and begins
-//     draining partial-transcript chunks from the provided async-stream closure.
-//   - `transition(to:)` — updates the model state; cancels the partials task when
-//     moving to `.processing` (no more chunks will arrive).
-//   - `stop()` — cancels the partials task, resets the model, and hides the panel.
+//     NSHostingView cost is paid once, not per-dictation).
+//   - `start(partialsProvider:levelsProvider:isCleaningUp:)` — resets the model,
+//     shows the panel, drains partials and level values, and arms the Escape monitor.
+//   - `transition(to:)` — updates the model state.
+//   - `stop()` — cancels all tasks, resets the model, hides the panel.
+//   - `showError(_:)` — transitions to `.error` with a reason; a retry affordance
+//     is shown in the HUD. Call AFTER stop() has not been called (the panel stays
+//     visible in error state so the user can act).
+//   - `cancelImmediate()` — hides immediately without done-flash (Escape cancel).
 //
-// Honesty boundary:
-//   - Panel visibility (`orderFrontRegardless` / `orderOut`) is live-window-server
-//     behaviour — not autonomously verifiable in unit tests. Tests construct and
-//     call the controller but should not assert on physical visibility.
-//   - Model state transitions ARE verifiable from unit tests (the model is @MainActor
-//     and has no hidden state).
+// W2.1 — Live level drain:
+//   A parallel `levelsTask` runs alongside `partialsTask`. It drains
+//   `AsyncStream<Double>` from the audio-engine RMS feed, applies one-pole smoothing
+//   via `levelSmoothed(previous:target:)`, and writes `overlayModel.level` on every
+//   value. Torn down identically to `durationTask` on transition/stop.
+//
+// W2.2 — Escape-to-cancel:
+//   A global `NSEvent.addGlobalMonitorForEvents(matching:)` handler intercepts
+//   Escape keystrokes while the panel is visible. A *global* monitor is used (not
+//   local) because the panel is non-activating and the app is LSUIElement; a local
+//   monitor never fires when another app is focused. Global monitors cannot consume
+//   (suppress) the event — which is fine: we want Escape to also dismiss dialogs in
+//   the target app if the user pressed it there. The monitor is installed at
+//   `start()` and removed at `stop()` / `cancelImmediate()`.
+//   [decision W2.2: global NSEvent monitor; cannot consume; Input Monitoring already granted]
 //
 // Threading:
 //   - `OverlayController` is `@MainActor`. All mutations of `overlayModel` and
 //     `partialText` are on the main thread.
-//   - The partials-drain Task runs on a background executor but posts to MainActor
+//   - The drain Tasks run on a background executor but post to MainActor
 //     via `MainActor.run { }` when writing to the model.
-//   - `[weak self]` captures avoid retain cycles in the drain Task.
-//
-// CREATION TIMING:
-//   `createPanel()` must be called exactly once from `startMonitoring()`, not from
-//   `init`. `NSHostingView` is expensive; recreating it per-dictation is not the
-//   right model. This matches the original behaviour in `DictationController`.
+//   - `[weak self]` captures avoid retain cycles in drain Tasks.
 
 import AppKit
 import SwiftUI
@@ -49,7 +56,7 @@ final class OverlayController {
     /// assert on `overlayState` and `partialText` without going through the panel.
     let overlayModel = OverlayViewModel()
 
-    /// The running partial text — mirrors `overlayModel.partialText` so callers
+    /// The running partial transcript text — mirrors `overlayModel.partialText` so callers
     /// that only need the string (e.g. the enclosing `DictationController`) can
     /// observe it without referencing the model directly.
     private(set) var partialText: String = ""
@@ -58,8 +65,16 @@ final class OverlayController {
 
     private var panel: TranscriptOverlayPanel?
     private var partialsTask: Task<Void, Never>?
+    /// W2.1: parallel task draining the RMS level stream into `overlayModel.level`.
+    private var levelsTask: Task<Void, Never>?
     /// 1 Hz timer driving the HUD duration counter. Lives only while listening.
     private var durationTask: Task<Void, Never>?
+    /// W2.2: global NSEvent monitor for the Escape key. Installed while the panel
+    /// is showing, removed on stop/cancel. Nil when idle.
+    /// `NSEvent.addGlobalMonitorForEvents` returns `Any?` not `NSObjectProtocol`.
+    private var escapeMonitor: Any?
+    /// W2.2: callback invoked when the user presses Escape while dictating.
+    var onEscapeCancel: (() -> Void)?
 
     // MARK: - Init
 
@@ -78,23 +93,38 @@ final class OverlayController {
     // MARK: - Lifecycle
 
     /// Show the overlay in the `.listening` state and begin draining partial
-    /// transcript chunks from `partialsProvider`.
+    /// transcript chunks and RMS levels.
     ///
-    /// - Parameter partialsProvider: An async closure that returns the partials
-    ///   `AsyncStream<TranscriptChunk>?` for the current dictation session. Called
-    ///   after the panel is shown — same timing as the original `currentPartials()`
-    ///   call site in `DictationController.startOverlay()`. Passing `nil` (or a
-    ///   closure that returns `nil`) is safe — the drain task exits early.
-    func start(partialsProvider: @escaping () async -> AsyncStream<TranscriptChunk>?) {
+    /// - Parameters:
+    ///   - partialsProvider: Returns the partials `AsyncStream<TranscriptChunk>?`.
+    ///   - levelsProvider: Returns the levels `AsyncStream<Double>?` (W2.1).
+    ///     Passing a nil-returning closure is safe — the levels task exits early
+    ///     and the bar chart falls back to the idle-breathing animation.
+    ///   - isCleaningUp: `true` when AI cleanup will run after capture ends.
+    ///     Controls the "Cleaning up…" vs "Pasting…" copy in `.processing` state (W2.2).
+    func start(
+        partialsProvider: @escaping () async -> AsyncStream<TranscriptChunk>?,
+        levelsProvider: @escaping () async -> AsyncStream<Double>?,
+        isCleaningUp: Bool
+    ) {
         // Reset to listening state with empty text before showing.
         overlayModel.partialText = ""
         overlayModel.overlayState = .listening
         overlayModel.elapsedSeconds = 0
+        overlayModel.level = 0.0
+        overlayModel.errorReason = nil
+        overlayModel.isCleaningUp = isCleaningUp
         partialText = ""
         panel?.show()
 
         // Drive the HUD duration counter at 1 Hz while listening.
         startDurationTimer()
+
+        // W2.1: start the level drain task.
+        startLevelsDrain(provider: levelsProvider)
+
+        // W2.2: arm the Escape-key global monitor while the panel is visible.
+        installEscapeMonitor()
 
         partialsTask?.cancel()
         partialsTask = nil
@@ -122,15 +152,18 @@ final class OverlayController {
 
     /// Transition the overlay to a new visual state.
     ///
-    /// Cancels the partials task when moving to `.processing` — no more chunks
-    /// will arrive once the engine transitions to the cleanup phase.
-    /// Does NOT hide the panel; call `stop()` for that.
+    /// Cancels the partials + levels tasks when moving to `.processing` — no more
+    /// chunks or level values will arrive once the engine transitions to cleanup.
     func transition(to state: OverlayState) {
         overlayModel.overlayState = state
         if state == .processing {
-            // No more partial text will arrive once processing begins.
+            // No more partial text or level data will arrive once processing begins.
             partialsTask?.cancel()
             partialsTask = nil
+            levelsTask?.cancel()
+            levelsTask = nil
+            // Reset level to 0 — bars should be at rest during processing.
+            overlayModel.level = 0.0
             // Stop the duration counter — dictation has ended, cleanup is running.
             durationTask?.cancel()
             durationTask = nil
@@ -147,22 +180,69 @@ final class OverlayController {
     func stop() {
         partialsTask?.cancel()
         partialsTask = nil
+        levelsTask?.cancel()
+        levelsTask = nil
         durationTask?.cancel()
         durationTask = nil
+        removeEscapeMonitor()
         overlayModel.partialText = ""
         overlayModel.overlayState = .listening   // reset for next dictation
         overlayModel.elapsedSeconds = 0
+        overlayModel.level = 0.0
+        overlayModel.errorReason = nil
+        overlayModel.isCleaningUp = false
         partialText = ""
         panel?.hide()
         SpeakLog.engine.info("OverlayController: overlay hidden.")
     }
 
+    /// W2.2: Show an error state in the HUD with a short reason string.
+    ///
+    /// Cancels all running tasks, leaves the panel visible so the user sees
+    /// the error. Call `stop()` after the user acknowledges (or after a timeout).
+    /// [decision W2.2: brief reason surfaced in the HUD instead of silent hide]
+    func showError(_ reason: String) {
+        partialsTask?.cancel()
+        partialsTask = nil
+        levelsTask?.cancel()
+        levelsTask = nil
+        durationTask?.cancel()
+        durationTask = nil
+        // Keep the escape monitor so the user can press Escape to dismiss.
+        overlayModel.level = 0.0
+        overlayModel.errorReason = reason
+        overlayModel.overlayState = .error
+        // Ensure panel is showing — if beginDictation never called start(), show now.
+        panel?.show()
+        SpeakLog.engine.info(
+            "OverlayController: error state shown — \(reason, privacy: .public)"
+        )
+    }
+
+    /// W2.2: Immediate cancel — hide the panel without a done-flash. Used for
+    /// Escape-to-cancel and mute. Resets identically to `stop()`.
+    func cancelImmediate() {
+        partialsTask?.cancel()
+        partialsTask = nil
+        levelsTask?.cancel()
+        levelsTask = nil
+        durationTask?.cancel()
+        durationTask = nil
+        removeEscapeMonitor()
+        overlayModel.partialText = ""
+        overlayModel.overlayState = .listening
+        overlayModel.elapsedSeconds = 0
+        overlayModel.level = 0.0
+        overlayModel.errorReason = nil
+        overlayModel.isCleaningUp = false
+        partialText = ""
+        panel?.hide()
+        SpeakLog.engine.info("OverlayController: dictation cancelled (immediate hide).")
+    }
+
     // MARK: - Duration timer
 
     /// Increment `overlayModel.elapsedSeconds` once per second while listening.
-    /// A cancellable Task (not a `Timer`) so it composes with the actor model and is
-    /// torn down deterministically on transition/stop. [decision: 1 s tick — the HUD
-    /// shows whole seconds; sub-second precision adds no user value.]
     private func startDurationTimer() {
         durationTask?.cancel()
         durationTask = Task { [weak self] in
@@ -173,6 +253,69 @@ final class OverlayController {
                     self?.overlayModel.elapsedSeconds += 1
                 }
             }
+        }
+    }
+
+    // MARK: - W2.1: Level drain
+
+    /// Drain the RMS level stream and write `overlayModel.level` with one-pole
+    /// smoothing. Cancelled automatically on `transition(to: .processing)` and `stop()`.
+    private func startLevelsDrain(provider: @escaping () async -> AsyncStream<Double>?) {
+        levelsTask?.cancel()
+        levelsTask = nil
+
+        levelsTask = Task { [weak self] in
+            guard let self else { return }
+            guard let stream = await provider() else {
+                SpeakLog.engine.info("OverlayController: level stream unavailable — bars use idle animation.")
+                return
+            }
+            var smoothed = 0.0
+            for await rawLevel in stream {
+                if Task.isCancelled { break }
+                // Apply one-pole low-pass smoothing (see LevelMath.swift for constants).
+                let next = levelSmoothed(previous: smoothed, target: rawLevel)
+                smoothed = next
+                let levelToSet = next
+                await MainActor.run { [weak self] in
+                    self?.overlayModel.level = levelToSet
+                }
+            }
+            // Stream ended (capture stopped) — reset level to 0.
+            await MainActor.run { [weak self] in
+                self?.overlayModel.level = 0.0
+            }
+            SpeakLog.engine.info("OverlayController: level stream finished.")
+        }
+    }
+
+    // MARK: - W2.2: Escape monitor
+
+    /// Install a *global* NSEvent monitor for Escape (keyCode 53).
+    ///
+    /// Global monitors fire regardless of which app is frontmost — required here
+    /// because the panel is non-activating (LSUIElement app, never key). Cannot
+    /// consume the event, which is acceptable: Escape reaching the target app
+    /// is harmless and usually desirable.
+    ///
+    /// [decision W2.2: global monitor; no consumption; AX/Input Monitoring already granted]
+    private func installEscapeMonitor() {
+        removeEscapeMonitor()   // idempotent — remove prior monitor if any
+        escapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // keyCode 53 is Escape on all Apple keyboard layouts. [decision: kVK_Escape = 53]
+            guard event.keyCode == 53 else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                SpeakLog.engine.info("OverlayController: Escape key detected — cancelling dictation.")
+                self.onEscapeCancel?()
+            }
+        }
+    }
+
+    private func removeEscapeMonitor() {
+        if let monitor = escapeMonitor {
+            NSEvent.removeMonitor(monitor)
+            escapeMonitor = nil
         }
     }
 }

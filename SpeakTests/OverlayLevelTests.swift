@@ -5,21 +5,31 @@
 // deterministic; no AppKit, no SwiftUI, no audio hardware required.
 //
 // Coverage:
-//   1.  levelLinear(fromDB:)          — 0 dB → 1.0 (full scale)
-//   2.  levelLinear(fromDB:)          — −∞ / −160 dB → ≈ 0.0
-//   3.  levelLinear(fromDB:)          — above 0 dB clamped to 1.0
-//   4.  levelLinear(fromDB:)          — known mid value (−20 dB → 0.1)
-//   5.  levelSmoothed(previous:target:) — stationary (prev = target) is identity
-//   6.  levelSmoothed(previous:target:) — 0 → 1 converges toward 1 over iterations
-//   7.  levelSmoothed(previous:target:) — explicit math (0.7/0.3 split)
-//   8.  levelBarHeights(level:)       — zero level → all bars at minHeight
-//   9.  levelBarHeights(level:)       — full level → center bar at maxHeight
-//   10. levelBarHeights(level:)       — returns exactly barCount elements
-//   11. levelBarHeights(level:)       — barCount=0 returns empty
-//   12. levelBarHeights(level:)       — all bars within [minHeight, maxHeight]
-//   13. levelBarHeights(level:)       — waveform is symmetric (center-peaked)
+//   1.  levelLinear(fromDB:)               — 0 dB → 1.0 (full scale)
+//   2.  levelLinear(fromDB:)               — −∞ / −160 dB → ≈ 0.0
+//   3.  levelLinear(fromDB:)               — above 0 dB clamped to 1.0
+//   4.  levelLinear(fromDB:)               — known mid value (−20 dB → 0.1)
+//   5.  levelSmoothed(previous:target:)    — stationary (prev = target) is identity
+//   6.  levelSmoothed(previous:target:)    — 0 → 1 converges toward 1 over iterations
+//   7.  levelSmoothed(previous:target:)    — explicit math (0.7/0.3 split)
+//   8.  levelBarHeights(level:)            — zero level → all bars at minHeight
+//   9.  levelBarHeights(level:)            — full level → center bar at maxHeight
+//   10. levelBarHeights(level:)            — returns exactly barCount elements
+//   11. levelBarHeights(level:)            — barCount=0 returns empty
+//   12. levelBarHeights(level:)            — all bars within [minHeight, maxHeight]
+//   13. levelBarHeights(level:)            — waveform is symmetric (center-peaked)
+//   W2.1:
+//   14. AudioCapture.rmsLevel(buffer:)     — silence buffer → 0.0
+//   15. AudioCapture.rmsLevel(buffer:)     — full-scale buffer → 1.0
+//   W2.2:
+//   16. levelBarHeightsPhased(level:phase:) — zero level → all bars at minHeight
+//   17. levelBarHeightsPhased(level:phase:) — all bars within [minHeight, maxHeight]
+//   18. levelBarHeightsPhased(level:phase:) — returns exactly barCount elements
+//   19. levelBarHeightsPhased(level:phase:) — barCount=0 returns empty
+//   20. levelBarHeightsPhased(level:phase:) — different phase produces different heights
 
 import XCTest
+import AVFoundation
 @testable import SpeakCore
 
 final class OverlayLevelTests: XCTestCase {
@@ -129,5 +139,114 @@ final class OverlayLevelTests: XCTestCase {
             XCTAssertEqual(heights[i], heights[mirror], accuracy: 1e-9,
                 "Bar \(i) and bar \(mirror) should be equal (symmetric envelope)")
         }
+    }
+
+    // MARK: - W2.1: AudioCapture.rmsLevel(buffer:)
+
+    // Helper: build a silence or constant-level PCM buffer for testing.
+    // Returns nil and records an XCTFail if the buffer cannot be constructed
+    // (should never happen with these fixed parameters on any macOS 26 device).
+    private func makePCMBuffer(frameCount: AVAudioFrameCount, fillValue: Float) -> AVAudioPCMBuffer? {
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 16_000,
+            channels: 1,
+            interleaved: false
+        ) else {
+            XCTFail("Could not create AVAudioFormat for test buffer")
+            return nil
+        }
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            XCTFail("Could not create AVAudioPCMBuffer for test")
+            return nil
+        }
+        buffer.frameLength = frameCount
+        if let channel = buffer.floatChannelData?[0] {
+            for idx in 0 ..< Int(frameCount) {
+                channel[idx] = fillValue
+            }
+        }
+        return buffer
+    }
+
+    // 14. Silence buffer (all zeros) → rmsLevel = 0.0
+    func testRMSLevel_silenceBuffer_isZero() {
+        guard let buffer = makePCMBuffer(frameCount: 1024, fillValue: 0.0) else { return }
+        let rms = AudioCapture.rmsLevel(buffer: buffer)
+        XCTAssertEqual(rms, 0.0, accuracy: 1e-9,
+            "RMS of a silence buffer must be 0.0")
+    }
+
+    // 15. Full-scale constant buffer (all 1.0) → rmsLevel ≈ 1.0
+    func testRMSLevel_fullScaleBuffer_isOne() {
+        guard let buffer = makePCMBuffer(frameCount: 1024, fillValue: 1.0) else { return }
+        let rms = AudioCapture.rmsLevel(buffer: buffer)
+        XCTAssertEqual(rms, 1.0, accuracy: 1e-9,
+            "RMS of a full-scale buffer must be 1.0")
+    }
+
+    // MARK: - W2.2: levelBarHeightsPhased(level:phase:)
+
+    // 16. Zero level → all bars at minHeight regardless of phase
+    func testPhasedBarHeights_zeroLevel_allMinHeight() {
+        for phase in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            let heights = levelBarHeightsPhased(
+                level: 0.0,
+                phase: phase,
+                barCount: 15,
+                minHeight: 3.0,
+                maxHeight: 20.0
+            )
+            for h in heights {
+                XCTAssertEqual(h, 3.0, accuracy: 1e-9,
+                    "At level=0 every bar must be at minHeight (phase=\(phase))")
+            }
+        }
+    }
+
+    // 17. All bars within [minHeight, maxHeight]
+    func testPhasedBarHeights_allWithinBounds() {
+        for level in [0.0, 0.3, 0.6, 1.0] {
+            for phase in [0.0, 0.5, 1.0] {
+                let heights = levelBarHeightsPhased(
+                    level: level, phase: phase,
+                    barCount: 15, minHeight: 3.0, maxHeight: 20.0
+                )
+                for h in heights {
+                    XCTAssertGreaterThanOrEqual(h, 3.0,
+                        "Bar below minHeight (level=\(level), phase=\(phase))")
+                    XCTAssertLessThanOrEqual(h, 20.0,
+                        "Bar above maxHeight (level=\(level), phase=\(phase))")
+                }
+            }
+        }
+    }
+
+    // 18. Returns exactly barCount elements
+    func testPhasedBarHeights_returnCountMatchesBarCount() {
+        for n in [1, 5, 15] {
+            let heights = levelBarHeightsPhased(level: 0.5, phase: 0.3, barCount: n)
+            XCTAssertEqual(heights.count, n, "Expected \(n) bars, got \(heights.count)")
+        }
+    }
+
+    // 19. barCount=0 → empty array
+    func testPhasedBarHeights_zeroBarCountIsEmpty() {
+        let heights = levelBarHeightsPhased(level: 0.5, phase: 0.3, barCount: 0)
+        XCTAssertTrue(heights.isEmpty, "barCount=0 must return an empty array")
+    }
+
+    // 20. Different phase values produce different bar heights (phase drives ripple)
+    func testPhasedBarHeights_differentPhasesProduceDifferentHeights() {
+        let heightsA = levelBarHeightsPhased(
+            level: 0.7, phase: 0.0, barCount: 15, minHeight: 3.0, maxHeight: 20.0
+        )
+        let heightsB = levelBarHeightsPhased(
+            level: 0.7, phase: 0.25, barCount: 15, minHeight: 3.0, maxHeight: 20.0
+        )
+        // At non-zero phase depth the heights should differ for at least some bars.
+        let allEqual = zip(heightsA, heightsB).allSatisfy { abs($0.0 - $0.1) < 1e-9 }
+        XCTAssertFalse(allEqual,
+            "phase=0 and phase=0.25 should produce different bar heights")
     }
 }
