@@ -99,14 +99,39 @@ public final class PasteboardWriter: TextInserting, Sendable {
     /// Spec dictation-flow.md §5.
     let settle: Duration
 
+    /// Writes `text` to the system pasteboard (the clipboard floor). Injected so
+    /// tests never clobber the real `NSPasteboard.general` — a real write would
+    /// hijack the user's clipboard during `make test`. Default writes the general
+    /// pasteboard (WRITE only, never read).
+    let writeClipboard: @Sendable (String) -> Void
+
+    /// Posts one synthetic keyboard `CGEvent`. Injected so tests never post real
+    /// Cmd+V events to `.cghidEventTap` — a real post lands in whatever window
+    /// currently has focus (e.g. the terminal running the tests) and pastes the
+    /// clipboard there. Default posts to the HID tap.
+    let postEvent: @Sendable (CGEvent) -> Void
+
+    /// Production clipboard-floor write: `clearContents()` + `setString`. Extracted
+    /// as the injectable default so the production path is byte-for-byte unchanged.
+    public static let defaultWriteClipboard: @Sendable (String) -> Void = { text in
+        let pb = NSPasteboard.general
+        _ = pb.clearContents()                    // returns Int (change count); unused
+        _ = pb.setString(text, forType: .string)  // returns Bool; unused — a false result
+                                                   // is only observable by reading (prohibited)
+    }
+
     /// Designated init. Production callers (DictationController line ~142
     /// `inserter: PasteboardWriter()`) use the defaults and are unaffected.
     public init(
         isAccessibilityTrusted: @escaping @Sendable () -> Bool = { AXIsProcessTrusted() },
-        settle: Duration = .milliseconds(100)   // [decision] spec dictation-flow.md §5
+        settle: Duration = .milliseconds(100),   // [decision] spec dictation-flow.md §5
+        writeClipboard: @escaping @Sendable (String) -> Void = PasteboardWriter.defaultWriteClipboard,
+        postEvent: @escaping @Sendable (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) }
     ) {
         self.isAccessibilityTrusted = isAccessibilityTrusted
         self.settle = settle
+        self.writeClipboard = writeClipboard
+        self.postEvent = postEvent
     }
 
     // MARK: - TextInserting
@@ -129,11 +154,10 @@ public final class PasteboardWriter: TextInserting, Sendable {
         // ── Step 1: clipboard floor (WRITE only, never read) ─────────────────
         // Runs unconditionally — text is recoverable from the clipboard even
         // if the AX gate or event posting fails below.
-        let pb = NSPasteboard.general
-        _ = pb.clearContents()                    // returns Int (change count); unused
-        _ = pb.setString(text, forType: .string)  // returns Bool; not checked here because
-                                                   // a false result is only observable by
-                                                   // reading, which is prohibited.
+        // Delegate through the injected seam. Production writes NSPasteboard.general
+        // (see `defaultWriteClipboard`); tests inject a recorder so the real
+        // clipboard — and the user's focused window — are never touched. Never reads.
+        writeClipboard(text)
 
         // ── Step 2: AX-trust gate ────────────────────────────────────────────
         // Synthetic keyboard events are silently dropped when AX is not granted.
@@ -210,8 +234,11 @@ public final class PasteboardWriter: TextInserting, Sendable {
         }
 
         // Post all four events in sequence: Cmd-down → V-down → V-up → Cmd-up.
+        // Via the injected `postEvent` seam — production posts to `.cghidEventTap`
+        // ([verified] Swift instance method, not the obsoleted free fn); tests inject
+        // a recorder so no real Cmd+V ever reaches the focused window.
         for event in events {
-            event.post(tap: .cghidEventTap)  // [verified] Swift instance method, not free fn
+            postEvent(event)
         }
     }
 }

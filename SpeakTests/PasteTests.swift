@@ -258,6 +258,22 @@ final class PasteTests: XCTestCase {
 
 // MARK: - Phase D: PasteboardWriter unit tests (pure, no real AX / live events)
 
+/// Records `PasteboardWriter` side effects so unit tests never touch the real
+/// system clipboard or post real Cmd+V events into the focused window. A real
+/// post lands in whatever app has focus (e.g. the terminal running the suite)
+/// and pastes the clipboard there — see the regression this guards against.
+final class PasteSideEffectRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _clipboardWrites: [String] = []
+    private var _postedEventCount = 0
+
+    var clipboardWrites: [String] { lock.withLock { _clipboardWrites } }
+    var postedEventCount: Int { lock.withLock { _postedEventCount } }
+
+    func recordClipboardWrite(_ text: String) { lock.withLock { _clipboardWrites.append(text) } }
+    func recordPostedEvent(_ event: CGEvent) { lock.withLock { _postedEventCount += 1 } }
+}
+
 final class PasteboardWriterTests: XCTestCase {
 
     // MARK: - pasteEventPlan() shape
@@ -300,16 +316,19 @@ final class PasteboardWriterTests: XCTestCase {
     // MARK: - AX not trusted → throw + clipboard floor still written
 
     /// When AX is not trusted, `insert` must throw `.pasteRequiresAccessibility`
-    /// AND the text must still be on NSPasteboard.general (clipboard floor ran).
+    /// AND the clipboard floor must still have run (text written) before the gate.
     ///
-    /// Note: reading the pasteboard here is intentional — tests are explicitly
-    /// permitted to read the pasteboard (only production code must not). The
-    /// unique marker string avoids any false-positive collision.
+    /// The write is proven via the injected `PasteSideEffectRecorder`, NOT the real
+    /// `NSPasteboard.general` — a real write clobbers the user's clipboard during
+    /// `make test`. The unique marker string makes the assertion unambiguous.
     func testInsertThrowsPasteRequiresAccessibilityWhenAXNotTrusted() async throws {
         let uniqueText = "SPEAK_PHASE_D_AX_TEST_\(UUID().uuidString)"
+        let recorder = PasteSideEffectRecorder()
         let writer = PasteboardWriter(
             isAccessibilityTrusted: { false },
-            settle: .zero
+            settle: .zero,
+            writeClipboard: { recorder.recordClipboardWrite($0) },
+            postEvent: { recorder.recordPostedEvent($0) }
         )
 
         do {
@@ -321,24 +340,35 @@ final class PasteboardWriterTests: XCTestCase {
             XCTFail("Expected SpeakError.pasteRequiresAccessibility, got \(error)")
         }
 
-        // Assert the clipboard floor ran: text is on the pasteboard.
-        // (Test-only read — production code must never read the pasteboard.)
-        let onClipboard = NSPasteboard.general.string(forType: .string)
+        // Assert the clipboard floor ran BEFORE the AX gate — via the injected
+        // recorder, NOT the real NSPasteboard (which would clobber the user's
+        // clipboard; the floor logic is fully proven by the recorder).
         XCTAssertEqual(
-            onClipboard, uniqueText,
-            "Clipboard floor must write text before the AX gate; text must be on pasteboard"
+            recorder.clipboardWrites, [uniqueText],
+            "Clipboard floor must write text before the AX gate"
+        )
+        // AX-not-trusted → throw before posting; no Cmd+V events may be posted.
+        XCTAssertEqual(
+            recorder.postedEventCount, 0,
+            "AX-not-trusted path must not post any Cmd+V events"
         )
     }
 
     // MARK: - AX trusted + settle .zero → completes without throwing
 
     /// When AX is trusted and settle is zero, `insert` must complete without
-    /// throwing. Events post to the live HID tap harmlessly in the test host
-    /// (we assert no throw; the event effect itself is [deferred — human verification]).
+    /// throwing AND post the 4-event Cmd+V chord. The events go to the injected
+    /// recorder — NOT the live HID tap. (A real post is NOT harmless: it lands in
+    /// whatever window has focus and pastes the clipboard there — e.g. the terminal
+    /// running the suite. This test previously posted real events; that is the
+    /// regression being fixed.) The real paste effect is [deferred — human verification].
     func testInsertSucceedsWhenAXTrusted() async throws {
+        let recorder = PasteSideEffectRecorder()
         let writer = PasteboardWriter(
             isAccessibilityTrusted: { true },
-            settle: .zero
+            settle: .zero,
+            writeClipboard: { recorder.recordClipboardWrite($0) },
+            postEvent: { recorder.recordPostedEvent($0) }
         )
         // Must not throw. If CGEvent construction fails in CI (headless), the
         // test is allowed to throw `.pasteboardBusy` — only `.pasteRequiresAccessibility`
@@ -347,11 +377,23 @@ final class PasteboardWriterTests: XCTestCase {
             try await writer.insert("hello phase D")
         } catch SpeakError.pasteboardBusy {
             // Acceptable in headless CI where CGEvent infrastructure is unavailable.
+            return
         } catch SpeakError.pasteRequiresAccessibility {
             XCTFail("Should not throw .pasteRequiresAccessibility when AX is trusted")
+            return
         } catch {
             XCTFail("Unexpected error from insert(): \(error)")
+            return
         }
+        // Side effects captured by the recorder — no real clipboard write, no real Cmd+V.
+        XCTAssertEqual(
+            recorder.clipboardWrites, ["hello phase D"],
+            "AX-trusted path must write the clipboard floor exactly once"
+        )
+        XCTAssertEqual(
+            recorder.postedEventCount, 4,
+            "AX-trusted path posts the 4-event Cmd+V chord (to the recorder, not the real tap)"
+        )
     }
 }
 
