@@ -60,6 +60,20 @@
 > (single display; `screencapture` can't reach another Space without AX) — environment, not
 > code. Use `--debug-open dashboard:<section>` to screenshot any pane when a Space is free.
 >
+> **W1.0/W1.1 COMPLETE (2026-06-21, next-iteration-plan.md Wave 1):**
+>   - **W1.0 verified**: Right-Command fires `CGEventType.flagsChanged` (not keyDown/keyUp);
+>     `kVK_RightCommand = 54` [verified: swiftc + macOS 26 SDK]. Left vs right ⌘ are
+>     disambiguated by keycode on the flagsChanged event; both set `.maskCommand` in flags.
+>   - **W1.1 implemented**: Default binding changed from Fn (63) to Right-Command (54).
+>     Critical fix: `handle()` now uses `modifierMask(forKeyCode:)` → `.maskCommand` for
+>     Right-Command (not `.maskSecondaryFn`, which is always false for ⌘ events).
+>     `lastBoundKeyDown` tracks the binding's key separately from `lastFnDown` (Fn+Ctrl
+>     chord detector). Fn debouncer (40 ms, VoiceInk pattern) applied Fn-path-only.
+>     Shared display helpers: `HotkeyBinding.keySymbol` + `.displayString`.
+>     `DictationController.currentHotkeyCombo()` now uses `keySymbol` instead of "Fn".
+>     Gates: build ✅ · tests ✅ · lint 0 serious ✅ · moat 7/7 ✅. Left in worktree
+>     for orchestrator review.
+>
 > **REMAINING — only LIVE HUMAN VERIFICATION (the pre-existing `#8` gate; agent cannot do):**
 >   Run on a real Mac: grant the 3 permissions, dictate (core loop), exercise paste +
 >   overlay, and try **Command Mode** (select text in another app, hold Fn+Ctrl, speak,
