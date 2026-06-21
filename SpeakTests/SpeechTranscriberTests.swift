@@ -99,6 +99,52 @@ final class SpeechTranscriberTests: XCTestCase {
                        "Engine id must be 'apple-speech-en-US' per roadmap P3 done-when.")
     }
 
+    // MARK: - H4 customVocabulary seam
+
+    /// Default no-arg init must carry an empty vocabulary (behavior-neutral default).
+    @available(macOS 26.0, *)
+    func testDefaultVocabularyIsEmpty() {
+        let transcriber = AppleSpeechTranscriber()
+        XCTAssertEqual(transcriber.vocabulary, [],
+            "Default vocabulary must be [] — no AnalysisContext injection in the default path.")
+    }
+
+    /// Vocabulary passed at init must round-trip out of the `vocabulary` property.
+    @available(macOS 26.0, *)
+    func testVocabularyRoundTripsViaDefaultInit() {
+        let terms = ["Xcodegen", "SpeakCore", "SpeechAnalyzer"]
+        let transcriber = AppleSpeechTranscriber(vocabulary: terms)
+        XCTAssertEqual(transcriber.vocabulary, terms,
+            "vocabulary must equal the array passed to init(vocabulary:).")
+    }
+
+    /// AudioProducer-injection init also accepts and surfaces a vocabulary.
+    @available(macOS 26.0, *)
+    func testVocabularyRoundTripViaAudioProducerInit() throws {
+        let terms = ["Tahoe", "MacOS", "AVFoundation"]
+        let url = fixtureURL  // fixture existence is optional for this structural test
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            // No fixture = no producer to inject, but this is a pure structural test.
+            // We can still verify with a live producer path.
+            let t = AppleSpeechTranscriber(audioProducer: LiveAudioCapture(), vocabulary: terms)
+            XCTAssertEqual(t.vocabulary, terms,
+                "vocabulary must round-trip through init(audioProducer:vocabulary:).")
+            return
+        }
+        let producer = FixtureAudioProducer(fileURL: url)
+        let transcriber = AppleSpeechTranscriber(audioProducer: producer, vocabulary: terms)
+        XCTAssertEqual(transcriber.vocabulary, terms,
+            "vocabulary must round-trip through init(audioProducer:vocabulary:).")
+    }
+
+    /// An explicit empty vocabulary explicitly passed must equal [].
+    @available(macOS 26.0, *)
+    func testExplicitEmptyVocabularyRoundTrips() {
+        let transcriber = AppleSpeechTranscriber(vocabulary: [])
+        XCTAssertEqual(transcriber.vocabulary, [],
+            "Explicit empty vocabulary must equal [].")
+    }
+
     /// Verifies that `startStream` returns a stream object (pre-flight check —
     /// does not assert transcription content, just that the call doesn't crash).
     @available(macOS 26.0, *)

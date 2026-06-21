@@ -273,6 +273,35 @@ final class SettingsStoreTests: XCTestCase {
             "defaultTranscriber v1 stub must fall back to AppleSpeechTranscriber for .whisperCpp.")
     }
 
+    // MARK: - customVocabulary (H4 seam)
+
+    func testCustomVocabularyDefaultIsEmpty() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertEqual(store.customVocabulary, [],
+            "customVocabulary default must be [] — no injection in the baseline path.")
+    }
+
+    func testCustomVocabularyRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.customVocabulary = ["Xcodegen", "SpeakCore", "SpeechAnalyzer"]
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.customVocabulary, ["Xcodegen", "SpeakCore", "SpeechAnalyzer"],
+            "customVocabulary must survive a SettingsStore reload on the same defaults.")
+    }
+
+    func testCustomVocabularyEmptyArrayRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.customVocabulary = ["term1"]
+        store.customVocabulary = []   // clear back to empty
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.customVocabulary, [],
+            "Clearing customVocabulary to [] must persist and reload as [].")
+    }
+
     // MARK: - Multiple properties persist independently
 
     func testMultiplePropertiesPersistIndependently() throws {

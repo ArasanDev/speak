@@ -78,6 +78,7 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
         static let pasteMode             = "speak.settings.pasteMode"
         static let hasCompletedOnboarding = "speak.settings.hasCompletedOnboarding"
         static let triggerMode           = "speak.settings.triggerMode"
+        static let customVocabulary      = "speak.settings.customVocabulary"
     }
 
     // MARK: - Injected defaults (the testability seam)
@@ -237,6 +238,27 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
         set {
             objectWillChange.send()
             defaults.set(newValue.rawValue, forKey: Keys.triggerMode)
+        }
+    }
+
+    // MARK: - Custom vocabulary (H4 seam)
+
+    /// User-supplied term list passed to the STT recognizer as contextual hints.
+    ///
+    /// Persisted as a `[String]` array in `UserDefaults` (native type — no JSON
+    /// encoding needed). An empty array (the default) means no injection into
+    /// `AnalysisContext.contextualStrings`; the transcriber behaves exactly as it
+    /// did before H4. No UI in v0 — this property is the persistence seam only.
+    /// The v1 dictionary UI will write here and the transcriber will pick it up
+    /// on the next dictation session.
+    ///
+    /// [decision: stored as [String] because UserDefaults natively supports string
+    ///  arrays; no codec needed; injection point is AnalysisContext.contextualStrings[.general]]
+    public var customVocabulary: [String] {
+        get { defaults.stringArray(forKey: Keys.customVocabulary) ?? [] }
+        set {
+            objectWillChange.send()
+            defaults.set(newValue, forKey: Keys.customVocabulary)
         }
     }
 }

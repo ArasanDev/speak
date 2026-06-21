@@ -94,15 +94,29 @@ public final class AppleSpeechTranscriber: Transcribing {
     private let audioProducer: any AudioBufferProducing
     private let state = SessionState()
 
+    /// Optional custom-vocabulary terms hinting to the recognizer.
+    ///
+    /// Injected into `AnalysisContext.contextualStrings[.general]` before each session
+    /// starts. An empty list (the default) means no injection — current behavior is
+    /// unchanged. The vocabulary seam is storage-only in v0; whether Apple's on-device
+    /// model uses these terms to bias recognition is `[inferred]` (not measurable
+    /// without a live audio corpus). This wire point exists so v1 dictionary features
+    /// can snap in without changing the `Transcribing` protocol.
+    ///
+    /// [verified: AnalysisContext.contextualStrings + setContext from arm64e swiftinterface]
+    public let vocabulary: [String]
+
     /// Default no-arg init: uses the live microphone.
     /// The §10.1 factory `AppleSpeechTranscriber()` calls this.
-    public init() {
+    public init(vocabulary: [String] = []) {
         self.audioProducer = LiveAudioCapture()
+        self.vocabulary = vocabulary
     }
 
     /// Designated init for testing: inject any AudioBufferProducing.
-    public init(audioProducer: any AudioBufferProducing) {
+    public init(audioProducer: any AudioBufferProducing, vocabulary: [String] = []) {
         self.audioProducer = audioProducer
+        self.vocabulary = vocabulary
     }
 
     // MARK: Transcribing
@@ -110,12 +124,14 @@ public final class AppleSpeechTranscriber: Transcribing {
     public func startStream(locale: Locale) -> AsyncThrowingStream<TranscriptChunk, Error> {
         let state = self.state
         let producer = self.audioProducer
+        // Capture vocabulary as a local to avoid capturing self in the Sendable Task.
+        let vocabulary = self.vocabulary
 
         let (stream, continuation) = AsyncThrowingStream<TranscriptChunk, Error>.makeStream()
 
         let task = Task<Void, Never>(priority: .userInitiated) {
             do {
-                try await Session(locale: locale, audioProducer: producer, state: state)
+                try await Session(locale: locale, audioProducer: producer, state: state, vocabulary: vocabulary)
                     .run(continuation: continuation)
                 continuation.finish()
             } catch {
@@ -144,6 +160,9 @@ private struct Session: Sendable {
     let locale: Locale
     let audioProducer: any AudioBufferProducing
     let state: SessionState
+    /// Custom-vocabulary terms injected into AnalysisContext before the session starts.
+    /// Empty list means no injection — behavior-neutral with the default path.
+    let vocabulary: [String]
 
     // MARK: run — the authoritative lifecycle
 
@@ -179,6 +198,27 @@ private struct Session: Sendable {
         await state.setResultsTask(resultsTask)
 
         // ── Authoritative lifecycle ────────────────────────────────────────────
+        // Step 0 (vocabulary seam): inject contextual strings before starting
+        // so the model has them at session setup time. Guard on non-empty so the
+        // default (empty list) path adds zero work.
+        // [verified: AnalysisContext.contextualStrings + SpeechAnalyzer.setContext
+        //  from arm64e-apple-macos.swiftinterface, 2026-06-21]
+        if !vocabulary.isEmpty {
+            let ctx = AnalysisContext()
+            ctx.contextualStrings = [.general: vocabulary]
+            do {
+                try await analyzer.setContext(ctx)
+                SpeakLog.stt.info(
+                    "Vocabulary seam: injected \(vocabulary.count, privacy: .public) term(s) into AnalysisContext."
+                )
+            } catch {
+                // Vocabulary injection failing is non-fatal — log and continue without it.
+                SpeakLog.stt.error(
+                    "Vocabulary seam: setContext failed (\(error.localizedDescription, privacy: .public)); proceeding without custom vocabulary."
+                )
+            }
+        }
+
         // Step 1: start(inputSequence:) returns AFTER SETUP, not after all input.
         // [verified] The analyzer begins consuming from inputStream asynchronously.
         do {
