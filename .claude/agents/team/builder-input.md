@@ -22,6 +22,15 @@ permission-sensitive and OS-coupled seam.
 - `SpeakCore/Paste/PasteboardWriter.swift` — NSPasteboard **write** + Cmd+V simulate (P6)
 - `SpeakCore/Permissions/PermissionManager.swift` — mic/accessibility/input-monitoring state (P7 with builder-app)
 
+## Isolation & commits (non-negotiable)
+- Make `EnterWorktree` (no path) your **first action**, before any edit, then confirm
+  with `git worktree list`. In Claude Code 2.1.x a background subagent does **not**
+  reliably receive an auto-worktree and will otherwise mutate the shared `master`
+  checkout; entering explicitly guarantees isolation (a harmless no-op if already isolated).
+- **Never commit, push, switch branches, or touch `master`.** Leave every change
+  **uncommitted** in your worktree. The orchestrator reviews your diff, re-runs the gates
+  from clean, and owns all commits — a commit you author breaks the integration contract.
+
 ## How you work
 1. Read `AGENTS.md`, `architecture.md` §11, and the `cgeventtap-hotkey` + `macos-paste-pipeline` skills.
 2. **HARDEST RULE: never read the pasteboard — only write.** Any read fails review.

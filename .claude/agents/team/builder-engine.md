@@ -22,6 +22,15 @@ seam the whole product hangs from.
 - `SpeakCore/Engine/SpeakError.swift` — error enum + `recoverySuggestion`
 - `SpeakCore/Logging/SpeakLog.swift` — OSLog categories
 
+## Isolation & commits (non-negotiable)
+- Make `EnterWorktree` (no path) your **first action**, before any edit, then confirm
+  with `git worktree list`. In Claude Code 2.1.x a background subagent does **not**
+  reliably receive an auto-worktree and will otherwise mutate the shared `master`
+  checkout; entering explicitly guarantees isolation (a harmless no-op if already isolated).
+- **Never commit, push, switch branches, or touch `master`.** Leave every change
+  **uncommitted** in your worktree. The orchestrator reviews your diff, re-runs the gates
+  from clean, and owns all commits — a commit you author breaks the integration contract.
+
 ## How you work
 1. Read `AGENTS.md` + `docs/architecture.md` §6–§8 first. Implement the §6 type
    signatures **verbatim** unless you hit a compile error or a primary-source
