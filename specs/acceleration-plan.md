@@ -75,6 +75,15 @@ without modal-stacking. You said "full product, full application UI, everything"
 which points hard at **building the dashboard**. I recommend it; it is the spine
 Phase 2's UI hangs on. *Confirm and Phase 2 Wave A is the dashboard.*
 
+### Design system (locked by the user, 2026-06-21)
+**Typographic theme: `Monaco`** — the macOS-native monospace, chosen for its calm,
+even, easy-on-the-eyes rhythm. Native + zero-dependency (fits the Apple-only wedge).
+Applies across the UI: history/dashboard rows, timestamps, HUD transcript text,
+keycaps. SwiftUI: `.font(.custom("Monaco", size:))` (or a `Font` extension token —
+e.g. `Font.speakMono`). Pair with the system UI font for chrome/labels; Monaco for
+*content + data* (the "log-file" feel the competitor research calls for). One source
+of truth — define the token once, never hardcode the family string per view.
+
 ### Wave A — UI spine (the dashboard, if confirmed)
 Full-window app with sidebar IA + day-grouped history dashboard (TODAY/YESTERDAY,
 SF-Mono timestamps, full-text no-truncation, preserved empty rows). User-facing
