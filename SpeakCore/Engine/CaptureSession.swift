@@ -56,6 +56,20 @@ public actor CaptureSession {
     private var state: State = .idle
     private var streamTask: Task<Void, Never>?
     private var latestChunk: TranscriptChunk?
+    /// Accumulates text from finalized (isFinal == true) chunks.
+    ///
+    /// SpeechAnalyzer with `.progressiveTranscription` emits one isFinal segment
+    /// per speech window — each contains only that window's text, NOT the whole
+    /// utterance. Without accumulation, only the last window's text would be
+    /// pasted. finalizedText appends each isFinal chunk's text so the full
+    /// multi-segment transcript is assembled here, matching what the user saw
+    /// accumulate in the HUD across volatile chunks. [decision: truncation fix]
+    ///
+    /// Separator " " matches the convention in SpeechTranscriberTests.swift:239.
+    /// Whether Apple's on-device model already includes leading whitespace per
+    /// segment is [unverified] — if it does, double-spaces may appear; this can
+    /// be revisited with a live multi-segment test corpus.
+    private var finalizedText: String = ""
     private var sessionStartTime: Date?
     private var partialsContinuation: AsyncStream<TranscriptChunk>.Continuation?
 
@@ -165,6 +179,7 @@ public actor CaptureSession {
         state = .listening
         sessionStartTime = Date()
         latestChunk = nil
+        finalizedText = ""
 
         let stream = transcriber.startStream(locale: locale)
 
@@ -215,10 +230,13 @@ public actor CaptureSession {
             await task.value
         }
 
-        // Build the result. The "raw" text is the latest chunk's text —
-        // either a final chunk (preferred) or the last partial if no final
-        // arrived. Empty is valid: the STT may produce no speech.
-        let transcribed = latestChunk?.text ?? ""
+        // Build the result. Use finalizedText when it is non-empty: it
+        // accumulates every isFinal segment across all speech windows, giving the
+        // full utterance for long dictations. Fall back to latestChunk?.text for
+        // very short speech where no isFinal chunk arrived (only volatile chunks
+        // were emitted before stop() was called), or when the STT produced no
+        // output at all. Empty is valid: the STT may produce no speech.
+        let transcribed = finalizedText.isEmpty ? (latestChunk?.text ?? "") : finalizedText
         // Wave B: apply snippet expansion BEFORE cleanup, so the LLM smooths any seams
         // and snippets work even when cleanup is off (the expanded text becomes rawText,
         // which is what the raw-paste fallback delivers). nil expander = unchanged.
@@ -295,8 +313,26 @@ public actor CaptureSession {
 
     /// Store a chunk from the STT stream. Actor-isolated; safe under concurrent
     /// calls from the stream task.
+    ///
+    /// Two paths:
+    /// - volatile (isFinal == false): update latestChunk for the overlay HUD
+    ///   (newest-non-empty rule, matches OverlayTextAccumulator semantics).
+    /// - final   (isFinal == true):  append to finalizedText so multi-window
+    ///   sessions accumulate the full utterance rather than only the last window.
+    ///   latestChunk is also updated so stop() can fall back to it when
+    ///   finalizedText ends up empty (e.g. single-segment or very short speech
+    ///   where only a volatile arrived before the session was stopped).
     private func ingest(_ chunk: TranscriptChunk) {
         latestChunk = chunk
+        if chunk.isFinal {
+            // Append this window's final text. Separator " " is added between
+            // segments; the first segment gets no leading space. [decision: separator]
+            if finalizedText.isEmpty {
+                finalizedText = chunk.text
+            } else {
+                finalizedText += " " + chunk.text
+            }
+        }
         partialsContinuation?.yield(chunk)
     }
 

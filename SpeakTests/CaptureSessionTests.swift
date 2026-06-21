@@ -384,6 +384,86 @@ final class CaptureSessionTests: XCTestCase {
         }
     }
 
+    // MARK: - Multi-segment truncation fix (P0 correctness bug)
+
+    /// Regression test for the truncation bug: long dictation pasting only the
+    /// last few words instead of the full transcript.
+    ///
+    /// ROOT CAUSE: `ingest()` replaced `latestChunk` on every chunk. SpeechAnalyzer
+    /// emits one `isFinal == true` chunk per speech WINDOW (not per utterance), so
+    /// for a multi-window utterance only the last window's text landed in `rawText`.
+    ///
+    /// FIX: `ingest()` now accumulates `finalizedText` by appending each isFinal
+    /// chunk's text (space-separated). `stop()` prefers `finalizedText` when
+    /// non-empty, falling back to `latestChunk?.text` for short speech.
+    ///
+    /// FAIL-BEFORE/PASS-AFTER (verified by stash run):
+    ///   Pre-fix: `rawText == "how are you"` (last isFinal only) → test FAILS
+    ///   Post-fix: `rawText == "hello world how are you"` (all finals joined) → test PASSES
+    func testMultiSegmentFinalChunksAreJoinedInResult() async throws {
+        // Simulate three speech windows, each with volatile partials followed by
+        // one isFinal. This is the exact pattern SpeechAnalyzer produces for
+        // long dictations (one finalized segment per speech window).
+        let now = Date()
+        let multiSegmentScript: [TranscriptChunk] = [
+            // Window 1 volatile partials
+            TranscriptChunk(text: "hel",         isFinal: false, timestamp: now),
+            TranscriptChunk(text: "hello",       isFinal: false, timestamp: now.addingTimeInterval(0.1)),
+            TranscriptChunk(text: "hello wor",   isFinal: false, timestamp: now.addingTimeInterval(0.2)),
+            // Window 1 final
+            TranscriptChunk(text: "hello world", isFinal: true,  timestamp: now.addingTimeInterval(0.3)),
+            // Window 2 volatile partials
+            TranscriptChunk(text: "ho",          isFinal: false, timestamp: now.addingTimeInterval(0.4)),
+            TranscriptChunk(text: "how",         isFinal: false, timestamp: now.addingTimeInterval(0.5)),
+            TranscriptChunk(text: "how are",     isFinal: false, timestamp: now.addingTimeInterval(0.6)),
+            // Window 2 final
+            TranscriptChunk(text: "how are you", isFinal: true,  timestamp: now.addingTimeInterval(0.7))
+        ]
+
+        let transcriber = MockTranscriber(script: multiSegmentScript)
+        let session = CaptureSession(transcriber: transcriber)
+        try await session.start()
+        // Wait for all 8 chunks to be ingested (8 × 1ms sleep in MockTranscriber + buffer).
+        try await Task.sleep(nanoseconds: 50_000_000) // 50ms
+        let result = try await session.stop()
+
+        // The full utterance is both windows joined — NOT just the last window.
+        XCTAssertEqual(result.rawText, "hello world how are you",
+            """
+            rawText must be ALL finalized segments joined, not just the last one.
+            Pre-fix: only "how are you" (last isFinal) was captured.
+            Post-fix: all isFinal chunks are accumulated in finalizedText.
+            """)
+        XCTAssertNil(result.cleanedText, "No cleaner → cleanedText must be nil")
+        XCTAssertEqual(result.engineId, "mock-stt", "No cleaner → engineId is STT id")
+        let state = await session.currentState
+        XCTAssertTrue(state == .done, "Session must reach .done after successful stop()")
+    }
+
+    /// Short-utterance regression: a session where only volatile (isFinal=false)
+    /// chunks arrive (stopped before any window finalizes) must still produce a
+    /// result using the last volatile chunk — not empty string.
+    func testShortUtteranceWithNoFinalChunkUsesLastVolatile() async throws {
+        // Only volatile chunks — simulates stopping in the middle of a window
+        // before SpeechAnalyzer emits an isFinal for that window.
+        let now = Date()
+        let volatileOnlyScript: [TranscriptChunk] = [
+            TranscriptChunk(text: "spe",     isFinal: false, timestamp: now),
+            TranscriptChunk(text: "speak",   isFinal: false, timestamp: now.addingTimeInterval(0.1)),
+            TranscriptChunk(text: "speak c", isFinal: false, timestamp: now.addingTimeInterval(0.2))
+        ]
+
+        let transcriber = MockTranscriber(script: volatileOnlyScript)
+        let session = CaptureSession(transcriber: transcriber)
+        try await session.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let result = try await session.stop()
+
+        // finalizedText is empty (no isFinal chunks) → fallback to latestChunk.text.
+        XCTAssertEqual(result.rawText, "speak c",
+            "When no isFinal chunks arrive, rawText must be the last volatile chunk's text.")
+    }
+
     // MARK: - Partials stream
 
     func testPartialsStreamEmitsChunksAndFinishes() async throws {
