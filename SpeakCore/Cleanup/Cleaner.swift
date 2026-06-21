@@ -58,20 +58,53 @@ public enum CleanupStyle: String, Codable, Sendable, CaseIterable, Equatable {
     }
 }
 
-/// The neat-writing *intensity* — how aggressively the transcript is rewritten. A
-/// friendly abstraction over prompt strength (acceleration-plan.md Wave B).
-/// `.balanced` is the default.
+/// The neat-writing *intensity* — how aggressively the transcript is rewritten.
+///
+/// **W4.1 transparency moat** — 4-level intensity ladder matching the market
+/// pattern (Wispr Auto Cleanup, competitor-research finding #4):
+///   - `.none`   → raw passthrough; no model call. `SpeakEngine.newSession()` skips
+///                 the cleaner entirely when this is selected, exactly as if
+///                 `cleanupEnabled == false`. [decision: "no cleanup" is a level,
+///                 not a boolean toggle, so the user chooses all-or-nothing vs.
+///                 a specific intensity from one picker.]
+///   - `.light`  → filler-word removal + punctuation only.
+///   - `.medium` → + sentence tightening (the v0 balanced baseline).
+///   - `.high`   → + restructuring and paragraph breaks.
+///
+/// **rawValue migration note:** the previous cases (basic/balanced/thorough) are
+/// replaced by (light/medium/high). Stored rawValues from an earlier build will not
+/// decode, and SettingsStore falls back to the new default `.medium`. This is
+/// acceptable pre-release. [decision: clean break, no migration shim in v0]
+///
+/// **Persistence:** stored as `rawValue` String in `UserDefaults`. Default: `.medium`.
+/// **CaseIterable order == picker order** (None first, High last).
 public enum CleanupLevel: String, Codable, Sendable, CaseIterable, Equatable {
-    case basic
-    case balanced
-    case thorough
+    /// No AI cleanup — raw transcript is pasted. No model call is made.
+    case none
+    /// Light: filler-word removal and punctuation only. Minimal rewriting.
+    case light
+    /// Medium: filler removal + punctuation + sentence tightening. The balanced baseline.
+    case medium
+    /// High: filler removal + punctuation + tightening + restructuring + paragraphs.
+    case high
 
-    /// The picker label.
+    /// The user-facing picker label. [decision: plain English, not "Basic/Thorough"]
     public var displayName: String {
         switch self {
-        case .basic:    return "Basic"
-        case .balanced: return "Balanced"
-        case .thorough: return "Thorough"
+        case .none:   return "None"
+        case .light:  return "Light"
+        case .medium: return "Medium"
+        case .high:   return "High"
+        }
+    }
+
+    /// One-line description shown below the picker label in Settings. [decision]
+    public var levelDescription: String {
+        switch self {
+        case .none:   return "Paste raw transcript, no AI changes"
+        case .light:  return "Remove filler words and add punctuation"
+        case .medium: return "Tighten sentences and fix grammar"
+        case .high:   return "Restructure and add paragraph breaks"
         }
     }
 }

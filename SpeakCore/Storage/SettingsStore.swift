@@ -104,7 +104,10 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
             Keys.language: "en-US",
             Keys.pasteMode: PasteMode.cmdV.rawValue,
             Keys.cleanupStyle: CleanupStyle.default.rawValue,
-            Keys.cleanupLevel: CleanupLevel.balanced.rawValue
+            // W4.1: default is .medium (the "balanced" equivalent in the new 4-level scale).
+            // Old stored rawValues (basic/balanced/thorough) will not decode after this
+            // rename — the getter falls back to .medium. [decision: clean break, no shim]
+            Keys.cleanupLevel: CleanupLevel.medium.rawValue
         ])
         // Enum defaults are handled via `?? fallback` at the getter level because
         // Codable JSON cannot be registered as a `[String: Any]` literal.
@@ -262,12 +265,15 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
         }
     }
 
-    /// The neat-writing *intensity* applied during AI cleanup. Default: `.balanced`.
-    /// Read alongside `cleanupStyle` at `newSession()` time.
+    /// The neat-writing *intensity* applied during AI cleanup. Default: `.medium`.
+    ///
+    /// **W4.1 4-level scale**: None / Light / Medium / High. When `.none`, the engine
+    /// skips the LLM pass entirely (raw transcript pasted) even if `cleanupEnabled == true`.
+    /// Read alongside `cleanupStyle` at `newSession()` time (H1 pattern).
     public var cleanupLevel: CleanupLevel {
         get {
-            let raw = defaults.string(forKey: Keys.cleanupLevel) ?? CleanupLevel.balanced.rawValue
-            return CleanupLevel(rawValue: raw) ?? .balanced
+            let raw = defaults.string(forKey: Keys.cleanupLevel) ?? CleanupLevel.medium.rawValue
+            return CleanupLevel(rawValue: raw) ?? .medium
         }
         set {
             objectWillChange.send()
