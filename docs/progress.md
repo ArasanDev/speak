@@ -73,6 +73,36 @@ mute **chord** (the mute menu toggle ships; the chord is live-gated follow-up).
 
 ---
 
+## Done (this session — 2026-06-21, loop run #20 — Phase C: recording HUD visual states + level meter)
+
+Phase C of `specs/dictation-flow.md` — recording HUD upgrade:
+
+- [x] **`OverlayState` enum (App/Overlay/TranscriptOverlayView.swift):** `.listening`, `.processing`,
+      `.done` — drives HUD visual state. `OverlayViewModel` now publishes `overlayState` + `level: Double`.
+- [x] **Bottom-center positioning (spec §4 consensus: VoiceInk/Wispr/Handy):** panel repositioned from
+      top-center to `visibleFrame.minY + 24pt`. Repositions on `NSApplication.didChangeScreenParametersNotification`
+      (block-based observer, `[weak self]`, removed in deinit — no leak).
+- [x] **`.stationary, .ignoresCycle` added to `collectionBehavior`** alongside existing
+      `.canJoinAllSpaces, .fullScreenAuxiliary`. Panel still `.nonactivatingPanel`, `canBecomeKey=false`,
+      `orderFrontRegardless` — never steals focus (load-bearing).
+- [x] **Three HUD visual states:** listening (5-bar waveform + partial text or "Listening…" placeholder),
+      processing ("Cleaning up…" + ProgressView spinner), done (checkmark.circle.fill + "Done").
+- [x] **Level meter: placeholder path taken** (not fake-VU). `level: Double` on the model is the real
+      wire point; bars run a neutral uniform breathing animation (clearly not mic-reactive: all 5 bars
+      breathe together at 0.15–0.30 amplitude, 1.2 s cycle). Real feed deferred to builder-audio-stt +
+      builder-engine (AVAudioEngine tap RMS → `AsyncStream<Double>` → DictationController → OverlayViewModel).
+- [x] **`LevelMath.swift` (SpeakCore/Overlay/):** pure public functions: `levelLinear(fromDB:)` (Hex formula),
+      `levelSmoothed(previous:target:)` (Handy 0.7/0.3), `levelBarHeights(level:barCount:minHeight:maxHeight:)`
+      (cosine envelope, 5 bars, 3–20 pt). No AppKit/SwiftUI — fully unit-tested.
+- [x] **`endDictation()` hide-timing fixed:** panel stays visible during processing ("Cleaning up…")
+      and done (600ms flash). Panel hides AFTER done flash, not at stop(). `transitionOverlay(to:)` cancels
+      partials task at processing. Error path still hides immediately.
+- [x] **Debug targets extended (DebugLaunchDispatcher):** `overlay-demo` (listening + sample text + level=0.6),
+      `overlay-demo-processing`, `overlay-demo-done`. Three separate states are screenshot-verifiable.
+- [x] **13 unit tests (OverlayLevelTests.swift):** dB→linear, clamping, smoothing math, convergence,
+      bar count, bounds, symmetry — all pass.
+- `make build` PASSED, `make test` 163 tests 0 failures, `make verify-moat` 7/7, lint 0 errors.
+
 ## Done (this session — 2026-06-21, loop run #19 — Phase B: push-to-talk + trigger mode UI)
 
 Phase B of `specs/dictation-flow.md` — two trigger modes, user-selectable:
