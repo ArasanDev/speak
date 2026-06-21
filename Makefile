@@ -16,6 +16,34 @@ APP      := $(DERIVED)/Build/Products/$(CONFIG)/Speak.app
 
 XCB := xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration $(CONFIG) -derivedDataPath $(DERIVED)
 
+# ── Release variables ─────────────────────────────────────────────────────────
+# These must be set in your environment (or on the make command line) before
+# running `make release`. They are intentionally NOT committed — no secrets
+# ever touch source control.
+#
+#   DEV_ID          – Your Developer ID Application cert name.
+#                     Example: "Developer ID Application: Jane Smith (TEAMID)"
+#                     Find it: security find-identity -v -p codesigning
+#
+#   NOTARY_PROFILE  – The profile name you created with:
+#                     xcrun notarytool store-credentials <profile-name>
+#                     See docs/release.md for the one-time setup procedure.
+#
+# Invocation:
+#   DEV_ID="Developer ID Application: Jane Smith (TEAMID)" \
+#   NOTARY_PROFILE="speak-notary" \
+#   make release
+DEV_ID         ?=
+NOTARY_PROFILE ?=
+
+# Release-specific paths (kept out of DERIVED to avoid `make clean` deleting them)
+RELEASE_DIR    := build/release
+ARCHIVE        := $(RELEASE_DIR)/Speak.xcarchive
+EXPORT_DIR     := $(RELEASE_DIR)/export
+APP_EXPORT     := $(EXPORT_DIR)/Speak.app
+DMG            := $(RELEASE_DIR)/Speak.dmg
+EXPORT_PLIST   := scripts/export-options.plist
+
 # Stable local code-signing identity. When present, build re-signs the app with it
 # so macOS TCC permission grants (Accessibility, Input Monitoring) survive rebuilds.
 # Absent (fresh clone / CI) → the app stays ad-hoc and grants won't persist — run
@@ -23,7 +51,7 @@ XCB := xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration $(CONFIG)
 DEV_CERT  := speak-local-codesign
 BUNDLE_ID := com.speak.app
 
-.PHONY: all generate build test lint run lsp clean release verify-moat dev-cert reset-permissions
+.PHONY: all generate build test lint run lsp clean release verify-moat dev-cert reset-permissions release-preflight
 
 all: build
 
@@ -86,7 +114,97 @@ clean:
 verify-moat:
 	bash scripts/verify-moat.sh
 
-## release: Developer ID sign + notarize + .dmg + Homebrew cask (implemented at P11)
-release:
-	@echo "make release is implemented at roadmap P11 (sign + notarize + dmg + cask)."
-	@exit 1
+## release-preflight: check required environment variables before release
+release-preflight:
+	@if [ -z "$(DEV_ID)" ]; then \
+	  echo ""; \
+	  echo "ERROR: DEV_ID is not set."; \
+	  echo ""; \
+	  echo "  Set it to your Developer ID Application cert name, e.g.:"; \
+	  echo "    DEV_ID=\"Developer ID Application: Jane Smith (TEAMID)\""; \
+	  echo ""; \
+	  echo "  Find it with:  security find-identity -v -p codesigning"; \
+	  echo "  Full setup:    docs/release.md"; \
+	  echo ""; \
+	  exit 1; \
+	fi
+	@if [ -z "$(NOTARY_PROFILE)" ]; then \
+	  echo ""; \
+	  echo "ERROR: NOTARY_PROFILE is not set."; \
+	  echo ""; \
+	  echo "  Set it to the keychain profile name you created with:"; \
+	  echo "    xcrun notarytool store-credentials <profile-name>"; \
+	  echo ""; \
+	  echo "  Full setup:    docs/release.md"; \
+	  echo ""; \
+	  exit 1; \
+	fi
+	@if [ ! -f "$(EXPORT_PLIST)" ]; then \
+	  echo ""; \
+	  echo "ERROR: $(EXPORT_PLIST) is missing."; \
+	  echo "  Create it per docs/release.md (xcodebuild -exportArchive options)."; \
+	  echo ""; \
+	  exit 1; \
+	fi
+	@echo "release-preflight: DEV_ID and NOTARY_PROFILE set, export plist present — continuing."
+
+## release: Developer ID sign + notarize + .dmg + Homebrew cask (roadmap P11).
+##
+## Prerequisites (one-time setup — see docs/release.md):
+##   1. Install a "Developer ID Application" certificate in your keychain.
+##   2. Store notarization credentials:
+##        xcrun notarytool store-credentials speak-notary \
+##          --apple-id you@example.com --team-id YOURTEAMID
+##   3. Create scripts/export-options.plist (one-time, see docs/release.md).
+##
+## Then run:
+##   DEV_ID="Developer ID Application: Jane Smith (TEAMID)" \
+##   NOTARY_PROFILE="speak-notary" \
+##   make release
+release: generate release-preflight
+	@echo "==> release: archiving (Release configuration)..."
+	@mkdir -p $(RELEASE_DIR)
+	xcodebuild archive \
+	  -project $(PROJECT) \
+	  -scheme $(SCHEME) \
+	  -configuration Release \
+	  -archivePath $(ARCHIVE) \
+	  -derivedDataPath $(DERIVED)
+
+	@echo "==> release: exporting with Developer ID signing..."
+	xcodebuild -exportArchive \
+	  -archivePath $(ARCHIVE) \
+	  -exportPath $(EXPORT_DIR) \
+	  -exportOptionsPlist $(EXPORT_PLIST)
+
+	@echo "==> release: verifying code signature..."
+	codesign --verify --deep --strict --verbose=2 "$(APP_EXPORT)"
+	spctl --assess --type execute --verbose "$(APP_EXPORT)"
+
+	@echo "==> release: packaging .dmg (hdiutil)..."
+	@rm -f "$(DMG)"
+	hdiutil create \
+	  -volname "Speak" \
+	  -srcfolder "$(EXPORT_DIR)" \
+	  -ov \
+	  -format UDZO \
+	  "$(DMG)"
+
+	@echo "==> release: submitting to Apple Notary service (this may take a few minutes)..."
+	xcrun notarytool submit "$(DMG)" \
+	  --keychain-profile "$(NOTARY_PROFILE)" \
+	  --wait
+
+	@echo "==> release: stapling notarization ticket to .dmg..."
+	xcrun stapler staple "$(DMG)"
+
+	@echo "==> release: verifying Gatekeeper acceptance..."
+	spctl --assess --type open --context context:primary-signature --verbose "$(DMG)"
+
+	@echo ""
+	@echo "==> release: SUCCESS"
+	@echo "    Artifact: $(DMG)"
+	@echo ""
+	@echo "    Next: update dist/speak.cask.rb with the sha256 of the .dmg:"
+	@echo "      shasum -a 256 $(DMG)"
+	@echo ""

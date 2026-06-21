@@ -1,14 +1,20 @@
 name: CI
 
+# Trigger on every push and every PR. Cancel in-flight runs for the same
+# branch/PR so a rapid push sequence doesn't queue a pile of runners.
 on:
   push:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test-lint:
-    # NOTE [unverified]: speak targets macOS 26 (Tahoe) + Xcode 26, which needs a
-    # macOS 26 runner image. `macos-latest` tracks GitHub's newest image; pin to a
-    # macos-26 label once available. Untested until the repo has a remote + a push.
+    # NOTE [unverified]: speak targets macOS 26 (Tahoe) + Xcode 26. `macos-latest`
+    # tracks GitHub's newest available image; pin to a macos-26 label once available.
+    # Untested against a live remote until the repo has a remote + a push.
     runs-on: macos-latest
 
     steps:
@@ -19,6 +25,9 @@ jobs:
 
       - name: Install build tooling
         run: brew install xcodegen swiftlint
+
+      - name: Structural moat audit (fast, no Xcode needed)
+        run: make verify-moat
 
       - name: Build
         run: make build

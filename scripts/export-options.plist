@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  scripts/export-options.plist — xcodebuild -exportArchive options for Speak.
+
+  method: "developer-id"     → Developer ID Application signing (Gatekeeper-compliant).
+  signingStyle: "automatic"  → Xcode picks the installed Developer ID Application
+                               identity automatically from the system keychain.
+
+  Do NOT set signingCertificate or provisioningProfiles here — the identity comes
+  from the certificate installed in the system keychain (see docs/release.md §1).
+
+  Note: speak is NOT sandboxed in v0 (it requires Accessibility + Input Monitoring).
+  The sandbox entitlement is intentionally absent. Notarization still applies.
+-->
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>developer-id</string>
+    <key>signingStyle</key>
+    <string>automatic</string>
+</dict>
+</plist>
