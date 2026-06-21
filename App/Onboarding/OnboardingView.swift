@@ -8,6 +8,11 @@
 //     - active/empty: permission not yet granted (Why text + action button)
 //     - granted/done: permission granted (checkmark + Continue button)
 //
+// HOTKEY LABEL (W1.2):
+//   The default trigger is now double-tap Right-Command (keycode 54, flagsChanged).
+//   A local `fallbackTriggerLabel()` helper returns the display string.
+//   TODO: replace with HotkeyBinding.displayString once W1.1 is merged.
+//
 // HONESTY BOUNDARY:
 //   The rendered flow, system prompts, and deep-link correctness are
 //   [deferred — needs human verification: human-verification.md §4.4].
@@ -19,6 +24,19 @@
 
 import SwiftUI
 import SpeakCore
+
+// MARK: - Hotkey label fallback
+
+/// Returns the human-readable label for the default trigger.
+/// Default is double-tap Right-Command (W1.1/W1.2 decision).
+///
+/// TODO: replace body with `HotkeyBinding.displayString` once W1.1 is merged
+///       into this worktree. Using a distinct name (`fallbackTriggerLabel`) to
+///       avoid a duplicate-member conflict at merge with SpeakCore's extension.
+private func fallbackTriggerLabel() -> String {
+    // [decision: Right-Command is the default trigger post-W1.1, next-iteration-plan.md §2]
+    "Right-Command"
+}
 
 // MARK: - OnboardingView
 
@@ -32,7 +50,7 @@ struct OnboardingView: View {
             Spacer(minLength: 0)
             footer
         }
-        .frame(width: 480, height: 400)
+        .frame(width: 480, height: 460) // [decision: 460pt height to accommodate hotkey step conflict card + try pill, W1.2]
         .background(.background)
         .onAppear { viewModel.onAppear() }
         .onDisappear { viewModel.onDisappear() }
@@ -76,7 +94,10 @@ struct OnboardingView: View {
                 onOpenSettings: { viewModel.openSystemSettings(for: .inputMonitoring) }
             )
         case .hotkey:
-            HotkeyStepView(onContinue: { viewModel.advance() })
+            HotkeyStepView(
+                hotkeyTriggered: viewModel.hotkeyTriggered,
+                onContinue: { viewModel.advance() }
+            )
         case .done:
             DoneStepView()
         }
@@ -252,7 +273,7 @@ private struct PermissionStepView: View {
             return "speak needs Accessibility access to simulate the Cmd+V keystroke that pastes your transcribed text at the cursor."
         case .inputMonitoring:
             // swiftlint:disable:next line_length
-            return "Input Monitoring lets speak detect your double-tap Fn hotkey so it can start listening while another app has focus."
+            return "Input Monitoring lets speak detect your double-tap \(fallbackTriggerLabel()) hotkey so it can start listening while another app has focus."
         }
     }
 
@@ -290,42 +311,119 @@ private struct PermissionStepView: View {
 // MARK: - HotkeyStepView
 
 private struct HotkeyStepView: View {
+    /// `true` once the user has fired the hotkey at least once during this step.
+    let hotkeyTriggered: Bool
     let onContinue: () -> Void
 
     var body: some View {
         VStack(spacing: 24) {
-            Image(systemName: "fn.fill")
+            Image(systemName: "command.circle.fill")
                 .font(.system(size: 64))
                 .foregroundStyle(.tint)
-                .padding(.top, 40)
+                .padding(.top, 36)
 
             VStack(spacing: 8) {
-                Text("Your Hotkey: Double-tap Fn")
+                // Title uses the fallback label.
+                // TODO: use HotkeyBinding.displayString once W1.1 is merged.
+                Text("Your Hotkey: Double-tap \(fallbackTriggerLabel())")
                     .font(.title2.bold())
-                VStack(spacing: 6) {
-                    Text("Double-tap the Fn key to start dictating. Tap it once to stop.")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                    Text("speak listens while you work in any app — no need to switch focus.")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                }
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 360)
 
-                Text("You can change the hotkey in Settings at any time.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                Text("Double-tap the Right Command key to start dictating. Tap it once to stop. speak listens while you work in any app.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 360)
+
+                // Conflict guidance card [W1.2 decision: proactive, not detection-based]
+                // macOS has no public API to read the system-dictation shortcut state.
+                HotkeyConflictNoteView()
                     .padding(.top, 4)
             }
+
+            // "Try it now" live test pill
+            HotkeyTryPillView(triggered: hotkeyTriggered)
 
             Button("Finish Setup") {
                 onContinue()
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .padding(.bottom, 4)
         }
         .padding(.horizontal, 40)
+    }
+}
+
+// MARK: - HotkeyConflictNoteView
+
+/// Proactive conflict guidance card for the hotkey step.
+///
+/// macOS exposes no public API to read the system-dictation shortcut state
+/// [decision: detect nothing — guide proactively instead, W1.2]. The card is
+/// shown unconditionally and explains the safe default + what to do if the user
+/// switches to Fn.
+private struct HotkeyConflictNoteView: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "info.circle")
+                .foregroundStyle(.secondary)
+                .font(.body)
+                .padding(.top, 1)
+
+            // swiftlint:disable:next line_length
+            Text("speak uses double-tap Right-Command so it won't clash with macOS dictation. If you switch to Fn in Settings, disable **System Settings \u{2192} Keyboard \u{2192} Dictation** shortcut first.")
+                .font(.speakMonoCaption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, SpeakSpacing.md)
+        .padding(.vertical, SpeakSpacing.sm)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .frame(maxWidth: 360)
+    }
+}
+
+// MARK: - HotkeyTryPillView
+
+/// A pill that starts neutral and turns green once the user fires the hotkey.
+///
+/// Three visual states:
+///   - Waiting: grey, "Try it now — double-tap Right-Command"
+///   - Triggered (green): "Nice — that works!" with checkmark
+///
+/// The pill is a delighter, NOT a gate — advancing past this step
+/// does not require the pill to be green.
+private struct HotkeyTryPillView: View {
+    let triggered: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: triggered ? "checkmark.circle.fill" : "hand.tap")
+                .foregroundStyle(triggered ? .green : .secondary)
+                .font(.body)
+            // TODO: update label with HotkeyBinding.displayString once W1.1 merged.
+            Text(triggered ? "Nice \u{2014} that worked." : "Try it now \u{2014} double-tap \(fallbackTriggerLabel())")
+                .font(.speakMonoCaption)
+                .foregroundStyle(triggered ? .primary : .secondary)
+        }
+        .padding(.horizontal, SpeakSpacing.md)
+        .padding(.vertical, SpeakSpacing.sm)
+        .background(
+            Capsule()
+                .fill(triggered ? Color.green.opacity(0.12) : Color.secondary.opacity(0.1))
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(
+                    triggered ? Color.green.opacity(0.4) : Color.secondary.opacity(0.2),
+                    lineWidth: 1
+                )
+        )
+        .animation(.easeInOut(duration: 0.25), value: triggered)
     }
 }
 
@@ -342,14 +440,15 @@ private struct DoneStepView: View {
             VStack(spacing: 8) {
                 Text("You\u{2019}re all set.")
                     .font(.title.bold())
-                Text("Double-tap Fn to start dictating. speak will paste polished text wherever your cursor is.")
+                // TODO: update label with HotkeyBinding.displayString once W1.1 merged.
+                Text("Double-tap \(fallbackTriggerLabel()) to start dictating. speak will paste polished text wherever your cursor is.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 340)
             }
-            Text("This window will close automatically.")
-                .font(.caption)
+            Text("This window will close in a moment.")
+                .font(.speakMonoCaption)
                 .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 40)

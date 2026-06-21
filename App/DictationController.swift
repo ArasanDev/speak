@@ -207,12 +207,28 @@ final class DictationController: ObservableObject {
         // WindowPresenter is constructed here (not in init) so it shares the
         // same deferred-construction pattern as the panel below. Both become
         // active at the same point — when monitoring actually starts.
+        // Derive a publisher that fires (on the main thread) each time the hotkey
+        // triggers a new dictation session. `$icon` transitions to `.listening` on
+        // every startCapture event — this is the observable proxy for hotkey fires.
+        // `.removeDuplicates()` ensures we only emit on the idle→listening EDGE,
+        // not if `.listening` is re-published while already listening.
+        // `.filter { $0 == .listening }` + `.map { _ in () }` → `AnyPublisher<Void, Never>`.
+        // `receive(on: RunLoop.main)` ensures the subscriber (onboarding VM) hops to
+        // the main thread before touching @Published properties.
+        let hotkeyFiredPublisher = $icon
+            .removeDuplicates()
+            .filter { $0 == .listening }
+            .map { _ in () }
+            .receive(on: RunLoop.main)
+            .eraseToAnyPublisher()
+
         windowPresenter = WindowPresenter(
             historyStore: historyStore,
             permissionManager: permissionManager,
             settingsStore: settingsStore,
             snippetStore: snippetStore,
-            hotkeyComboProvider: { [weak self] in self?.currentHotkeyCombo() ?? ["Fn"] }
+            hotkeyComboProvider: { [weak self] in self?.currentHotkeyCombo() ?? ["Fn"] },
+            hotkeyFiredPublisher: hotkeyFiredPublisher
         )
         windowPresenter?.showOnboardingIfNeeded()
 

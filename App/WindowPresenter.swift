@@ -26,6 +26,7 @@
 //     via value/reference semantics appropriate to each type.
 
 import AppKit
+import Combine
 import SwiftUI
 import SpeakCore
 
@@ -52,6 +53,12 @@ final class WindowPresenter {
     /// lazily so a trigger-mode change is reflected the next time the window opens.
     private let hotkeyComboProvider: @MainActor () -> [String]
 
+    /// Publisher that fires on the main thread each time the hotkey triggers dictation.
+    /// Derived from `DictationController.$icon` (`.listening` edge) by the caller,
+    /// so no second iterator on `HotkeyMonitor.events` is created.
+    /// Used by the onboarding flow's "Try it now" live test pill.
+    private let hotkeyFiredPublisher: AnyPublisher<Void, Never>?
+
     // MARK: - Init
 
     init(
@@ -59,13 +66,15 @@ final class WindowPresenter {
         permissionManager: PermissionManager,
         settingsStore: SettingsStore,
         snippetStore: SnippetStore,
-        hotkeyComboProvider: @escaping @MainActor () -> [String]
+        hotkeyComboProvider: @escaping @MainActor () -> [String],
+        hotkeyFiredPublisher: AnyPublisher<Void, Never>? = nil
     ) {
         self.historyStore = historyStore
         self.permissionManager = permissionManager
         self.settingsStore = settingsStore
         self.snippetStore = snippetStore
         self.hotkeyComboProvider = hotkeyComboProvider
+        self.hotkeyFiredPublisher = hotkeyFiredPublisher
     }
 
     // MARK: - History window
@@ -130,7 +139,8 @@ final class WindowPresenter {
         if onboardingController == nil {
             onboardingController = OnboardingWindowController(
                 permissionManager: permissionManager,
-                settings: settingsStore
+                settings: settingsStore,
+                hotkeyFiredPublisher: hotkeyFiredPublisher
             )
         }
         onboardingController?.show()
