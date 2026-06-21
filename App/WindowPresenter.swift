@@ -44,17 +44,25 @@ final class WindowPresenter {
 
     private var historyController: HistoryWindowController?
     private var onboardingController: OnboardingWindowController?
+    private var dashboardController: DashboardWindowController?
+
+    /// Supplies the live hotkey combo (e.g. ["Fn", "Fn"]) for the dashboard at show
+    /// time. Injected by `DictationController`, which owns the `HotkeyMonitor`. Read
+    /// lazily so a trigger-mode change is reflected the next time the window opens.
+    private let hotkeyComboProvider: @MainActor () -> [String]
 
     // MARK: - Init
 
     init(
         historyStore: any HistoryStoring,
         permissionManager: PermissionManager,
-        settingsStore: SettingsStore
+        settingsStore: SettingsStore,
+        hotkeyComboProvider: @escaping @MainActor () -> [String]
     ) {
         self.historyStore = historyStore
         self.permissionManager = permissionManager
         self.settingsStore = settingsStore
+        self.hotkeyComboProvider = hotkeyComboProvider
     }
 
     // MARK: - History window
@@ -74,6 +82,30 @@ final class WindowPresenter {
     /// Show the History window. The window controller is created lazily on first call.
     func showHistory() {
         ensureHistoryController().show()
+    }
+
+    // MARK: - Dashboard window
+
+    /// Lazily create and show the full-window dashboard (Phase-2 UI spine).
+    /// Returns the controller — exposed as `internal` for testability.
+    @discardableResult
+    func ensureDashboardController() -> DashboardWindowController {
+        if let existing = dashboardController {
+            return existing
+        }
+        let context = DashboardContext(
+            settingsStore: settingsStore,
+            historyStore: historyStore,
+            hotkeyCombo: hotkeyComboProvider()
+        )
+        let controller = DashboardWindowController(context: context)
+        dashboardController = controller
+        return controller
+    }
+
+    /// Show the dashboard window. The window controller is created lazily on first call.
+    func showDashboard() {
+        ensureDashboardController().show()
     }
 
     // MARK: - Onboarding window

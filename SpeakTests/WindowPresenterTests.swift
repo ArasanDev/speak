@@ -55,7 +55,8 @@ final class WindowPresenterTests: XCTestCase {
         presenter = WindowPresenter(
             historyStore: TestNullHistoryStore(),
             permissionManager: PermissionManager(),
-            settingsStore: SettingsStore()
+            settingsStore: SettingsStore(),
+            hotkeyComboProvider: { ["Fn", "Fn"] }
         )
     }
 
@@ -101,6 +102,21 @@ final class WindowPresenterTests: XCTestCase {
         XCTAssertNoThrow(presenter.showHistory(), "showHistory() must not throw or crash.")
     }
 
+    // MARK: - Dashboard controller — lazy creation + identity
+
+    /// Calling `ensureDashboardController()` twice must return the same instance.
+    /// Proves the Phase-2 dashboard window is lazily created once, not per-call —
+    /// the same single-instance contract as the History controller.
+    func testEnsureDashboardController_returnsSameInstanceOnRepeatedCalls() {
+        let first = presenter.ensureDashboardController()
+        let second = presenter.ensureDashboardController()
+        XCTAssertTrue(
+            first === second,
+            "ensureDashboardController() must return the same DashboardWindowController " +
+            "instance on repeated calls — it is lazily created once, not per-call."
+        )
+    }
+
     // MARK: - showOnboardingIfNeeded (no-op when onboarding already complete)
 
     /// When `SettingsStore.hasCompletedOnboarding` is `true`, `showOnboardingIfNeeded()`
@@ -117,7 +133,8 @@ final class WindowPresenterTests: XCTestCase {
         let completedPresenter = WindowPresenter(
             historyStore: TestNullHistoryStore(),
             permissionManager: PermissionManager(),
-            settingsStore: settings
+            settingsStore: settings,
+            hotkeyComboProvider: { ["Fn"] }
         )
 
         XCTAssertNoThrow(

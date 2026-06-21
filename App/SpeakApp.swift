@@ -170,6 +170,11 @@ private struct SpeakMenu: View {
 
         Divider()
 
+        Button("Open speak\u{2026}") {
+            controller.showDashboard()
+        }
+        .keyboardShortcut("o")
+
         Button("History\u{2026}") {
             controller.showHistory()
         }

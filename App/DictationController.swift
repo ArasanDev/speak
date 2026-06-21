@@ -191,7 +191,8 @@ final class DictationController: ObservableObject {
         windowPresenter = WindowPresenter(
             historyStore: historyStore,
             permissionManager: permissionManager,
-            settingsStore: settingsStore
+            settingsStore: settingsStore,
+            hotkeyComboProvider: { [weak self] in self?.currentHotkeyCombo() ?? ["Fn"] }
         )
         windowPresenter?.showOnboardingIfNeeded()
 
@@ -232,6 +233,24 @@ final class DictationController: ObservableObject {
     /// Delegates to `WindowPresenter.showHistory()`.
     func showHistory() {
         windowPresenter?.showHistory()
+    }
+
+    /// Show the full-window dashboard (Phase-2 UI spine).
+    /// Called from `SpeakApp.swift` via the menu button.
+    /// Delegates to `WindowPresenter.showDashboard()`.
+    func showDashboard() {
+        windowPresenter?.showDashboard()
+    }
+
+    /// The current hotkey rendered as keycap labels for the dashboard.
+    /// Double-tap shows the key twice (["Fn", "Fn"]); hold shows it once (["Fn"]).
+    /// v0 binds the Fn key only, so the label is fixed; the count reflects the trigger.
+    private func currentHotkeyCombo() -> [String] {
+        let keyLabel = "Fn"  // [decision] v0 binds kVK_Function only (HotkeyBinding.defaultBinding)
+        switch monitor.binding.trigger {
+        case .doubleTap: return [keyLabel, keyLabel]
+        case .hold:      return [keyLabel]
+        }
     }
 
     // MARK: - Hardware mute (SPEC §7.4)
