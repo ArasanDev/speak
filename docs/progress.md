@@ -8,42 +8,55 @@
 
 ## Current phase
 
-> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-21, loop #26)
-> **PHASE 1 (base-hardening) is COMPLETE and GREEN.** All five surgical tasks from
-> `specs/acceleration-plan.md` are merged on `master`, verified by an independent
-> orchestrator gate from a **wiped DerivedData**: build ✅ · **199 tests / 5 XCTSkip /
-> 0 failures** ✅ · lint **0 serious** ✅ · moat **7/7** ✅.
->   - **H1** `6dbe029` — multi-language seam (locale read at `newSession()`; `en-US` default preserved → behavior-neutral)
->   - **H2** `4a3ad09` — app-test infra (`TEST_HOST`) + XCTest startup gate + `TranscriptOverlayPanel` guard tests
->   - **H4** `9bdc20d` — `customVocabulary` seam (`AnalysisContext.contextualStrings[.general]`, SDK-verified via `.swiftinterface`)
->   - **H5** `f2b1d1f` — `StreamingTextInserting` protocol (define-only; forward seam for streaming paste)
->   - **H3** `9a3c8c4` — decompose `DictationController` 415→361 → extract `OverlayController` + `WindowPresenter`
-> Plus **`30e99f2`** (paste test-hygiene fix, user-reported — see Done loop #26) and
-> two agent-memory commits (`b675318`, `126b7d5`). Tree clean at `126b7d5`; no agents/worktrees running.
+> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-21, Phase 2 build)
+> **PHASE 2 (full-product dashboard) is ~90% COMPLETE and GREEN.** The full-window
+> Wispr-style app is built and **visually verified on-screen**. All gates green from
+> clean: build ✅ · **251 tests / 5 XCTSkip / 0 failures** ✅ · lint **0 serious** ✅ ·
+> moat **7/7** ✅. Tree clean at `b7ac26e`; no agents/worktrees running.
 >
-> **Phase-1 exit gate:** code-complete + all automated gates green. The remaining exit
-> item — *re-run the LIVE RUN core loop once* — is **human-gated** (permissions + real
-> dictation). So Phase 1 = **CODE-COMPLETE, live-reverify pending user.**
+> **Shipped this phase (commits):**
+>   - **WaveA.0/A.1** `7b1187f` — Monaco theme token (`SpeakTheme`) + `KeyCapView` +
+>     dashboard spine (sidebar IA, `NavigationSplitView`, `DashboardWindowController`).
+>   - **WaveB.1** `176efba` — Style modes seam (`CleanupStyle`×`CleanupLevel`→`.styled`,
+>     per-mode prompt composition, settings-derived at `newSession()`) + Style pane.
+>   - **WaveA.2** `96daf79` — `InsightsStats` (pure, injected now/calendar) + Insights pane
+>     + Home recents (builder-app, integrated by orchestrator).
+>   - **WaveA.3** `972594e`+`9e32eb4` — **direction correction from a real Wispr
+>     screenshot + web research** (`research/wispr-flow-ui-verified.md`): Home = day-grouped
+>     feed + stats rail (was inverted with History); hybrid full-app activation
+>     (`.regular` Dock+menu when window open, `.accessory` on close); added **Transforms**
+>     + **Scratchpad** sidebar items; greeting + orange `fn` keycap.
+>   - **WaveB.2+B.3** `79a8d56` — Snippets (model+`SnippetExpander`+`SnippetStore`, applied
+>     BEFORE cleanup in `CaptureSession`) + Dictionary pane (`CustomVocabulary` helper).
+>   - **#18** `c53b367` — persist dictation `duration` (SQLite migration) → WPM stat.
+>   - **WaveD (partial)** `b7ac26e` — menubar Style + Language quick submenus.
+>   - Orchestration: `8a50f1a` — team agents now carry a **worktree-first + never-commit**
+>     contract (root-caused via claude-code-guide: bg subagents don't auto-isolate in CC 2.1.x).
 >
-> **Locked user decisions (carry into Phase 2):** (1) base-hardening FIRST ✅ done,
-> (2) **local-first, pluggable later** (Apple default + only dep; alt engines optional),
-> (3) **full-window dashboard** = Phase-2 UI spine (sidebar IA), (4) **Monaco**
-> typographic theme ([[monaco-font-theme]]). Base hard rules (`CLAUDE.md`/`AGENTS.md`) still bind.
+> **VISUALLY VERIFIED** (`--debug-open dashboard` + `screencapture`): full Mac app with app
+> menu, 8-item sidebar, greeting+`fn` keycap, TODAY/YESTERDAY feed, stats rail — matches the
+> real Wispr Home in Monaco. (A later WPM-screenshot attempt flaked on a Space/display
+> switch; layout already proven, WPM test-verified.)
 >
-> **NEXT ACTION:** Phase 2 (full-product waves — Wave A dashboard first). This is the
-> large strategic surface; it **wants the user in the loop** — held here deliberately,
-> not blocked. The base is now *designed for the full roadmap*.
+> **NEXT ACTION — remaining Wave D (the flagship interactions):**
+>   1. **Command Mode** — hold `Fn+Ctrl` over highlighted text → on-device AI rewrite
+>      replaces the selection (`ESC` cancels). **Reads/replaces selection via Accessibility
+>      API, NOT the pasteboard** (moat: never read pasteboard). OS-coupled + permission-heavy
+>      → benefits from live testing, like the human-gated core-loop (#8).
+>   2. **Scratchpad paste-failure fallback** + paste-last-transcript shortcut.
+>   3. **HUD enrichment** (live duration counter, confidence-colored partials).
+>   Then `#16` Phase-2 verify (RenderPreview every pane) + `progress.md` final rewrite.
 >
-> **Two durable orchestration lessons from loop #26 (METHOD — re-verify live, NOT version-pinned fact):**
-> (1) `Agent(isolation:"worktree")` did **not** produce isolated worktrees for the
-> background teammate agents — all four ran on the shared main checkout. It resolved
-> into a clean linear history only by luck (disjoint files + sequential commits).
-> **Before fanning out file-mutating agents, verify isolation actually took effect
-> (`git worktree list --porcelain`); if it didn't, serialize them.** (2) SourceKit/editor
-> diagnostics go **stale/phantom** after `xcodegen generate` + file moves (false "cannot
-> find type", "extra argument", type-mismatch). **A clean `make build` is the only
-> authority — never the LSP** (this loop alone produced 3 phantom-error episodes, all
-> disproved by a green build). [[agent-first-acceleration-model]]
+> **Locked user decisions:** local-first/pluggable-later · full-window dashboard ·
+> **Monaco** ([[monaco-font-theme]]) · **Wave C (WhisperKit/Ollama) deliberately OUT** —
+> third-party deps break the moat. Base hard rules (`CLAUDE.md`/`AGENTS.md`) still bind.
+>
+> **Durable lessons (METHOD — re-verify live, not from memory):** (1) `Agent(isolation:
+> "worktree")` does NOT isolate **named/background** subagents in CC 2.1.x — they write the
+> shared checkout. Verify `git worktree list` after spawning; the standing fix is each agent
+> calls `EnterWorktree` first + never commits (now in the team prompts). (2) SourceKit goes
+> **stale/phantom** after edits — a clean `make build` is the only authority, never the LSP.
+> [[agent-first-acceleration-model]]
 
 
 **The entire v0 surface is built — engine, pipeline, AND all UI — and the app is
