@@ -9,10 +9,11 @@
 ## Current phase
 
 > ## 🚩 READ THIS FIRST (handoff banner — 2026-06-21, Phase 2 build)
-> **PHASE 2 (full-product dashboard) is ~90% COMPLETE and GREEN.** The full-window
-> Wispr-style app is built and **visually verified on-screen**. All gates green from
-> clean: build ✅ · **251 tests / 5 XCTSkip / 0 failures** ✅ · lint **0 serious** ✅ ·
-> moat **7/7** ✅. Tree clean at `b7ac26e`; no agents/worktrees running.
+> **PHASE 2 (full-product dashboard) — ALL autonomously-buildable work COMPLETE & GREEN;**
+> only **human-gated live-verification features remain** (see bottom). The full-window
+> Wispr-style app is built and the Home screen is **visually verified on-screen**. All
+> gates green from clean: build ✅ · **255 tests / 5 XCTSkip / 0 failures** ✅ · lint
+> **0 serious** ✅ · moat **7/7** ✅. Tree clean at `da40b0d`; no agents/worktrees running.
 >
 > **Shipped this phase (commits):**
 >   - **WaveA.0/A.1** `7b1187f` — Monaco theme token (`SpeakTheme`) + `KeyCapView` +
@@ -38,14 +39,20 @@
 > real Wispr Home in Monaco. (A later WPM-screenshot attempt flaked on a Space/display
 > switch; layout already proven, WPM test-verified.)
 >
-> **NEXT ACTION — remaining Wave D (the flagship interactions):**
->   1. **Command Mode** — hold `Fn+Ctrl` over highlighted text → on-device AI rewrite
->      replaces the selection (`ESC` cancels). **Reads/replaces selection via Accessibility
->      API, NOT the pasteboard** (moat: never read pasteboard). OS-coupled + permission-heavy
->      → benefits from live testing, like the human-gated core-loop (#8).
->   2. **Scratchpad paste-failure fallback** + paste-last-transcript shortcut.
->   3. **HUD enrichment** (live duration counter, confidence-colored partials).
->   Then `#16` Phase-2 verify (RenderPreview every pane) + `progress.md` final rewrite.
+> **Wave D shipped (autonomously buildable + verified):** menubar Style/Language
+> submenus (`b7ac26e`) · **Paste Last Transcript** Cmd+Ctrl+V re-paste (`4a8bd4d`) ·
+> **HUD live duration counter** (`db58c87`) · **Command Mode AI-transform core**
+> (`.command(instruction:)` + prompt, `da40b0d`). Final gate: **255 tests / 0 fail**.
+>
+> **REMAINING — all HUMAN-GATED by nature (need live testing the agent cannot do):**
+>   1. **Command Mode live wiring** — a `Fn+Ctrl` chord detector + reading/replacing the
+>      selection via the **Accessibility API** in the frontmost app. The AI core is done +
+>      tested; the live AX read/replace + chord need a real app with selected text. Like #8.
+>   2. **Scratchpad paste-failure routing** — needs paste-error plumbing to surface the
+>      failed text + a live paste-failure to verify. (Text is already clipboard-safe today.)
+>   3. **Live render/run verification** of overlay + every dashboard pane (Home already
+>      screenshot-verified) + the live core loop (#8). These are the honesty-boundary items.
+>   Then `#16` final RenderPreview sweep + `progress.md` final rewrite once #8 clears.
 >
 > **Locked user decisions:** local-first/pluggable-later · full-window dashboard ·
 > **Monaco** ([[monaco-font-theme]]) · **Wave C (WhisperKit/Ollama) deliberately OUT** —
