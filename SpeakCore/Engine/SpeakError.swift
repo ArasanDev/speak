@@ -10,6 +10,13 @@
 // refuses to start a session and throws this — the bypass-proof enforcement point
 // (no `CaptureSession`/audio is ever constructed). It is a *refusal*, not a fault:
 // the app shell catches it specifically and stays idle rather than entering `.error`.
+//
+// ADDITIVE CASE (graceful degradation): `.pasteRequiresAccessibility` is thrown by
+// `PasteboardWriter.insert(_:)` when `AXIsProcessTrusted()` returns false. The text
+// has already been written to the clipboard (the clipboard floor runs first, always),
+// so this is a *degraded delivery*, not a data-loss fault. The app shell catches it
+// specifically: sets `permissionsNeeded = true` and leaves the icon `.idle` (text on
+// clipboard), not `.error`. Per spec dictation-flow.md §5 + §6-D.
 
 public enum SpeakError: Error, Sendable {
     case microphoneDenied
@@ -20,6 +27,7 @@ public enum SpeakError: Error, Sendable {
     case llmCleanupFailed(String)
     case sessionCancelled
     case microphoneMuted
+    case pasteRequiresAccessibility
     case unknown(String)
 
     public var recoverySuggestion: String {
@@ -40,6 +48,8 @@ public enum SpeakError: Error, Sendable {
             return "Session cancelled."
         case .microphoneMuted:
             return "Microphone is muted. Unmute speak to dictate."
+        case .pasteRequiresAccessibility:
+            return "Text copied to clipboard. Enable speak in System Settings → Privacy → Accessibility to paste automatically."
         case .unknown(let detail):
             return "Unknown error: \(detail)."
         }

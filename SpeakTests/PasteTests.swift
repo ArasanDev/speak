@@ -29,6 +29,8 @@
 //              with a real PasteboardWriter in a running app session.
 
 import XCTest
+import AppKit
+import Carbon.HIToolbox
 @testable import SpeakCore
 
 // MARK: - MockInserter
@@ -250,6 +252,105 @@ final class PasteTests: XCTestCase {
             // Correct.
         } else {
             XCTFail("Generic insert() error must map to .error(.pasteboardBusy), got \(state)")
+        }
+    }
+}
+
+// MARK: - Phase D: PasteboardWriter unit tests (pure, no real AX / live events)
+
+final class PasteboardWriterTests: XCTestCase {
+
+    // MARK: - pasteEventPlan() shape
+
+    /// The plan must contain exactly 4 entries in the canonical Cmd+V order:
+    ///   [0] Cmd-down  (.maskCommand)
+    ///   [1] V-down    (.maskCommand)
+    ///   [2] V-up      (.maskCommand)
+    ///   [3] Cmd-up    ([])
+    func testPasteEventPlanHasFourEntriesInOrder() {
+        let plan = PasteboardWriter.pasteEventPlan()
+        XCTAssertEqual(plan.count, 4, "pasteEventPlan() must return exactly 4 entries")
+
+        // kVK_Command = 55 = 0x37 [verified: Carbon/HIToolbox, swiftc 2026-06-21]
+        let cmdKey = CGKeyCode(kVK_Command)
+        // kVK_ANSI_V = 9 = 0x09 [verified: Carbon/HIToolbox, runtime 2026-06-20]
+        let vKey = CGKeyCode(kVK_ANSI_V)
+
+        // [0] Cmd-down
+        XCTAssertEqual(plan[0].keyCode, cmdKey,          "[0] keyCode must be kVK_Command")
+        XCTAssertTrue(plan[0].keyDown,                   "[0] must be keyDown=true (Cmd-down)")
+        XCTAssertEqual(plan[0].flags, .maskCommand,      "[0] flags must be .maskCommand")
+
+        // [1] V-down
+        XCTAssertEqual(plan[1].keyCode, vKey,            "[1] keyCode must be kVK_ANSI_V")
+        XCTAssertTrue(plan[1].keyDown,                   "[1] must be keyDown=true (V-down)")
+        XCTAssertEqual(plan[1].flags, .maskCommand,      "[1] flags must be .maskCommand")
+
+        // [2] V-up
+        XCTAssertEqual(plan[2].keyCode, vKey,            "[2] keyCode must be kVK_ANSI_V")
+        XCTAssertFalse(plan[2].keyDown,                  "[2] must be keyDown=false (V-up)")
+        XCTAssertEqual(plan[2].flags, .maskCommand,      "[2] flags must be .maskCommand")
+
+        // [3] Cmd-up
+        XCTAssertEqual(plan[3].keyCode, cmdKey,          "[3] keyCode must be kVK_Command")
+        XCTAssertFalse(plan[3].keyDown,                  "[3] must be keyDown=false (Cmd-up)")
+        XCTAssertEqual(plan[3].flags, [],                "[3] flags must be empty []")
+    }
+
+    // MARK: - AX not trusted → throw + clipboard floor still written
+
+    /// When AX is not trusted, `insert` must throw `.pasteRequiresAccessibility`
+    /// AND the text must still be on NSPasteboard.general (clipboard floor ran).
+    ///
+    /// Note: reading the pasteboard here is intentional — tests are explicitly
+    /// permitted to read the pasteboard (only production code must not). The
+    /// unique marker string avoids any false-positive collision.
+    func testInsertThrowsPasteRequiresAccessibilityWhenAXNotTrusted() async throws {
+        let uniqueText = "SPEAK_PHASE_D_AX_TEST_\(UUID().uuidString)"
+        let writer = PasteboardWriter(
+            isAccessibilityTrusted: { false },
+            settle: .zero
+        )
+
+        do {
+            try await writer.insert(uniqueText)
+            XCTFail("insert() must throw when AX is not trusted")
+        } catch SpeakError.pasteRequiresAccessibility {
+            // Expected — correct error.
+        } catch {
+            XCTFail("Expected SpeakError.pasteRequiresAccessibility, got \(error)")
+        }
+
+        // Assert the clipboard floor ran: text is on the pasteboard.
+        // (Test-only read — production code must never read the pasteboard.)
+        let onClipboard = NSPasteboard.general.string(forType: .string)
+        XCTAssertEqual(
+            onClipboard, uniqueText,
+            "Clipboard floor must write text before the AX gate; text must be on pasteboard"
+        )
+    }
+
+    // MARK: - AX trusted + settle .zero → completes without throwing
+
+    /// When AX is trusted and settle is zero, `insert` must complete without
+    /// throwing. Events post to the live HID tap harmlessly in the test host
+    /// (we assert no throw; the event effect itself is [deferred — human verification]).
+    func testInsertSucceedsWhenAXTrusted() async throws {
+        let writer = PasteboardWriter(
+            isAccessibilityTrusted: { true },
+            settle: .zero
+        )
+        // Must not throw. If CGEvent construction fails in CI (headless), the
+        // test is allowed to throw `.pasteboardBusy` — only `.pasteRequiresAccessibility`
+        // and truly unexpected errors are failures.
+        do {
+            try await writer.insert("hello phase D")
+        } catch SpeakError.pasteboardBusy {
+            // Acceptable in headless CI where CGEvent infrastructure is unavailable.
+        } catch SpeakError.pasteRequiresAccessibility {
+            XCTFail("Should not throw .pasteRequiresAccessibility when AX is trusted")
+        } catch {
+            XCTFail("Unexpected error from insert(): \(error)")
         }
     }
 }
