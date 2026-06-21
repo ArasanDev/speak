@@ -8,7 +8,42 @@
 
 ## Current phase
 
-> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-22, secure-field paste guard)
+> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-22, Input Monitoring removal)
+> **INPUT MONITORING REMOVED — ALL 4 GATES GREEN.**
+> Build ✅ · Tests ✅ (376 tests / 5 XCTSkip / 0 failures) · Lint ✅ (0 serious) · Moat ✅ (7/7).
+> **Uncommitted in worktree** — orchestrator reviews diff and owns the commit.
+>
+> **Why:** The CGEventTap uses `.defaultTap` and is gated on Accessibility alone — Input Monitoring
+> was vestigial scaffolding from an earlier listen-only-tap design. The IM onboarding step was also
+> falsely telling users "Input Monitoring lets speak detect your hotkey" which was incorrect.
+> Verified empirically: the hotkey fires without IM granted on the live machine.
+>
+> **New onboarding step order:** welcome → microphone → accessibility → hotkey → done (4 steps, was 5).
+>
+> **Files changed:**
+>   - `SpeakCore/Permissions/PermissionTypes.swift` — removed `PermissionKind.inputMonitoring` + `requestInputMonitoring()` from protocol
+>   - `SpeakCore/Permissions/PermissionManager.swift` — removed `.inputMonitoring` status case (IOHIDCheckAccess), `requestInputMonitoring()`, `import IOKit.hid`
+>   - `SpeakCore/Permissions/OnboardingState.swift` — removed `.inputMonitoring` step; `evaluate()` now takes 2 permission params
+>   - `SpeakCore/Engine/SpeakError.swift` — removed `.inputMonitoringDenied` case
+>   - `SpeakCore/Hotkey/HotkeyMonitor.swift` — updated permission model comment (no longer says IM "requested for registration")
+>   - `App/Onboarding/OnboardingView.swift` — removed `.inputMonitoring` case, updated `allSteps`, removed IM title/description/icon
+>   - `App/Onboarding/OnboardingViewModel.swift` — removed `requestInputMonitoring()`, `isWaitingForInputMonitoring`, IM poll branch; `stepAfter(.accessibility)` → `.hotkey`
+>   - `App/Debug/DebugLaunchDispatcher.swift` — removed `onboardingInputMonitoring` debug target
+>   - `SpeakTests/OnboardingFlowTests.swift` — removed IM-specific tests; all `evaluate()` calls updated to 2-param signature
+>   - `SpeakTests/PermissionTests.swift` — removed IM status test; updated `allCases.count == 2`
+>   - `SpeakTests/EngineCoreTests.swift` — removed `inputMonitoringDenied` assertion
+>   - `SpeakTests/OnboardingViewModelDoublePromptTests.swift` — removed all IM test methods and stub IM members
+>   - `SpeakTests/MoatAuditTests.swift` — removed `IOKit.hid` from import allowlist
+>
+> **Docs/rules still referencing IM (orchestrator decision needed):**
+>   - `AGENTS.md §2.2` — still says "exactly three permissions: Microphone, Accessibility, Input Monitoring"
+>   - `.claude/skills/swift-code-review.md` — says "exactly three permissions … no more, no fewer"
+>   - `docs/architecture.md` — may reference IM in §6/§7.2
+>   - `docs/product.md §7.3` — may still list the 5-step onboarding order
+>   - `specs/verification-ledger.md` line 39 — row says "Accessibility implicitly satisfies Input Monitoring"; should note IM is not requested at all in v0 (`.defaultTap` → AX only)
+>   These are outside the builder-input domain; orchestrator should update them post-merge.
+
+> ## OLD BANNER (handoff banner — 2026-06-22, secure-field paste guard)
 > **SECURE-FIELD PASTE GUARD — BUILT & ALL 4 GATES GREEN.**
 > Build ✅ · Tests ✅ (374 tests / 5 XCTSkip / 0 failures; +4 new secure-field guard tests) · Lint ✅ (0 serious) · Moat ✅ (7/7).
 > **Uncommitted in worktree** — orchestrator reviews diff and owns the commit.

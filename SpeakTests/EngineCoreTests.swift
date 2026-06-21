@@ -20,7 +20,6 @@ import Foundation
 func recoverySuggestionsAreUserFacing() {
     #expect(SpeakError.microphoneDenied.recoverySuggestion.contains("Microphone"))
     #expect(SpeakError.accessibilityDenied.recoverySuggestion.contains("Accessibility"))
-    #expect(SpeakError.inputMonitoringDenied.recoverySuggestion.contains("Input Monitoring"))
     #expect(SpeakError.sessionCancelled.recoverySuggestion == "Session cancelled.")
     #expect(SpeakError.llmCleanupFailed("boom").recoverySuggestion.contains("boom"))
 }

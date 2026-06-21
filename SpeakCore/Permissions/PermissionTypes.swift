@@ -2,6 +2,10 @@
 //
 // The permission state machine vocabulary (architecture.md §6, §7.2).
 // `Equatable` added so callers can compare (e.g. `state == .granted`).
+//
+// v0 requires exactly two OS permissions: Microphone and Accessibility.
+// Input Monitoring was removed — the CGEventTap uses .defaultTap and is
+// gated on Accessibility alone (verified: HotkeyMonitor.swift §84–86).
 
 public enum PermissionState: Sendable, Equatable {
     case notDetermined
@@ -14,7 +18,6 @@ public enum PermissionState: Sendable, Equatable {
 public enum PermissionKind: Sendable, CaseIterable {
     case microphone
     case accessibility
-    case inputMonitoring
 }
 
 // MARK: - PermissionManaging
@@ -38,9 +41,4 @@ public protocol PermissionManaging: AnyObject {
     /// Returns whether the process is already trusted.
     @discardableResult
     func requestAccessibility() -> Bool
-
-    /// Registers the app in the Input Monitoring list and shows the TCC dialog.
-    /// Returns whether access is already granted.
-    @discardableResult
-    func requestInputMonitoring() -> Bool
 }

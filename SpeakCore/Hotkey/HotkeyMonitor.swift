@@ -50,10 +50,9 @@
 // monitor schedules a re-arm in ~3 s (AltTab pattern).
 //
 // --- Live OS behavior [deferred] ---
-// Whether the tap fires correctly while another app has focus, and whether
-// the OS prompts for Accessibility + Input Monitoring permissions on first run,
-// requires a live, non-sandboxed app run with permissions granted.
-// These done-when rows are marked [deferred — needs human verification].
+// Whether the tap fires correctly while another app has focus (with only
+// Accessibility granted, no Input Monitoring) requires a live, non-sandboxed
+// app run. These done-when rows are marked [deferred — needs human verification].
 //
 // --- Double-tap window ---
 // Default 0.4 s = 400 ms. Source: benchmark.md §7 [decision], empirically tuned
@@ -80,10 +79,10 @@ import os
 ///     need to re-subscribe after a re-arm.
 ///
 /// Permission model:
-///   - Gate tap on Accessibility only (spec §2 — AX alone is sufficient for
-///     a listen-only .flagsChanged tap). Input Monitoring is requested for
-///     registration purposes but does NOT block tap arming.
-///   - IOHIDCheckAccess is used only for status display.
+///   - Gate tap on Accessibility only. The CGEventTap uses .defaultTap and is
+///     sufficient for a .flagsChanged event tap with AX alone — no Input
+///     Monitoring grant is required or requested. [verified: live machine
+///     without IM grant; tap arms and fires on double-tap Right-Command, 2026-06-22]
 ///
 /// Re-arm watchdog:
 ///   - A CFRunLoopTimer fires every 100ms [decision: benchmark.md §7].

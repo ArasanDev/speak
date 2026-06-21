@@ -85,17 +85,6 @@ struct OnboardingView: View {
                 onContinue: { viewModel.advance() },
                 onOpenSettings: { viewModel.openSystemSettings(for: .accessibility) }
             )
-        case .inputMonitoring:
-            PermissionStepView(
-                kind: .inputMonitoring,
-                status: viewModel.evaluation.blockingPermissions.contains(.inputMonitoring)
-                    ? .needed : .granted,
-                isLoading: false,
-                isWaiting: viewModel.isWaitingForInputMonitoring,
-                onAction: { viewModel.requestInputMonitoring() },
-                onContinue: { viewModel.advance() },
-                onOpenSettings: { viewModel.openSystemSettings(for: .inputMonitoring) }
-            )
         case .hotkey:
             HotkeyStepView(
                 hotkeyTriggered: viewModel.hotkeyTriggered,
@@ -125,7 +114,7 @@ struct OnboardingView: View {
 
     /// Step-position dots (visual only — pure decoration).
     private var progressDots: some View {
-        let allSteps: [OnboardingStep] = [.welcome, .microphone, .accessibility, .inputMonitoring, .hotkey]
+        let allSteps: [OnboardingStep] = [.welcome, .microphone, .accessibility, .hotkey]
         let currentIndex = allSteps.firstIndex(of: viewModel.displayedStep) ?? 0
         return HStack(spacing: 6) {
             ForEach(0..<allSteps.count, id: \.self) { idx in
@@ -180,10 +169,10 @@ private struct PermissionStepView: View {
     let kind: PermissionKind
     let status: PermissionStatus
     let isLoading: Bool
-    /// `true` for Accessibility/InputMonitoring after the first tap while waiting
-    /// for the user to toggle the permission in System Settings. Disables the
-    /// primary button and relabels it "Waiting for permission…" so re-taps cannot
-    /// spawn a second TCC dialog. The "Open System Settings" link remains enabled.
+    /// `true` for Accessibility after the first tap while waiting for the user to
+    /// toggle the permission in System Settings. Disables the primary button and
+    /// relabels it "Waiting for permission…" so re-taps cannot spawn a second TCC
+    /// dialog. The "Open System Settings" link remains enabled.
     let isWaiting: Bool
     let onAction: () -> Void
     let onContinue: () -> Void
@@ -283,7 +272,6 @@ private struct PermissionStepView: View {
         switch kind {
         case .microphone:     return "Microphone Access"
         case .accessibility:  return "Accessibility Access"
-        case .inputMonitoring: return "Input Monitoring"
         }
     }
 
@@ -294,9 +282,6 @@ private struct PermissionStepView: View {
         case .accessibility:
             // swiftlint:disable:next line_length
             return "speak needs Accessibility access to simulate the Cmd+V keystroke that pastes your transcribed text at the cursor."
-        case .inputMonitoring:
-            // swiftlint:disable:next line_length
-            return "Input Monitoring lets speak detect your double-tap \(fallbackTriggerLabel()) hotkey so it can start listening while another app has focus."
         }
     }
 
@@ -304,7 +289,7 @@ private struct PermissionStepView: View {
         switch kind {
         case .microphone:
             return "Grant Microphone Access"
-        case .accessibility, .inputMonitoring:
+        case .accessibility:
             return "Open System Settings"
         }
     }
@@ -315,9 +300,8 @@ private struct PermissionStepView: View {
             return "checkmark.circle.fill"
         case .needed:
             switch kind {
-            case .microphone:      return "mic.fill"
-            case .accessibility:   return "hand.point.up.left.fill"
-            case .inputMonitoring: return "keyboard.fill"
+            case .microphone:    return "mic.fill"
+            case .accessibility: return "hand.point.up.left.fill"
             }
         }
     }
