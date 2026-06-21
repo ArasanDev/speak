@@ -39,6 +39,7 @@ final class WindowPresenter {
     private let historyStore: any HistoryStoring
     private let permissionManager: PermissionManager
     private let settingsStore: SettingsStore
+    private let snippetStore: SnippetStore
 
     // MARK: - Lazy window controllers
 
@@ -57,11 +58,13 @@ final class WindowPresenter {
         historyStore: any HistoryStoring,
         permissionManager: PermissionManager,
         settingsStore: SettingsStore,
+        snippetStore: SnippetStore,
         hotkeyComboProvider: @escaping @MainActor () -> [String]
     ) {
         self.historyStore = historyStore
         self.permissionManager = permissionManager
         self.settingsStore = settingsStore
+        self.snippetStore = snippetStore
         self.hotkeyComboProvider = hotkeyComboProvider
     }
 
@@ -96,7 +99,8 @@ final class WindowPresenter {
         let context = DashboardContext(
             settingsStore: settingsStore,
             historyStore: historyStore,
-            hotkeyCombo: hotkeyComboProvider()
+            hotkeyCombo: hotkeyComboProvider(),
+            snippetStore: snippetStore
         )
         let controller = DashboardWindowController(context: context)
         dashboardController = controller

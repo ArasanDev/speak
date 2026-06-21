@@ -47,6 +47,9 @@ public actor CaptureSession {
     private let transcriber: any Transcribing
     private let cleaner: (any LLMCleaning)?
     private let inserter: (any TextInserting)?
+    /// Optional snippet expander applied to the raw transcript BEFORE cleanup.
+    /// `nil` (default) means no expansion — behavior is identical to pre-Wave-B.
+    private let expander: (any SnippetExpanding)?
 
     // MARK: - Mutable session state (actor-isolated)
 
@@ -71,16 +74,20 @@ public actor CaptureSession {
     ///     the session transitions to `.error` (paste failure = delivery failure).
     ///   - locale: Locale passed to the transcriber. Default: en-US.
     ///   - cleanupMode: `CleanupMode` passed to the cleaner. Default: `.punctuation`.
+    ///   - expander: Optional snippet expander applied to the raw transcript before
+    ///     cleanup. `nil` (default) = no expansion.
     public init(transcriber: any Transcribing,
                 cleaner: (any LLMCleaning)? = nil,
                 inserter: (any TextInserting)? = nil,
                 locale: Locale = Locale(identifier: "en-US"),
-                cleanupMode: CleanupMode = .punctuation) {
+                cleanupMode: CleanupMode = .punctuation,
+                expander: (any SnippetExpanding)? = nil) {
         self.transcriber = transcriber
         self.cleaner = cleaner
         self.inserter = inserter
         self.locale = locale
         self.cleanupMode = cleanupMode
+        self.expander = expander
     }
 
     // MARK: - State observation
@@ -185,7 +192,11 @@ public actor CaptureSession {
         // Build the result. The "raw" text is the latest chunk's text —
         // either a final chunk (preferred) or the last partial if no final
         // arrived. Empty is valid: the STT may produce no speech.
-        let rawText = latestChunk?.text ?? ""
+        let transcribed = latestChunk?.text ?? ""
+        // Wave B: apply snippet expansion BEFORE cleanup, so the LLM smooths any seams
+        // and snippets work even when cleanup is off (the expanded text becomes rawText,
+        // which is what the raw-paste fallback delivers). nil expander = unchanged.
+        let rawText = expander?.expand(transcribed) ?? transcribed
         let duration = Date().timeIntervalSince(sessionStartTime ?? Date())
         let sessionEndedAt = Date()
 

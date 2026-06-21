@@ -59,6 +59,10 @@ public actor SpeakEngine {
     private let inserter: (any TextInserting)?
     private let history: any HistoryStoring
 
+    /// Optional snippet store. Read at `newSession()` time (like settings) so a snippet
+    /// edit applies to the next dictation without an engine restart. `nil` = no snippets.
+    private let snippetStore: SnippetStore?
+
     /// The settings store. Read at `newSession()` time so both the cleanup toggle
     /// and the transcription locale take effect on the next dictation without
     /// requiring an engine restart. `@unchecked Sendable` on `SettingsStore` makes
@@ -107,12 +111,14 @@ public actor SpeakEngine {
                 cleaner: (any LLMCleaning)? = nil,
                 inserter: (any TextInserting)? = nil,
                 history: any HistoryStoring,
-                settings: SettingsStore) {
+                settings: SettingsStore,
+                snippetStore: SnippetStore? = nil) {
         self.transcriber = transcriber
         self.cleaner = cleaner
         self.inserter = inserter
         self.history = history
         self.settings = settings
+        self.snippetStore = snippetStore
     }
 
     // MARK: - Session factory
@@ -147,13 +153,17 @@ public actor SpeakEngine {
         // Wave B: derive the neat-writing mode from settings at call time (H1 pattern)
         // so a Style-pane change applies on the next dictation with no engine restart.
         let activeMode: CleanupMode = .styled(settings.cleanupStyle, settings.cleanupLevel)
+        // Wave B: build a snippet expander from the current snippets at call time, so a
+        // snippet edit applies on the next dictation. nil store → nil expander → no change.
+        let activeExpander: (any SnippetExpanding)? = snippetStore.map { $0.makeExpander() }
 
         let session = CaptureSession(
             transcriber: transcriber,
             cleaner: activeCleaner,
             inserter: inserter,
             locale: activeLocale,
-            cleanupMode: activeMode
+            cleanupMode: activeMode,
+            expander: activeExpander
         )
         currentSession = session
         return session

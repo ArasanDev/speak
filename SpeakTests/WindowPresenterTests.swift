@@ -56,6 +56,7 @@ final class WindowPresenterTests: XCTestCase {
             historyStore: TestNullHistoryStore(),
             permissionManager: PermissionManager(),
             settingsStore: SettingsStore(),
+            snippetStore: SnippetStore(),
             hotkeyComboProvider: { ["Fn", "Fn"] }
         )
     }
@@ -134,6 +135,7 @@ final class WindowPresenterTests: XCTestCase {
             historyStore: TestNullHistoryStore(),
             permissionManager: PermissionManager(),
             settingsStore: settings,
+            snippetStore: SnippetStore(),
             hotkeyComboProvider: { ["Fn"] }
         )
 

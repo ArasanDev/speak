@@ -93,6 +93,10 @@ final class DictationController: ObservableObject {
 
     let historyStore: any HistoryStoring
 
+    /// The snippets store — owned here, shared with the engine (expansion at dictation
+    /// start) and the dashboard's Snippets pane.
+    let snippetStore = SnippetStore()
+
     // MARK: - Collaborators (H3)
 
     /// Owns the overlay lifecycle (model + panel + partials drain).
@@ -144,7 +148,8 @@ final class DictationController: ObservableObject {
             cleaner: defaultCleaner(for: store),
             inserter: PasteboardWriter(),
             history: historyStore,
-            settings: store
+            settings: store,
+            snippetStore: snippetStore
         )
 
         monitor = HotkeyMonitor()
@@ -192,6 +197,7 @@ final class DictationController: ObservableObject {
             historyStore: historyStore,
             permissionManager: permissionManager,
             settingsStore: settingsStore,
+            snippetStore: snippetStore,
             hotkeyComboProvider: { [weak self] in self?.currentHotkeyCombo() ?? ["Fn"] }
         )
         windowPresenter?.showOnboardingIfNeeded()
