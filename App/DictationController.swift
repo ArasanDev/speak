@@ -7,6 +7,8 @@
 //   - Owns a `HotkeyMonitor` and bridges its events to the engine verbs.
 //   - Publishes `icon: MenubarIcon` (drives the menu-bar label).
 //   - Publishes `permissionsNeeded: Bool` (drives a hint in the menu).
+//   - Delegates overlay lifecycle to `OverlayController`.
+//   - Delegates window presentation to `WindowPresenter`.
 //
 // Honesty boundary: the end-to-end behavior (double-tap Fn, paste at cursor,
 // real-time icon) is [deferred — human verification required]. The only
@@ -75,6 +77,7 @@ final class DictationController: ObservableObject {
     @Published private(set) var permissionsNeeded: Bool = false
 
     /// The current running partial transcript text (empty when not listening).
+    /// Mirrors `overlayController.partialText` for callers that observe this controller.
     @Published private(set) var partialText: String = ""
 
     /// Hardware-mute state (SPEC §7.4). Mirrors `engine.isMuted` for the menu
@@ -89,13 +92,14 @@ final class DictationController: ObservableObject {
     private var armStateTask: Task<Void, Never>?
 
     let historyStore: any HistoryStoring
-    private var historyController: HistoryWindowController?
 
-    // MARK: - Overlay (P4)
+    // MARK: - Collaborators (H3)
 
-    private let overlayModel = OverlayViewModel()
-    private var overlayPanel: TranscriptOverlayPanel?
-    private var partialsTask: Task<Void, Never>?
+    /// Owns the overlay lifecycle (model + panel + partials drain).
+    private let overlayController = OverlayController()
+
+    /// Owns History and Onboarding window presentation.
+    private var windowPresenter: WindowPresenter?
 
     // MARK: - Settings store
 
@@ -114,7 +118,6 @@ final class DictationController: ObservableObject {
 
     // MARK: - Onboarding
 
-    private var onboardingController: OnboardingWindowController?
     let permissionManager: PermissionManager
 
     // MARK: - Init
@@ -182,8 +185,19 @@ final class DictationController: ObservableObject {
     /// the monitor's 100ms watchdog will arm the tap on the untrusted→trusted
     /// edge. This controller responds via `armStateChanges`.
     func startMonitoring() {
-        showOnboardingIfNeeded()
-        overlayPanel = TranscriptOverlayPanel(overlayModel: overlayModel)
+        // WindowPresenter is constructed here (not in init) so it shares the
+        // same deferred-construction pattern as the panel below. Both become
+        // active at the same point — when monitoring actually starts.
+        windowPresenter = WindowPresenter(
+            historyStore: historyStore,
+            permissionManager: permissionManager,
+            settingsStore: settingsStore
+        )
+        windowPresenter?.showOnboardingIfNeeded()
+
+        // Delegate panel creation to OverlayController — panel is expensive and
+        // must be created once, not per-dictation.
+        overlayController.createPanel()
         SpeakLog.hotkey.info("DictationController: startMonitoring() — arming monitor.")
 
         // Check immediate AX state to set the initial permissionsNeeded hint.
@@ -205,24 +219,19 @@ final class DictationController: ObservableObject {
         startEventTask()
     }
 
-    // MARK: - Onboarding
+    // MARK: - Window presentation (delegates to WindowPresenter)
 
+    /// Show the Onboarding window if the onboarding flow is not yet complete.
+    /// Delegates to `WindowPresenter.showOnboardingIfNeeded()`.
     func showOnboardingIfNeeded() {
-        let eval = OnboardingStateMachine.evaluate(
-            manager: permissionManager,
-            hasCompletedOnboarding: settingsStore.hasCompletedOnboarding
-        )
-        guard !eval.isComplete else { return }
-        SpeakLog.permissions.info(
-            "DictationController: onboarding required — step=\(String(describing: eval.currentStep), privacy: .public)"
-        )
-        if onboardingController == nil {
-            onboardingController = OnboardingWindowController(
-                permissionManager: permissionManager,
-                settings: settingsStore
-            )
-        }
-        onboardingController?.show()
+        windowPresenter?.showOnboardingIfNeeded()
+    }
+
+    /// Show the History window (P9).
+    /// Called from `SpeakApp.swift` via the menu button.
+    /// Delegates to `WindowPresenter.showHistory()`.
+    func showHistory() {
+        windowPresenter?.showHistory()
     }
 
     // MARK: - Hardware mute (SPEC §7.4)
@@ -233,19 +242,10 @@ final class DictationController: ObservableObject {
             let nowMuted = await self.engine.toggleMute()
             self.isMuted = nowMuted
             if nowMuted {
-                self.stopOverlay()
+                self.overlayController.stop()
                 self.icon = .idle
             }
         }
-    }
-
-    // MARK: - History window (P9)
-
-    func showHistory() {
-        if historyController == nil {
-            historyController = HistoryWindowController(store: historyStore)
-        }
-        historyController?.show()
     }
 
     // MARK: - Private task management
@@ -304,7 +304,10 @@ final class DictationController: ObservableObject {
             try await engine.beginDictation()
             icon = .listening
             SpeakLog.engine.info("DictationController: beginDictation succeeded → .listening")
-            startOverlay()
+            let engineRef = engine
+            overlayController.start {
+                await engineRef.currentPartials()
+            }
         } catch SpeakError.microphoneMuted {
             icon = .idle
             SpeakLog.engine.info("DictationController: start ignored — microphone muted.")
@@ -322,16 +325,16 @@ final class DictationController: ObservableObject {
             // This keeps the panel visible showing "Cleaning up…" during the LLM pass.
             // The panel is hidden AFTER the done flash, not immediately on stop.
             icon = .processing
-            transitionOverlay(to: .processing)
+            overlayController.transition(to: .processing)
             _ = try await engine.endDictation()
             icon = .done
             // Phase C: show done state briefly before hiding the panel.
-            transitionOverlay(to: .done)
+            overlayController.transition(to: .done)
             SpeakLog.engine.info("DictationController: endDictation succeeded → .done")
             // 600ms done-flash — roadmap.md P8 [decision].
             let doneFlashNanoseconds: UInt64 = 600_000_000  // [decision] roadmap.md P8
             try? await Task.sleep(nanoseconds: doneFlashNanoseconds)
-            stopOverlay()
+            overlayController.stop()
             icon = .idle
         } catch SpeakError.pasteRequiresAccessibility {
             // Graceful degradation: text was written to the clipboard (the
@@ -340,7 +343,7 @@ final class DictationController: ObservableObject {
             // Outcome: NOT a fault — the user can paste manually (Cmd+V).
             // Mirror the `.microphoneMuted` soft-catch pattern: hide overlay,
             // stay idle, surface the permissions hint via `permissionsNeeded`.
-            stopOverlay()
+            overlayController.stop()
             icon = .idle
             permissionsNeeded = true
             SpeakLog.engine.info(
@@ -348,68 +351,11 @@ final class DictationController: ObservableObject {
             )
         } catch {
             // Error: hide the panel immediately — no done flash on failure.
-            stopOverlay()
+            overlayController.stop()
             icon = .error
             SpeakLog.engine.error(
                 "DictationController: endDictation failed — \(error.localizedDescription, privacy: .public)"
             )
         }
-    }
-
-    // MARK: - Overlay lifecycle (Phase C)
-
-    private func startOverlay() {
-        // Reset to listening state with empty text before showing.
-        overlayModel.partialText = ""
-        overlayModel.overlayState = .listening
-        overlayPanel?.show()
-        partialsTask?.cancel()
-        partialsTask = nil
-
-        partialsTask = Task { [weak self] in
-            guard let self else { return }
-            guard let stream = await self.engine.currentPartials() else {
-                SpeakLog.engine.info("DictationController: partials stream unavailable.")
-                return
-            }
-
-            var accumulator = OverlayTextAccumulator()
-            for await chunk in stream {
-                if Task.isCancelled { break }
-                let displayed = accumulator.next(chunk)
-                await MainActor.run {
-                    self.overlayModel.partialText = displayed
-                    self.partialText = displayed
-                }
-            }
-            SpeakLog.engine.info("DictationController: partials stream finished.")
-        }
-    }
-
-    /// Transition the overlay to a new visual state.
-    /// Cancels the partials task when moving to .processing (no more partials coming).
-    /// Does NOT hide the panel — `stopOverlay()` is responsible for hiding.
-    private func transitionOverlay(to state: OverlayState) {
-        overlayModel.overlayState = state
-        if state == .processing {
-            // No more partial text will arrive once processing begins.
-            partialsTask?.cancel()
-            partialsTask = nil
-        }
-        SpeakLog.engine.info(
-            "DictationController: overlay transitioned to .\(String(describing: state), privacy: .public)"
-        )
-    }
-
-    /// Hide the overlay panel and reset all overlay state.
-    /// Call this only AFTER the done flash is complete (or immediately on error).
-    private func stopOverlay() {
-        partialsTask?.cancel()
-        partialsTask = nil
-        overlayModel.partialText = ""
-        overlayModel.overlayState = .listening   // reset for next dictation
-        partialText = ""
-        overlayPanel?.hide()
-        SpeakLog.engine.info("DictationController: overlay hidden.")
     }
 }
