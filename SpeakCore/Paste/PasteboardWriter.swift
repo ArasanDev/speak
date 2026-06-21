@@ -15,12 +15,20 @@
 //      signal. The caller (DictationController.endDictation) treats this as a
 //      soft outcome, not a crash: it sets `permissionsNeeded = true` and stays
 //      `.idle` (text is on the clipboard for manual paste).
-//   3. Settle delay: `Task.sleep` for `settle` duration (default 100 ms) before
+//   3. Secure-field gate: query the Accessibility API to detect if the currently
+//      focused element is a secure text field (password input). If so, throw
+//      `SpeakError.pasteIntoSecureField` rather than pasting. Dictated speech
+//      into a password field is a privacy/safety footgun and password fields
+//      often reject synthetic paste anyway. The clipboard floor has already run
+//      (step 1) so the text is never lost. Fail-safe: if the AX query fails or
+//      is ambiguous, the gate passes and paste proceeds normally — we never block
+//      legitimate pastes due to a query failure. See `SecureFieldDetector.swift`.
+//   4. Settle delay: `Task.sleep` for `settle` duration (default 100 ms) before
 //      posting events. [decision] provenance: VoiceInk + Hex post a short delay
 //      so the clipboard write commits and the target's first responder is ready
 //      after focus returns from the hotkey. Spec dictation-flow.md §5. Tests
 //      inject `.zero` to avoid real sleeps.
-//   4. Explicit modifier sequence: Cmd-down → V-down → V-up → Cmd-up posted to
+//   5. Explicit modifier sequence: Cmd-down → V-down → V-up → Cmd-up posted to
 //      `.cghidEventTap`. [decision] VoiceInk/Hex post the modifier key events
 //      explicitly rather than relying on `.maskCommand` alone on the V events;
 //      this matches what the system expects for a synthetic keyboard chord.
@@ -43,6 +51,16 @@
 //   • `kVK_ANSI_V == 9 == 0x09` [verified: Carbon/HIToolbox, runtime 2026-06-20]
 //   • `kVK_Command == 0x37 == 55` [verified: Carbon/HIToolbox, swiftc 2026-06-21]
 //   • `CGEventFlags.maskCommand` [verified]
+//
+// Secure-field guard verifications (swiftc -typecheck against macOS 26 SDK):
+//   • `AXUIElementCreateSystemWide()` → AXUIElement [verified: ApplicationServices]
+//   • `AXUIElementCopyAttributeValue(_:_:_:)` → AXError [verified: ApplicationServices]
+//   • `kAXFocusedUIElementAttribute` [verified: ApplicationServices]
+//   • `kAXSubroleAttribute` [verified: ApplicationServices]
+//   • `kAXSecureTextFieldSubrole == "AXSecureTextField"` [verified: HIServices/AXRoleConstants.h:408]
+//   • `CFGetTypeID` + `AXUIElementGetTypeID()` guard before `unsafeBitCast` [verified]
+//     (CFTypeRef → AXUIElement; unsafeBitCast avoids force_cast lint rule;
+//      see SecureFieldDetector.swift for rationale)
 //
 // Unverified / deferred (requires live human test — P6 done-when):
 //   [unverified] Write+Cmd+V avoids macOS 26.4 Terminal paste-provenance prompt
@@ -93,6 +111,12 @@ public final class PasteboardWriter: TextInserting, Sendable {
     /// the outcome without requiring Accessibility to be granted in CI.
     let isAccessibilityTrusted: @Sendable () -> Bool
 
+    /// Returns whether the focused UI element is a secure text field (password input).
+    /// Injected so tests can simulate secure / non-secure focus without requiring
+    /// a live focused element. Default queries via `focusedElementIsSecureField()`
+    /// in `SecureFieldDetector.swift` (fail-safe: returns `false` on any query failure).
+    let isFocusedFieldSecure: @Sendable () -> Bool
+
     /// Pre-paste settle delay. Injected so tests can pass `.zero`.
     /// Default 100 ms — [decision] VoiceInk/Hex settle before posting events
     /// so the clipboard write commits and the first responder is ready.
@@ -124,11 +148,13 @@ public final class PasteboardWriter: TextInserting, Sendable {
     /// `inserter: PasteboardWriter()`) use the defaults and are unaffected.
     public init(
         isAccessibilityTrusted: @escaping @Sendable () -> Bool = { AXIsProcessTrusted() },
+        isFocusedFieldSecure: @escaping @Sendable () -> Bool = { focusedElementIsSecureField() },
         settle: Duration = .milliseconds(100),   // [decision] spec dictation-flow.md §5
         writeClipboard: @escaping @Sendable (String) -> Void = PasteboardWriter.defaultWriteClipboard,
         postEvent: @escaping @Sendable (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) }
     ) {
         self.isAccessibilityTrusted = isAccessibilityTrusted
+        self.isFocusedFieldSecure = isFocusedFieldSecure
         self.settle = settle
         self.writeClipboard = writeClipboard
         self.postEvent = postEvent
@@ -141,10 +167,14 @@ public final class PasteboardWriter: TextInserting, Sendable {
     /// Steps (in order):
     ///   1. Clipboard floor (always runs — text always lands on clipboard).
     ///   2. AX-trust gate (no AX → throw `.pasteRequiresAccessibility`; text is on clipboard).
-    ///   3. Settle delay.
-    ///   4. Post Cmd-down → V-down → V-up → Cmd-up to `.cghidEventTap`.
+    ///   3. Secure-field gate (focused element is a password field → throw
+    ///      `.pasteIntoSecureField`; text is on clipboard). Fail-safe: query failure
+    ///      → pass (do not block legitimate pastes on ambiguous AX results).
+    ///   4. Settle delay.
+    ///   5. Post Cmd-down → V-down → V-up → Cmd-up to `.cghidEventTap`.
     ///
     /// - Throws: `SpeakError.pasteRequiresAccessibility` when AX is not granted.
+    ///           `SpeakError.pasteIntoSecureField` when focused element is a password field.
     ///           `SpeakError.pasteboardBusy` when CGEvent construction fails.
     public func insert(_ text: String) async throws {
         log.info(
@@ -170,12 +200,28 @@ public final class PasteboardWriter: TextInserting, Sendable {
             throw SpeakError.pasteRequiresAccessibility(text: text)
         }
 
-        // ── Step 3: settle delay ─────────────────────────────────────────────
+        // ── Step 3: secure-field gate ────────────────────────────────────────
+        // Query the focused element's AX subrole. If it is `kAXSecureTextFieldSubrole`
+        // ("AXSecureTextField"), the user's cursor is in a password field. Pasting
+        // dictated speech into a credential field is a privacy/safety footgun and
+        // password fields often reject synthetic paste anyway.
+        // Fail-safe: `isFocusedFieldSecure()` returns `false` on any AX query
+        // failure — we never block a legitimate paste due to an ambiguous result.
+        // The clipboard floor (step 1) has already run, so the text is never lost:
+        // DictationController routes it to the Scratchpad on this error.
+        if isFocusedFieldSecure() {
+            log.info(
+                "PasteboardWriter: focused element is a secure field — refusing paste; text on clipboard"
+            )
+            throw SpeakError.pasteIntoSecureField(text: text)
+        }
+
+        // ── Step 4: settle delay ─────────────────────────────────────────────
         // Give the clipboard write time to commit and let the target app's first
         // responder re-focus after the hotkey tap. [decision] dictation-flow.md §5
         try await Task.sleep(for: settle)
 
-        // ── Step 4: Cmd-down → V-down → V-up → Cmd-up ───────────────────────
+        // ── Step 5: Cmd-down → V-down → V-up → Cmd-up ───────────────────────
         try simulateCmdV()
 
         log.info("PasteboardWriter: Cmd+V sequence posted to .cghidEventTap")

@@ -528,6 +528,25 @@ final class DictationController: ObservableObject {
             SpeakLog.engine.info(
                 "DictationController: paste fell back to clipboard + Scratchpad — Accessibility needed"
             )
+        } catch SpeakError.pasteIntoSecureField(let text) {
+            // Deliberate refusal: the focused element is a secure text field
+            // (password input). Pasting dictated speech into a credential field
+            // is a privacy/safety footgun; PasteboardWriter refused the paste.
+            // The clipboard floor still ran (text is on the clipboard), so text
+            // is never lost — we route it to the Scratchpad for easy access.
+            // Outcome: NOT a fault, NOT a permissions gap — stay `.idle`, show
+            // the HUD error so the user sees the clear message from
+            // `SpeakError.pasteIntoSecureField.recoverySuggestion`.
+            // [decision: do NOT set `permissionsNeeded` — no permission is missing;
+            //  this is a safety refusal, not a degraded permission state.]
+            overlayController.stop()
+            overlayController.showError(SpeakError.pasteIntoSecureField(text: text).recoverySuggestion)
+            icon = .idle
+            lastTranscript = text
+            Scratchpad.append(text)
+            SpeakLog.engine.info(
+                "DictationController: paste refused — focused element is a secure field; text saved to Scratchpad"
+            )
         } catch {
             // W2.2: show an error state in the HUD with a short reason instead of silently hiding.
             overlayController.showError(error.localizedDescription)

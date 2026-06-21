@@ -8,7 +8,43 @@
 
 ## Current phase
 
-> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-22, P0 correctness fix: long-dictation truncation)
+> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-22, secure-field paste guard)
+> **SECURE-FIELD PASTE GUARD — BUILT & ALL 4 GATES GREEN.**
+> Build ✅ · Tests ✅ (374 tests / 5 XCTSkip / 0 failures; +4 new secure-field guard tests) · Lint ✅ (0 serious) · Moat ✅ (7/7).
+> **Uncommitted in worktree** — orchestrator reviews diff and owns the commit.
+>
+> **Problem:** When the user's cursor was in a password/secure text field, `PasteboardWriter.insert()`
+> would paste dictated speech into it — a privacy/safety footgun.
+>
+> **Fix:** Added a secure-field detection gate (step 3) in `PasteboardWriter.insert()`, between the
+> AX-trust gate (step 2) and the settle delay (step 4). Uses the Accessibility API to query
+> `kAXFocusedUIElementAttribute` → `kAXSubroleAttribute` of the frontmost focused element.
+> If the subrole is `kAXSecureTextFieldSubrole` ("AXSecureTextField"), throws
+> `SpeakError.pasteIntoSecureField(text:)` and refuses to paste.
+>
+> **Fail-safe:** Any AX query failure returns `false` → paste proceeds normally. Never blocks
+> legitimate pastes on ambiguous results. The clipboard floor (step 1) always runs first so text is
+> never lost regardless of gate outcome.
+>
+> **UX:** DictationController catches `.pasteIntoSecureField` specifically (parallel to the existing
+> `.pasteRequiresAccessibility` arm), routes text to Scratchpad, shows the HUD error message
+> "Won't paste into a password field — text saved to history." Stays `.idle`, does NOT set
+> `permissionsNeeded` (no permission is missing — this is a deliberate safety refusal).
+>
+> **AX constant verified:** `kAXSecureTextFieldSubrole == "AXSecureTextField"` [verified:
+> HIServices/AXRoleConstants.h:408 in local macOS 26 SDK].
+>
+> **Files changed:**
+>   - `SpeakCore/Engine/SpeakError.swift` — new `.pasteIntoSecureField(text:)` case + recoverySuggestion
+>   - `SpeakCore/Paste/SecureFieldDetector.swift` — new file: `focusedElementIsSecureField()` free function
+>   - `SpeakCore/Paste/PasteboardWriter.swift` — new `isFocusedFieldSecure` injected closure + step 3 gate
+>   - `App/DictationController.swift` — new catch arm for `.pasteIntoSecureField`
+>   - `SpeakTests/PasteTests.swift` — 4 new tests in `SecureFieldGuardTests`
+>
+> **Note on `StreamingTextInserting`:** protocol-only (no conformer, not wired in v0). Does NOT need
+> the same guard; flagged as a future concern when H5 streaming paste lands.
+
+> ## OLD BANNER (handoff banner — 2026-06-22, P0 correctness fix: long-dictation truncation)
 > **P0 TRUNCATION BUG FIX — BUILT & ALL 4 GATES GREEN.**
 > Build ✅ · Tests ✅ (all pass, 5 pre-existing XCTSkip, 2 new regression tests added) · Lint ✅ (0 serious) · Moat ✅ (7/7).
 > **Uncommitted in worktree** — orchestrator reviews diff and owns the commit.

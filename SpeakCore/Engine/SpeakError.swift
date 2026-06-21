@@ -17,6 +17,16 @@
 // so this is a *degraded delivery*, not a data-loss fault. The app shell catches it
 // specifically: sets `permissionsNeeded = true` and leaves the icon `.idle` (text on
 // clipboard), not `.error`. Per spec dictation-flow.md §5 + §6-D.
+//
+// ADDITIVE CASE (secure-field guard): `.pasteIntoSecureField` is thrown by
+// `PasteboardWriter.insert(_:)` when the AX query detects that the frontmost
+// focused element is a secure text field (subrole == kAXSecureTextFieldSubrole).
+// Pasting dictated speech into a password field is a privacy/safety footgun and
+// password fields often reject synthetic paste anyway. Outcome: deliberate refusal,
+// NOT a data-loss fault — text is routed to the Scratchpad and the clipboard floor
+// still runs. The app shell catches it specifically and stays `.idle`, identical to
+// the `.pasteRequiresAccessibility` soft-catch pattern. `permissionsNeeded` is NOT
+// set (no permission is missing; this is a safety decision, not a permission gap).
 
 public enum SpeakError: Error, Sendable {
     case microphoneDenied
@@ -30,6 +40,10 @@ public enum SpeakError: Error, Sendable {
     /// AX not granted at paste time. Carries the `text` it was delivering so the app
     /// shell can route it to the Scratchpad (it is also already on the clipboard).
     case pasteRequiresAccessibility(text: String)
+    /// The focused element is a secure text field. Dictated text must not be pasted
+    /// into a credential field. Carries the `text` so the app shell can route it to
+    /// the Scratchpad (it is also already on the clipboard from the clipboard floor).
+    case pasteIntoSecureField(text: String)
     case unknown(String)
 
     public var recoverySuggestion: String {
@@ -52,6 +66,8 @@ public enum SpeakError: Error, Sendable {
             return "Microphone is muted. Unmute speak to dictate."
         case .pasteRequiresAccessibility:
             return "Text copied to clipboard. Enable speak in System Settings → Privacy → Accessibility to paste automatically."
+        case .pasteIntoSecureField:
+            return "Won't paste into a password field — text saved to history."
         case .unknown(let detail):
             return "Unknown error: \(detail)."
         }
