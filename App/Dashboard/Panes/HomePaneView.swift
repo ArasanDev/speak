@@ -28,21 +28,38 @@ struct HomePaneView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            feedColumn
+        VStack(alignment: .leading, spacing: 0) {
+            greeting
             Divider()
-            statsRail
-                // [decision: 260pt rail — fits the stat card + status without crowding the feed]
-                .frame(width: 260)
+            HStack(alignment: .top, spacing: 0) {
+                feedColumn
+                Divider()
+                statsRail
+                    // [decision: 260pt rail — fits the stat card + status without crowding the feed]
+                    .frame(width: 260)
+            }
         }
         .task { await loadEntries() }
     }
 
-    // MARK: - Feed column (greeting + day-grouped history)
+    // MARK: - Greeting (spans the full width at the top, Wispr-style)
+
+    private var greeting: some View {
+        HStack(spacing: SpeakSpacing.sm) {
+            Text("Hey \(firstName), get back into the flow with")
+                .font(.speakMonoTitle)
+            KeyCapView(label: "fn", isAccented: true)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, SpeakSpacing.lg)
+        .padding(.vertical, SpeakSpacing.md)
+    }
+
+    // MARK: - Feed column (day-grouped history)
 
     private var feedColumn: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            greeting
+        Group {
             if loaded && entries.isEmpty {
                 emptyFeed
             } else {
@@ -50,18 +67,6 @@ struct HomePaneView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var greeting: some View {
-        HStack(spacing: SpeakSpacing.sm) {
-            Text("Hey \(firstName), get back into the flow with")
-                .font(.speakMonoTitle)
-                .fixedSize(horizontal: false, vertical: true)
-            KeyCapView(label: "fn", isAccented: true)
-        }
-        .padding(.horizontal, SpeakSpacing.lg)
-        .padding(.top, SpeakSpacing.lg)
-        .padding(.bottom, SpeakSpacing.md)
     }
 
     private var feedList: some View {

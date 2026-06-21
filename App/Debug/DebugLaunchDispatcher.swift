@@ -54,6 +54,7 @@ enum DebugTarget: String {
     case onboardingDone          = "onboarding-done"
     case settings                = "settings"
     case history                 = "history"
+    case dashboard               = "dashboard"   // full-window app, seeded feed (Phase 2)
     // Overlay demo targets (Phase C — one per visual state for screenshot verification):
     //   overlay-demo            → .listening state, sample partial text, mid-level meter
     //   overlay-demo-processing → .processing state, "Cleaning up…" + spinner
@@ -127,6 +128,9 @@ final class DebugLaunchDispatcher {
         case .history:
             openHistory(controller: controller)
             return false
+        case .dashboard:
+            openDashboard(controller: controller)
+            return false
         case .overlayDemo:
             openOverlayDemo(state: .listening, controller: controller)
             return false
@@ -196,6 +200,24 @@ final class DebugLaunchDispatcher {
         vc.show()
         keepAlive(vc)
         log.info("DebugLaunchDispatcher: History window opened.")
+    }
+
+    // MARK: - Dashboard target (Phase 2 — full-window app)
+
+    /// Open the full-window dashboard with a SEEDED in-memory history store so the
+    /// day-grouped Home feed + stats rail render with realistic content for a
+    /// screenshot. Uses a throwaway store — never touches the production SQLite DB.
+    /// [decision: seeded in-memory store keeps the visual-verification path side-effect-free]
+    private func openDashboard(controller: DictationController) {
+        let context = DashboardContext(
+            settingsStore: controller.settingsStore,
+            historyStore: DebugSeededHistoryStore(),
+            hotkeyCombo: ["Fn", "Fn"]
+        )
+        let vc = DashboardWindowController(context: context)
+        vc.show()
+        keepAlive(vc)
+        log.info("DebugLaunchDispatcher: Dashboard window opened (seeded feed).")
     }
 
     // MARK: - Overlay demo target (Phase C)
@@ -342,6 +364,47 @@ final class DebugLaunchDispatcher {
             await DebugObjectStore.shared.retain(object)
         }
     }
+}
+
+// MARK: - DebugSeededHistoryStore
+
+/// A read-only in-memory `HistoryStoring` seeded with sample dictations spanning
+/// today + yesterday, so the dashboard's day-grouped feed and stats rail render
+/// realistically for screenshot verification. Writes are no-ops; never persisted.
+private final class DebugSeededHistoryStore: HistoryStoring, @unchecked Sendable {
+
+    private let entries: [HistoryEntry]
+
+    init() {
+        let now = Date()
+        let hour: TimeInterval = 3600
+        let day: TimeInterval = 86_400
+        func entry(_ raw: String, _ cleaned: String, ago: TimeInterval) -> HistoryEntry {
+            HistoryEntry(rawText: raw, cleanedText: cleaned,
+                         createdAt: now.addingTimeInterval(-ago),
+                         engineId: "apple-speech-en-US+foundation-models")
+        }
+        entries = [
+            entry("um can you hear me",
+                  "Can you hear me?", ago: hour),
+            entry("lets ship the dashboard today and then verify the final output",
+                  "Let's ship the dashboard today, and then verify the final output.", ago: 2 * hour),
+            entry("the env file has real api keys we need to test and validate everything",
+                  "The .env file has real API keys — we need to test and validate everything.", ago: 5 * hour),
+            entry("understand the project explore deeply ideate the current state",
+                  "Understand the project, explore deeply, ideate the current state.", ago: day + hour),
+            entry("explore the project and understand the sdk we are building on",
+                  "Explore the project and understand the SDK we are building on.", ago: day + 3 * hour)
+        ]
+    }
+
+    func save(_ entry: HistoryEntry) throws {}
+    func recent(limit: Int) throws -> [HistoryEntry] { Array(entries.prefix(limit)) }
+    func search(_ substring: String) throws -> [HistoryEntry] {
+        entries.filter { ($0.cleanedText ?? $0.rawText).localizedCaseInsensitiveContains(substring) }
+    }
+    func clear() throws {}
+    func export() throws -> String { "[]" }
 }
 
 // MARK: - DebugObjectStore
