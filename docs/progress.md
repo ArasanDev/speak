@@ -1328,4 +1328,19 @@ thrash, since the next work (Phase 0) is blocked on a human gate.
   **Completed Phase 0** (3 §5 targets build via `make build`; lint clean; tests
   green via `xcodebuild test`) and **Phase 1** (menubar app launched + verified).
   Retired the temporary SwiftPM/`Smoke` scaffolding. Next: P2 audio capture.
+- **2026-06-21 (W4.1)**: Implemented the transparency moat. Two deliverables:
+  (1) **4-level cleanup intensity** — `CleanupLevel` extended from 3 cases
+  (basic/balanced/thorough) to 4 (none/light/medium/high). `SpeakEngine.newSession()`
+  gates on `level == .none` → skips the LLM pass entirely. `FoundationModelsCleaner.
+  styledInstructions` updated with named, traceable prompt clauses per level. Default
+  changed from `.balanced` to `.medium`. All prompt clauses carry `[decision W4.1]`
+  tags. `StylePaneView` and all tests updated; old rawValues (basic/balanced/thorough)
+  no longer decode → fallback to `.medium` (pre-release clean break, [decision]).
+  (2) **`CleanupDiffView`** — new `App/Components/CleanupDiffView.swift`, a standalone
+  SwiftUI view using Monaco tokens (speakMono*, speakDiffInsert, speakDiffDelete) with
+  3 display modes (inline/side-by-side/cleaned). Backed by `SpeakCore/Diff/TextDiff.swift`
+  — pure dependency-free word-level LCS diff (`textDiff(raw:cleaned:)` → `[DiffSegment]`).
+  Unit-tested in `SpeakTests/TextDiffTests.swift` (edge cases + level mapping + prompt
+  traceability). All 4 gates green: `make build`, `make test` (301 tests, 5 XCTSkip,
+  0 failures), `make lint` (0 errors), `make verify-moat` (7/7 PASS).
 - **2026-06-19**: Doc restructure into `AGENTS.md` + `docs/` + `research/`.

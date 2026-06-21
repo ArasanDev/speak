@@ -244,21 +244,38 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
                     "invent recipients, subjects, or signatures."
         }
 
+        // W4.1 — 4-level intensity ladder. Each clause is named here for traceability
+        // (test assertions target the quoted phrases). [decision W4.1: distinct named
+        // clauses, not interpolated, so each level is independently unit-testable]
         let intensity: String
         switch level {
-        case .basic:
+        case .none:
+            // .none means "no model call" — SpeakEngine.newSession() never passes the
+            // cleaner when level==.none, so this branch is unreachable in production.
+            // It is included for exhaustive switch coverage and defensive safety: if
+            // somehow called, return a no-op instruction rather than crashing. [decision]
+            intensity = "Return the text exactly as provided, with no changes whatsoever."
+        case .light:
+            // Light: filler-word removal + punctuation only. Minimal rewriting.
+            // [decision W4.1: "light touch" is the distinguishing phrase tested in
+            //  CleanupIntensityTests.testLightLevelIsLightTouch()]
             intensity = "Apply a light touch: add punctuation and fix capitalization, and " +
                         "remove only obvious filler sounds (um, uh, hmm). Otherwise leave the " +
                         "speaker's words and structure intact."
-        case .balanced:
+        case .medium:
+            // Medium: filler removal + punctuation + sentence tightening.
+            // [decision W4.1: "sentence tightening" is the distinguishing phrase tested]
             intensity = "Apply standard cleanup: correct punctuation, capitalization, and " +
-                        "grammar, and remove filler words (um, uh, like, you know, kind of, " +
-                        "sort of). Do not paraphrase or change the speaker's meaning."
-        case .thorough:
+                        "grammar, remove filler words (um, uh, like, you know, kind of, sort of), " +
+                        "and tighten run-on sentences. Do not paraphrase or change the speaker's meaning."
+        case .high:
+            // High: full restructuring including paragraph breaks. The most aggressive level.
+            // [decision W4.1: "paragraph" and "restructure" are the distinguishing phrases tested]
             intensity = "Apply a thorough polish: in addition to punctuation, capitalization, " +
                         "grammar, and filler removal, tighten rambling phrasing and redundancy " +
-                        "into concise, well-structured prose — while preserving the speaker's " +
-                        "meaning and key vocabulary."
+                        "into concise, well-structured prose, and restructure the text into logical " +
+                        "paragraphs where appropriate — while preserving the speaker's meaning and " +
+                        "key vocabulary."
         }
 
         return """

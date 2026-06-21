@@ -148,7 +148,16 @@ public actor SpeakEngine {
     public func newSession() -> CaptureSession {
         // Read both the cleanup toggle and the locale from settings at call time
         // (SettingsStore is @unchecked Sendable — actor read is safe).
-        let activeCleaner: (any LLMCleaning)? = settings.cleanupEnabled ? cleaner : nil
+        // W4.1: CleanupLevel.none short-circuits cleanup regardless of cleanupEnabled.
+        // This means `.none` is semantically "no AI, always" — the user-facing moat
+        // feature that shows raw text. Distinct from cleanupEnabled==false (the legacy
+        // boolean toggle). When level==.none, we log it clearly so diagnostics distinguish
+        // "turned cleanup off" from "model unavailable". [decision W4.1]
+        let cleanupLevelIsNone = settings.cleanupLevel == .none
+        if cleanupLevelIsNone {
+            SpeakLog.engine.info("SpeakEngine: cleanupLevel=.none — skipping cleanup, raw transcript will be used.")
+        }
+        let activeCleaner: (any LLMCleaning)? = (settings.cleanupEnabled && !cleanupLevelIsNone) ? cleaner : nil
         let activeLocale: Locale = settings.language
         // Wave B: derive the neat-writing mode from settings at call time (H1 pattern)
         // so a Style-pane change applies on the next dictation with no engine restart.

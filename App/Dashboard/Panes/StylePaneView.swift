@@ -125,11 +125,13 @@ struct StylePaneView: View {
         }
     }
 
+    // W4.1: updated for 4-level scale (none/light/medium/high).
     private func levelBlurb(_ level: CleanupLevel) -> String {
         switch level {
-        case .basic:    return "Light touch — punctuation and obvious fillers only."
-        case .balanced: return "Standard cleanup — grammar, punctuation, filler removal."
-        case .thorough: return "Full polish — tightens rambling phrasing into concise prose."
+        case .none:   return "Raw transcript — no AI changes applied."
+        case .light:  return "Light touch — punctuation and obvious fillers only."
+        case .medium: return "Standard cleanup — grammar, punctuation, filler removal."
+        case .high:   return "Full polish — tightens phrasing and adds paragraph breaks."
         }
     }
 
