@@ -45,6 +45,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import Combine
 import SpeakCore
 
 // MARK: - NullHistoryStore
@@ -100,6 +101,17 @@ final class DictationController: ObservableObject {
 
     private(set) var settingsStore: SettingsStore
 
+    // MARK: - Trigger-mode wiring (Phase B)
+
+    /// Holds the Combine subscription that applies `settingsStore.triggerMode`
+    /// changes to the live monitor without relaunch.
+    ///
+    /// `objectWillChange` fires *before* the value is written, so the `sink`
+    /// callback defers reading via `DispatchQueue.main.async`. The async hop
+    /// also ensures we are not on any SwiftUI rendering path when we call
+    /// `monitor.updateBinding(_:)`.
+    private var triggerModeCancellable: AnyCancellable?
+
     // MARK: - Onboarding
 
     private var onboardingController: OnboardingWindowController?
@@ -133,6 +145,32 @@ final class DictationController: ObservableObject {
         )
 
         monitor = HotkeyMonitor()
+
+        // Phase B: apply the persisted trigger mode to the monitor on launch.
+        // `monitor = HotkeyMonitor()` loads the persisted `HotkeyBinding` via
+        // `UserDefaultsBindingStore`, but `SettingsStore.triggerMode` is the
+        // user-facing authoritative value — reconcile them now.
+        let initialTrigger = store.triggerMode
+        let updatedBinding = monitor.binding.with(trigger: initialTrigger)
+        monitor.updateBinding(updatedBinding)
+        SpeakLog.hotkey.info("DictationController: trigger mode applied at init — \(initialTrigger.rawValue, privacy: .public)")
+
+        // Subscribe to future trigger-mode changes from SettingsView.
+        // `objectWillChange` fires before the write, so we schedule a read for
+        // the next run-loop turn when the value has settled.
+        triggerModeCancellable = store.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    let newTrigger = self.settingsStore.triggerMode
+                    let newBinding = self.monitor.binding.with(trigger: newTrigger)
+                    self.monitor.updateBinding(newBinding)
+                    SpeakLog.hotkey.info(
+                        "DictationController: trigger mode changed — \(newTrigger.rawValue, privacy: .public)"
+                    )
+                }
+            }
     }
 
     // MARK: - Public API

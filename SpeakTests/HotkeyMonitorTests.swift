@@ -42,10 +42,12 @@ final class HotkeyBindingCodableTests: XCTestCase {
     }
 
     func testRoundTripWithModifiers() throws {
+        // Uses .hold trigger (Phase B) — .singleTapToggle was removed in Phase B
+        // as it was never implemented. [decision: specs/dictation-flow.md §6-B]
         let binding = HotkeyBinding(
             keyCode: 0x09, // kVK_ANSI_V
             modifiers: [.maskCommand, .maskShift],
-            trigger: .singleTapToggle,
+            trigger: .hold,
             doubleTapWindow: 0.3
         )
         let data = try JSONEncoder().encode(binding)
@@ -53,8 +55,41 @@ final class HotkeyBindingCodableTests: XCTestCase {
 
         XCTAssertEqual(decoded.keyCode, 0x09)
         XCTAssertEqual(decoded.modifiers.rawValue, CGEventFlags([.maskCommand, .maskShift]).rawValue)
-        XCTAssertEqual(decoded.trigger, .singleTapToggle)
+        XCTAssertEqual(decoded.trigger, .hold)
         XCTAssertEqual(decoded.doubleTapWindow, 0.3, accuracy: 1e-9)
+    }
+
+    func testHoldTriggerRoundTrip() throws {
+        let binding = HotkeyBinding(
+            keyCode: 63,
+            modifiers: [],
+            trigger: .hold,
+            doubleTapWindow: 0.4
+        )
+        let data = try JSONEncoder().encode(binding)
+        let decoded = try JSONDecoder().decode(HotkeyBinding.self, from: data)
+
+        XCTAssertEqual(decoded.trigger, .hold)
+    }
+
+    func testDoubleTapTriggerRoundTrip() throws {
+        let binding = HotkeyBinding.defaultBinding
+        let data = try JSONEncoder().encode(binding)
+        let decoded = try JSONDecoder().decode(HotkeyBinding.self, from: data)
+
+        XCTAssertEqual(decoded.trigger, .doubleTap)
+    }
+
+    func testStalePersistedTriggerDecodesNilAndFallsBack() throws {
+        // A JSON payload that has an unknown trigger value (e.g., the removed
+        // "singleTapToggle") should fail to decode via try? in the store,
+        // and the store returns nil → caller falls back to defaultBinding.
+        let staleJSONString = """
+        {"keyCode":63,"modifiersRawValue":0,"trigger":"singleTapToggle","doubleTapWindow":0.4}
+        """
+        let staleJSON = try XCTUnwrap(Data(staleJSONString.utf8))
+        let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: staleJSON)
+        XCTAssertNil(decoded, "An unknown trigger case must fail to decode — store returns nil → default binding used.")
     }
 
     func testRoundTripEmptyModifiers() throws {
@@ -213,6 +248,45 @@ final class DoubleTapDetectorTests: XCTestCase {
         _ = detector.register(tapAt: 2.0, window: window) // first tap of next cycle
         let event = detector.register(tapAt: 2.3, window: window)
         XCTAssertEqual(event, .startCapture, "Should be able to restart after a stop")
+    }
+}
+
+// MARK: - HoldEdge Tests
+
+/// Tests for the `holdEdge(isFnDown:wasDown:)` pure free function.
+/// No CGEventTap, no clock, no side effects — all inputs injected.
+final class HoldEdgeTests: XCTestCase {
+
+    func testPressEdgeEmitsStartCapture() {
+        // Transition: not pressed → pressed
+        let event = holdEdge(isFnDown: true, wasDown: false)
+        XCTAssertEqual(event, .startCapture, "Press leading edge must emit startCapture")
+    }
+
+    func testReleaseEdgeEmitsStopCapture() {
+        // Transition: pressed → released
+        let event = holdEdge(isFnDown: false, wasDown: true)
+        XCTAssertEqual(event, .stopCapture, "Release trailing edge must emit stopCapture")
+    }
+
+    func testKeyRepeatWhileHeldEmitsNil() {
+        // Both pressed → no transition (e.g., key-repeat flagsChanged event)
+        let event = holdEdge(isFnDown: true, wasDown: true)
+        XCTAssertNil(event, "Key-repeat while held must emit nil")
+    }
+
+    func testNoChangeWhileReleasedEmitsNil() {
+        // Both released → no transition
+        let event = holdEdge(isFnDown: false, wasDown: false)
+        XCTAssertNil(event, "No change while released must emit nil")
+    }
+
+    func testPressReleaseCycle() {
+        // Full press-and-release cycle yields start then stop
+        let start = holdEdge(isFnDown: true, wasDown: false)
+        let stop  = holdEdge(isFnDown: false, wasDown: true)
+        XCTAssertEqual(start, .startCapture)
+        XCTAssertEqual(stop, .stopCapture)
     }
 }
 

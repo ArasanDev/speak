@@ -7,6 +7,7 @@
 //   HotkeyBinding     — Codable + Sendable; custom Codable for CGEventFlags
 //   HotkeyMonitor     — installs the tap, exposes AsyncStream<HotkeyEvent>
 //   DoubleTapDetector — pure value-type detector (testable without a tap)
+//   holdEdge()        — pure free function for hold-mode edge detection (testable)
 //
 // --- Fn-key detection model [verified] ---
 // The Fn/Globe key does NOT produce keyDown/keyUp events; it arrives exclusively
@@ -80,9 +81,21 @@ public enum HotkeyEvent: Sendable {
 /// synthesize Codable on its own.
 public struct HotkeyBinding: Codable, Sendable {
 
-    public enum Trigger: Codable, Sendable {
+    /// How the hotkey activates dictation.
+    ///
+    /// - `doubleTap`: double-tap Fn (toggle) — the default. Two presses within
+    ///   `doubleTapWindow` start a hands-free session; the next single press stops it.
+    ///   Implemented by `DoubleTapDetector`.
+    /// - `hold`: push-to-talk. Fn press → startCapture; Fn release → stopCapture.
+    ///   No minimum-hold guard in Phase B [decision: an accidental short tap yields a
+    ///   near-empty recording — acceptable; a min-hold timer can come in a later phase].
+    ///   Implemented by `holdEdge(isFnDown:wasDown:)`.
+    ///
+    /// `.singleTapToggle` was planned but never implemented; it was removed in Phase B
+    /// to keep the enum honest. Persisted payloads containing it decode to `nil` (via
+    /// `try?` in `UserDefaultsBindingStore.load()`) and fall back to the default binding.
+    public enum Trigger: String, Codable, Sendable {
         case doubleTap
-        case singleTapToggle
         case hold
     }
 
@@ -138,6 +151,40 @@ extension HotkeyBinding {
         trigger: .doubleTap,
         doubleTapWindow: 0.4 // benchmark.md §7 [decision]; tune at P13
     )
+
+    /// Return a new binding identical to `self` but with a different trigger.
+    /// Used by `DictationController` to apply a `SettingsStore.triggerMode` change
+    /// without losing the user's configured key, modifiers, or window.
+    public func with(trigger newTrigger: Trigger) -> HotkeyBinding {
+        HotkeyBinding(
+            keyCode: keyCode,
+            modifiers: modifiers,
+            trigger: newTrigger,
+            doubleTapWindow: doubleTapWindow
+        )
+    }
+}
+
+// MARK: - Hold-mode edge detection
+
+/// Pure free function for hold-mode (push-to-talk) edge detection.
+/// Extracted for unit-testability — no CGEventTap, no clock dependency.
+///
+/// - Parameters:
+///   - isFnDown: Whether the Fn key is pressed in the current event.
+///   - wasDown:  Whether the Fn key was pressed in the previous event.
+/// - Returns:
+///   - `.startCapture` on the press leading edge (false → true).
+///   - `.stopCapture` on the release trailing edge (true → false).
+///   - `nil` if neither transition occurred (e.g., key-repeat or no change).
+///
+/// No minimum-hold guard is applied in Phase B [decision: specs/dictation-flow.md §6-B].
+public func holdEdge(isFnDown: Bool, wasDown: Bool) -> HotkeyEvent? {
+    switch (wasDown, isFnDown) {
+    case (false, true):  return .startCapture   // press leading edge
+    case (true, false):  return .stopCapture    // release trailing edge
+    default:             return nil             // no transition
+    }
 }
 
 // MARK: - DoubleTapDetector
@@ -305,7 +352,11 @@ public final class HotkeyMonitor: @unchecked Sendable {
     // MARK: Public API
 
     /// The current binding. Persisted on every change.
-    public private(set) var binding: HotkeyBinding
+    /// Lock-guarded: read on the run-loop thread (`handle`/`buildTap`) and written
+    /// on the main thread (`updateBinding`, via Phase B's live trigger-mode switch).
+    /// Without the lock this is a data race on a multi-field value struct.
+    private var _binding: HotkeyBinding
+    public var binding: HotkeyBinding { lock.withLock { _binding } }
 
     /// The stream of hotkey events. Stable for the monitor's lifetime.
     /// Consumers iterate this once and receive events across all arm/re-arm cycles.
@@ -367,7 +418,7 @@ public final class HotkeyMonitor: @unchecked Sendable {
     /// built asynchronously on the first `start()` call once AX is granted.
     public init(binding: HotkeyBinding = .defaultBinding, store: any BindingStoring = UserDefaultsBindingStore()) {
         let persisted = store.load() ?? binding
-        self.binding = persisted
+        self._binding = persisted
         self.store = store
 
         // Build the AsyncStream once — consumers keep the same reference for
@@ -430,7 +481,7 @@ public final class HotkeyMonitor: @unchecked Sendable {
 
     /// Update the binding and persist it.
     public func updateBinding(_ newBinding: HotkeyBinding) {
-        binding = newBinding
+        lock.withLock { _binding = newBinding }
         store.save(newBinding)
         SpeakLog.hotkey.info("Hotkey binding updated: keyCode=\(newBinding.keyCode, privacy: .public)")
     }
@@ -595,6 +646,18 @@ public final class HotkeyMonitor: @unchecked Sendable {
     }
 
     /// Handle an incoming CGEvent on the tap's run loop thread.
+    ///
+    /// Both trigger modes read `lastFnDown` for edge detection and update it
+    /// before dispatching — this keeps edge state correct regardless of mode.
+    ///
+    /// - `.doubleTap`: acts only on the press leading edge (false→true) and
+    ///   delegates to `DoubleTapDetector`.
+    /// - `.hold`: acts on BOTH edges via `holdEdge(isFnDown:wasDown:)` —
+    ///   press → startCapture, release → stopCapture. No timestamp or window needed.
+    ///
+    /// If the tap is torn down mid-hold (Phase A watchdog, rate-limiter, or wake
+    /// re-arm), `buildTap()` resets `lastFnDown = false` (line ~519) so the next
+    /// press after re-arm is treated as a fresh start — hold cannot stick "on".
     private func handle(proxy: CGEventTapProxy, type eventType: CGEventType, event: CGEvent) {
         if eventType == .tapDisabledByTimeout || eventType == .tapDisabledByUserInput {
             handleTapDisabled()
@@ -603,29 +666,43 @@ public final class HotkeyMonitor: @unchecked Sendable {
 
         guard eventType == .flagsChanged else { return }
 
+        // Snapshot the binding once (lock-guarded getter) so a concurrent
+        // updateBinding() on the main thread can't tear this multi-field read.
+        let currentBinding = binding
         let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
-        guard keyCode == binding.keyCode else { return }
+        guard keyCode == currentBinding.keyCode else { return }
 
         // Fn-press edge detection: maskSecondaryFn bit set = key down.
         // [verified: CGEventFlags.maskSecondaryFn rawValue = 8388608, SDK 2026-06-20]
         let flags = event.flags
         let isFnDown = flags.contains(.maskSecondaryFn)
         let wasDown = lastFnDown
-        lastFnDown = isFnDown
+        lastFnDown = isFnDown   // update BEFORE branching so both modes see current state
 
-        // Emit a "tap" only on the leading edge (released → pressed).
-        guard isFnDown && !wasDown else { return }
+        switch currentBinding.trigger {
 
-        // Timestamp: use DispatchTime.uptimeNanoseconds (nanoseconds, monotonic)
-        // converted to seconds. Avoids CGEvent.timestamp unit ambiguity (mach
-        // absolute time is not nanoseconds on Apple Silicon without conversion).
-        // HID delivery latency is sub-ms; "now" ≈ press time for a 0.4s window.
-        let timestampSec = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000.0
+        case .doubleTap:
+            // Act only on the press leading edge — release edge is ignored.
+            guard isFnDown && !wasDown else { return }
 
-        let window = binding.doubleTapWindow
-        if let hotkeyEvent = detector.register(tapAt: timestampSec, window: window) {
-            SpeakLog.hotkey.info("HotkeyEvent: \(String(describing: hotkeyEvent), privacy: .public)")
-            continuation.yield(hotkeyEvent)
+            // Timestamp: use DispatchTime.uptimeNanoseconds (nanoseconds, monotonic)
+            // converted to seconds. Avoids CGEvent.timestamp unit ambiguity (mach
+            // absolute time is not nanoseconds on Apple Silicon without conversion).
+            // HID delivery latency is sub-ms; "now" ≈ press time for a 0.4s window.
+            let timestampSec = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000.0
+            let window = currentBinding.doubleTapWindow
+            if let hotkeyEvent = detector.register(tapAt: timestampSec, window: window) {
+                SpeakLog.hotkey.info("HotkeyEvent: \(String(describing: hotkeyEvent), privacy: .public)")
+                continuation.yield(hotkeyEvent)
+            }
+
+        case .hold:
+            // Act on BOTH edges: press → startCapture, release → stopCapture.
+            // No timestamp or window needed — the gesture is defined by key state.
+            if let hotkeyEvent = holdEdge(isFnDown: isFnDown, wasDown: wasDown) {
+                SpeakLog.hotkey.info("HotkeyEvent (hold): \(String(describing: hotkeyEvent), privacy: .public)")
+                continuation.yield(hotkeyEvent)
+            }
         }
     }
 

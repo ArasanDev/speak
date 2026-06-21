@@ -77,6 +77,7 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
         static let language              = "speak.settings.language"
         static let pasteMode             = "speak.settings.pasteMode"
         static let hasCompletedOnboarding = "speak.settings.hasCompletedOnboarding"
+        static let triggerMode           = "speak.settings.triggerMode"
     }
 
     // MARK: - Injected defaults (the testability seam)
@@ -207,6 +208,35 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
         set {
             objectWillChange.send()
             defaults.set(newValue.rawValue, forKey: Keys.pasteMode)
+        }
+    }
+
+    // MARK: - Hotkey trigger mode (Phase B)
+
+    /// Which gesture activates dictation.
+    ///
+    /// - `.doubleTap` (default): double-tap Fn starts hands-free recording; next
+    ///   single Fn tap stops. Toggle style — ideal for longer dictations.
+    /// - `.hold`: press Fn to record, release to stop. Push-to-talk style — ideal
+    ///   for short utterances and one-handed use.
+    ///
+    /// Persisted as the `Trigger.rawValue` String. An unset key returns `.doubleTap`.
+    /// `DictationController` reads this on launch and on change, builds a
+    /// `HotkeyBinding` from it, and calls `monitor.updateBinding(_:)` so the live
+    /// monitor switches mode without restart.
+    ///
+    /// Note: the trigger is also stored inside the `HotkeyBinding` in
+    /// `UserDefaultsBindingStore` (owned by P5 `HotkeyMonitor`). `DictationController`
+    /// keeps them in sync — `SettingsStore.triggerMode` is the user-facing setting,
+    /// `UserDefaultsBindingStore` is the monitor's runtime view of the same value.
+    public var triggerMode: HotkeyBinding.Trigger {
+        get {
+            let raw = defaults.string(forKey: Keys.triggerMode) ?? HotkeyBinding.Trigger.doubleTap.rawValue
+            return HotkeyBinding.Trigger(rawValue: raw) ?? .doubleTap
+        }
+        set {
+            objectWillChange.send()
+            defaults.set(newValue.rawValue, forKey: Keys.triggerMode)
         }
     }
 }

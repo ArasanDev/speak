@@ -34,13 +34,48 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            activationSection
             transcriptionSection
             cleanupSection
             pasteSection
         }
         .formStyle(.grouped)
         .padding()
-        .frame(minWidth: 420, minHeight: 340)
+        .frame(minWidth: 420, minHeight: 380)
+    }
+
+    // MARK: - Activation section (Phase B)
+
+    private var activationSection: some View {
+        Section("Activation") {
+            // Trigger mode picker — Phase B (specs/dictation-flow.md §6-B).
+            // Writing to `store.triggerMode` persists the choice to UserDefaults.
+            // `DictationController` subscribes to `settingsStore.objectWillChange`
+            // and calls `monitor.updateBinding(_:)` on change so the live monitor
+            // switches mode without relaunch.
+            Picker("Hotkey Mode", selection: Binding(
+                get: { store.triggerMode },
+                set: { store.triggerMode = $0 }
+            )) {
+                Text("Double-tap Fn (toggle)").tag(HotkeyBinding.Trigger.doubleTap)
+                Text("Hold Fn (push-to-talk)").tag(HotkeyBinding.Trigger.hold)
+            }
+            .pickerStyle(.inline)
+
+            // Contextual hint so the user understands what each mode does.
+            Group {
+                switch store.triggerMode {
+                case .doubleTap:
+                    Text("Tap Fn twice to start recording; tap once to stop.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                case .hold:
+                    Text("Hold Fn to record; release to stop and paste.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 
     // MARK: - Transcription section
