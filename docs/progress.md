@@ -8,6 +8,28 @@
 
 ## Current phase
 
+> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-21, loop #25)
+> **The v0 base is CONFIRMED WORKING LIVE** (the user dictated their own instructions
+> *through speak* — see `human-verification.md` "LIVE RUN #1"). We have **pivoted from
+> finishing v0 to building the FULL PRODUCT.**
+>
+> **The active execution contract is now `specs/acceleration-plan.md`** — it
+> SUPERSEDES the lowest-numbered-roadmap-task loop for this push. Read it.
+>
+> **Two-phase plan:** *Phase 1* = surgical base-hardening (H1–H5: multi-language seam,
+> `TEST_HOST` app-test infra, decompose `DictationController`, `customVocabulary` seam,
+> `StreamingTextInserting` protocol). *Phase 2* = full-product feature waves on the
+> hardened base. **Locked user decisions:** (1) **base-hardening FIRST**, (2)
+> **local-first, pluggable later** (Apple default + only dep; alt engines are optional
+> plugins the arch is ready for), (3) **full-window dashboard** is the Phase-2 UI spine
+> (sidebar IA), (4) **Monaco** is the typographic theme ([[monaco-font-theme]] memory).
+>
+> **NEXT ACTION (not yet started):** launch Phase 1 — fan out `H1`/`H2`/`H4`/`H5` in
+> parallel worktrees (independent), then `H3` after `H2`. Owners + file refs + gates
+> are in `specs/acceleration-plan.md` Phase 1 table. Tree clean at `e60a665`; no
+> agents/worktrees running. Base hard rules (`CLAUDE.md`/`AGENTS.md`) still bind.
+
+
 **The entire v0 surface is built — engine, pipeline, AND all UI — and the app is
 RUNNABLE.** Engine seam (P0–P3.5) + P5 hotkey + P6 paste + P9 history + the
 **`SpeakEngine` facade** + **app-shell wiring**, and now the full UI: **P10
@@ -72,6 +94,34 @@ mute **chord** (the mute menu toggle ships; the chord is live-gated follow-up).
 > CFRunLoop thread leaks per instance (fine for a single app-lifetime monitor).
 
 ---
+
+## Done (this session — 2026-06-21, loop run #25 — LIVE base verified + full-product acceleration plan)
+
+**Milestone: the v0 base WORKS LIVE.** The user ran `make dev-cert` + `make run`,
+granted permissions, and **dictated their development instructions into Claude Code
+*using speak itself*** — a recursive feedback loop (the product directing its own
+build). Confirmed live (recorded in `human-verification.md` "LIVE RUN #1",
+`c9392bd`): double-tap Fn start / single-tap stop, overlay over other apps, partials
+streaming live, paste at cursor **into a terminal surface with no macOS 26.4
+paste-prompt**, raw-fallback with Apple Intelligence off. The user is happy with the
+base and **pivoted the mission from "finish v0" to "build the full product, fast."**
+
+**Produced the full-product execution contract — `specs/acceleration-plan.md`
+(`bb17491`, then `e60a665`).** Synthesized from **3 parallel scouts** (orchestrator
+fanned out, then reviewed): `scout-architecture` (seam audit — the base is already
+clean + extensible; the engine factory pre-declares WhisperKit/Ollama cases; harden
+list is *surgical* H1–H5, with a "leave-alone" list), `scout-product` (full roadmap
+v0→v3+ with citations), `scout-competitors` (Wispr Flow primary + VoiceInk /
+Superwhisper / MacWhisper / FluidVoice / Aiko; winning patterns; our local-first
+wedge; flagged Aqua/Handy/Hex as zero-coverage gaps + §11 Wispr analysis is
+recall-based). **Four locked user decisions:** base-hardening-first · local-first +
+pluggable-later · **full-window dashboard** (Phase-2 UI spine, sidebar IA) ·
+**Monaco** typographic theme (saved to cross-session memory + design-system token).
+
+**Status at wind-down:** plan written + committed; **Phase 1 NOT yet started** (the
+user wound the session here, just before the fleet launched). Tree clean at
+`e60a665`, no agents/worktrees running. The next session resumes at
+`specs/acceleration-plan.md` Phase 1 (see the handoff banner under "Current phase").
 
 ## Done (this session — 2026-06-21, loop run #24 — HotkeyMonitor split + human-gate 3-bucket map)
 
