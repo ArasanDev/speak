@@ -58,6 +58,8 @@ final class OverlayController {
 
     private var panel: TranscriptOverlayPanel?
     private var partialsTask: Task<Void, Never>?
+    /// 1 Hz timer driving the HUD duration counter. Lives only while listening.
+    private var durationTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -87,8 +89,12 @@ final class OverlayController {
         // Reset to listening state with empty text before showing.
         overlayModel.partialText = ""
         overlayModel.overlayState = .listening
+        overlayModel.elapsedSeconds = 0
         partialText = ""
         panel?.show()
+
+        // Drive the HUD duration counter at 1 Hz while listening.
+        startDurationTimer()
 
         partialsTask?.cancel()
         partialsTask = nil
@@ -125,6 +131,9 @@ final class OverlayController {
             // No more partial text will arrive once processing begins.
             partialsTask?.cancel()
             partialsTask = nil
+            // Stop the duration counter — dictation has ended, cleanup is running.
+            durationTask?.cancel()
+            durationTask = nil
         }
         SpeakLog.engine.info(
             "OverlayController: overlay transitioned to .\(String(describing: state), privacy: .public)"
@@ -138,10 +147,32 @@ final class OverlayController {
     func stop() {
         partialsTask?.cancel()
         partialsTask = nil
+        durationTask?.cancel()
+        durationTask = nil
         overlayModel.partialText = ""
         overlayModel.overlayState = .listening   // reset for next dictation
+        overlayModel.elapsedSeconds = 0
         partialText = ""
         panel?.hide()
         SpeakLog.engine.info("OverlayController: overlay hidden.")
+    }
+
+    // MARK: - Duration timer
+
+    /// Increment `overlayModel.elapsedSeconds` once per second while listening.
+    /// A cancellable Task (not a `Timer`) so it composes with the actor model and is
+    /// torn down deterministically on transition/stop. [decision: 1 s tick — the HUD
+    /// shows whole seconds; sub-second precision adds no user value.]
+    private func startDurationTimer() {
+        durationTask?.cancel()
+        durationTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if Task.isCancelled { break }
+                await MainActor.run { [weak self] in
+                    self?.overlayModel.elapsedSeconds += 1
+                }
+            }
+        }
     }
 }

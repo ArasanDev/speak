@@ -41,6 +41,11 @@ final class OverlayViewModel: ObservableObject {
     @Published var partialText: String = ""
     @Published var overlayState: OverlayState = .listening
 
+    /// Elapsed seconds since the current dictation started listening. Driven by a 1 Hz
+    /// timer in `OverlayController`; reset to 0 on each `start()`. Shown in the HUD so the
+    /// user sees how long they've been dictating (verified Wispr HUD detail).
+    @Published var elapsedSeconds: Int = 0
+
     /// Microphone level (0…1), linearized from dB via `pow(10, dB/20)`.
     /// Currently unused as a live feed — the bars run a neutral idle animation.
     /// Wire this to the AVAudioEngine RMS output when the real feed is plumbed
@@ -184,9 +189,19 @@ struct TranscriptOverlayView: View {
             LevelMeterView(level: model.level, isActive: true)
                 .frame(width: 27)   // 5 bars × 3 pt + 4 gaps × 3 pt = 27 pt [decision]
             textContent
+            Text(Self.durationLabel(model.elapsedSeconds))
+                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+
+    /// Format elapsed seconds as `m:ss` for the HUD (e.g. 0:05, 1:23).
+    static func durationLabel(_ seconds: Int) -> String {
+        let s = max(0, seconds)
+        return "\(s / 60):\(String(format: "%02d", s % 60))"
     }
 
     @ViewBuilder
