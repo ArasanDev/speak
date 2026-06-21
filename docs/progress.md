@@ -73,6 +73,24 @@ mute **chord** (the mute menu toggle ships; the chord is live-gated follow-up).
 
 ---
 
+## Done (this session — 2026-06-21, loop run #21 — Phase D: robust paste)
+
+Phase D of `specs/dictation-flow.md` — robust paste with graceful AX fallback:
+
+- [x] **`SpeakError.pasteRequiresAccessibility` (SpeakCore/Engine/SpeakError.swift):** additive case; `recoverySuggestion` directs user to System Settings → Accessibility. Documented as graceful-degradation (text-on-clipboard), not a fault — mirrors `.microphoneMuted` pattern.
+- [x] **`PasteboardWriter` rewritten (SpeakCore/Paste/PasteboardWriter.swift):**
+  - Clipboard floor (clearContents + setString) runs unconditionally before any gate — text always recoverable.
+  - AX-trust gate: `isAccessibilityTrusted: @Sendable () -> Bool` (injected; default `AXIsProcessTrusted()`). False → log + throw `.pasteRequiresAccessibility`.
+  - Settle delay: `settle: Duration` (injected; default 100 ms `[decision]` per VoiceInk/Hex + spec §5). Tests inject `.zero`.
+  - Explicit 4-event Cmd chord: Cmd-down → V-down → V-up → Cmd-up to `.cghidEventTap`.
+  - `pasteEventPlan() -> [PasteKeyEvent]` pure static function (unit-testable without posting events). `PasteKeyEvent` struct is `internal` + `Sendable`.
+  - `kVK_Command = 0x37` [verified: Carbon/HIToolbox swiftc 2026-06-21].
+  - No new imports required: `ApplicationServices` (for `AXIsProcessTrusted`) was already in the project allowlist.
+- [x] **`DictationController.endDictation` (App/DictationController.swift):** specific `catch SpeakError.pasteRequiresAccessibility` BEFORE generic catch: `permissionsNeeded = true`, `icon = .idle` (not `.error`), `.info` log. Mirrors `.microphoneMuted` pattern. Reuses existing `permissionsNeeded` published property.
+- [x] **`PasteboardWriterTests` (SpeakTests/PasteTests.swift — new suite):** 3 new tests: plan shape (4 entries, correct keyCodes/flags), AX-false → throws + clipboard floor verified (test-only read), AX-true → completes. All 6 prior `PasteTests` unchanged.
+- `make build` PASSED, `make test` **169 tests, 5 skipped (live FM), 0 failures**, `make verify-moat` **7/7**, lint 0 serious.
+- **Live paste into TextEdit/Terminal**: `[deferred — human verification]` (unchanged from P6).
+
 ## Done (this session — 2026-06-21, loop run #20 — Phase C: recording HUD visual states + level meter)
 
 Phase C of `specs/dictation-flow.md` — recording HUD upgrade:
