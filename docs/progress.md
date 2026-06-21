@@ -73,6 +73,47 @@ mute **chord** (the mute menu toggle ships; the chord is live-gated follow-up).
 
 ---
 
+## Done (this session — 2026-06-21, loop run #18 — Phase A: hotkey re-arm + lifecycle fixes)
+
+Phase A of `specs/dictation-flow.md` — the "make it fire without relaunch" set:
+
+- [x] **Non-blocking `HotkeyMonitor.init` (spec §1.3 fix):** semaphore wait removed.
+      Dedicated run-loop thread is spawned and returns; init completes immediately.
+      No `sema.wait()` on the main thread. Fixes the priority-inversion backtrace.
+- [x] **Re-arm watchdog (core fix, spec §1.2):** CFRunLoopTimer fires every 100ms
+      on the run-loop thread. While ungranted: polls `AXIsProcessTrustedWithOptions([prompt:false])`
+      silently. On untrusted→trusted edge: calls `buildTap()` on-thread — no relaunch.
+      Stream is stable for monitor lifetime; consumers don't need to re-subscribe.
+- [x] **`HotkeyMonitor.start()` safely re-callable:** sets `armingDesired` flag + wakes
+      run loop; `buildTap()` tears down any half-built tap first (clean retry).
+- [x] **Gate tap on Accessibility only (spec §2):** `armingDesired=true` + AX granted =
+      arm. IM missing does not block. `IOHIDCheckAccess` used for status display only.
+- [x] **Input Monitoring non-blocking in onboarding (spec §2):** `OnboardingStateMachine`
+      now only treats Mic + AX as blocking permissions. IM has its own step (user is guided
+      to grant it) but `blockingPermissions` never contains `.inputMonitoring`, and
+      `isComplete == true` when Mic+AX are granted regardless of IM state.
+- [x] **`DictationController` re-arm wiring:** `startMonitoring()` calls `monitor.start()`
+      once (non-throwing). `armStateChanges` stream clears/sets `permissionsNeeded` on the
+      `@MainActor` when tap arms/disarms. Event-consume Task started once and stable.
+- [x] **Tap-disabled watchdog (spec §3):** `tapDisabledByTimeout`/`ByUserInput` re-enables
+      tap via `CGEvent.tapEnable`; `TapRestartRateLimiter` caps restarts at 5/2s (Loop OSS
+      [decision]); `NSWorkspace.didWakeNotification` schedules a re-arm 3s after wake
+      (AltTab pattern [decision]).
+- [x] **Single-instance guard (spec §1.4):** `AppDelegate.applicationDidFinishLaunching`
+      checks `NSRunningApplication.runningApplications(withBundleIdentifier:)` before
+      constructing `DictationController`; finds another `com.speak.app` instance → activates
+      it + exits. No contention from duplicate launches.
+- [x] **`CoreFoundation` added to moat import allowlist** (CFRunLoop/CFRunLoopTimer).
+- [x] **App-Intents noise:** no reliable plist key; left a one-line note; did not rabbit-hole.
+- [x] **New tests:** `PhaseARearmTests.swift` — 17 tests for `TapRestartRateLimiter` (pure,
+      injectable timestamps) + re-arm edge-logic invariants. `OnboardingFlowTests.swift`
+      updated for Phase A semantics (IM non-blocking; 4 new tests, 3 updated assertions).
+- [x] `make build` ✓, `make test` **167 tests (145 XCTest + 22 Swift Testing; 5 XCTSkip),
+      0 failures**, `make lint` 0 serious, `make verify-moat` **7/7**.
+
+Done-when (spec §6-A): grant Accessibility live → tap arms within ~0.2 s with no relaunch;
+double-tap Fn fires start/stop. This is [deferred — human verification] per standard rows.
+
 ## Done (this session — 2026-06-21, loop run #17 — agent-drivable visual verification)
 
 **Breakthrough: the agent now closes the UI-rendering half of `human-verification.md`
