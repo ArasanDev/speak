@@ -213,6 +213,33 @@ final class OverlayControllerTests: XCTestCase {
         )
     }
 
+    // MARK: - W2.2 (updated): onEscapeStop wiring
+
+    /// `onEscapeStop` is nil by default — wiring is not set during OverlayController init.
+    func testOnEscapeStop_isNilByDefault() {
+        XCTAssertNil(
+            controller.onEscapeStop,
+            "onEscapeStop must be nil until the caller sets it."
+        )
+    }
+
+    /// Setting `onEscapeStop` stores the closure and invokes it when called.
+    /// This is a wiring-only test — it does NOT exercise the NSEvent global monitor
+    /// or the physical Escape key. The actual Escape-key → stop-and-paste behavior
+    /// is [unverified — human dogfood required].
+    func testOnEscapeStop_storedClosureIsInvokedWhenCalled() {
+        var wasCalled = false
+        controller.onEscapeStop = { wasCalled = true }
+
+        // Simulate the call path the installEscapeMonitor handler fires.
+        controller.onEscapeStop?()
+
+        XCTAssertTrue(
+            wasCalled,
+            "onEscapeStop closure must be invoked when called — wiring test."
+        )
+    }
+
     /// cancelImmediate() hides overlay and resets all state (including error).
     func testCancelImmediate_resetsAllState() {
         controller.showError("Some error")

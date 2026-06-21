@@ -137,11 +137,21 @@ final class WindowPresenter {
             "WindowPresenter: onboarding required — step=\(String(describing: eval.currentStep), privacy: .public)"
         )
         if onboardingController == nil {
-            onboardingController = OnboardingWindowController(
+            let controller = OnboardingWindowController(
                 permissionManager: permissionManager,
                 settings: settingsStore,
                 hotkeyFiredPublisher: hotkeyFiredPublisher
             )
+            // On first completion only: open the dashboard after the onboarding window
+            // auto-closes. `[weak self]` breaks the reference cycle (WindowPresenter
+            // owns `onboardingController`; a strong capture back would be a cycle).
+            // "First-completion only" is guaranteed by the onboarding gate above:
+            // on every subsequent launch `hasCompletedOnboarding == true` →
+            // `eval.isComplete` → early return before this path is reached.
+            controller.onCompletion = { [weak self] in
+                self?.showDashboard()
+            }
+            onboardingController = controller
         }
         onboardingController?.show()
     }

@@ -269,10 +269,15 @@ final class DictationController: ObservableObject {
         // Delegate panel creation to OverlayController — panel is expensive and
         // must be created once, not per-dictation.
         overlayController.createPanel()
-        // W2.2: wire Escape cancel — when the user presses Escape while dictating,
-        // cancel the current session without pasting.
-        overlayController.onEscapeCancel = { [weak self] in
-            self?.cancelDictation()
+        // W2.2 (updated): wire Escape stop — when the user presses Escape while
+        // actively dictating, stop the session and paste (same path as single-press stop).
+        // Guard on `icon == .listening` prevents re-entrancy: if the session has already
+        // transitioned to `.processing` or `.error` the press is a no-op.
+        overlayController.onEscapeStop = { [weak self] in
+            guard let self, self.icon == .listening else { return }
+            Task { [weak self] in
+                await self?.endDictation()
+            }
         }
         SpeakLog.hotkey.info("DictationController: startMonitoring() — arming monitor.")
 
@@ -325,8 +330,11 @@ final class DictationController: ObservableObject {
         ensureWindowPresenter().showDashboard()
     }
 
-    /// Cancel the current dictation without pasting. Called by the Escape key handler
-    /// in the overlay (W2.2). Safe to call when idle — the engine no-ops in that case.
+    /// Cancel the current dictation without pasting. Previously called by the Escape
+    /// key handler (W2.2), which was changed to invoke `endDictation()` (stop+paste)
+    /// instead. `cancelDictation()` is now only called internally (e.g. mute toggle)
+    /// and remains available for future use. Safe to call when idle — the engine
+    /// no-ops in that case.
     ///
     /// Hides the overlay immediately (no done-flash on cancel) and resets to idle.
     func cancelDictation() {
