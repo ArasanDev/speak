@@ -53,3 +53,30 @@ another app is focused.
 v0 used 5 bars (Handy reference). W2.2 uses 15 bars (VoiceInk blueprint, research §0 finding #1).
 `levelBarHeightsPhased(level:phase:barCount:…)` in `LevelMath.swift` adds per-bar sinusoidal ripple.
 Phase is caller-controlled (from SwiftUI animation state) so the function stays pure + unit-testable.
+
+## W2.3: Perceptual level mapping + asymmetric smoothing + cold-start fix
+
+**Problem:** raw RMS for speech clusters at 0.01–0.08 (1–8% of bar range) — imperceptible.
+**Fix:** `levelPerceptual(rms:)` in `LevelMath.swift` — dB normalization mapping [-55 dBFS noise
+floor … -3 dBFS clip ceiling] → [0…1]. Speech fills bars naturally; silence drops to calm.
+
+**Smoothing:** `levelSmoothedAsymmetric(previous:target:attackCoeff:decayCoeff:)` replaces the
+symmetric `levelSmoothed` in the drain path. attackCoeff=0.5 (snappy onset), decayCoeff=0.85
+(natural tail). `levelSmoothed` itself is unchanged — its tests pin the 0.7/0.3 coefficients.
+
+**Pipeline order:** raw RMS → `levelPerceptual` → `levelSmoothedAsymmetric` → `overlayModel.level`
+Perceptual mapping runs on instantaneous RMS; smoothing then operates in the perceptual space
+the user sees. This order gives correct attack/release feel at the display scale.
+
+**Cold-start race:** `AppleSpeechTranscriber.startStream()` spawns a background Task. `audioProducer.start()`
+(which sets `pendingLevelStream`) runs *inside* that Task. `OverlayController.startLevelsDrain` calls
+`await provider()` → `startLevelStream()` which races against Task startup. Fix: retry loop in
+`startLevelsDrain` — up to 5 attempts × 50ms = 250ms max wait. First dictation now behaves like
+warm ones. Static retry constants `levelStreamRetryCount`/`levelStreamRetryIntervalNs` are on `OverlayController`.
+
+**Goal B:** 200ms minimum processing dwell added in `DictationController.endDictation` BEFORE `.done`
+transition (paste already happened inside `endDictation()`, so zero text-latency cost). Existing
+600ms done-flash preserved.
+
+**Tests (30 total in OverlayLevelTests.swift):** W2.3 adds 10 new cases (21–30) covering:
+`levelPerceptual` boundary/speech/noise-floor cases + `levelSmoothedAsymmetric` math/direction cases.

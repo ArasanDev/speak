@@ -496,6 +496,14 @@ final class DictationController: ObservableObject {
             lastTranscript = result.cleanedText ?? result.rawText
             icon = .done
             // Phase C: show done state briefly before hiding the panel.
+            // W2.3: Enforce a minimum processing dwell of 200 ms so "Cleaning up…"
+            // / "Pasting…" is always visible before transitioning to .done.
+            // Paste has already happened inside endDictation(), so this dwell
+            // adds zero text-delivery latency — it only affects the visual transition.
+            // [decision W2.3: 200 ms minimum dwell — enough to read "Cleaning up…"
+            //  without stalling the workflow; matches Wispr's micro-dwell. benchmark.md §7]
+            let processingDwellNanoseconds: UInt64 = 200_000_000  // 200 ms [decision W2.3]
+            try? await Task.sleep(nanoseconds: processingDwellNanoseconds)
             overlayController.transition(to: .done)
             SpeakLog.engine.info("DictationController: endDictation succeeded → .done")
             // 600ms done-flash — roadmap.md P8 [decision].

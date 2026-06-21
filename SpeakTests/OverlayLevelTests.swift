@@ -27,6 +27,17 @@
 //   18. levelBarHeightsPhased(level:phase:) — returns exactly barCount elements
 //   19. levelBarHeightsPhased(level:phase:) — barCount=0 returns empty
 //   20. levelBarHeightsPhased(level:phase:) — different phase produces different heights
+//   W2.3:
+//   21. levelPerceptual(rms:)              — silence (rms=0) → 0.0
+//   22. levelPerceptual(rms:)              — full-scale RMS → 1.0 (clamped)
+//   23. levelPerceptual(rms:)              — quiet speech (rms=0.01) → visible positive value
+//   24. levelPerceptual(rms:)              — loud speech (rms=0.25) → high display value
+//   25. levelPerceptual(rms:)              — output always in [0, 1] for all inputs
+//   26. levelPerceptual(rms:)              — below noise floor → 0.0 (calm state)
+//   27. levelSmoothedAsymmetric(…)        — stationary is identity
+//   28. levelSmoothedAsymmetric(…)        — rising uses attackCoeff
+//   29. levelSmoothedAsymmetric(…)        — falling uses decayCoeff
+//   30. levelSmoothedAsymmetric(…)        — attack is faster than release
 
 import XCTest
 import AVFoundation
@@ -248,5 +259,109 @@ final class OverlayLevelTests: XCTestCase {
         let allEqual = zip(heightsA, heightsB).allSatisfy { abs($0.0 - $0.1) < 1e-9 }
         XCTAssertFalse(allEqual,
             "phase=0 and phase=0.25 should produce different bar heights")
+    }
+
+    // MARK: - W2.3: levelPerceptual(rms:)
+
+    // 21. Silence (rms=0) → 0.0
+    func testLevelPerceptual_zeroRMS_isZero() {
+        XCTAssertEqual(levelPerceptual(rms: 0.0), 0.0, accuracy: 1e-9,
+            "Silence RMS must map to 0.0")
+    }
+
+    // 22. Full-scale RMS (1.0) → 1.0 (0 dBFS is above clipFloor -3 dBFS → clamped to 1.0)
+    func testLevelPerceptual_fullScaleRMS_isOne() {
+        XCTAssertEqual(levelPerceptual(rms: 1.0), 1.0, accuracy: 1e-9,
+            "Full-scale RMS must clamp to 1.0")
+    }
+
+    // 23. Typical quiet speech RMS (~0.01, ≈ -40 dBFS) maps to a visible positive value
+    //     -40 dBFS with noiseFloor=-55, clipFloor=-3 → (−40 − −55)/(−3 − −55) = 15/52 ≈ 0.288
+    func testLevelPerceptual_quietSpeech_isVisible() {
+        let rms = 0.01   // ≈ -40 dBFS
+        let result = levelPerceptual(rms: rms)
+        XCTAssertGreaterThan(result, 0.1,
+            "Quiet speech RMS 0.01 should produce a visible bar level (> 0.1)")
+        XCTAssertLessThan(result, 0.7,
+            "Quiet speech RMS 0.01 should not fill bars to 70% (not loud)")
+    }
+
+    // 24. Loud speech RMS (~0.25, ≈ -12 dBFS) maps to a high display value
+    //     -12 dBFS → (−12 − −55)/(−3 − −55) = 43/52 ≈ 0.827
+    func testLevelPerceptual_loudSpeech_isHigh() {
+        let rms = 0.25   // ≈ -12 dBFS
+        let result = levelPerceptual(rms: rms)
+        XCTAssertGreaterThan(result, 0.6,
+            "Loud speech RMS 0.25 should produce a high bar level (> 0.6)")
+        XCTAssertLessThanOrEqual(result, 1.0,
+            "Result must not exceed 1.0")
+    }
+
+    // 25. Output is always in [0, 1] for all RMS inputs
+    func testLevelPerceptual_alwaysInUnitRange() {
+        let inputs = [0.0, 0.001, 0.01, 0.05, 0.1, 0.5, 0.9, 1.0]
+        for rms in inputs {
+            let result = levelPerceptual(rms: rms)
+            XCTAssertGreaterThanOrEqual(result, 0.0,
+                "levelPerceptual must be ≥ 0 for rms=\(rms)")
+            XCTAssertLessThanOrEqual(result, 1.0,
+                "levelPerceptual must be ≤ 1 for rms=\(rms)")
+        }
+    }
+
+    // 26. Below noise floor (rms corresponding to < -55 dBFS) → 0.0
+    //     -55 dBFS = 10^(-55/20) ≈ 0.00178. So rms=0.001 < 0.00178 → 0.0
+    func testLevelPerceptual_belowNoiseFloor_isZero() {
+        let rms = 0.001   // ≈ -60 dBFS, below -55 dBFS noise floor
+        let result = levelPerceptual(rms: rms)
+        XCTAssertEqual(result, 0.0, accuracy: 1e-9,
+            "RMS below noise floor must map to 0.0 (calm state)")
+    }
+
+    // MARK: - W2.3: levelSmoothedAsymmetric(previous:target:)
+
+    // 27. Stationary (prev == target) → output == target (fixed point for asymmetric too)
+    func testLevelSmoothedAsymmetric_stationaryIsIdentity() {
+        for value in [0.0, 0.5, 1.0] {
+            let result = levelSmoothedAsymmetric(previous: value, target: value)
+            XCTAssertEqual(result, value, accuracy: 1e-9,
+                "Asymmetric smoothing must be a fixed point when prev == target")
+        }
+    }
+
+    // 28. Rising signal uses attackCoeff (faster): with attackCoeff=0.5, result = 0.5*prev + 0.5*target
+    func testLevelSmoothedAsymmetric_risingUsesAttackCoeff() {
+        let result = levelSmoothedAsymmetric(previous: 0.2, target: 0.8,
+                                              attackCoeff: 0.5, decayCoeff: 0.9)
+        // rising: coeff = attackCoeff = 0.5 → 0.2*0.5 + 0.8*0.5 = 0.5
+        XCTAssertEqual(result, 0.5, accuracy: 1e-9,
+            "Rising signal must use attackCoeff")
+    }
+
+    // 29. Falling signal uses decayCoeff (slower): with decayCoeff=0.9, result = 0.9*prev + 0.1*target
+    func testLevelSmoothedAsymmetric_fallingUsesDecayCoeff() {
+        let result = levelSmoothedAsymmetric(previous: 0.8, target: 0.2,
+                                              attackCoeff: 0.5, decayCoeff: 0.9)
+        // falling: coeff = decayCoeff = 0.9 → 0.8*0.9 + 0.2*0.1 = 0.72 + 0.02 = 0.74
+        XCTAssertEqual(result, 0.74, accuracy: 1e-9,
+            "Falling signal must use decayCoeff")
+    }
+
+    // 30. Attack is faster than release: identical signal change, attack reaches target faster
+    func testLevelSmoothedAsymmetric_attackFasterThanRelease() {
+        // Rising: 0 → 1
+        var risingPrev = 0.0
+        for _ in 0 ..< 5 {
+            risingPrev = levelSmoothedAsymmetric(previous: risingPrev, target: 1.0)
+        }
+        // Falling: 1 → 0
+        var fallingPrev = 1.0
+        for _ in 0 ..< 5 {
+            fallingPrev = levelSmoothedAsymmetric(previous: fallingPrev, target: 0.0)
+        }
+        // After 5 frames, rising should be closer to 1.0 than falling is to 0.0
+        // i.e. risingPrev > (1 - fallingPrev)
+        XCTAssertGreaterThan(risingPrev, 1.0 - fallingPrev,
+            "Attack should be faster than release (risingPrev=\(risingPrev), fallingPrev=\(fallingPrev))")
     }
 }
