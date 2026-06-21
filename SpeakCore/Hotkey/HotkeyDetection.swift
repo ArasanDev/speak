@@ -87,6 +87,43 @@ public struct DoubleTapDetector: Sendable {
     }
 }
 
+// MARK: - Command Mode chord detection
+
+/// The two edges of the Command Mode chord (Wave D): the user holds `Fn`+`Ctrl`, speaks
+/// an instruction, and releases. `.begin` fires when both go down; `.end` when either
+/// is released.
+public enum CommandChordEvent: Sendable, Equatable {
+    case begin
+    case end
+}
+
+/// Pure value-type detector for the `Fn`+`Ctrl` push-to-talk chord. No CGEventTap, no
+/// clock — fed `(isFnDown, isCtrlDown)` from the tap callback; returns an edge event or
+/// nil. Tracks its own active state so the caller only forwards modifier state.
+public struct CommandChordDetector: Sendable {
+    /// True while the chord (Fn AND Ctrl) is held.
+    private(set) var isActive: Bool = false
+
+    public init() {}
+
+    /// Feed the current modifier state. Returns `.begin` on the both-down leading edge,
+    /// `.end` on the trailing edge (either key released), or nil if nothing changed.
+    public mutating func update(isFnDown: Bool, isCtrlDown: Bool) -> CommandChordEvent? {
+        let nowActive = isFnDown && isCtrlDown
+        defer { isActive = nowActive }
+        switch (isActive, nowActive) {
+        case (false, true): return .begin
+        case (true, false): return .end
+        default:            return nil
+        }
+    }
+
+    /// Reset to inactive (e.g. on tap re-arm or external cancel).
+    public mutating func reset() {
+        isActive = false
+    }
+}
+
 // MARK: - TapRestartRateLimiter
 
 /// Pure value-type rate limiter for tap restart events.
