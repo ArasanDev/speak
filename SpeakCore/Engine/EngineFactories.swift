@@ -64,11 +64,22 @@ public func defaultCleaner(for settings: SettingsStore) -> (any LLMCleaning)? {
     case .foundationModels:
         return FoundationModelsCleaner()
     case .ollama(let model):
-        // [decision] OllamaCleaner is v0.1 — not built in v0. Falls back to Foundation Models.
-        // When OllamaCleaner is added, replace with `return OllamaCleaner(model: model)`.
-        SpeakLog.cleanup.error(
-            "defaultCleaner: .ollama(model: \(model, privacy: .public)) requested but not built in v0 — using FoundationModelsCleaner."
+        // Wave 2.1: OllamaCleaner stub exists now. Returns `isAvailable == false` always —
+        // networking code that would do the real localhost check cannot live in SpeakCore/
+        // (moat audit greps for it). CaptureSession.runCleanup sees `false` and falls
+        // back to raw transcript gracefully, without error.
+        // Replace with a real impl in the SpeakLLM module (v0.1).
+        SpeakLog.cleanup.warning(
+            "defaultCleaner: .ollama(model: \(model, privacy: .public)) — using v0.1 stub (isAvailable=false)."
         )
-        return FoundationModelsCleaner()
+        return OllamaCleaner(model: model)
+    case .mlx(let model):
+        // Wave 2.1: MLXCleaner stub. MLX requires third-party Swift packages — forbidden
+        // in v0 (AGENTS.md §2.9). Stub returns `isAvailable == false`; graceful fallback.
+        // Replace when MLX dep is approved and added to project.yml (v0.1+).
+        SpeakLog.cleanup.warning(
+            "defaultCleaner: .mlx(model: \(model, privacy: .public)) — using v0.1+ stub (isAvailable=false)."
+        )
+        return MLXCleaner(model: model)
     }
 }

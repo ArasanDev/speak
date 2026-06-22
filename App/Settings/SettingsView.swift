@@ -377,11 +377,28 @@ private struct TranscriptionSettingsTab: View {
 /// transparency moat. The preview uses a canned sample transcript (FM is unavailable
 /// on dev Macs) with illustrative cleaned outputs that match each intensity's prompt
 /// contract. [decision W4.1: canned sample in Settings preview; live diff is in History]
+///
+/// Wave 2.1 additions:
+///   - Engine picker now offers Foundation Models (default) + Ollama (opt-in) +
+///     MLX (opt-in, v0.1+). Ollama and MLX rows are always enabled in the picker
+///     but the cleaners behind them are stubs (`isAvailable == false`) — the user
+///     selects them, then sees the guided-setup sheet explaining what to install.
+///   - `OllamaSetupSheet` is presented when the user picks Ollama and explains
+///     how to install Ollama and pull a model. The sheet has no live connection
+///     test in v0 — networking code is moat-forbidden in App/ (see `OllamaCleaner.swift`).
+///
+/// The engine picker is *independent of* the cleanup level — it controls which engine
+/// runs when cleanup is active, so it is only disabled when `cleanupActive == false`.
 private struct AICleanupSettingsTab: View {
     @ObservedObject var store: SettingsStore
 
     /// Derived: cleanup is active when effectiveCleanupLevel != .none.
     private var cleanupActive: Bool { store.effectiveCleanupLevel != .none }
+
+    // MARK: - Ollama setup sheet state
+
+    /// Whether to show the Ollama guided-setup sheet.
+    @State private var showOllamaSetup: Bool = false
 
     // MARK: - Canned sample for the diff preview
 
@@ -419,6 +436,29 @@ private struct AICleanupSettingsTab: View {
             // High: + restructuring + paragraph clarity. Two clean, complete sentences.
             return "Let\u{2019}s move the meeting to Thursday. I have a scheduling conflict on Wednesday."
         }
+    }
+
+    // MARK: - Engine-picker binding
+
+    /// A binding that maps between `CleanupEngine` (associated-value enum) and the
+    /// picker rows. The Ollama row uses a canonical model tag; picking Ollama from a
+    /// Foundation-Models state seeds the `model` field with the default Ollama model.
+    ///
+    /// [decision Wave 2.1: picker tags use canonical defaults (.ollama(model:"qwen2.5:3b"),
+    ///  .mlx(model:"Qwen2.5-3B-Instruct-4bit")) instead of empty strings, so the stored
+    ///  engine is immediately meaningful for the future real implementation.]
+    private var engineBinding: Binding<CleanupEngine> {
+        Binding(
+            get: { store.cleanupEngine },
+            set: { newEngine in
+                store.cleanupEngine = newEngine
+                // When the user picks Ollama, surface the guided-setup sheet so they
+                // know what to install. The sheet is informational in v0.
+                if case .ollama = newEngine {
+                    showOllamaSetup = true
+                }
+            }
+        )
     }
 
     var body: some View {
@@ -489,34 +529,88 @@ private struct AICleanupSettingsTab: View {
                 Text("Voice")
             }
 
-            // Engine — secondary / advanced. Disabled for future engines in v0.
+            // Engine — Wave 2.1: picker enabled; Ollama/MLX are opt-in stubs.
+            // Selecting Ollama presents the guided-setup sheet (no live detection in v0).
+            // Selecting MLX shows a "v0.1+ — coming soon" note in the picker footer.
             Section {
-                Picker("Cleanup Engine", selection: Binding(
-                    get: { store.cleanupEngine },
-                    set: { store.cleanupEngine = $0 }
-                )) {
-                    Text("Foundation Models (default)")
-                        .tag(CleanupEngine.foundationModels)
-                    Text("Ollama  (v0.1 — coming soon)")
-                        .tag(CleanupEngine.ollama(model: ""))
-                        .disabled(true)
+                Picker("Cleanup Engine", selection: engineBinding) {
+                    // v0 default — always available (requires Apple Intelligence on device).
+                    Text("Foundation Models").tag(CleanupEngine.foundationModels)
+                    // v0.1 opt-in — localhost Ollama server; stub in v0 (isAvailable=false).
+                    // Canonical default model: Qwen2.5 3B — small, fast, quality.
+                    Text("Ollama (local server)").tag(CleanupEngine.ollama(model: "qwen2.5:3b"))
+                    // v0.1+ opt-in — MLX on-device; stub in v0 (third-party dep forbidden).
+                    Text("MLX (v0.1+, coming soon)")
+                        .tag(CleanupEngine.mlx(model: "Qwen2.5-3B-Instruct-4bit"))
                         .foregroundStyle(.secondary)
                 }
                 .pickerStyle(.menu)
                 .disabled(!cleanupActive)
-                Text("Foundation Models runs on-device — no network, no account.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+
+                // Engine-specific status note below the picker.
+                // [decision Wave 2.1: single Text that switches on the selected engine,
+                //  so context is always visible without needing to open a sheet]
+                engineStatusNote
             } header: {
                 Text("Engine")
             } footer: {
-                Text("Alternative engines (Ollama) arrive in v0.1.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                engineFootnote
+            }
+            .sheet(isPresented: $showOllamaSetup) {
+                OllamaSetupSheet(isPresented: $showOllamaSetup)
             }
         }
         .formStyle(.grouped)
         .padding(SpeakSpacing.md)
+    }
+
+    // MARK: - Engine-picker contextual text
+
+    /// One-line status note shown below the engine picker. Updates live with the selection.
+    @ViewBuilder
+    private var engineStatusNote: some View {
+        switch store.cleanupEngine {
+        case .foundationModels:
+            Text("Foundation Models runs on-device — no network, no account.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .ollama:
+            HStack(spacing: SpeakSpacing.xs) {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+                // Clarify stub status so user knows why cleanup still falls back to raw.
+                Text("Requires Ollama — see setup guide.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Setup guide\u{2026}") { showOllamaSetup = true }
+                    .font(.caption)
+                    .buttonStyle(.borderless)
+            }
+        case .mlx:
+            Text("MLX support arrives in v0.1 — currently falling back to raw transcript.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Footer text below the Engine section. Varies by selection.
+    @ViewBuilder
+    private var engineFootnote: some View {
+        switch store.cleanupEngine {
+        case .foundationModels:
+            Text("Requires Apple Intelligence on this Mac. Falls back to raw transcript when unavailable.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .ollama:
+            Text("Ollama runs on-device — no cloud, no account. Install Ollama and pull a model to activate.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .mlx:
+            Text("MLX requires third-party Swift packages; available from v0.1.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
