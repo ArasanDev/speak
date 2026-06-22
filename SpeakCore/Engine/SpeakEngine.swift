@@ -258,12 +258,17 @@ public actor SpeakEngine {
         let result = try await session.stop()
 
         // History save — best-effort. Never propagate a save failure.
+        // Latency fields default to 0 when the result has no LatencyRecord (tests /
+        // fixture runs without a live inserter). Pre-P13 rows in the DB also default
+        // to 0 via the ALTER TABLE migration. [decision P13: 0 ≡ "no measurement"]
         let entry = HistoryEntry(
             rawText: result.rawText,
             cleanedText: result.cleanedText,
             createdAt: result.createdAt,
             engineId: result.engineId,
-            duration: result.duration
+            duration: result.duration,
+            stopToPasteSeconds: result.latency?.stopToPasteSeconds ?? 0,
+            cleanupSeconds: result.latency?.cleanupSeconds ?? 0
         )
         do {
             try await history.save(entry)

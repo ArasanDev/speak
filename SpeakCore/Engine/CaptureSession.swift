@@ -218,6 +218,13 @@ public actor CaptureSession {
         SpeakLog.engine.info("CaptureSession: stopping; finalizing transcript.")
         state = .processing
 
+        // t_stop: monotonic instant when stop() was initiated.
+        // DispatchTime.uptimeNanoseconds is a monotonic counter — immune to
+        // wall-clock adjustments. [decision: DispatchTime over ContinuousClock
+        //  because Duration→Double-seconds conversion is less direct; nanoseconds
+        //  are stored as REAL in SQLite and converted at aggregation time.]
+        let tStop = DispatchTime.now().uptimeNanoseconds
+
         // Stop the STT — this triggers finalization, which causes the stream
         // to drain (final chunk) and finish. Must be awaited so the stream
         // task below has something to wait for.
@@ -229,6 +236,9 @@ public actor CaptureSession {
         if let task = streamTask {
             await task.value
         }
+
+        // t_transcript_ready: STT stream fully drained; raw text is available.
+        let tTranscriptReady = DispatchTime.now().uptimeNanoseconds
 
         // Build the result. Use finalizedText when it is non-empty: it
         // accumulates every isFinal segment across all speech windows, giving the
@@ -247,12 +257,18 @@ public actor CaptureSession {
         // Run cleanup. Never throws — all failure/timeout paths return raw fallback.
         let (cleanedText, engineId) = await runCleanup(rawText: rawText)
 
+        // t_cleanup_done: runCleanup() returned (whether cleanup ran or fell back).
+        // When cleanup was skipped (cleaner nil or unavailable), this equals
+        // tTranscriptReady within measurement noise — cleanupSeconds ≈ 0.
+        let tCleanupDone = DispatchTime.now().uptimeNanoseconds
+
         let result = TranscriptionResult(
             rawText: rawText,
             cleanedText: cleanedText,
             duration: duration,
             engineId: engineId,
             createdAt: sessionEndedAt
+            // latency is set below after the paste step, once t_pasted is known.
         )
 
         // Paste step (P6): if an inserter was injected, paste the final text
@@ -279,17 +295,40 @@ public actor CaptureSession {
             }
         }
 
+        // t_pasted: text has been written to the pasteboard and Cmd+V simulated
+        // (or the pasteboard floor ran). When no inserter is wired (tests / fixture
+        // runs), tPasted == tCleanupDone so stopToPasteSeconds excludes paste overhead.
+        let tPasted = DispatchTime.now().uptimeNanoseconds
+        let latency = LatencyRecord(
+            tStop: tStop,
+            tTranscriptReady: tTranscriptReady,
+            tCleanupDone: tCleanupDone,
+            tPasted: tPasted
+        )
+
+        // Rebuild result with the latency record now that all timestamps are known.
+        let resultWithLatency = TranscriptionResult(
+            rawText: result.rawText,
+            cleanedText: result.cleanedText,
+            duration: result.duration,
+            engineId: result.engineId,
+            createdAt: result.createdAt,
+            latency: latency
+        )
+
         state = .done
         partialsContinuation?.finish()
         partialsContinuation = nil
         streamTask = nil
 
         SpeakLog.engine.info("""
-            CaptureSession: done. rawChars=\(result.rawText.count, privacy: .public) \
-            cleanedChars=\(result.cleanedText?.count ?? -1, privacy: .public) \
-            engineId=\(result.engineId, privacy: .public)
+            CaptureSession: done. rawChars=\(resultWithLatency.rawText.count, privacy: .public) \
+            cleanedChars=\(resultWithLatency.cleanedText?.count ?? -1, privacy: .public) \
+            engineId=\(resultWithLatency.engineId, privacy: .public) \
+            stopToPaste=\(String(format: "%.0f", latency.stopToPasteSeconds * 1000), privacy: .public)ms \
+            cleanup=\(String(format: "%.0f", latency.cleanupSeconds * 1000), privacy: .public)ms
             """)
-        return result
+        return resultWithLatency
     }
 
     /// Hard cancel — stop the STT immediately and move the session to `.error`.
