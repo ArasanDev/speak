@@ -98,6 +98,9 @@ Confidence that the codebase is healthy is **reinforced**: storage SQLi = CLEAN,
 - **[P2→P1?] Empty-transcript clobbers clipboard** (`CaptureSession.stop()` ~L249-295 / `SpeakEngine` ~L279). Silent start+stop → `rawText == ""` → `inserter.insert("")` (clipboard floor **wipes the user's clipboard**) + saves a zero-char history entry. Fix: guard empty `rawText` → reach `.done`, skip paste + history. (hunt-engine P1-1, high conf.)
 - **[MEDIUM-security] Command-mode prompt injection** (`FoundationModelsCleaner` ~L207-214). Dictated instruction interpolated verbatim into a double-quoted system-prompt slot (`instruction: "\(trimmed)"`); only whitespace-trimmed. A crafted utterance can close the quote and inject a competing instruction. Fix: escape `"`→`'` (or `\"`) and strip `\n`. FM guardrails attenuate but the structural seam is real. (hunt-cleanup N1, med conf.)
 - **[MEDIUM-security] Vocabulary-term prompt injection** (`FoundationModelsCleaner` ~L301-302). Same class: dictionary terms wrapped in `"\"\($0)\""`; a term containing `"`/`\n` breaks out. Fix: same escaping. (hunt-cleanup N2, med conf.)
+- **[P2, med-high] Start/stop race leaves the mic hot forever** (`AppleSpeechTranscriber` ~L160,196-198). If `stop()` arrives before the session Task reaches `setStopProducer` (L198), `stopSession()` finds nil producer+task (no-ops), then `run()` starts the mic and blocks on `await bridgeTask.value` with no escape — mic never released. Fix: register `sessionTask` synchronously (not fire-and-forget `Task{}`) or add a `stopRequested` flag checked after `audioProducer.start()`. (hunt-stt N-1.)
+- **[P2] Stream consumer-abandonment leaks the mic** (`AppleSpeechTranscriber` ~L145). `startStream` has no `continuation.onTermination` — a consumer that cancels its task without calling `stop()` orphans the session + leaves the tap installed. Fix: `continuation.onTermination = { _ in Task { await state.stopSession() } }`. (hunt-stt N-2.)
+- **✅ Refuted (STT side):** empty-transcript *hang* — the results stream closes cleanly on silence (hunt-stt P1-1). (Engine-side empty-text clipboard-clobber above is still real.)
 
 ### MEDIUM confirmed bugs
 - **[Med] `cleanupSeconds` near-zero sentinel collision** (`CaptureSession` ~L525). If the two `DispatchTime.now()` reads return the same ns (fast machine / mocked cleaner), the cleanup-ran path yields `0.0` → `LatencyStats` misclassifies it as the **raw** population. Fix: substitute a 1ns floor when end==start so the `==0`/`>0` partition stays honest. (hunt-engine N-4.)
@@ -119,6 +122,9 @@ Confidence that the codebase is healthy is **reinforced**: storage SQLi = CLEAN,
 - `icon = .listening` set before `overlayController.start()` returns (hunt-app N4).
 - No per-term length cap on vocabulary (graceful raw-fallback, latency cost) (hunt-cleanup N3).
 - `engineId`/encode-failure silent fallbacks in storage (hunt-storage N-4/5/6, info).
+- **STT P2-1** no model prewarm (cold-start ~1-3s on first dictation) — confirmed (hunt-stt; overlaps 1A P2).
+- **STT P2-2** no `AssetInventory.reserve(locale:)` → OS can evict model under storage pressure — confirmed (hunt-stt; overlaps 1A P2).
+- **STT P3 (hardware portability, latent on current Macs):** converter-init-failure feeds wrong format to analyzer silently (N-3); `rmsLevel` assumes Float32 channel data (N-4); converter-failure error lacks format logging (N-5); double-space join between isFinal segments `[unverified live model]` (N-6).
 
 ### DOC-only (confirmed, matches Phase 1B)
 - `FoundationModelsCleaner` header `[verified]` tags wrong: `LanguageModelSession.init(model:guardrails:instructions:)` doesn't exist (code uses correct two-step); `GenerationError` not `@frozen`/exhaustive. (hunt-cleanup C1/N4.)
