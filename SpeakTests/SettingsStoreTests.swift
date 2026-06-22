@@ -380,4 +380,5 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.sttEngine, .whisperKit)
         XCTAssertEqual(reloaded.cleanupEngine, .ollama(model: "phi-4"))
     }
+
 }
