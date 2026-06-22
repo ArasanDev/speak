@@ -39,7 +39,18 @@
 > **Wave 2.2 ALSO MERGED (cherry-picked code commit, all 4 gates green: build / test / lint 0-serious / moat 7/7):**
 > - **2.2 richer cleanup** (`SpeakCore/Cleanup/{Cleaner,FoundationModelsCleaner}.swift`; `SpeakEngine.swift`; +`StyleModeTests`): tone/style modes + snippet expander (`snippetStore.makeExpander()`) were ALREADY wired; net-new is the **custom-dictionary clause** — `customVocabulary` now rides inside `CleanupMode.styled(style, level, customVocabulary:)` and is read at call time (H1 pattern), injecting a "preserve these spellings exactly" clause into the FM prompt (50-term cap `[decision]`; empty list → byte-identical-to-baseline prompt, no regression). Style-effectiveness needs live FM to confirm (human-gate). (Agent also self-edited progress.md → discarded; orchestrator owns this file.)
 >
-> **Next:** Wave 2.3 CLI shim (running — CFMessagePort behind `CLITransport`, contract in `specs/acceleration-roadmap.md` §3). After 2.3, Wave 2 is complete → Wave 3 (code-aware mode, voice editing, history power-tools) + Human-gate track (live paste in 3 apps, latency numbers [plumbing ready], menubar-color visual check, live rebind-fires check, style-effectiveness check, P11 release) — all owner-only.
+> **Wave 2.3 MERGED → WAVE 2 COMPLETE (all 4 gates green: build / 434 tests 0-fail / lint 0-serious / moat 7/7):**
+> - **2.3 CLI shim** (`SpeakCore/CLI/{CLIContract,CLIPortServer}.swift` + `CLI/main.swift` new; `DictationController.swift`; `SpeakLog.swift`; `project.yml` SpeakCLI target; `scripts/verify-moat.sh` extended to scan `CLI/`): `speak --start/--stop/--status` over **CFMessagePort** (named `com.speak.app.cli`, 3s timeout) behind `CLITransport`. App-not-running → stderr + exit 1 (no auto-launch in v0, empirically verified). Idempotency gate in `CLIPortServer` (icon-state check) reusing the hotkey's begin/end path. Moat stayed 7/7 (CFMessagePort = mach port not network; CLI uses FileHandle not print; CLI/ now moat-scanned).
+> - **2.3 caveats → routed to validation Phase 2 bug-hunt:** (1) **double-`--start` race** — narrow window before `icon` flips to `.listening`; safety depends on engine re-entrancy guards the agent didn't confirm (the hotkey path has the same property and works live, implying a guard exists — VERIFY). (2) **idempotency tests are a pure reimplementation** of the gate logic (pass by construction; won't catch real-gate drift) — needs a live-port integration test.
+>
+> ## VALIDATION & HARDENING PHASE (started 2026-06-22) — user-directed
+> Build is feature-complete through Wave 2. User asked: compare against OSS competitors, SDK-ground the skills (they were written from research/docs, not the on-machine macOS 26 SDK), and hunt ALL bugs across ALL flows/coverage, then validate. Decisions: **Agent fan-out** (not heavyweight Workflow) + **report-first** (NO code changes until user approves the findings report).
+> Phase 1 grounding (read-only, running): 1A OSS comparison matrix (`val-oss-compare`), 1B Skill⇄SDK truth audit (`val-skill-sdk`).
+> Next: Phase 1C flow/coverage map + Phase 2 per-seam SDK-grounded bug hunt (swift-code-review) → Phase 3 adversarial verification → Phase 4 single prioritized findings report.
+>
+> **Worktree note:** `wave23-cli` is the orchestrator's current cwd → can't self-remove; clean up next session.
+>
+> **Wave 3 (deferred until after validation):** code-aware mode, voice editing, history power-tools. **Human-gate track (owner-only):** live paste in 3 apps, latency numbers [plumbing ready], menubar-color visual check, live rebind-fires check, style-effectiveness check, P11 notarized release.
 
 > ## OLD BANNER (handoff banner — 2026-06-22, Wave 0 live-bug cleanup — MERGED)
 > **Two live bugs fixed + integrated to master. ALL 4 GATES GREEN on combined master.**
