@@ -564,4 +564,18 @@ final class DictationController: ObservableObject {
             )
         }
     }
+
+#if DEBUG
+    // MARK: - Debug helpers
+
+    /// Force the menubar icon to a specific state, held indefinitely.
+    /// Used by `--debug-open menubar-icon-<state>` for visual color verification.
+    /// Never compiled into release builds.
+    func forceIcon(_ state: MenubarIcon) {
+        icon = state
+        SpeakLog.engine.info(
+            "DictationController: [DEBUG] icon forced to .\(String(describing: state), privacy: .public)"
+        )
+    }
+#endif
 }

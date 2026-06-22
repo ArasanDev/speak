@@ -60,6 +60,32 @@ public extension Color {
 
     /// Subtle panel background for cards/sections inside the dashboard. [decision]
     static let speakSurface = Color(nsColor: .underPageBackgroundColor)
+
+    // MARK: - Menubar icon state colors (roadmap P8)
+    //
+    // These tokens provide the per-state tint for the menubar icon.
+    // They are applied via `.foregroundStyle(color)` on a non-template
+    // SwiftUI Image — see SpeakApp.swift §MenuBarLabel for the rendering
+    // mechanism and its [unverified] caveat.
+    //
+    // [decision: roadmap P8 — idle=neutral, listening=red, processing=yellow,
+    //  done=green, error=red+X. System semantic colors are preferred so they
+    //  adapt correctly between light and dark menu bars.]
+
+    /// Idle — neutral gray, system secondary to blend into the menubar. [decision: P8]
+    static let speakStateIdle = Color(nsColor: .secondaryLabelColor)
+
+    /// Listening (recording active) — system red to signal mic-on. [decision: P8]
+    static let speakStateListening = Color(nsColor: .systemRed)
+
+    /// Processing (cleanup / paste in flight) — system yellow to signal work. [decision: P8]
+    static let speakStateProcessing = Color(nsColor: .systemYellow)
+
+    /// Done flash (success) — system green, held 600ms then returns to idle. [decision: P8]
+    static let speakStateDone = Color(nsColor: .systemGreen)
+
+    /// Error — system red, paired with an xmark symbol. [decision: P8]
+    static let speakStateError = Color(nsColor: .systemRed)
 }
 
 // MARK: - Spacing tokens

@@ -63,6 +63,12 @@ enum DebugTarget: String {
     case overlayDemoDone         = "overlay-demo-done"
     case overlayDemoError        = "overlay-demo-error"
     case simulateDictation       = "simulate-dictation"
+    // Menubar icon color verification (roadmap P8):
+    //   Each target holds the menubar icon in the given state indefinitely so a
+    //   `screencapture` can confirm the color survives the menu-bar compositor.
+    //   Use `listening` or `error` (red), NOT `idle` (gray — indistinguishable from template).
+    case menubarIconListening    = "menubar-icon-listening"
+    case menubarIconError        = "menubar-icon-error"
 }
 
 // MARK: - DebugLaunchDispatcher
@@ -148,6 +154,15 @@ final class DebugLaunchDispatcher {
             // Return true to tell AppDelegate to skip startMonitoring().
             startSimulateDictation(controller: controller)
             return true
+        case .menubarIconListening:
+            // Force the menubar icon to .listening (red) and hold it indefinitely.
+            // Allows screencapture to verify the color survives the system compositor.
+            controller.forceIcon(.listening)
+            return false
+        case .menubarIconError:
+            // Force the menubar icon to .error (red + xmark) and hold it indefinitely.
+            controller.forceIcon(.error)
+            return false
         }
     }
 
