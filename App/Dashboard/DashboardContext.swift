@@ -30,7 +30,14 @@ struct DashboardContext {
 
     /// The active hotkey combo, pre-rendered as keycap labels (e.g. ["Fn", "Fn"]).
     /// Supplied by the controller from the live `HotkeyMonitor.binding`.
-    let hotkeyCombo: [String]
+    ///
+    /// `var` so that `WindowPresenter.showDashboard()` can refresh this value each
+    /// time the dashboard is shown — the provider closure is called lazily at show
+    /// time rather than at controller construction, so a hotkey rebind is reflected
+    /// the next time the window opens. [decision: refresh-at-show; DashboardContext
+    /// is a value type captured by NSHostingView at window construction, so the
+    /// update path is: mutate context before the hosting view reads it on show()]
+    var hotkeyCombo: [String]
 
     /// Explicit init with `snippetStore` defaulted to a fresh store, so SwiftUI
     /// previews can omit it; production call sites inject the shared store.

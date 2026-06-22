@@ -61,15 +61,17 @@ final class OnboardingViewModel: ObservableObject {
     ///
     /// Examples: "⌘⌘ Right Command", "Fn ×2", "⌘ Right Command (hold)".
     ///
+    /// Cached as a `@Published` property so SwiftUI body re-renders read an already-
+    /// computed value instead of allocating a `UserDefaultsBindingStore` and hitting
+    /// UserDefaults on every body evaluation. Refreshed in `refreshEvaluation()` and
+    /// at `init` time.
+    ///
     /// [decision: read UserDefaultsBindingStore in-seam — avoids an out-of-seam
     ///  dependency on DictationController while producing the same value. 2026-06-22]
-    var currentHotkeyDisplayString: String {
-        let base = UserDefaultsBindingStore().load() ?? HotkeyBinding.defaultBinding
-        // Mirror the effective trigger from settings — DictationController applies the
-        // same override via `base.with(trigger: settings.triggerMode)`.
-        let effective = base.with(trigger: settings.triggerMode)
-        return effective.displayString
-    }
+    /// [decision: cached @Published — no hotkey rebind is expected during onboarding;
+    ///  refreshEvaluation() is called after every user action, covering the trigger-
+    ///  mode change path. benchmark.md §7]
+    @Published private(set) var currentHotkeyDisplayString: String = ""
 
     // MARK: - Private
 
@@ -107,6 +109,9 @@ final class OnboardingViewModel: ObservableObject {
             manager: permissionManager,
             hasCompletedOnboarding: settings.hasCompletedOnboarding
         )
+        // Compute the display string once at init rather than on every SwiftUI body
+        // render (avoids repeated UserDefaults reads and BindingStore allocations).
+        self.currentHotkeyDisplayString = Self.computeHotkeyDisplayString(settings: settings)
     }
 
     deinit {
@@ -299,6 +304,17 @@ final class OnboardingViewModel: ObservableObject {
             manager: permissionManager,
             hasCompletedOnboarding: settings.hasCompletedOnboarding
         )
+        // Refresh the cached display string in case trigger mode changed.
+        currentHotkeyDisplayString = Self.computeHotkeyDisplayString(settings: settings)
+    }
+
+    /// Compute the hotkey display string from UserDefaults (reads once per call).
+    /// Extracted as a `static` helper so it can be called both from `init` (before
+    /// `self` is fully initialised) and from `refreshEvaluation()`.
+    private static func computeHotkeyDisplayString(settings: SettingsStore) -> String {
+        let base = UserDefaultsBindingStore().load() ?? HotkeyBinding.defaultBinding
+        let effective = base.with(trigger: settings.triggerMode)
+        return effective.displayString
     }
 
     /// If the given kind is now granted, advance the displayed step forward.

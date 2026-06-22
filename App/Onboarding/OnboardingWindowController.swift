@@ -39,6 +39,11 @@ final class OnboardingWindowController {
     /// Cancelled if the user clicks away (windowDidResignKey) before it fires.
     private var autoCloseTask: Task<Void, Never>?
 
+    /// Outer watcher Task that polls `viewModel.displayedStep` until `.done`.
+    /// Stored so a second `show()` call can cancel the prior watcher before spawning
+    /// a fresh one — prevents duplicate watchers racing to set `autoCloseTask`.
+    private var completionWatcherTask: Task<Void, Never>?
+
     /// Called once — on the main thread — immediately after the onboarding window
     /// auto-closes following the `.done` step. Used by `WindowPresenter` to open
     /// the dashboard on first completion. Not fired on manual close or skip.
@@ -120,6 +125,11 @@ final class OnboardingWindowController {
 
     /// Hides the onboarding window.
     func close() {
+        // Cancel both tasks so neither fires after the window is gone.
+        completionWatcherTask?.cancel()
+        completionWatcherTask = nil
+        autoCloseTask?.cancel()
+        autoCloseTask = nil
         window?.close()
         window = nil
         log.info("OnboardingWindowController: window closed.")
@@ -140,11 +150,16 @@ final class OnboardingWindowController {
     ///
     /// Poll cadence 0.5 s [decision: close-latency vs overhead; same as before].
     private func watchForCompletion() {
+        // Cancel any prior watcher before spawning a fresh one so a second show()
+        // call never runs two concurrent watchers racing to set `autoCloseTask`.
+        completionWatcherTask?.cancel()
+        completionWatcherTask = nil
+
         // Named constant: 2.5 s auto-close delay after Done step [decision above].
         let doneAutoCloseDelayNanoseconds: UInt64 = 2_500_000_000
         // Poll cadence: 0.5 s [decision: close-latency vs overhead tradeoff]
         let closeWatchIntervalNanoseconds: UInt64 = 500_000_000
-        Task { [weak self] in
+        let watcher = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: closeWatchIntervalNanoseconds)
                 guard let self else { break }
@@ -169,6 +184,7 @@ final class OnboardingWindowController {
                 }
             }
         }
+        completionWatcherTask = watcher
     }
 
     // MARK: - Window close delegate bridge

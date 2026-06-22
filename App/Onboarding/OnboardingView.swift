@@ -103,7 +103,12 @@ struct OnboardingView: View {
 
     /// Step-position dots (visual only — pure decoration).
     private var progressDots: some View {
-        let allSteps: [OnboardingStep] = [.welcome, .microphone, .accessibility, .hotkey]
+        // `.done` is included so `firstIndex(of:)` returns the last index when the
+        // Done screen is shown, lighting the final dot rather than falling back to
+        // `?? 0` (Welcome). [decision: 5-dot sequence — done follows hotkey]
+        let allSteps: [OnboardingStep] = [.welcome, .microphone, .accessibility, .hotkey, .done]
+        // When `displayedStep` is `.done`, `firstIndex` returns 4 (last dot) — correct.
+        // `?? 0` is a defensive fallback only; with `.done` included it is unreachable.
         let currentIndex = allSteps.firstIndex(of: viewModel.displayedStep) ?? 0
         return HStack(spacing: 6) {
             ForEach(0..<allSteps.count, id: \.self) { idx in

@@ -35,7 +35,10 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
     // MARK: - Private
 
     private var window: NSWindow?
-    private let context: DashboardContext
+    /// `var` so that `updateHotkeyCombo(_:)` can refresh the combo before each show().
+    /// DashboardContext is a value-type bundle; the new combo is picked up by the
+    /// NSHostingView created at the start of the next show() call.
+    private var context: DashboardContext
     private let initialSection: DashboardSection
     private let log = SpeakLog.storage
 
@@ -48,6 +51,15 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
     }
 
     // MARK: - Public API
+
+    /// Refresh the stored hotkey combo so the next show() call picks up the current
+    /// binding. Call this from `WindowPresenter.showDashboard()` before `show()` so
+    /// a hotkey rebind is reflected the next time the window opens.
+    /// [decision: update-before-show is safe because context is consumed only inside
+    ///  show(); if the window is already visible, the update takes effect on re-open.]
+    func updateHotkeyCombo(_ combo: [String]) {
+        context.hotkeyCombo = combo
+    }
 
     /// Show the dashboard window, creating it if needed. Brings it to front and
     /// promotes the app to a regular Dock-present app for the window's lifetime.

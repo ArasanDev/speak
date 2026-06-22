@@ -117,8 +117,16 @@ final class WindowPresenter {
     }
 
     /// Show the dashboard window. The window controller is created lazily on first call.
+    ///
+    /// Refreshes the hotkey combo from the live provider before each show so that a
+    /// hotkey rebind (trigger-mode change or custom key) is reflected the next time
+    /// the dashboard opens, not just at first construction.
     func showDashboard() {
-        ensureDashboardController().show()
+        let controller = ensureDashboardController()
+        // Read the provider lazily at show-time so any rebind since construction is
+        // picked up. The update is a no-op if the combo hasn't changed.
+        controller.updateHotkeyCombo(hotkeyComboProvider())
+        controller.show()
     }
 
     // MARK: - Onboarding window

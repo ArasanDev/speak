@@ -25,6 +25,7 @@
 //  NSPanel construction requires the main thread per macOS/AppKit convention.]
 
 import XCTest
+import SpeakCore
 @testable import Speak
 
 @MainActor
@@ -298,5 +299,80 @@ final class OverlayControllerTests: XCTestCase {
             controller.overlayModel.level, 0.0, accuracy: 1e-9,
             "transition(to: .processing) must reset level to 0."
         )
+    }
+
+    // MARK: - Partials drain (1C coverage — real AsyncStream path)
+    //
+    // Previous tests pass `partialsProvider: { nil }` which exercises only the early-
+    // exit path. These tests supply a real `AsyncStream<TranscriptChunk>` so the
+    // drain loop, `OverlayTextAccumulator`, and `controller.partialText` are exercised.
+
+    /// A partials stream with a single final chunk must update `partialText`.
+    func testPartialsDrain_singleFinalChunk_updatesPartialText() async {
+        // Build a stream that yields one final chunk and then finishes.
+        let chunk = TranscriptChunk(text: "Hello world", isFinal: true, timestamp: Date())
+        let stream: AsyncStream<TranscriptChunk> = AsyncStream { continuation in
+            continuation.yield(chunk)
+            continuation.finish()
+        }
+
+        // Start with the real stream provider.
+        controller.start(
+            partialsProvider: { stream },
+            levelsProvider: { nil },
+            isCleaningUp: false
+        )
+
+        // Give the drain task a chance to consume the stream (background task → MainActor.run).
+        // One Task.yield is enough because the drain task is already scheduled; it
+        // consumes the single-element stream and posts back to the main actor.
+        // We yield several times to cover the back-and-forth scheduling.
+        for _ in 0..<10 {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(
+            controller.partialText, chunk.text,
+            "After a single final chunk, controller.partialText must equal the chunk text."
+        )
+        XCTAssertEqual(
+            controller.overlayModel.partialText, chunk.text,
+            "After a single final chunk, overlayModel.partialText must equal the chunk text."
+        )
+    }
+
+    /// Cancelling via stop() before the stream finishes must clear partialText.
+    func testPartialsDrain_stopCancelsTask_clearsPartialText() async {
+        // Build a stream that never finishes (simulates an ongoing dictation).
+        var continuation: AsyncStream<TranscriptChunk>.Continuation!
+        let stream: AsyncStream<TranscriptChunk> = AsyncStream { cont in
+            continuation = cont
+        }
+
+        controller.start(
+            partialsProvider: { stream },
+            levelsProvider: { nil },
+            isCleaningUp: false
+        )
+
+        // Yield a partial chunk so there is text in flight.
+        continuation.yield(TranscriptChunk(text: "typing…", isFinal: false, timestamp: Date()))
+        await Task.yield()
+
+        // Stop before the stream finishes — must cancel the task and clear text.
+        controller.stop()
+        await Task.yield()
+
+        XCTAssertEqual(
+            controller.partialText, "",
+            "stop() must clear controller.partialText even when the drain stream is open."
+        )
+        XCTAssertEqual(
+            controller.overlayModel.partialText, "",
+            "stop() must clear overlayModel.partialText even when the drain stream is open."
+        )
+
+        // Clean up: finish the stream so no continuation is leaked.
+        continuation.finish()
     }
 }

@@ -162,12 +162,21 @@ public actor HistoryStore: HistoryStoring {
     public func search(_ substring: String) throws -> [HistoryEntry] {
         // `instr(col, ?) > 0` is a true substring match — no wildcard escaping
         // needed (unlike LIKE '%x%'). Default BINARY collation → case-sensitive.
+        //
+        // LIMIT 500: a common-word search over a large history would otherwise
+        // decode every matching row before the caller can page/cap the results,
+        // causing a heap spike proportional to the match count. 500 is well above
+        // any visible page size (the History pane shows ≤ 100 rows) and provides
+        // a deterministic worst-case allocation bound.
+        // [decision: 500-row search cap — balances full-history coverage with heap
+        //  safety; revisit if power-users report truncated results. benchmark.md §7]
         let sql = """
             SELECT id, rawText, cleanedText, createdAt, engineId, duration,
                    stopToPasteSeconds, cleanupSeconds
             FROM history
             WHERE instr(rawText, ?) > 0 OR instr(cleanedText, ?) > 0
             ORDER BY createdAt DESC, rowid DESC
+            LIMIT 500
             """
         return try query(sql: sql) { stmt in
             try bind(stmt, index: 1, text: substring)
@@ -262,7 +271,9 @@ public actor HistoryStore: HistoryStoring {
             )
             """
         try execute(sql: sql) { stmt in
-            guard sqlite3_bind_int(stmt, 1, Int32(maxEntries)) == SQLITE_OK else {
+            // Use int64 to match the `recent()` binding and avoid Int32 truncation
+            // for maxEntries values above 2 147 483 647 (theoretical, but consistent).
+            guard sqlite3_bind_int64(stmt, 1, Int64(maxEntries)) == SQLITE_OK else {
                 throw dbError("bind maxEntries for trim")
             }
         }

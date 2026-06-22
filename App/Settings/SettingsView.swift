@@ -119,7 +119,15 @@ private struct GeneralSettingsTab: View {
             Section {
                 Picker("Paste Mode", selection: Binding(
                     get: { store.pasteMode },
-                    set: { store.pasteMode = $0 }
+                    set: {
+                        // Guard: `.accessibility` is a v1 stub — `.disabled(true)` on the
+                        // tag row is visual-only and does not block keyboard navigation.
+                        // Intercept and reject the write so the stored value stays `.cmdV`.
+                        // [decision: custom binding guard — the only correct way to prevent
+                        //  a disabled Picker row from being selected via keyboard nav on macOS]
+                        guard $0 != .accessibility else { return }
+                        store.pasteMode = $0
+                    }
                 )) {
                     Text("Cmd+V (default)").tag(PasteMode.cmdV)
                     Text("Accessibility API  (v1 — coming soon)")
@@ -269,6 +277,11 @@ private struct TranscriptionSettingsTab: View {
     @State private var supportedLocales: [Locale] = []
     @State private var installedLocaleIDs: Set<String> = []
     @State private var localesLoaded = false
+    /// `true` when the stored locale was not in the supported list and was auto-reset.
+    /// Drives the unsupported-locale alert so the reset is visible to the user.
+    @State private var showLanguageResetAlert = false
+    /// The locale the settings were silently reset TO — named in the alert message.
+    @State private var pendingResetLocale: Locale?
 
     var body: some View {
         Form {
@@ -328,10 +341,16 @@ private struct TranscriptionSettingsTab: View {
                 localesLoaded = true
 
                 // If the stored locale is not in the supported list, reset to
-                // the first supported locale to avoid a stuck-blank picker.
-                // [decision: 1.2 — silent reset; no alert; first supported = sorted order]
+                // the first supported locale to avoid a stuck-blank picker — but
+                // surface an alert rather than resetting silently.
+                // [decision: alert on unsupported-locale reset — the user deserves
+                //  to know their language preference changed; Monaco caption below
+                //  is the secondary affordance. benchmark.md §7]
                 if !s.isEmpty && !s.contains(where: { $0.identifier == store.language.identifier }) {
-                    store.language = s[0]
+                    let fallback = s[0]
+                    store.language = fallback
+                    pendingResetLocale = fallback
+                    showLanguageResetAlert = true
                 }
             }
 
@@ -366,6 +385,21 @@ private struct TranscriptionSettingsTab: View {
         }
         .formStyle(.grouped)
         .padding(SpeakSpacing.md)
+        .alert(
+            "Language Reset",
+            isPresented: $showLanguageResetAlert,
+            actions: {
+                Button("OK", role: .cancel) { pendingResetLocale = nil }
+            },
+            message: {
+                // Show the locale display name when available; fall back to identifier.
+                let name = pendingResetLocale.flatMap {
+                    $0.localizedString(forIdentifier: $0.identifier)
+                } ?? pendingResetLocale?.identifier ?? "the first supported language"
+                Text("Your previously selected language is no longer available. " +
+                     "Language has been reset to \(name).")
+            }
+        )
     }
 }
 
