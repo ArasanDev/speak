@@ -130,11 +130,39 @@ final class DictationController: ObservableObject {
 
     private(set) var settingsStore: SettingsStore
 
+    /// The current active hotkey binding. `@Published` so the Shortcuts settings tab
+    /// can observe and refresh its "Current Hotkey" label without a relaunch.
+    /// Updated atomically by `rebindHotkey(_:)` alongside `monitor.updateBinding`.
+    /// [decision: W1.1 — published so SwiftUI can react to recorder saves]
+    @Published private(set) var activeBinding: HotkeyBinding = .defaultBinding
+
     /// The human-readable label for the current hotkey binding, e.g. "⌘ Right Command ×2".
     /// Forwarded from the live `HotkeyMonitor.binding.displayString` so the Settings
     /// Shortcuts tab can show a read-only summary without accessing the private monitor.
-    /// [decision: W3.1 — Settings shows binding read-only; W3.2 will add the record UI]
+    /// [decision: W3.1 — Settings shows binding read-only; recorder added in W1.1]
     var currentHotkeyDisplayString: String { monitor.binding.displayString }
+
+    /// Apply a new hotkey binding from the recorder sheet (W1.1).
+    ///
+    /// This is the single point of truth for a rebind:
+    ///   1. `monitor.updateBinding` — swaps the live tap binding AND persists via
+    ///      `UserDefaultsBindingStore.save` [verified: HotkeyMonitor.updateBinding, 2026-06-22].
+    ///   2. Updates `settingsStore.triggerMode` so the next-launch reconcile in
+    ///      `DictationController.init` converges on the saved trigger.
+    ///      The `objectWillChange` subscription fires after this write; its deferred
+    ///      `.with(trigger:)` is a no-op because the binding already carries the new
+    ///      trigger — the key is preserved.
+    ///   3. Publishes `activeBinding` so the Settings UI refreshes without relaunch.
+    ///
+    /// Must be called on the main actor (this class is `@MainActor`).
+    func rebindHotkey(_ newBinding: HotkeyBinding) {
+        monitor.updateBinding(newBinding)
+        settingsStore.triggerMode = newBinding.trigger
+        activeBinding = newBinding
+        SpeakLog.hotkey.info(
+            "DictationController: hotkey rebound — keyCode=\(newBinding.keyCode, privacy: .public) trigger=\(newBinding.trigger.rawValue, privacy: .public)"
+        )
+    }
 
     // MARK: - Trigger-mode wiring (Phase B)
 
@@ -188,6 +216,9 @@ final class DictationController: ObservableObject {
         let initialTrigger = store.triggerMode
         let updatedBinding = monitor.binding.with(trigger: initialTrigger)
         monitor.updateBinding(updatedBinding)
+        // Seed `activeBinding` from the reconciled initial binding so the Settings UI
+        // shows the correct key on first open. [decision: set after reconcile, W1.1]
+        activeBinding = updatedBinding
         SpeakLog.hotkey.info("DictationController: trigger mode applied at init — \(initialTrigger.rawValue, privacy: .public)")
 
         // Subscribe to future trigger-mode changes from SettingsView.

@@ -42,18 +42,18 @@ import SpeakCore
 
 struct SettingsView: View {
 
-    // The controller is needed for the Shortcuts tab's read-only hotkey display.
-    // `store` is extracted at init and observed separately to avoid propagating the
-    // whole controller as an observed dependency through all child tabs.
+    // The controller is needed for the Shortcuts tab: it provides `activeBinding`
+    // (observed reactively post-recorder-save) and `rebindHotkey(_:)`.
+    // `store` is extracted separately so child tabs don't depend on the whole controller.
     @ObservedObject var store: SettingsStore
-    let hotkeyDisplayString: String
+    @ObservedObject var controller: DictationController
 
     // [decision: W3.1 — default tab is General; user re-selects across launches]
     @State private var selectedTab: SettingsTab = .general
 
     init(controller: DictationController) {
+        self.controller = controller
         self.store = controller.settingsStore
-        self.hotkeyDisplayString = controller.currentHotkeyDisplayString
     }
 
     var body: some View {
@@ -64,8 +64,8 @@ struct SettingsView: View {
                 .tabItem { Label("General",  systemImage: "gearshape") }
                 .tag(SettingsTab.general)
 
-            // 2 — Shortcuts (hotkey — read-only in W3.1; recorder is W3.2)
-            ShortcutsSettingsTab(store: store, hotkeyDisplayString: hotkeyDisplayString)
+            // 2 — Shortcuts (recorder live in W1.1)
+            ShortcutsSettingsTab(store: store, controller: controller)
                 .tabItem { Label("Shortcuts", systemImage: "keyboard") }
                 .tag(SettingsTab.shortcuts)
 
@@ -159,18 +159,30 @@ private struct GeneralSettingsTab: View {
 
 // MARK: - 2. Shortcuts
 
-/// Shortcuts: shows the current hotkey binding read-only.
-/// The hotkey recorder (record-a-combo UI) is W3.2 — a clear "Record…" stub seam.
+/// Shortcuts: shows the current hotkey binding and lets the user record a new one.
+/// The recorder sheet (HotkeyRecorderView) was added in W1.1.
+///
+/// Trigger-mode changes made *within* the recorder sheet are applied atomically via
+/// `controller.rebindHotkey(_:)`, which updates both the live monitor and
+/// `store.triggerMode` in one call. The picker below remains as a shortcut for
+/// changing only the trigger mode without re-recording the key.
+///
+/// Note on Hybrid mode: `HotkeyBinding.Trigger` has two cases (`doubleTap`, `hold`).
+/// A third `hybrid` case was intentionally not added — it requires runtime detection
+/// logic in HotkeyMonitor and is deferred to a later wave. The picker offers the two
+/// working modes only.
 private struct ShortcutsSettingsTab: View {
     @ObservedObject var store: SettingsStore
-    let hotkeyDisplayString: String
+    @ObservedObject var controller: DictationController
+
+    // Sheet state for the recorder.
+    @State private var showingRecorder: Bool = false
 
     var body: some View {
         Form {
             Section {
-                // Trigger mode picker — key-agnostic labels (W1.1 changes the
-                // default key, so labels must not hard-code "Fn"). The actual key
-                // is shown via `hotkeyDisplayString` below.
+                // Trigger mode picker — key-agnostic labels; the actual key
+                // is shown via `controller.activeBinding.displayString` below.
                 Picker("Activation Mode", selection: Binding(
                     get: { store.triggerMode },
                     set: { store.triggerMode = $0 }
@@ -201,7 +213,9 @@ private struct ShortcutsSettingsTab: View {
                     Text("Current Hotkey")
                     Spacer()
                     // Monaco for the keybinding label (data, not chrome). [decision: W3.1]
-                    Text(hotkeyDisplayString)
+                    // Reads `controller.activeBinding.displayString` so the label refreshes
+                    // immediately after a recorder save without a relaunch. [decision: W1.1]
+                    Text(controller.activeBinding.displayString)
                         .font(.speakMonoBody)
                         .foregroundStyle(.primary)
                         .padding(.horizontal, SpeakSpacing.sm)
@@ -212,15 +226,28 @@ private struct ShortcutsSettingsTab: View {
                         )
                 }
 
-                // W3.2 extension point — hotkey recorder lives here.
-                // [stub: W3.2 (builder-input + builder-app) adds the Record… sheet]
-                Button("Record\u{2026}") {}
-                    .disabled(true)
-                    .help("Hotkey recorder — coming in W3.2")
+                // Record button — opens the HotkeyRecorderView sheet.
+                Button("Record\u{2026}") {
+                    showingRecorder = true
+                }
+                .sheet(isPresented: $showingRecorder) {
+                    HotkeyRecorderView(
+                        initialBinding: controller.activeBinding,
+                        onSave: { newBinding in
+                            controller.rebindHotkey(newBinding)
+                            showingRecorder = false
+                        },
+                        onCancel: {
+                            showingRecorder = false
+                        }
+                    )
+                }
             } header: {
                 Text("Hotkey")
             } footer: {
-                Text("Hotkey recording and per-binding mode (Hybrid) are coming in the next update.")
+                // Hybrid mode (hold + double-tap timing disambiguation) is deferred
+                // — it requires HotkeyMonitor detection work. Only two modes ship in W1.1.
+                Text("Record any key+modifier combo or a modifier-only key (e.g. Right-Command, Fn). Hybrid mode comes in a later wave.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
