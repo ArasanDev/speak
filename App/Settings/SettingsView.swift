@@ -235,19 +235,77 @@ private struct ShortcutsSettingsTab: View {
 private struct TranscriptionSettingsTab: View {
     @ObservedObject var store: SettingsStore
 
+    // Locale list loaded async from SpeechTranscriber.supportedLocales.
+    // Seeded with the current selection so the picker is never visually blank
+    // while loading (the selected row always appears even before the full list
+    // arrives). [decision: 1.2 — seed avoids a blank-picker flash on open]
+    @State private var supportedLocales: [Locale] = []
+    @State private var installedLocaleIDs: Set<String> = []
+    @State private var localesLoaded = false
+
     var body: some View {
         Form {
             Section {
-                Picker("Language", selection: Binding(
-                    get: { store.language.identifier },
-                    set: { store.language = Locale(identifier: $0) }
-                )) {
-                    Text("English (US)").tag("en-US")
-                    Text("English (UK)").tag("en-GB")
+                if !localesLoaded {
+                    // Loading state — show a spinner until the async fetch completes.
+                    // [decision: 1.2 — ProgressView placeholder; avoids blank picker]
+                    HStack {
+                        Text("Language")
+                        Spacer()
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                } else {
+                    Picker("Language", selection: Binding(
+                        get: { store.language.identifier },
+                        set: { store.language = Locale(identifier: $0) }
+                    )) {
+                        ForEach(supportedLocales, id: \.identifier) { locale in
+                            HStack(spacing: SpeakSpacing.xs) {
+                                Text(SpeechTranscriberLocaleSource.displayName(for: locale))
+                                // Indicate locales that still need a model download.
+                                // [decision: 1.2 — informational label; provisionAsset
+                                //  handles the actual download at transcription time]
+                                if !installedLocaleIDs.contains(locale.identifier) {
+                                    Text("(download)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .tag(locale.identifier)
+                        }
+                    }
+                    .pickerStyle(.menu)
                 }
-                .pickerStyle(.menu)
             } header: {
                 Text("Language")
+            } footer: {
+                if localesLoaded && supportedLocales.isEmpty {
+                    // SpeechTranscriber not available on this device (e.g., Intel Mac).
+                    // The existing engine falls back gracefully; the picker just shows nothing.
+                    Text("No supported languages found — SpeechAnalyzer may not be available on this device.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .task {
+                // Fetch the locale lists concurrently; both are get async.
+                // [verified: SpeechTranscriber.supportedLocales: [Locale] { get async }
+                //  and SpeechTranscriber.installedLocales: [Locale] { get async }
+                //  from Apple developer docs, 2026-06-22]
+                async let supported = SpeechTranscriberLocaleSource.supportedLocales()
+                async let installed = SpeechTranscriberLocaleSource.installedLocales()
+                let (s, i) = await (supported, installed)
+                supportedLocales = s
+                installedLocaleIDs = Set(i.map(\.identifier))
+                localesLoaded = true
+
+                // If the stored locale is not in the supported list, reset to
+                // the first supported locale to avoid a stuck-blank picker.
+                // [decision: 1.2 — silent reset; no alert; first supported = sorted order]
+                if !s.isEmpty && !s.contains(where: { $0.identifier == store.language.identifier }) {
+                    store.language = s[0]
+                }
             }
 
             Section {
