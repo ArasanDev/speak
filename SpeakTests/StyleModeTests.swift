@@ -153,4 +153,90 @@ final class StyleModeTests: XCTestCase {
         XCTAssertEqual(viaMode, direct,
                        "instructions(for: .command(...)) must delegate to commandInstructions.")
     }
+
+    // MARK: - Custom vocabulary → FM prompt (Wave 2.2)
+
+    /// An empty vocabulary list must produce the EXACT same prompt as before Wave 2.2
+    /// (byte-identical, not just semantically equivalent). This guards against accidental
+    /// regression for users with no vocabulary entries — their cleanup cost and quality
+    /// must be unchanged. [decision Wave 2.2: empty list = no clause injected]
+    @available(macOS 26.0, *)
+    func testEmptyVocabularyProducesSamePromptAsBaseline() {
+        let baselinePrompt = FoundationModelsCleaner.styledInstructions(style: .default, level: .medium)
+        let withEmptyVocab = FoundationModelsCleaner.styledInstructions(style: .default, level: .medium,
+                                                                         customVocabulary: [])
+        XCTAssertEqual(baselinePrompt, withEmptyVocab,
+                       "Empty customVocabulary must produce a byte-identical prompt to the no-vocabulary baseline.")
+    }
+
+    /// A non-empty vocabulary list must inject a preservation clause containing the
+    /// terms and must produce a different prompt than the no-vocabulary baseline.
+    @available(macOS 26.0, *)
+    func testNonEmptyVocabularyInjectsPreserveClause() {
+        let terms = ["SwiftUI", "FoundationModels", "SpeakCore"]
+        let prompt = FoundationModelsCleaner.styledInstructions(style: .professional, level: .medium,
+                                                                 customVocabulary: terms)
+        // Every supplied term must appear in the prompt.
+        for term in terms {
+            XCTAssertTrue(prompt.contains(term),
+                          "Prompt must contain the vocabulary term '\(term)'.")
+        }
+        // The preservation instruction must be present.
+        XCTAssertTrue(prompt.lowercased().contains("preserved") || prompt.lowercased().contains("capitalisation"),
+                      "Prompt must contain a preservation-spelling instruction when vocabulary is non-empty.")
+        // The prompt must differ from the no-vocabulary baseline.
+        let baseline = FoundationModelsCleaner.styledInstructions(style: .professional, level: .medium)
+        XCTAssertNotEqual(prompt, baseline,
+                          "Non-empty customVocabulary must produce a different prompt than the baseline.")
+    }
+
+    /// The vocabulary clause must be present across every style + level combination
+    /// when a term list is supplied, so the injection is not accidentally dropped for
+    /// a specific voice or intensity.
+    @available(macOS 26.0, *)
+    func testVocabularyClauseAppearsAcrossAllStyleLevelCombinations() {
+        let terms = ["Xcode", "SwiftNIO"]
+        for style in CleanupStyle.allCases {
+            for level in CleanupLevel.allCases {
+                let prompt = FoundationModelsCleaner.styledInstructions(style: style, level: level,
+                                                                         customVocabulary: terms)
+                for term in terms {
+                    XCTAssertTrue(prompt.contains(term),
+                                  "Term '\(term)' must appear for style=\(style), level=\(level).")
+                }
+            }
+        }
+    }
+
+    /// The 50-term cap must prevent excessively long prompts: given 60 terms only 50
+    /// must appear in the prompt (the first 50 by Array.prefix order).
+    @available(macOS 26.0, *)
+    func testVocabularyCapAt50Terms() {
+        let terms = (1...60).map { "Term\($0)" }
+        let prompt = FoundationModelsCleaner.styledInstructions(style: .default, level: .medium,
+                                                                 customVocabulary: terms)
+        // Terms 1–50 must appear.
+        for i in 1...50 {
+            XCTAssertTrue(prompt.contains("Term\(i)"),
+                          "Term\(i) (within the 50-term cap) must appear in the prompt.")
+        }
+        // Terms 51–60 must not appear.
+        for i in 51...60 {
+            XCTAssertFalse(prompt.contains("Term\(i)"),
+                           "Term\(i) (beyond the 50-term cap) must not appear in the prompt.")
+        }
+    }
+
+    /// `.styled(style, level, customVocabulary:)` via `instructions(for:)` must route
+    /// to `styledInstructions(style:level:customVocabulary:)` and carry the terms through.
+    @available(macOS 26.0, *)
+    func testInstructionsForStyledWithVocabularyRoutesCorrectly() {
+        let terms = ["Anthropic", "ClaudeCode"]
+        let viaMode = FoundationModelsCleaner.instructions(
+            for: .styled(.email, .high, customVocabulary: terms))
+        let direct = FoundationModelsCleaner.styledInstructions(style: .email, level: .high,
+                                                                  customVocabulary: terms)
+        XCTAssertEqual(viaMode, direct,
+                       "instructions(for: .styled(..., customVocabulary:)) must delegate to styledInstructions with the same terms.")
+    }
 }

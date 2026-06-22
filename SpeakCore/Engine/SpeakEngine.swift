@@ -159,9 +159,15 @@ public actor SpeakEngine {
         }
         let activeCleaner: (any LLMCleaning)? = (settings.cleanupEnabled && !cleanupLevelIsNone) ? cleaner : nil
         let activeLocale: Locale = settings.language
-        // Wave B: derive the neat-writing mode from settings at call time (H1 pattern)
-        // so a Style-pane change applies on the next dictation with no engine restart.
-        let activeMode: CleanupMode = .styled(settings.cleanupStyle, settings.cleanupLevel)
+        // Wave B / Wave 2.2: derive the neat-writing mode from settings at call time
+        // (H1 pattern) so any Style-pane or Dictionary-pane change applies on the next
+        // dictation with no engine restart. `customVocabulary` is read here alongside
+        // style/level — it rides inside the mode enum so the stateless `LLMCleaning`
+        // cleaner sees it without needing its own SettingsStore reference. [decision Wave 2.2]
+        let activeVocabulary: [String] = settings.customVocabulary
+        let activeMode: CleanupMode = .styled(settings.cleanupStyle,
+                                               settings.cleanupLevel,
+                                               customVocabulary: activeVocabulary)
         // Wave B: build a snippet expander from the current snippets at call time, so a
         // snippet edit applies on the next dictation. nil store → nil expander → no change.
         let activeExpander: (any SnippetExpanding)? = snippetStore.map { $0.makeExpander() }

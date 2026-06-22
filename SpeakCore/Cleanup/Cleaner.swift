@@ -19,12 +19,16 @@ public enum CleanupMode: Sendable {
     case toneAdjust
     case translate(Locale)
     /// The user-facing neat-writing mode (Wave B): a writing *voice*
-    /// (`CleanupStyle`) crossed with a polish *intensity* (`CleanupLevel`).
-    /// `SpeakEngine.newSession()` derives this from `SettingsStore` at call time
-    /// (the H1 pattern), so a Style-pane change applies on the next dictation with
-    /// no engine restart. The legacy single-axis cases above remain for direct
-    /// callers and tests.
-    case styled(CleanupStyle, CleanupLevel)
+    /// (`CleanupStyle`) crossed with a polish *intensity* (`CleanupLevel`), plus
+    /// an optional list of proper nouns / specialist spellings the model must
+    /// preserve verbatim (`customVocabulary`). `SpeakEngine.newSession()` derives
+    /// all three from `SettingsStore` at call time (the H1 pattern), so any
+    /// pane change applies on the next dictation with no engine restart. The
+    /// legacy single-axis cases above remain for direct callers and tests.
+    ///
+    /// `customVocabulary` is `[]` by default so callers that do not supply it
+    /// (unit tests, legacy call sites) produce the same prompt as before.
+    case styled(CleanupStyle, CleanupLevel, customVocabulary: [String] = [])
 
     /// Command Mode (Wave D): apply a spoken `instruction` to the text passed to
     /// `clean(_:mode:)`. The text is the user's highlighted selection; the instruction

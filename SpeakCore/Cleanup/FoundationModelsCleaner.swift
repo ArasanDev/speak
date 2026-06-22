@@ -188,12 +188,12 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
                 commentary, no quotes, and no introduction.
                 """
 
-        case .styled(let style, let level):
-            // Wave B: compose a writing voice (style) with a polish intensity (level).
-            // The base task + footer are shared; the voice and the intensity are the
-            // two variable clauses. Kept as composed strings (not a fixed table) so a
-            // new style or level is one clause, not a combinatorial rewrite.
-            return Self.styledInstructions(style: style, level: level)
+        case .styled(let style, let level, let customVocabulary):
+            // Wave B / Wave 2.2: compose a writing voice (style), a polish intensity
+            // (level), and an optional "preserve these spellings" clause derived from
+            // the user's custom-dictionary terms. Kept as composed strings (not a
+            // fixed table) so a new style, level, or vocabulary is one clause.
+            return Self.styledInstructions(style: style, level: level, customVocabulary: customVocabulary)
 
         case .command(let instruction):
             // Wave D Command Mode: apply the user's spoken instruction to their selection.
@@ -214,10 +214,16 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
             """
     }
 
-    /// Compose the system instructions for a `.styled(style, level)` mode.
-    /// `style` selects the voice clause; `level` selects how aggressively to rewrite.
-    /// `internal` for unit-test access (StyleModeTests). [decision Wave B]
-    static func styledInstructions(style: CleanupStyle, level: CleanupLevel) -> String {
+    /// Compose the system instructions for a `.styled(style, level, customVocabulary:)` mode.
+    /// `style` selects the voice clause; `level` selects how aggressively to rewrite;
+    /// `customVocabulary` (default `[]`) injects a "preserve these spellings" clause so the
+    /// model does not mangle proper nouns, technical terms, or non-standard spellings the user
+    /// has registered. When the list is empty the clause is omitted entirely, producing a
+    /// byte-identical prompt to the pre-Wave-2.2 baseline — no regression for existing tests
+    /// or users without vocabulary entries. [decision Wave 2.2]
+    /// `internal` for unit-test access (StyleModeTests, CustomVocabularyPromptTests). [decision Wave B]
+    static func styledInstructions(style: CleanupStyle, level: CleanupLevel,
+                                   customVocabulary: [String] = []) -> String {
         let voice: String
         switch style {
         case .default:
@@ -278,9 +284,30 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
                         "key vocabulary."
         }
 
+        // Wave 2.2 — custom vocabulary clause. Injected only when non-empty so the
+        // prompt for users with no vocabulary entries is byte-identical to the pre-2.2
+        // baseline. The clause instructs the model to preserve exact spellings and
+        // capitalisation for the listed terms, complementing the STT-side biasing already
+        // applied via AnalysisContext.contextualStrings. [decision Wave 2.2]
+        let vocabularyClause: String
+        if customVocabulary.isEmpty {
+            vocabularyClause = ""
+        } else {
+            // Format terms as a comma-separated list enclosed in double quotes for
+            // maximum model clarity. Limiting to the first 50 terms avoids an
+            // excessively long system prompt on large dictionaries. [decision: 50-term
+            // cap — all 50 fit comfortably in the system-prompt context window; users
+            // with >50 terms need the highest-priority ones first (UI responsibility).]
+            let terms = customVocabulary.prefix(50)
+                .map { "\"\($0)\"" }
+                .joined(separator: ", ")
+            vocabularyClause = " The following terms must be preserved exactly as spelled, " +
+                               "including their capitalisation: \(terms)."
+        }
+
         return """
-            You are a transcript editor. \(voice) \(intensity) Return only the edited \
-            text with no commentary, no quotes, and no introduction.
+            You are a transcript editor. \(voice) \(intensity)\(vocabularyClause) Return only \
+            the edited text with no commentary, no quotes, and no introduction.
             """
     }
 
