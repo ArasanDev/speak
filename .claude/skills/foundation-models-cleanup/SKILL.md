@@ -22,6 +22,8 @@ enum CleanupMode {
     case codeAware
     case toneAdjust
     case translate(Locale)
+    case styled(CleanupStyle, CleanupLevel, customVocabulary: [String] = [])
+    case command(instruction: String)
 }
 ```
 
@@ -46,8 +48,35 @@ The v0 concrete implementation is `FoundationModelsCleaner`, backed by Apple's *
 - `SpeakError.llmCleanupFailed` is thrown only on genuine API errors, not on unavailability.
 - Unit tests cover: available path produces non-nil cleanedText, unavailable path produces nil cleanedText + done state, API failure path produces `llmCleanupFailed`.
 
+## API Pattern (Ground-Truthed)
+
+Foundation Models API uses a **two-step initialization pattern**:
+
+```swift
+// Step 1: Create the model with guardrails
+let model = SystemLanguageModel(
+    useCase: .general,
+    guardrails: .permissiveContentTransformations
+)
+
+// Step 2: Create the session from the model + instructions
+let session = LanguageModelSession(
+    model: model,
+    instructions: "Your system prompt here"
+)
+
+// Then use the session
+let response = try await session.respond(to: userText)
+```
+
+Key points:
+- `guardrails:` is a **parameter on `SystemLanguageModel`**, NOT on `LanguageModelSession` [verified]
+- `LanguageModelSession.init(model:instructions:)` takes only two parameters [verified]
+- `GenerationError` is **NOT `@frozen`** — exhaustive switches need `@unknown default` [verified]
+- `UnavailableReason` is also non-`@frozen` [verified]
+
 ## Verify at Implementation Time
 
-**Do not recall the Foundation Models API surface from training data.** The exact types for session creation, availability checking (`LanguageModelSession` or equivalent), and prompt submission must be ground-truthed against current Apple documentation before writing any code.
+**Do not recall the Foundation Models API surface from training data.** The exact types for session creation, availability checking (`SystemLanguageModel` and `LanguageModelSession`), and prompt submission must be ground-truthed against current Apple documentation before writing any code.
 
-Use the `apple-docs-mcp` MCP server (if available in this session) to look up `FoundationModels` or `LanguageModelSession`. Otherwise, fetch from `https://developer.apple.com/documentation/foundationmodels`. Additionally, `swiftc -typecheck -sdk "$(xcrun --show-sdk-path)" -target arm64-apple-macosx26.0 <file>` is the strongest available local check for symbol resolution — use it to confirm any API symbol claim (note: it confirms symbol availability, not full method signatures). Tag every API claim `[verified]`, `[inferred]`, or `[unverified]`. Surface any conflict with prior claims before continuing.
+Use the `apple-docs-mcp` MCP server (if available in this session) to look up `FoundationModels`, `SystemLanguageModel`, or `LanguageModelSession`. Otherwise, fetch from `https://developer.apple.com/documentation/foundationmodels`. Additionally, `swiftc -typecheck -sdk "$(xcrun --show-sdk-path)" -target arm64-apple-macosx26.0 <file>` is the strongest available local check for symbol resolution — use it to confirm any API symbol claim (note: it confirms symbol availability, not full method signatures). Tag every API claim `[verified]`, `[inferred]`, or `[unverified]`. Surface any conflict with prior claims before continuing.
