@@ -2,16 +2,16 @@
 //
 // Unit tests for `LatencyRecord` derivation math and `LatencyStats` aggregation.
 //
-// All tests are PURE: no I/O, no actors, no clock calls — timestamps are
-// injected directly. This matches the InsightsStats pattern (injectable `now`).
+// All tests are PURE: no I/O, no actors, no clock calls — timestamps and
+// cleanupSeconds are injected directly. This matches the InsightsStats pattern.
 //
 // COVERAGE:
 //   LatencyRecord:
-//     - Normal derivation from well-ordered timestamps.
+//     - Normal derivation from well-ordered timestamps + injected cleanupSeconds.
 //     - stopToPasteSeconds spans the full t_stop→t_pasted range.
-//     - cleanupSeconds is the transcriptReady→cleanupDone gap only.
+//     - cleanupSeconds passthrough: 0.0 (sentinel) and > 0 (measured).
 //     - Defensive: out-of-order timestamps → 0 (no crash).
-//     - No cleanup: cleanupSeconds == 0 when tCleanupDone == tTranscriptReady.
+//     - Negative cleanupSeconds floored to 0.
 //
 //   LatencyStats:
 //     - Empty input → all nil / zero counts.
@@ -23,6 +23,7 @@
 //     - Mixed population: raw vs cleanup correctly partitioned.
 //     - Even vs odd sample count: median picks middle correctly.
 //     - p95 clamped to last element on small n.
+//     - cleanupSeconds == 0 (sentinel) → raw bucket; > 0 → cleanup bucket.
 //
 // HONESTY BOUNDARY:
 //   These tests verify pure arithmetic derivation. Live wall-clock accuracy
@@ -35,9 +36,6 @@ import XCTest
 final class LatencyRecordTests: XCTestCase {
 
     // MARK: - Helpers
-
-    /// Nanoseconds-per-second constant. Avoids bare literals in test arithmetic.
-    private let nsPerSecond: UInt64 = 1_000_000_000
 
     /// Build a `HistoryEntry` with injected latency values.
     private func entry(
@@ -55,64 +53,62 @@ final class LatencyRecordTests: XCTestCase {
 
     // MARK: - LatencyRecord: derivation math
 
-    func testLatencyRecord_normalDerivation() {
-        // Exact nanosecond values to avoid integer-arithmetic surprises:
-        //   t_stop            =         0 ns  →  0.0 s
+    func testLatencyRecord_normalDerivation_withCleanup() {
+        // Exact nanosecond values:
+        //   t_stop            =           0 ns  →  0.0 s
         //   t_transcript_ready = 500_000_000 ns  →  0.5 s
-        //   t_cleanup_done    = 1_400_000_000 ns  →  1.4 s   (cleanup took 0.9 s)
-        //   t_pasted          = 1_600_000_000 ns  →  1.6 s   (paste took 0.2 s)
+        //   t_pasted          = 1_600_000_000 ns →  1.6 s
+        //   cleanupSeconds    =            0.9 s  (injected from runCleanup)
         //
         // Expected derivations:
         //   stopToPasteSeconds     = 1.6 - 0.0 = 1.6 s
         //   transcriptReadySeconds = 0.5 - 0.0 = 0.5 s
-        //   cleanupSeconds         = 1.4 - 0.5 = 0.9 s
+        //   cleanupSeconds         = 0.9 s (passthrough from runCleanup)
         let record = LatencyRecord(
-            tStop:            0,
+            tStop: 0,
             tTranscriptReady: 500_000_000,
-            tCleanupDone:     1_400_000_000,
-            tPasted:          1_600_000_000
+            tPasted: 1_600_000_000,
+            cleanupSeconds: 0.9
         )
         XCTAssertEqual(record.stopToPasteSeconds, 1.6, accuracy: 0.001,
             "stopToPasteSeconds must span t_stop to t_pasted")
         XCTAssertEqual(record.transcriptReadySeconds, 0.5, accuracy: 0.001,
             "transcriptReadySeconds must span t_stop to t_transcriptReady")
         XCTAssertEqual(record.cleanupSeconds, 0.9, accuracy: 0.001,
-            "cleanupSeconds must span t_transcriptReady to t_cleanupDone")
+            "cleanupSeconds must be the injected value from runCleanup")
     }
 
-    func testLatencyRecord_noCleanup_cleanupSecondsIsZero() {
-        // When tCleanupDone == tTranscriptReady, no time was spent in cleanup.
-        let tBase: UInt64 = 1_000_000_000  // 1s uptime
+    func testLatencyRecord_noCleanup_sentinelZero() {
+        // When cleanup did not run, cleanupSeconds is exactly 0.0 (sentinel).
         let record = LatencyRecord(
-            tStop:            tBase,
-            tTranscriptReady: tBase + 300_000_000,   // +300ms
-            tCleanupDone:     tBase + 300_000_000,   // same as transcript ready
-            tPasted:          tBase + 350_000_000    // +50ms paste
+            tStop: 1_000_000_000,
+            tTranscriptReady: 1_300_000_000,   // +300ms
+            tPasted: 1_350_000_000,            // +50ms paste
+            cleanupSeconds: 0.0                // sentinel: cleanup did not run
         )
-        XCTAssertEqual(record.cleanupSeconds, 0, accuracy: 0.0001,
-            "cleanupSeconds must be 0 when cleanup was not run")
+        XCTAssertEqual(record.cleanupSeconds, 0.0,
+            "cleanupSeconds must be exactly 0.0 when cleanup did not run (sentinel)")
         XCTAssertEqual(record.stopToPasteSeconds, 0.35, accuracy: 0.001,
             "stopToPasteSeconds still reflects the full stop→paste interval")
+        XCTAssertEqual(record.transcriptReadySeconds, 0.3, accuracy: 0.001)
     }
 
     func testLatencyRecord_outOfOrderTimestamps_noCrash() {
         // t_pasted < t_stop → should not crash, should produce 0 not negative.
         let record = LatencyRecord(
-            tStop:            1_000_000_000,
+            tStop: 1_000_000_000,
             tTranscriptReady: 900_000_000,    // out of order (< t_stop)
-            tCleanupDone:     800_000_000,    // out of order
-            tPasted:          700_000_000     // out of order
+            tPasted: 700_000_000,             // out of order
+            cleanupSeconds: 0.0
         )
         XCTAssertEqual(record.stopToPasteSeconds, 0,
             "Out-of-order timestamps must produce 0, not negative or crash")
         XCTAssertEqual(record.transcriptReadySeconds, 0,
             "Out-of-order tTranscriptReady must produce 0")
-        XCTAssertEqual(record.cleanupSeconds, 0,
-            "Out-of-order tCleanupDone must produce 0")
     }
 
     func testLatencyRecord_allZeroTimestamps_zeroResult() {
-        let record = LatencyRecord(tStop: 0, tTranscriptReady: 0, tCleanupDone: 0, tPasted: 0)
+        let record = LatencyRecord(tStop: 0, tTranscriptReady: 0, tPasted: 0, cleanupSeconds: 0)
         XCTAssertEqual(record.stopToPasteSeconds, 0)
         XCTAssertEqual(record.transcriptReadySeconds, 0)
         XCTAssertEqual(record.cleanupSeconds, 0)
@@ -121,13 +117,25 @@ final class LatencyRecordTests: XCTestCase {
     func testLatencyRecord_exactOneSecond() {
         // Sanity check: exactly 1,000,000,000 ns → 1.0 s.
         let record = LatencyRecord(
-            tStop:            0,
+            tStop: 0,
             tTranscriptReady: 1_000_000_000,
-            tCleanupDone:     1_000_000_000,
-            tPasted:          1_000_000_000
+            tPasted: 1_000_000_000,
+            cleanupSeconds: 0.0
         )
         XCTAssertEqual(record.stopToPasteSeconds, 1.0, accuracy: 0.000_001,
             "1,000,000,000 ns must convert to exactly 1.0 s")
+    }
+
+    func testLatencyRecord_negativeCleanupSeconds_flooredToZero() {
+        // Defensive: runCleanup should never return negative, but guard at the boundary.
+        let record = LatencyRecord(
+            tStop: 0,
+            tTranscriptReady: 100_000_000,
+            tPasted: 200_000_000,
+            cleanupSeconds: -0.5
+        )
+        XCTAssertEqual(record.cleanupSeconds, 0,
+            "Negative cleanupSeconds must be floored to 0")
     }
 
     // MARK: - LatencyStats: empty input
@@ -155,6 +163,29 @@ final class LatencyRecordTests: XCTestCase {
         XCTAssertEqual(stats.cleanupSampleCount, 0)
     }
 
+    // MARK: - LatencyStats: sentinel discrimination
+
+    func testLatencyStats_sentinelZero_bucketedAsRaw() {
+        // cleanupSeconds == 0.0 (exact sentinel from runCleanup off/unavailable path)
+        // must be bucketed as raw, not cleanup. This is the core correctness test.
+        let entries = [entry(stopToPaste: 0.7, cleanup: 0.0)]
+        let stats = LatencyStats(entries: entries)
+        XCTAssertEqual(stats.rawSampleCount, 1,
+            "Sentinel cleanupSeconds==0 must be bucketed as raw")
+        XCTAssertEqual(stats.cleanupSampleCount, 0,
+            "Sentinel cleanupSeconds==0 must NOT appear in cleanup population")
+    }
+
+    func testLatencyStats_nonZeroCleanup_bucketedAsCleanup() {
+        // cleanupSeconds > 0 (cleanup ran) must be bucketed as cleanup, not raw.
+        let entries = [entry(stopToPaste: 1.2, cleanup: 0.8)]
+        let stats = LatencyStats(entries: entries)
+        XCTAssertEqual(stats.rawSampleCount, 0,
+            "Entries with cleanupSeconds > 0 must NOT appear in raw population")
+        XCTAssertEqual(stats.cleanupSampleCount, 1,
+            "Entries with cleanupSeconds > 0 must be bucketed as cleanup")
+    }
+
     // MARK: - LatencyStats: single samples
 
     func testLatencyStats_singleRawSample() {
@@ -180,8 +211,8 @@ final class LatencyRecordTests: XCTestCase {
 
     func testLatencyStats_mixedPopulation_correctlyPartitioned() {
         let entries = [
-            entry(stopToPaste: 0.5, cleanup: 0),    // raw
-            entry(stopToPaste: 0.9, cleanup: 0),    // raw
+            entry(stopToPaste: 0.5, cleanup: 0),    // raw (sentinel)
+            entry(stopToPaste: 0.9, cleanup: 0),    // raw (sentinel)
             entry(stopToPaste: 1.2, cleanup: 0.5),  // cleanup
             entry(stopToPaste: 1.8, cleanup: 0.9)   // cleanup
         ]
@@ -267,8 +298,8 @@ final class LatencyRecordTests: XCTestCase {
 
     func testLatencyStats_equatable_sameEntries() {
         let entries = [entry(stopToPaste: 0.6, cleanup: 0), entry(stopToPaste: 1.2, cleanup: 0.4)]
-        let a = LatencyStats(entries: entries)
-        let b = LatencyStats(entries: entries)
-        XCTAssertEqual(a, b, "LatencyStats from the same entries must be equal")
+        let statsA = LatencyStats(entries: entries)
+        let statsB = LatencyStats(entries: entries)
+        XCTAssertEqual(statsA, statsB, "LatencyStats from the same entries must be equal")
     }
 }
