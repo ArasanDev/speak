@@ -18,6 +18,7 @@ struct InsightsPaneView: View {
 
     // History is fetched once on appear and cached here until the view disappears.
     @State private var stats: InsightsStats?
+    @State private var latency: LatencyStats?
     @State private var isLoading: Bool = false
 
     init(context: DashboardContext) {
@@ -61,6 +62,9 @@ struct InsightsPaneView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
                 statCardRow(stats)
+                if let latency {
+                    latencySection(latency)
+                }
                 activityChart(stats)
             }
             .padding(.horizontal, SpeakSpacing.lg)
@@ -86,6 +90,58 @@ struct InsightsPaneView: View {
                 Color.clear.frame(maxWidth: .infinity)   // keep the 2-column grid aligned
             }
         }
+    }
+
+    // MARK: - Latency section (benchmark.md §7 L_e2e)
+
+    /// Stop→paste latency cards. Thresholds come from benchmark.md §7 — no bare literals.
+    private func latencySection(_ latency: LatencyStats) -> some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+            Text("Stop → paste latency")
+                .font(.speakMonoBody)
+
+            HStack(spacing: SpeakSpacing.sm) {
+                LatencyCard(
+                    label: "raw median",
+                    valueSeconds: latency.rawMedian,
+                    budgetSeconds: latencyBudgetRawMedianSeconds,
+                    sampleCount: latency.rawSampleCount
+                )
+                LatencyCard(
+                    label: "cleanup median",
+                    valueSeconds: latency.cleanupMedian,
+                    budgetSeconds: latencyBudgetCleanupMedianSeconds,
+                    sampleCount: latency.cleanupSampleCount
+                )
+            }
+
+            if latency.rawSampleCount > 0 || latency.cleanupSampleCount > 0 {
+                HStack(spacing: SpeakSpacing.sm) {
+                    if let p95 = latency.rawP95 {
+                        LatencyCard(
+                            label: "raw p95",
+                            valueSeconds: p95,
+                            budgetSeconds: latencyBudgetRawMedianSeconds * 2,
+                            sampleCount: latency.rawSampleCount
+                        )
+                    }
+                    if let p95 = latency.cleanupP95 {
+                        LatencyCard(
+                            label: "cleanup p95",
+                            valueSeconds: p95,
+                            budgetSeconds: latencyBudgetCleanupMedianSeconds * 2,
+                            sampleCount: latency.cleanupSampleCount
+                        )
+                    }
+                    // Fill trailing space if only one p95 card is shown.
+                    if (latency.rawP95 != nil) != (latency.cleanupP95 != nil) {
+                        Color.clear.frame(maxWidth: .infinity)
+                    }
+                }
+            }
+        }
+        .padding(SpeakSpacing.md)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.speakSurface))
     }
 
     // MARK: - 7-day activity bar chart (plain SwiftUI — no Charts dep)
@@ -126,9 +182,11 @@ struct InsightsPaneView: View {
         do {
             let entries = try await context.historyStore.recent(limit: 1000)
             stats = InsightsStats(entries: entries, now: Date(), calendar: .current)
+            latency = LatencyStats(entries: entries)
         } catch {
             // Store errors surface as an empty state (stats stays nil → placeholder shown).
             stats = InsightsStats(entries: [], now: Date(), calendar: .current)
+            latency = LatencyStats(entries: [])
         }
     }
 }
@@ -152,6 +210,59 @@ private struct StatCard: View {
         .padding(SpeakSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.speakSurface))
+    }
+}
+
+// MARK: - LatencyCard
+
+/// A compact latency metric card showing a value in milliseconds with a budget indicator.
+///
+/// Color semantics (no magic numbers — thresholds from benchmark.md §7 via `budgetSeconds`):
+///   • Green (speakStateDone):    value ≤ budget — within target.
+///   • Red (speakStateError):     value > budget — over target.
+///   • Secondary (neutral):       no data yet (value is nil).
+private struct LatencyCard: View {
+    let label: String
+    /// The measured value in seconds. `nil` when no samples exist yet.
+    let valueSeconds: Double?
+    /// Budget threshold in seconds (from benchmark.md §7 via a named constant).
+    let budgetSeconds: Double
+    /// Number of samples this value is derived from.
+    let sampleCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            if let valueSeconds {
+                let withinBudget = valueSeconds <= budgetSeconds
+                Text(formattedMs(valueSeconds))
+                    .font(.speakMonoStat)
+                    .foregroundStyle(withinBudget ? Color.speakStateDone : Color.speakStateError)
+                Text(label)
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(.secondary)
+                Text("n=\(sampleCount)")
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(.tertiary)
+            } else {
+                Text("—")
+                    .font(.speakMonoStat)
+                    .foregroundStyle(.secondary)
+                Text(label)
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(.secondary)
+                Text("no data")
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(SpeakSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.speakSurface))
+    }
+
+    /// Format seconds as milliseconds with one decimal, e.g. "342.1ms".
+    private func formattedMs(_ seconds: Double) -> String {
+        String(format: "%.0fms", seconds * 1000)
     }
 }
 

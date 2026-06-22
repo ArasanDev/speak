@@ -106,8 +106,9 @@ public actor HistoryStore: HistoryStoring {
 
     public func save(_ entry: HistoryEntry) throws {
         let sql = """
-            INSERT OR REPLACE INTO history (id, rawText, cleanedText, createdAt, engineId, duration)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO history \
+            (id, rawText, cleanedText, createdAt, engineId, duration, stopToPasteSeconds, cleanupSeconds)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """
         try execute(sql: sql) { stmt in
             let idStr = entry.id.uuidString
@@ -130,6 +131,12 @@ public actor HistoryStore: HistoryStoring {
             guard sqlite3_bind_double(stmt, 6, entry.duration) == SQLITE_OK else {
                 throw dbError("bind duration")
             }
+            guard sqlite3_bind_double(stmt, 7, entry.stopToPasteSeconds) == SQLITE_OK else {
+                throw dbError("bind stopToPasteSeconds")
+            }
+            guard sqlite3_bind_double(stmt, 8, entry.cleanupSeconds) == SQLITE_OK else {
+                throw dbError("bind cleanupSeconds")
+            }
         }
         try trimToCapacity()
         SpeakLog.storage.debug("HistoryStore saved entry \(entry.id.uuidString, privacy: .private)")
@@ -137,7 +144,8 @@ public actor HistoryStore: HistoryStoring {
 
     public func recent(limit: Int) throws -> [HistoryEntry] {
         let sql = """
-            SELECT id, rawText, cleanedText, createdAt, engineId, duration
+            SELECT id, rawText, cleanedText, createdAt, engineId, duration,
+                   stopToPasteSeconds, cleanupSeconds
             FROM history
             ORDER BY createdAt DESC, rowid DESC
             LIMIT ?
@@ -155,7 +163,8 @@ public actor HistoryStore: HistoryStoring {
         // `instr(col, ?) > 0` is a true substring match — no wildcard escaping
         // needed (unlike LIKE '%x%'). Default BINARY collation → case-sensitive.
         let sql = """
-            SELECT id, rawText, cleanedText, createdAt, engineId, duration
+            SELECT id, rawText, cleanedText, createdAt, engineId, duration,
+                   stopToPasteSeconds, cleanupSeconds
             FROM history
             WHERE instr(rawText, ?) > 0 OR instr(cleanedText, ?) > 0
             ORDER BY createdAt DESC, rowid DESC
@@ -212,12 +221,14 @@ public actor HistoryStore: HistoryStoring {
     private static func setupSchema(db: OpaquePointer?) throws {
         let sql = """
             CREATE TABLE IF NOT EXISTS history (
-                id         TEXT PRIMARY KEY NOT NULL,
-                rawText    TEXT NOT NULL,
-                cleanedText TEXT,
-                createdAt  REAL NOT NULL,
-                engineId   TEXT NOT NULL,
-                duration   REAL NOT NULL DEFAULT 0
+                id                 TEXT PRIMARY KEY NOT NULL,
+                rawText            TEXT NOT NULL,
+                cleanedText        TEXT,
+                createdAt          REAL NOT NULL,
+                engineId           TEXT NOT NULL,
+                duration           REAL NOT NULL DEFAULT 0,
+                stopToPasteSeconds REAL NOT NULL DEFAULT 0,
+                cleanupSeconds     REAL NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS idx_history_createdAt ON history (createdAt DESC);
             """
@@ -230,11 +241,14 @@ public actor HistoryStore: HistoryStoring {
             throw SpeakError.unknown("SQLite schema: \(msg)")
         }
 
-        // Migration: add `duration` to DBs created before it existed. ALTER errors with
-        // "duplicate column name" when the column is already present (fresh DBs, or a
-        // prior migration) — that is the idempotent no-op case, so the result is ignored.
-        // [decision: column-add migration over PRAGMA user_version — single additive column]
+        // Migrations: add columns to DBs created before they existed. ALTER errors with
+        // "duplicate column name" on fresh DBs or after a prior migration — that is the
+        // idempotent no-op case, so the result is ignored.
+        // [decision: column-add migration over PRAGMA user_version — single additive columns]
         sqlite3_exec(db, "ALTER TABLE history ADD COLUMN duration REAL NOT NULL DEFAULT 0", nil, nil, nil)
+        // P13 migration: stop→paste latency columns (benchmark.md §7).
+        sqlite3_exec(db, "ALTER TABLE history ADD COLUMN stopToPasteSeconds REAL NOT NULL DEFAULT 0", nil, nil, nil)
+        sqlite3_exec(db, "ALTER TABLE history ADD COLUMN cleanupSeconds REAL NOT NULL DEFAULT 0", nil, nil, nil)
     }
 
     // MARK: - Capacity trim
@@ -303,13 +317,17 @@ public actor HistoryStore: HistoryStoring {
             let createdAt = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 3))
             let engineId = sqlite3_column_text(stmt, 4).map { String(cString: $0) } ?? ""
             let duration = sqlite3_column_double(stmt, 5)
+            let stopToPasteSeconds = sqlite3_column_double(stmt, 6)
+            let cleanupSeconds = sqlite3_column_double(stmt, 7)
             entries.append(HistoryEntry(
                 id: id,
                 rawText: rawText,
                 cleanedText: cleanedText,
                 createdAt: createdAt,
                 engineId: engineId,
-                duration: duration
+                duration: duration,
+                stopToPasteSeconds: stopToPasteSeconds,
+                cleanupSeconds: cleanupSeconds
             ))
         }
         return entries
