@@ -204,6 +204,18 @@ public actor SpeakEngine {
             SpeakLog.engine.info("SpeakEngine: beginDictation refused — microphone is muted.")
             throw SpeakError.microphoneMuted
         }
+        // [A3] Re-entrancy guard: SpeakEngine is a bare actor (NOT @MainActor).
+        // A second beginDictation() call entering during the `await session.start()`
+        // suspension below would call newSession(), which overwrites currentSession
+        // and orphans the first session's live streamTask indefinitely. Guard at the
+        // only place that creates sessions so the first session runs to completion
+        // (or cancel) before a second can be started. The caller (DictationController)
+        // already serialises through the hotkey debouncer, but the CLI path has no
+        // such gate — this is the bypass-proof enforcement point. [decision A3]
+        guard currentSession == nil else {
+            SpeakLog.engine.info("SpeakEngine: beginDictation refused — a session is already in flight.")
+            return
+        }
         let session = newSession()
         SpeakLog.engine.info("SpeakEngine: beginDictation — starting new session.")
         try await session.start()
@@ -261,7 +273,39 @@ public actor SpeakEngine {
             throw SpeakError.unknown("SpeakEngine.endDictation() called with no active session.")
         }
         SpeakLog.engine.info("SpeakEngine: endDictation — stopping session.")
-        let result = try await session.stop()
+        // [A3 wedge fix] If session.stop() throws (e.g., A1 cancel-during-processing
+        // re-check, or a paste failure), `currentSession = nil` below is never reached.
+        // Clear currentSession before propagating the error so a subsequent
+        // beginDictation() is not wedged by a non-nil stale session. The session is
+        // already in a terminal error state at this point — clearing the reference
+        // releases it. [decision A3-wedge]
+        do {
+            let result = try await session.stop()
+            // Stop succeeded — fall through to history save below.
+            return await finishEndDictation(result: result)
+        } catch {
+            currentSession = nil
+            SpeakLog.engine.error(
+                "SpeakEngine: endDictation stop/paste failed — currentSession cleared. \(error.localizedDescription, privacy: .public)"
+            )
+            throw error
+        }
+    }
+
+    /// Completes the end-dictation flow after a successful `session.stop()`:
+    /// saves the history entry (best-effort) and clears `currentSession`.
+    /// Extracted so the error path above can clear `currentSession` without
+    /// duplicating the history-save logic.
+    private func finishEndDictation(result: TranscriptionResult) async -> TranscriptionResult {
+
+        // [A2] Empty-transcript guard (engine side): CaptureSession.stop() already
+        // skips paste for empty rawText. Skip history save too — a zero-char entry
+        // is noise and could mislead WPM/latency stats. Reach .done cleanly.
+        guard !result.rawText.isEmpty else {
+            currentSession = nil
+            SpeakLog.engine.info("SpeakEngine: empty transcript — skip history save.")
+            return result
+        }
 
         // History save — best-effort. Never propagate a save failure.
         // Latency fields default to 0 when the result has no LatencyRecord (tests /

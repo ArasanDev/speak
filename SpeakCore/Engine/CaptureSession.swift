@@ -203,8 +203,9 @@ public actor CaptureSession {
     /// Returns the `TranscriptionResult` (architecture §6) to the caller; the
     /// caller is responsible for the paste (P6) and history (P9) side effects.
     ///
-    /// Throws `SpeakError` if the session is not in `.listening`, or if the
-    /// cleanup engine raises a genuine API failure (`SpeakError.llmCleanupFailed`).
+    /// Throws `SpeakError` if the session is not in `.listening`, if a
+    /// `cancel()` arrived during one of the awaits (`.sessionCancelled`), or if
+    /// the paste step fails.
     public func stop() async throws -> TranscriptionResult {
         // If the stream already failed, surface that error before attempting stop.
         if case .error(let err) = state {
@@ -251,8 +252,34 @@ public actor CaptureSession {
         // and snippets work even when cleanup is off (the expanded text becomes rawText,
         // which is what the raw-paste fallback delivers). nil expander = unchanged.
         let rawText = expander?.expand(transcribed) ?? transcribed
-        let duration = Date().timeIntervalSince(sessionStartTime ?? Date())
+
+        // [A2] Empty-transcript guard: a silent start+stop (blocked mic, silence) must
+        // never call inserter.insert("") — that wipes the user's clipboard — and must
+        // never save a zero-char history entry. Reach .done cleanly and return early.
+        // runCleanup is also skipped: sending "" to Foundation Models wastes up to T_cleanup.
+        if rawText.isEmpty {
+            state = .done
+            partialsContinuation?.finish()
+            partialsContinuation = nil
+            streamTask = nil
+            SpeakLog.engine.info("CaptureSession: empty transcript — skip paste + history, reach .done.")
+            // Use a single timestamp for both duration and createdAt so they are
+            // consistent. [decision: single Date() call prevents sub-millisecond skew
+            // between the two fields, which would make duration vs createdAt inconsistent.]
+            let sessionEndedAt = Date()
+            return TranscriptionResult(
+                rawText: rawText,
+                cleanedText: nil,
+                duration: sessionEndedAt.timeIntervalSince(sessionStartTime ?? sessionEndedAt),
+                engineId: transcriber.id,
+                createdAt: sessionEndedAt
+            )
+        }
+
+        // [decision: single Date() call for both duration and createdAt so the two
+        // fields are consistent — no sub-millisecond skew between them.]
         let sessionEndedAt = Date()
+        let duration = sessionEndedAt.timeIntervalSince(sessionStartTime ?? sessionEndedAt)
 
         // Run cleanup. Never throws — all failure/timeout paths return raw fallback.
         // `cleanupSeconds` is the measured time spent inside the cleanup pass:
@@ -261,6 +288,20 @@ public actor CaptureSession {
         // This sentinel distinction drives LatencyStats population partitioning —
         // do NOT replace with a DispatchTime.now() delta here.
         let (cleanedText, engineId, cleanupSeconds) = await runCleanup(rawText: rawText)
+
+        // [A1] Cancel-during-processing guard: cancel() can enter this actor during
+        // any of the awaits above (transcriber.stop, task.value, runCleanup). It sets
+        // state=.error(.sessionCancelled). Re-check here — AFTER the last await, BEFORE
+        // paste — so a cancelled session never pastes against the user's intent and
+        // never overwrites .error with .done. This also covers the `inserter == nil`
+        // path: we throw rather than settling .done over a cancelled session.
+        if case .error(let cancelErr) = state {
+            SpeakLog.engine.info(
+                "CaptureSession: cancel arrived during stop() awaits — aborting paste+done."
+            )
+            // partialsContinuation and streamTask are already cleaned up by cancel().
+            throw cancelErr
+        }
 
         let result = TranscriptionResult(
             rawText: rawText,
@@ -336,9 +377,14 @@ public actor CaptureSession {
     /// Used by the hotkey on cancel, or by the app on quit. Safe to call from
     /// any non-terminal state.
     public func cancel() async {
-        if case .error = state {
-            // Already terminal — nothing to do.
+        // Guard both terminal states: .error (already cancelled or failed) and
+        // .done (session completed). Re-entering either would double-call
+        // transcriber.stop() and needlessly re-finish the partials continuation.
+        switch state {
+        case .error, .done:
             return
+        default:
+            break
         }
         SpeakLog.engine.info("CaptureSession: cancelling.")
         await transcriber.stop()
@@ -362,7 +408,22 @@ public actor CaptureSession {
     ///   latestChunk is also updated so stop() can fall back to it when
     ///   finalizedText ends up empty (e.g. single-segment or very short speech
     ///   where only a volatile arrived before the session was stopped).
+    ///
+    /// NOTE: `.processing` is NOT guarded here. transcriber.stop() triggers
+    /// finalization and the final isFinal chunk arrives while state==.processing
+    /// (during stop()'s drain). Guarding against .processing would silently drop
+    /// the final segment and produce a truncated/empty transcript. Only terminal
+    /// states (.done, .error) are guarded.
     private func ingest(_ chunk: TranscriptChunk) {
+        // Late-ingest guard: a chunk arriving after the session is terminal
+        // (cancel() during the stream drain, or a duplicate drain path) must
+        // not mutate state or the partials continuation.
+        switch state {
+        case .done, .error:
+            return
+        default:
+            break
+        }
         latestChunk = chunk
         if chunk.isFinal {
             // Append this window's final text. Separator " " is added between
@@ -379,6 +440,15 @@ public actor CaptureSession {
     /// Called when the STT stream throws (transcriber failure). The session
     /// moves to `.error`; `stop()` will then re-throw the error.
     private func failStream(_ error: Error) {
+        // Late-failStream guard: if cancel() already set .error, do not
+        // overwrite it (would change the error reason) and do not re-finish
+        // the partials continuation.
+        switch state {
+        case .done, .error:
+            return
+        default:
+            break
+        }
         let speakError: SpeakError
         if let speakErrorCast = error as? SpeakError {
             speakError = speakErrorCast
@@ -522,9 +592,15 @@ public actor CaptureSession {
         // success, failure, or timeout). The delta is the real user-experienced latency
         // for this cleanup pass, including model cold-start and timeout wait if triggered.
         let tCleanupEnd = DispatchTime.now().uptimeNanoseconds
-        let cleanupSeconds: Double = tCleanupEnd >= tCleanupStart
-            ? Double(tCleanupEnd - tCleanupStart) / 1_000_000_000
-            : 0.0
+        // [A4] Floor: when tCleanupEnd == tCleanupStart (fast machine or mocked cleaner,
+        // both reads return the same nanosecond), the computed delta would be exactly 0.0
+        // — colliding with the "cleanup did not run" sentinel used by LatencyStats to
+        // partition raw vs cleanup entries. Apply a 1 ns floor so any path that actually
+        // called clean() produces cleanupSeconds > 0, preserving the partition invariant.
+        // 1 ns is chosen because it is the smallest representable DispatchTime unit and
+        // is far below any real measurement (≥ 1 µs in practice). [decision A4]
+        let rawDeltaNs: UInt64 = tCleanupEnd > tCleanupStart ? tCleanupEnd - tCleanupStart : 1
+        let cleanupSeconds: Double = Double(rawDeltaNs) / 1_000_000_000
 
         switch outcome {
         case .success(let cleaned):
