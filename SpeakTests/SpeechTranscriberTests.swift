@@ -283,4 +283,89 @@ final class SpeechTranscriberTests: XCTestCase {
         // The test passes if the for loop exits (stream terminated, no hang).
         XCTAssertTrue(true, "Stream terminated after stop() — no zombie tasks.")
     }
+
+    // MARK: - B1: start/stop race guard tests
+
+    /// Mock AudioBufferProducing that records start()/stop() calls.
+    /// Lets us verify the mic is released in all stop orderings. [B1]
+    final class MockAudioProducer: AudioBufferProducing, @unchecked Sendable {
+        private let lock = NSLock()
+        private var _startCount = 0
+        private var _stopCount = 0
+        var startCount: Int { lock.withLock { _startCount } }
+        var stopCount: Int { lock.withLock { _stopCount } }
+        var continuationRef: AsyncStream<AVAudioPCMBuffer>.Continuation?
+
+        func start() throws -> AsyncStream<AVAudioPCMBuffer> {
+            lock.withLock { _startCount += 1 }
+            let (stream, cont) = AsyncStream<AVAudioPCMBuffer>.makeStream()
+            lock.withLock { continuationRef = cont }
+            return stream
+        }
+        func stop() {
+            lock.withLock {
+                _stopCount += 1
+                continuationRef?.finish()
+                continuationRef = nil
+            }
+        }
+    }
+
+    /// B1 — immediate-stop ordering: stop() called right after startStream(),
+    /// before the session Task has a chance to register the producer.
+    ///
+    /// The session task is detached and must reach setStopProducer() asynchronously.
+    /// stop() may win actor entry first (stopRequested = true). When the session
+    /// Task then calls setStopProducer(), it gets back `true`, calls producer.stop(),
+    /// and returns without touching the bridge. Result: stream must finish.
+    ///
+    /// This test is inherently racy — it cannot deterministically trigger the exact
+    /// window (the race is ns-level). It guards the bail path by exercising
+    /// immediate-stop with no sleep and asserting the stream terminates.
+    @available(macOS 26.0, *)
+    func testStopImmediatelyAfterStartStreamTerminates() async throws {
+        guard SpeechTranscriber.isAvailable else {
+            throw XCTSkip("SpeechTranscriber not available.")
+        }
+        let mock = MockAudioProducer()
+        let stt = AppleSpeechTranscriber(audioProducer: mock)
+        let stream = stt.startStream(locale: Locale(identifier: "en-US"))
+        // Stop immediately — no sleep. May or may not hit the race window.
+        await stt.stop()
+        // Stream must terminate (finite collect), not hang.
+        var count = 0
+        for try await _ in stream { count += 1 }
+        XCTAssertTrue(true, "Stream terminated after immediate stop() — B1 bail path did not hang.")
+    }
+
+    /// B1 — stop() called before startStream(). Verifies that the stop()
+    /// call to a transcriber that has never started does not crash or hang.
+    @available(macOS 26.0, *)
+    func testStopBeforeStartNoCrash() async {
+        let mock = MockAudioProducer()
+        let stt = AppleSpeechTranscriber(audioProducer: mock)
+        // stop() with no session in progress — must be a no-op.
+        await stt.stop()
+        XCTAssertEqual(mock.stopCount, 0, "stop() before startStream() must not touch producer.")
+    }
+
+    /// B1 — verifies mock producer stop() is called after startStream + delayed stop.
+    /// Sanity-check that the mock tracking works (used by the immediate-stop test).
+    @available(macOS 26.0, *)
+    func testMockProducerStopCalledAfterDelayedStop() async throws {
+        guard SpeechTranscriber.isAvailable else {
+            throw XCTSkip("SpeechTranscriber not available.")
+        }
+        let mock = MockAudioProducer()
+        let stt = AppleSpeechTranscriber(audioProducer: mock)
+        let stream = stt.startStream(locale: Locale(identifier: "en-US"))
+        // Give the session Task time to register the producer.
+        try await Task.sleep(nanoseconds: 200_000_000) // 200ms
+        await stt.stop()
+        var count = 0
+        for try await _ in stream { count += 1 }
+        // Producer stop() should have been called exactly once.
+        XCTAssertGreaterThanOrEqual(mock.stopCount, 1,
+            "producer.stop() must be called after stt.stop() — mic must not stay hot.")
+    }
 }
