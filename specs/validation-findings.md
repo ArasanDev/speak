@@ -88,6 +88,43 @@ Cloud cleanup (ours is on-device/free — strictly better).
 
 ---
 
-## Phase 2 — per-seam code bug hunt  *(pending)*
-## Phase 3 — adversarial verification of findings  *(pending)*
+## Phase 2 — per-seam code bug hunt  *(4 of 6 seams in: engine, cleanup, storage, app; input + STT pending)*
+
+Confidence that the codebase is healthy is **reinforced**: storage SQLi = CLEAN, logging-privacy = CLEAN, cleanup fallback contract + actor-safety = CLEAN, no `print`/force-unwrap/global-state/networking found. The real bugs are concentrated in the **engine session lifecycle** and **cleanup prompt building**.
+
+### HIGH-VALUE confirmed bugs (→ Phase 3 adversarial verify before any fix)
+- **[P1] Cancel-during-processing pastes against user intent** (`CaptureSession.stop()` ~L213-320). `stop()` checks state once, then `await`s `transcriber.stop()`, `runCleanup` (up to 10s), `inserter.insert`. A `cancel()` (mute/quit) arriving during those awaits sets `.error(.sessionCancelled)`, but `stop()` resumes, **pastes anyway**, and overwrites `state = .done` — the cancel is silently lost. Fix: re-check `if case .error = state { throw e }` after the last await and before paste + before `.done`. *Directly violates the "never paste against intent / be very safe" rule.* (hunt-engine P1-2b, high conf.)
+- **[P1] CLI double-`--start` re-entrancy double-starts a session** (`SpeakEngine.beginDictation()` ~L183, L198-210). No `guard currentSession == nil`; two `--start` (or hotkey+CLI race) before `icon` flips both call `beginDictation()` → `newSession()` overwrites `currentSession`, and `transcriber.startStream` runs **twice on the same shared transcriber**, orphaning the first session's live `streamTask`. Fix: `guard currentSession == nil else { return }` atop `beginDictation()`. (hunt-engine P1-3, high conf. The CLI icon-gate window from 2.3's caveat is real after all.)
+- **[P2→P1?] Empty-transcript clobbers clipboard** (`CaptureSession.stop()` ~L249-295 / `SpeakEngine` ~L279). Silent start+stop → `rawText == ""` → `inserter.insert("")` (clipboard floor **wipes the user's clipboard**) + saves a zero-char history entry. Fix: guard empty `rawText` → reach `.done`, skip paste + history. (hunt-engine P1-1, high conf.)
+- **[MEDIUM-security] Command-mode prompt injection** (`FoundationModelsCleaner` ~L207-214). Dictated instruction interpolated verbatim into a double-quoted system-prompt slot (`instruction: "\(trimmed)"`); only whitespace-trimmed. A crafted utterance can close the quote and inject a competing instruction. Fix: escape `"`→`'` (or `\"`) and strip `\n`. FM guardrails attenuate but the structural seam is real. (hunt-cleanup N1, med conf.)
+- **[MEDIUM-security] Vocabulary-term prompt injection** (`FoundationModelsCleaner` ~L301-302). Same class: dictionary terms wrapped in `"\"\($0)\""`; a term containing `"`/`\n` breaks out. Fix: same escaping. (hunt-cleanup N2, med conf.)
+
+### MEDIUM confirmed bugs
+- **[Med] `cleanupSeconds` near-zero sentinel collision** (`CaptureSession` ~L525). If the two `DispatchTime.now()` reads return the same ns (fast machine / mocked cleaner), the cleanup-ran path yields `0.0` → `LatencyStats` misclassifies it as the **raw** population. Fix: substitute a 1ns floor when end==start so the `==0`/`>0` partition stays honest. (hunt-engine N-4.)
+- **[Med] Int32 truncation in `trimToCapacity`** (`HistoryStore` ~L265) — `sqlite3_bind_int(Int32(maxEntries))` vs `recent()` using `int64`. Latent (UI caps well below Int32.max) but inconsistent. Fix: `sqlite3_bind_int64`. (hunt-storage N-1.)
+- **[Med] `search()` has no `LIMIT`** (`HistoryStore` ~L162-175) — a common-word search over 10k rows decodes all matches at once (heap spike). Fix: `LIMIT 500`. (hunt-storage N-2.)
+- **[Med] Dashboard shows stale hotkey keycaps after rebind** (`WindowPresenter`/`DashboardWindowController`) — `hotkeyCombo` captured at controller construction, not at `show()`. (hunt-app N5.)
+- **[Med] Duplicate `watchForCompletion` watcher on onboarding re-show** (`OnboardingWindowController` ~L147) — task not stored; a 2nd `show()` spawns a 2nd poll, both racing to set `autoCloseTask`; first becomes uncancellable. (hunt-app N3.)
+- **[Med] `UserDefaults` read on every render** (`OnboardingViewModel` ~L67) — `currentHotkeyDisplayString` allocates a `UserDefaultsBindingStore` + reads UD per body render. (hunt-app N2.)
+- **[Med] `.accessibility` paste-mode picker row selectable despite `.disabled(true)`** (`SettingsView` ~L125) — `.disabled` on the tag doesn't block selection; keyboard-nav can write the stub mode. (hunt-app N9.)
+- **[Med] Silent language reset** (`SettingsView` ~L317-333) — stored locale unsupported on this Mac → silently reset to `s[0]` with no user feedback. (hunt-app N8; echoes 1.2.)
+
+### LOW / polish (confirmed)
+- Wrong progress dot highlighted on the Done screen (`OnboardingView` ~L106; `.done` excluded from `allSteps` → index nil → dot 0 lit). (hunt-app N7, easy.)
+- `cancel()` doesn't guard `.done` terminal state → can re-enter `.error` + double `transcriber.stop()` (hunt-engine N-1).
+- Late `ingest()`/`failStream()` after `cancel()` can still mutate state (hunt-engine N-2).
+- Two separate `Date()` calls make `duration` vs `createdAt` slightly inconsistent (hunt-engine N-3, one-line fix).
+- `endDictation()` post-await overwrite (lower-blast-radius sibling of P1-2b) (hunt-engine N-5).
+- HotkeyRecorderView NSEvent monitor `[self]` value-capture fragility (hunt-app N1).
+- `icon = .listening` set before `overlayController.start()` returns (hunt-app N4).
+- No per-term length cap on vocabulary (graceful raw-fallback, latency cost) (hunt-cleanup N3).
+- `engineId`/encode-failure silent fallbacks in storage (hunt-storage N-4/5/6, info).
+
+### DOC-only (confirmed, matches Phase 1B)
+- `FoundationModelsCleaner` header `[verified]` tags wrong: `LanguageModelSession.init(model:guardrails:instructions:)` doesn't exist (code uses correct two-step); `GenerationError` not `@frozen`/exhaustive. (hunt-cleanup C1/N4.)
+
+### Test-coverage additions (agent-doable, from 1C + confirmed)
+`triggerMode` + `cleanupStyle` + `.mlx` round-trip tests; CLI real-gate (not the reimplementation); `endDictation` error branches E2E; `rebindHotkey`+Combine; snippet-in-session E2E; partials drain; empty-transcript; multi-display positioning; OnboardingViewModel lifecycle.
+
+## Phase 3 — adversarial verification of findings  *(pending — will target the 5 HIGH-VALUE bugs + 2 security injections)*
 ## Phase 4 — prioritized fix batches for user approval  *(pending)*
