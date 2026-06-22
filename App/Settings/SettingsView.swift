@@ -288,11 +288,53 @@ private struct TranscriptionSettingsTab: View {
 
 /// AI Cleanup: unified effectiveCleanupLevel picker collapses the old toggle + level pair.
 /// Style and Engine pickers are disabled when level == .none (progressive disclosure).
+/// A live diff preview shows what each intensity level actually changes — the W4.1
+/// transparency moat. The preview uses a canned sample transcript (FM is unavailable
+/// on dev Macs) with illustrative cleaned outputs that match each intensity's prompt
+/// contract. [decision W4.1: canned sample in Settings preview; live diff is in History]
 private struct AICleanupSettingsTab: View {
     @ObservedObject var store: SettingsStore
 
     /// Derived: cleanup is active when effectiveCleanupLevel != .none.
     private var cleanupActive: Bool { store.effectiveCleanupLevel != .none }
+
+    // MARK: - Canned sample for the diff preview
+
+    /// The fixed raw transcript used as the diff preview source.
+    /// Chosen to show all four intensity levels meaningfully:
+    ///   - light: strips "um"/"you know", adds periods and commas
+    ///   - medium: additionally tightens "was thinking that maybe" → "think"
+    ///   - high: additionally restructures into two clean sentences
+    /// [decision W4.1: single canned input, four distinct cleaned outputs; this is
+    ///  illustrative — the live engine may clean differently depending on context]
+    private let sampleRaw =
+        "um I was thinking that maybe we should like move the meeting to thursday " +
+        "because you know on wednesday I have a conflict with another thing"
+
+    /// Returns the canned cleaned output for `level`. These strings match the
+    /// intensity ladder description in `CleanupLevel.levelDescription` so the
+    /// user can read both and understand what each level does.
+    /// [decision W4.1: named function (not a switch inline) so test fixtures can
+    ///  call the same mapping without instantiating the view]
+    private func sampleCleaned(for level: CleanupLevel) -> String? {
+        switch level {
+        case .none:
+            // None = raw passthrough; cleanedText nil triggers "No AI cleanup" state.
+            return nil
+        case .light:
+            // Light: filler removal + punctuation. Words and structure unchanged.
+            return "I was thinking that maybe we should like move the meeting to Thursday, " +
+                   "because on Wednesday I have a conflict with another thing."
+        case .medium:
+            // Medium: + sentence tightening. "was thinking that maybe" → "think",
+            //         "another thing" → "another commitment".
+            return "I think we should move the meeting to Thursday. " +
+                   "I have a conflict on Wednesday."
+        case .high:
+            // High: + restructuring + paragraph clarity. Two clean, complete sentences.
+            return "Let\u{2019}s move the meeting to Thursday. I have a scheduling conflict on Wednesday."
+        }
+    }
 
     var body: some View {
         Form {
@@ -316,6 +358,27 @@ private struct AICleanupSettingsTab: View {
                 Text("Intensity")
             } footer: {
                 Text("None = raw transcript pasted with no AI changes.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // W4.1 diff preview — shows exactly what the selected intensity changes.
+            // CleanupDiffView handles .none → "No AI cleanup applied" state internally.
+            // [decision W4.1: Settings preview uses canned illustrative text; live
+            //  diffs from real dictations appear in History]
+            Section {
+                CleanupDiffView(
+                    rawText: sampleRaw,
+                    cleanedText: sampleCleaned(for: store.effectiveCleanupLevel)
+                )
+                // Constrain height so the form stays scrollable on small displays.
+                // [decision W4.1: 160pt = ~4 lines at speakMonoBody — enough to read
+                //  the diff without dominating the Settings pane]
+                .frame(minHeight: 160)
+            } header: {
+                Text("Preview")
+            } footer: {
+                Text("Illustrative preview — your actual results may vary. Live diffs appear in History.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
