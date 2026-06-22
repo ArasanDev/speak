@@ -156,7 +156,7 @@ Method: independent skeptics, "REFUTED unless the exact reachable path is traced
 
 ### skeptic-cleanup (both injections REFUTED) ❌→dropped
 - **Command-mode prompt injection → REFUTED.** Dictated text lands in the session **instructions** slot (`LanguageModelSession(model:instructions:)`); selected text is a separate channel (`session.respond(to:)` L99). The `"\(trimmed)"` quotes are NL prose, not a grammar the model parses to "close quote + inject" — at most a generic jailbreak (dictating "ignore previous…"), not a code-level seam. **No privilege boundary: the user is the operator** (own hotkey → own instruction → own selected text → own document). On-device, no tools/network → no exfiltration. Worst case = unexpected text in the user's own doc. **Fix unnecessary** (string-sanitizing does nothing; the model parses meaning, not quote syntax).
-- **Vocabulary-term prompt injection → REFUTED (the code does not exist).** `FoundationModelsCleaner.swift` is 293 lines — there is no L301-302. `grep` of `SpeakCore/Cleanup/` for vocab/dictionary interpolation = zero hits. `customVocabulary` (SettingsStore L342) flows **only** into `AppleSpeechTranscriber.contextualStrings` (L221-223) as a typed STT recognition hint — never into the cleanup layer. hunt-cleanup N2 mislocated the code.
+- **Vocabulary-term prompt injection → REFUTED on threat-model grounds.** ⚠️ **Correction:** skeptic-cleanup reported "the code does not exist" — that was a **stale-baseline artifact** (it read the `wave23-cli` worktree's pre-Wave-2.2 `FoundationModelsCleaner.swift` = 293 lines). In **ship** code (master, 319 lines) the vocab clause **does exist**: L287-309 interpolates `customVocabulary.prefix(50)` terms as `"\"\($0)\""` into the FM system instructions (matches hunt-cleanup N2 + my Wave 2.2 work). It is still correctly **dropped**, but for the reason that holds regardless of code location: **no privilege boundary** — the user types their own dictionary terms into their own prompt to clean their own text on-device with no tools/network. (`customVocabulary` ALSO flows into `AppleSpeechTranscriber.contextualStrings` as a typed STT hint — a second, safe path.)
 - **Threat-model note:** classic injection needs attacker≠user, or model tools/network, or output→trusted downstream. None hold (on-device FM, no function-calling, output is clipboard text the user sees first). → **Both removed from the fix backlog.**
 
 ### skeptic-stt (1 confirmed, 1 refuted)
@@ -166,6 +166,16 @@ Method: independent skeptics, "REFUTED unless the exact reachable path is traced
 ### skeptic-input (both CONFIRMED; primary-source on the leak)
 - **CLAIM 1 — detector desync after out-of-band stop → CONFIRMED-REAL.** `DoubleTapDetector.register()` (HotkeyDetection L147-165): `isCapturing==true`→`.stopCapture`+reset; else 2nd-tap-in-window→`.startCapture`; else record+nil. `detector.reset()` is called **only** in `buildTap()` (L349), which runs only on the AX untrusted→trusted edge + wake-rearm. `endDictation()` / `cancelDictation()` / Escape / CLI `--stop` never reset it. So after any out-of-band stop, the next double-tap needs a **3rd tap** (tap1→`.stopCapture` no-op + resets, tap2→records+nil, tap3→`.startCapture`). **FIX CAVEAT (important):** `detector` is documented run-loop-thread-only (L163); a `notifySessionEnded()` from the main actor must reset via the `NSLock` **or** a lock-guarded `pendingDetectorReset` flag applied by the run-loop thread (mirror the `armingDesired` pattern) — the naive reset adds a data race. Fix correct in concept; **must** address threading.
 - **CLAIM 2 — `passRetained` CGEvent leak → CONFIRMED-REAL (primary source).** `CGEventTypes.h:451` typedef has **no `CF_RETURNS_RETAINED`**; the header comment (L444-446) states the calling code retains the event and releases it after the callback returns → Get Rule → callback must return **+0**. `passRetained` at HotkeyMonitor L423/L427 hands the system a +1 it never releases → one CGEvent leaked per flagsChanged. Hammerspoon / AltTab / karabiner-elements all pass through with no extra retain. Fix (`passUnretained` at both sites) = **correct & sufficient**, no threading implications.
+
+---
+
+## ⚠️ Audited-baseline note (read before trusting line numbers)
+
+Skeptics + hunters read the **`wave23-cli` worktree** (HEAD `d3382c5`); ship is **`master`** (`d8db7a6`). Diff of the 9 audited source files: **7 IDENTICAL** to ship → their line numbers + verdicts stand verbatim (CaptureSession, AppleSpeechTranscriber, HotkeyMonitor, HotkeyDetection, DictationController, PasteboardWriter, CLIPortServer). **2 were behind ship** (`SpeakEngine.swift`, `FoundationModelsCleaner.swift` — the worktree predates Wave 2.2 vocab plumbing). Both re-checked against ship:
+- **A3 (CLI double-start) re-verified against ship:** `beginDictation()` is at ship L198; only `guard !muted` (L203) precedes `newSession()` (L207); **no `currentSession` guard** → finding HOLDS. (Skeptic's L192-204 cites stale numbers; ship = L198-207.)
+- **Vocab-injection re-checked against ship:** code DOES exist (L287-309) — see corrected verdict below; still dropped, on threat-model grounds.
+
+**Confidence asymmetry:** the 9 CONFIRMED high-value bugs got adversarial verification (4 of ~13 claims were refuted — a real ~30% false-positive rate). The **12 MEDIUM** + the **hunt-input2 NEW** findings did NOT get an adversarial pass. → Every Batch C-NEW/D item is tagged **"re-confirm the exact site before implementing"**; an implementer must grep the live line before editing.
 
 ---
 
@@ -192,7 +202,7 @@ Method: independent skeptics, "REFUTED unless the exact reachable path is traced
 Directly protects the hard rules "never paste against intent" + "don't corrupt other apps' clipboard."
 - **A1** Cancel-during-processing paste: re-check `if case .error = state { cleanup; throw }` after the last `await` in `stop()` (post-L237), before paste (L281) and before `.done` (L320).
 - **A2** Empty-transcript clobber: guard `rawText.isEmpty` after L253 → skip paste + skip history, reach `.done`.
-- **A3** CLI double-start: `guard currentSession == nil else { return }` atop `beginDictation()` (before L201).
+- **A3** CLI double-start: `guard currentSession == nil else { return }` atop `beginDictation()` (ship: after `guard !muted` L203, before `newSession()` L207).
 - **A4 (bundled MEDIUM)** cleanupSeconds sentinel: 1ns floor when `end==start` so the raw/cleanup partition stays honest.
 - *+regression tests for A1/A2/A3 (cancel-during-await, empty path, re-entrant start).*
 
