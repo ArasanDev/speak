@@ -98,14 +98,16 @@ struct OllamaSetupSheet: View {
             SetupStepRow(
                 number: "3",
                 title: "Keep Ollama running",
-                detail: "Ollama runs as a background service on port 11434. speak uses it automatically on your next dictation."
+                detail: "Ollama runs as a background service on port 11434. speak will connect to it automatically in v0.1."
             )
 
-            // Note: live detection deferred to v0.1.
+            // Note: live detection deferred to v0.1. In v0 selecting Ollama stores
+            // the preference but falls back to raw transcript (isAvailable returns
+            // false until SpeakLLM networking lands). [decision Wave 2.1]
             HStack(spacing: SpeakSpacing.xs) {
                 Image(systemName: "info.circle")
                     .foregroundStyle(.secondary)
-                Text("speak will use Ollama automatically once it is running. Live detection arrives in v0.1.")
+                Text("Ollama support lands in v0.1. In v0, speak falls back to raw transcript when Ollama is selected.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

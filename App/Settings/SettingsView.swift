@@ -603,7 +603,7 @@ private struct AICleanupSettingsTab: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         case .ollama:
-            Text("Ollama runs on-device — no cloud, no account. Install Ollama and pull a model to activate.")
+            Text("Ollama support arrives in v0.1. In v0, speak falls back to raw transcript when this engine is selected.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         case .mlx:
