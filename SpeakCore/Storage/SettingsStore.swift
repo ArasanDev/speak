@@ -42,12 +42,30 @@ public enum STTEngine: Codable, Sendable, Equatable, Hashable {
     case whisperCpp
 }
 
-/// Which AI cleanup engine to use. v0 = `.foundationModels`. v0.1+ are placeholders.
+/// Which AI cleanup engine to use. v0 = `.foundationModels`. v0.1+ are opt-in alternatives.
+///
+/// **Persistence:** encoded as JSON in `UserDefaults` (same pattern as `STTEngine`).
+/// **Default:** `.foundationModels` — the only production-ready engine in v0.
+/// **Fallback:** `EngineFactories.defaultCleaner(for:)` always falls back to
+/// `FoundationModelsCleaner` when an opt-in engine's stub returns `isAvailable == false`.
+///
+/// Wave 2.1 additions: `.ollama` and `.mlx` are now registered cases (not just code
+/// comments). Their `LLMCleaning` conformers (`OllamaCleaner`, `MLXCleaner`) exist in
+/// `SpeakCore/Cleanup/` as stubs that always return `isAvailable == false`. Real
+/// implementations land when the `SpeakLLM` module (v0.1) or MLX dep (v0.1+) is added.
+/// Registering them now lets the picker UI and `EngineFactories` be exhaustive without
+/// a rebuild when the real cleaners land. [decision Wave 2.1]
 public enum CleanupEngine: Codable, Sendable, Equatable, Hashable {
     /// Apple Foundation Models (macOS 26+, Apple Silicon + Neural Engine). **v0 default.**
+    /// Runs entirely on-device; no network, no account, no server required.
     case foundationModels
-    /// Ollama local server (Qwen 2.5, Gemma 3, Phi-4-mini…). **v0.1 placeholder (not built).**
+    /// Ollama local server (Qwen2.5-3B / Gemma3-4B / Phi-4-mini…).
+    /// The user installs Ollama (ollama.ai) and pulls a model; `speak` talks to the
+    /// localhost HTTP API at port 11434. **v0.1 — stub in v0 (`isAvailable == false`).**
     case ollama(model: String)
+    /// MLX on-device inference (Apple Silicon, github.com/ml-explore/mlx).
+    /// Requires MLX Swift packages (third-party dep — forbidden in v0). **v0.1+ stub.**
+    case mlx(model: String)
 }
 
 /// How finished text is delivered to the cursor. v0 = `.cmdV`.
