@@ -39,7 +39,11 @@ if [[ ! -f "$REPO_ROOT/project.yml" ]]; then
     exit 1
 fi
 
-SOURCE_DIRS=("$REPO_ROOT/SpeakCore" "$REPO_ROOT/App")
+# CLI/ is included because it is new IPC surface — scanning it keeps the
+# networking-symbol check honest for the CLI binary. The CLI binary itself is
+# not a GUI app and uses FileHandle for output (not os.Logger), but it must
+# still be free of networking symbols and third-party imports. [decision: W2.3]
+SOURCE_DIRS=("$REPO_ROOT/SpeakCore" "$REPO_ROOT/App" "$REPO_ROOT/CLI")
 PASS_COUNT=0
 FAIL_COUNT=0
 

@@ -65,7 +65,7 @@ private final class NullHistoryStore: HistoryStoring, @unchecked Sendable {
 // MARK: - DictationController
 
 @MainActor
-final class DictationController: ObservableObject {
+final class DictationController: ObservableObject, CLICommandHandler {
 
     // MARK: - Published state
 
@@ -125,6 +125,14 @@ final class DictationController: ObservableObject {
     /// `startMonitoring()`; consumes `monitor.commandChordEvents`.
     private var commandModeController: CommandModeController?
     private var commandChordTask: Task<Void, Never>?
+
+    // MARK: - CLI IPC server (W2.3)
+
+    /// Owns the named CFMessagePort server for the `speak` CLI tool.
+    /// Registered in `startMonitoring()` — not before, so the test host path
+    /// (XCTestConfigurationFilePath early-return) never opens the port.
+    /// [decision: W2.3 — server lifetime = app lifetime]
+    private let cliPortServer = CLIPortServer()
 
     // MARK: - Settings store
 
@@ -285,6 +293,34 @@ final class DictationController: ObservableObject {
 
     // MARK: - Public API
 
+    // MARK: - CLICommandHandler (W2.3)
+    //
+    // These two entry points bridge CLI IPC into the same begin/end path the hotkey
+    // uses. They are defined here (not inside an `extension`) so they have access to
+    // `beginDictation()` and `endDictation()` which are `private`.
+    //
+    // The idempotency gate lives in `CLIPortServer` (checks `icon` before calling),
+    // but we keep the actual dispatch simple and trust the gate above.
+
+    /// Called by `CLIPortServer` when a `--start` command arrives.
+    /// Dispatches `beginDictation()` on the main actor (already on main — the
+    /// port callback schedules on CFRunLoopGetMain). Reuses the hotkey path exactly.
+    func cliBeginDictation() {
+        Task { [weak self] in
+            await self?.beginDictation()
+        }
+    }
+
+    /// Called by `CLIPortServer` when a `--stop` command arrives.
+    /// Dispatches `endDictation()` on the main actor. Reuses the hotkey path exactly.
+    func cliEndDictation() {
+        Task { [weak self] in
+            await self?.endDictation()
+        }
+    }
+
+    // MARK: - startMonitoring
+
     /// Call once from `applicationDidFinishLaunching`. Arms the hotkey tap
     /// asynchronously and begins consuming events. Safe to call exactly once.
     ///
@@ -337,6 +373,12 @@ final class DictationController: ObservableObject {
             cleaner: defaultCleaner(for: settingsStore)
         )
         startCommandChordTask()
+
+        // CLI IPC server (W2.3): register the named CFMessagePort so `speak --start`,
+        // `--stop`, and `--status` can drive this running instance.
+        // Called AFTER the XCTestConfigurationFilePath early-return in AppDelegate
+        // ensures the port is never opened during test-host runs.
+        cliPortServer.register(handler: self)
     }
 
     // MARK: - Window presentation (delegates to WindowPresenter)

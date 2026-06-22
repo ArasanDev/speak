@@ -19,4 +19,5 @@ public enum SpeakLog {
     public static let paste       = Logger(subsystem: subsystem, category: "paste")
     public static let permissions = Logger(subsystem: subsystem, category: "permissions")
     public static let storage     = Logger(subsystem: subsystem, category: "storage")
+    public static let cli         = Logger(subsystem: subsystem, category: "cli")
 }
