@@ -6,8 +6,10 @@
 // using a word-level diff computed by `SpeakCore.textDiff(raw:cleaned:)`.
 //
 // DESIGN:
-//   - Standalone component: no wiring into Settings, History, or the overlay yet.
-//     Those are Wave-3/Wave-4 tasks that will compose this view. [scope W4.1]
+//   - Wired into Settings▸AI Cleanup (W4.1): `AICleanupSettingsTab` embeds this as
+//     a live diff preview that updates when the user changes the cleanup level. The
+//     preview uses a canned illustrative transcript; live diffs from real dictations
+//     are a future History-detail integration. [decision W4.1: Settings preview first]
 //   - Monaco theme throughout (Font.speakMono*, Color.speakAccent, SpeakSpacing).
 //     No magic numbers — all sizes are semantic tokens or tagged [decision]. [decision]
 //   - Three display modes via `CleanupDiffView.DisplayMode`:

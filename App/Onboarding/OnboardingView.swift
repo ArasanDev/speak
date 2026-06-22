@@ -8,10 +8,11 @@
 //     - active/empty: permission not yet granted (Why text + action button)
 //     - granted/done: permission granted (checkmark + Continue button)
 //
-// HOTKEY LABEL (W1.2):
-//   The default trigger is now double-tap Right-Command (keycode 54, flagsChanged).
-//   A local `fallbackTriggerLabel()` helper returns the display string.
-//   TODO: replace with HotkeyBinding.displayString once W1.1 is merged.
+// HOTKEY LABEL (W2.5):
+//   Onboarding reads the live binding from `OnboardingViewModel.currentHotkeyDisplayString`
+//   which sources `UserDefaultsBindingStore` + `settings.triggerMode` — the same
+//   pair `DictationController` uses — so the hotkey step and done screen always show
+//   the user's actual configured gesture (e.g. "⌘⌘ Right Command", "Fn ×2").
 //
 // HONESTY BOUNDARY:
 //   The rendered flow, system prompts, and deep-link correctness are
@@ -24,19 +25,6 @@
 
 import SwiftUI
 import SpeakCore
-
-// MARK: - Hotkey label fallback
-
-/// Returns the human-readable label for the default trigger.
-/// Default is double-tap Right-Command (W1.1/W1.2 decision).
-///
-/// TODO: replace body with `HotkeyBinding.displayString` once W1.1 is merged
-///       into this worktree. Using a distinct name (`fallbackTriggerLabel`) to
-///       avoid a duplicate-member conflict at merge with SpeakCore's extension.
-private func fallbackTriggerLabel() -> String {
-    // [decision: Right-Command is the default trigger post-W1.1, next-iteration-plan.md §2]
-    "Right-Command"
-}
 
 // MARK: - OnboardingView
 
@@ -87,11 +75,12 @@ struct OnboardingView: View {
             )
         case .hotkey:
             HotkeyStepView(
+                hotkeyLabel: viewModel.currentHotkeyDisplayString,
                 hotkeyTriggered: viewModel.hotkeyTriggered,
                 onContinue: { viewModel.advance() }
             )
         case .done:
-            DoneStepView()
+            DoneStepView(hotkeyLabel: viewModel.currentHotkeyDisplayString)
         }
     }
 
@@ -318,6 +307,9 @@ private struct PermissionStepView: View {
 // MARK: - HotkeyStepView
 
 private struct HotkeyStepView: View {
+    /// The live hotkey gesture label (e.g. "⌘⌘ Right Command", "Fn ×2").
+    /// Sourced from `OnboardingViewModel.currentHotkeyDisplayString`.
+    let hotkeyLabel: String
     /// `true` once the user has fired the hotkey at least once during this step.
     let hotkeyTriggered: Bool
     let onContinue: () -> Void
@@ -330,12 +322,14 @@ private struct HotkeyStepView: View {
                 .padding(.top, 36)
 
             VStack(spacing: 8) {
-                // Title uses the fallback label.
-                // TODO: use HotkeyBinding.displayString once W1.1 is merged.
-                Text("Your Hotkey: Double-tap \(fallbackTriggerLabel())")
+                // `hotkeyLabel` already encodes the full gesture (e.g. "⌘⌘ Right Command")
+                // so we show it as-is — never prepend "Double-tap" which would
+                // double-encode the trigger and be wrong for hold mode.
+                Text("Your Hotkey: \(hotkeyLabel)")
                     .font(.title2.bold())
 
-                Text("Double-tap the Right Command key to start dictating. Tap it once to stop. speak listens while you work in any app.")
+                // swiftlint:disable:next line_length
+                Text("Trigger the hotkey to start dictating; trigger it again to stop. speak listens while you work in any app.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -348,7 +342,7 @@ private struct HotkeyStepView: View {
             }
 
             // "Try it now" live test pill
-            HotkeyTryPillView(triggered: hotkeyTriggered)
+            HotkeyTryPillView(hotkeyLabel: hotkeyLabel, triggered: hotkeyTriggered)
 
             Button("Finish Setup") {
                 onContinue()
@@ -398,13 +392,15 @@ private struct HotkeyConflictNoteView: View {
 
 /// A pill that starts neutral and turns green once the user fires the hotkey.
 ///
-/// Three visual states:
-///   - Waiting: grey, "Try it now — double-tap Right-Command"
-///   - Triggered (green): "Nice — that works!" with checkmark
+/// Two visual states:
+///   - Waiting: grey, "Try it now — \(hotkeyLabel)"
+///   - Triggered (green): "Nice — that worked." with checkmark
 ///
 /// The pill is a delighter, NOT a gate — advancing past this step
 /// does not require the pill to be green.
 private struct HotkeyTryPillView: View {
+    /// The live hotkey gesture label (e.g. "⌘⌘ Right Command", "Fn ×2").
+    let hotkeyLabel: String
     let triggered: Bool
 
     var body: some View {
@@ -412,8 +408,7 @@ private struct HotkeyTryPillView: View {
             Image(systemName: triggered ? "checkmark.circle.fill" : "hand.tap")
                 .foregroundStyle(triggered ? .green : .secondary)
                 .font(.body)
-            // TODO: update label with HotkeyBinding.displayString once W1.1 merged.
-            Text(triggered ? "Nice \u{2014} that worked." : "Try it now \u{2014} double-tap \(fallbackTriggerLabel())")
+            Text(triggered ? "Nice \u{2014} that worked." : "Try it now \u{2014} \(hotkeyLabel)")
                 .font(.speakMonoCaption)
                 .foregroundStyle(triggered ? .primary : .secondary)
         }
@@ -437,6 +432,9 @@ private struct HotkeyTryPillView: View {
 // MARK: - DoneStepView
 
 private struct DoneStepView: View {
+    /// The live hotkey gesture label (e.g. "⌘⌘ Right Command", "Fn ×2").
+    let hotkeyLabel: String
+
     var body: some View {
         VStack(spacing: 24) {
             Image(systemName: "checkmark.seal.fill")
@@ -447,8 +445,8 @@ private struct DoneStepView: View {
             VStack(spacing: 8) {
                 Text("You\u{2019}re all set.")
                     .font(.title.bold())
-                // TODO: update label with HotkeyBinding.displayString once W1.1 merged.
-                Text("Double-tap \(fallbackTriggerLabel()) to start dictating. speak will paste polished text wherever your cursor is.")
+                // `hotkeyLabel` encodes the full gesture — shown directly, no prefix.
+                Text("Use \(hotkeyLabel) to start dictating. speak will paste polished text wherever your cursor is.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
