@@ -48,6 +48,29 @@ final class OnboardingViewModel: ObservableObject {
     /// Used by the view to disable the primary button and show "Waiting…" label.
     @Published private(set) var isWaitingForAccessibility: Bool = false
 
+    // MARK: - Live hotkey display string
+
+    /// The human-readable description of the current hotkey binding gesture.
+    ///
+    /// Derived from `UserDefaultsBindingStore` (the same key the monitor reads) so
+    /// onboarding always shows the user's persisted choice. The trigger is mirrored
+    /// from `settings.triggerMode` — `SettingsStore` is the authoritative source for
+    /// the effective trigger (the monitor applies it via `HotkeyBinding.with(trigger:)`
+    /// on start). Falls back to `HotkeyBinding.defaultBinding.displayString` when no
+    /// persisted binding exists (first run).
+    ///
+    /// Examples: "⌘⌘ Right Command", "Fn ×2", "⌘ Right Command (hold)".
+    ///
+    /// [decision: read UserDefaultsBindingStore in-seam — avoids an out-of-seam
+    ///  dependency on DictationController while producing the same value. 2026-06-22]
+    var currentHotkeyDisplayString: String {
+        let base = UserDefaultsBindingStore().load() ?? HotkeyBinding.defaultBinding
+        // Mirror the effective trigger from settings — DictationController applies the
+        // same override via `base.with(trigger: settings.triggerMode)`.
+        let effective = base.with(trigger: settings.triggerMode)
+        return effective.displayString
+    }
+
     // MARK: - Private
 
     private let permissionManager: any PermissionManaging
