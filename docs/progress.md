@@ -26,7 +26,13 @@
 >
 > **Worktree note:** the 1.3 worktree (`agent-a4e257b3191f0f3d1`) is the orchestrator's own primary working dir, so it could not self-remove after merge — clean it up next session (`git worktree remove --force` once operating elsewhere). The 1.1/1.2 worktrees were removed.
 >
-> **Next:** Wave 1.4 (cleanup intensity + diff polish in Settings▸AI Cleanup), then Wave 2 (v1 feature ladder). Human-gate track (live paste in 3 apps, latency numbers, menubar-color visual check, P11 release) remains owner-only.
+> **Wave 1.4 + 2.5 ALSO MERGED (same integration pass, all 4 gates green: build / 378 tests 0-fail / lint 0-serious / moat 7/7):**
+> - **1.4 cleanup intensity** (`App/Settings/SettingsView.swift` AICleanupSettingsTab; `App/Components/CleanupDiffView.swift`): 4-level None/Light/Medium/High wired end-to-end + raw-vs-cleaned diff surfaced. (None = raw passthrough, skips the LLM.)
+> - **2.5 onboarding polish** (`App/Onboarding/OnboardingView.swift` + `OnboardingViewModel.swift`): live current-hotkey display (reads `UserDefaultsBindingStore` in-seam), gesture-mode-agnostic copy fix; "Try it now" pill + overlay waveform were already wired (verified, no work needed).
+>
+> **⚠️ ORCHESTRATION GOTCHA (learned this session):** the orchestrator's own cwd is a git worktree (`agent-a4e257b3191f0f3d1`). Subagents spawned with `isolation: worktree` did NOT get isolated trees — they committed onto the orchestrator's worktree branch, stacking commits. Safe only because file seams were disjoint + git serialized commits. **For genuinely parallel file-mutating work, create explicit `git worktree add` dirs manually or serialize.** That branch is now fully merged; clean it up next session (`git worktree remove --force` once operating from the main checkout).
+>
+> **Next:** Wave 2 — **2.4 (latency/metrics) BEFORE 2.3 (CLI)** per advisor (2.4 feeds the v0 ship-gate numbers); then 2.1 (pluggable cleanup-model UI) + 2.2 (richer cleanup). CLI IPC contract pinned in `specs/acceleration-roadmap.md` §3 (CFMessagePort behind `CLITransport`). Human-gate track (live paste in 3 apps, latency numbers, menubar-color visual check, live rebind-fires check, P11 release) remains owner-only.
 
 > ## OLD BANNER (handoff banner — 2026-06-22, Wave 0 live-bug cleanup — MERGED)
 > **Two live bugs fixed + integrated to master. ALL 4 GATES GREEN on combined master.**
