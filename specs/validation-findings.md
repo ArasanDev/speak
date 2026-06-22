@@ -175,6 +175,13 @@ Method: independent skeptics, "REFUTED unless the exact reachable path is traced
 **REFUTED & DROPPED (4):** command-mode prompt injection · vocab-term injection (code didn't exist) · STT consumer-abandonment leak · STT empty-transcript hang.
 **MEDIUM confirmed (12):** cleanupSeconds sentinel · Int32 trim · search no-LIMIT · stale keycaps · dup watcher · UserDefaults-per-render · picker row selectable · silent language reset · tearDownTap race · wakeRearmTimer race · modifierMask default · triggerMode over-fire.
 
+### Addendum — hunt-input2 (late Phase-2 input re-hunt; not Phase-3-verified, but concrete + actionable)
+- **[refines C2 — deeper diagnosis]** The stuck-session-on-tap-teardown affects **double-tap mode too, not just hold.** Root cause is controller-level: `startArmStateTask()` (DictationController L479-489) on `armed==false` only sets `permissionsNeeded=true` — it never calls `cancelDictation()`. So when `tearDownTap()` fires mid-session, the engine stays `.listening` and after rebuild `detector.isCapturing==false` makes the next tap read as a fresh first-tap against a still-running engine. **The robust fix is at the controller: on disarm while `icon==.listening`, dispatch `endDictation()` (preserve transcript) / `cancelDictation()`** — this subsumes the tap-level `.stopCapture` yield in C2. *(Reconcile with skeptic-input C2 + NEW-1 during Batch C.)*
+- **[NEW][P2] Weak-self race in monitor init** (HotkeyMonitor L217-219): `Thread.detachNewThread { [weak self] in self?.runLoopMain() }` — if the monitor is released before the thread starts, `runLoopMain()` never runs, `tapRunLoop` never set, monitor silently dead (no crash). Latent in app (held for lifetime); real in transient/test paths. Fix: strong capture (or `Unmanaged.passRetained` + `takeRetainedValue` in the closure).
+- **[NEW][P3, high-conf] CLI source on `.defaultMode` not `.commonModes`** (CLIPortServer L124,137): while a modal is up (onboarding window, settings sheet, menu-tracking) the run loop switches modes and the CLI callback never fires → `speak --status`/`--stop` silently 3s-timeout. Fix: `.commonModes` for both add+remove. *(Real CLI usability bug if CLI-while-modal is a use case.)*
+- **[NEW][P3, high-conf] Spurious `permissionsNeeded` flicker on every expected re-arm** (DictationController L486-489): each `tearDownTap()` yields `armStateChanges(false)` → `permissionsNeeded=true` for one tick on every normal wake/rate-limit re-arm (AX still granted). Fix: only set `permissionsNeeded=true` on disarm when `AXIsProcessTrusted()==false`.
+- **[NEW][P3, low] rate-limiter is per-arm-cycle** (HotkeyMonitor L385-388): `restartRateLimiter.reset()` on every `buildTap()` → never permanently gives up on a persistent macOS tap-disable. Doc-gap / may be intentional; note in code.
+
 ---
 
 ## Phase 4 — prioritized fix batches for user approval
@@ -195,7 +202,10 @@ Directly protects the hard rules "never paste against intent" + "don't corrupt o
 ### ⭐ BATCH C — Hotkey lifecycle & paste P1 *(builder-input: `HotkeyMonitor.swift` + `HotkeyDetection.swift` + `DictationController.swift` + `PasteboardWriter.swift`)*
 One owner — these all cluster in the input seam (C1/C2/C4/C5 share `HotkeyMonitor`).
 - **C1** Detector desync: `notifySessionEnded()` resetting `detector`+`lastBoundKeyDown` via lock / `pendingDetectorReset` flag (NOT a naive main-actor reset — threading caveat), called from `endDictation()` + `cancelDictation()`.
-- **C2** Hold-mode stuck: in `tearDownTap()`, if `_binding.trigger == .hold && lastBoundKeyDown` → `continuation.yield(.stopCapture)` before disarm.
+- **C2** Stuck-session on tap teardown (hold AND double-tap): tap-level — in `tearDownTap()`, if `_binding.trigger == .hold && lastBoundKeyDown` → `yield(.stopCapture)`; **plus** the more robust controller-level fix (hunt-input2): in `startArmStateTask()`, on disarm while `icon==.listening` → `endDictation()`. Implement together — the controller fix covers double-tap mode the tap-level yield misses.
+- **C6 (NEW, P3 high-conf)** CLI source mode: `.defaultMode`→`.commonModes` at CLIPortServer L124,137 so `--status`/`--stop` work while a modal is open.
+- **C7 (NEW, P3 high-conf)** Suppress `permissionsNeeded` flicker: only set it on disarm when `AXIsProcessTrusted()==false` (DictationController L486-489).
+- **C8 (NEW, P2)** Monitor-init weak-self race: strong-capture `self` in `Thread.detachNewThread` (HotkeyMonitor L217-219).
 - **C3** Paste 10ms gap: `try await Task.sleep(for: .milliseconds(10))` between the 4 CGEvents (`simulateCmdV` → `async throws`; call site `try await`). *(code-confirmed vs VoiceInk; live-paste impact is a Human-Gate item.)*
 - **C4** `passRetained`→`passUnretained` at L423/L427.
 - **C5** deinit UAF: store watchdog timer as ivar → `CFRunLoopTimerInvalidate` + `CFRunLoopStop(tapRunLoop)` in `deinit`.
