@@ -8,7 +8,27 @@
 
 ## Current phase
 
-> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-22, Wave 0 live-bug cleanup — MERGED)
+> ## 🚩 READ THIS FIRST (handoff banner — 2026-06-22, Wave 1 v0-polish — MERGED, ALL 4 GATES GREEN)
+> **Wave 1 (three parallel worktrees) complete + integrated to master. `make build`/`test`/`lint`/`verify-moat` all green on combined master.**
+> Per `specs/acceleration-roadmap.md` §2. Salvaged from three agents that died at the session limit mid-task — partial files were finished, wired, gated, and merged (no work discarded).
+>
+> **1.1 — Hotkey recorder UI** (`App/Settings/HotkeyRecorderView.swift` new +508; `SettingsView.swift` ShortcutsSettingsTab; `DictationController.swift`):
+>   - Record-a-combo sheet in Settings▸Shortcuts; persists via `BindingStore`; current binding shown via `HotkeyBinding.displayString`; live re-bind through `controller.rebindHotkey(_:)`.
+>   - Mode picker ships **Toggle + Push-to-Talk** only. **Hybrid is DEFERRED** — `HotkeyBinding.Trigger` has just `.doubleTap`/`.hold`; hybrid needs core `HotkeyMonitor` hold-vs-double-tap timing disambiguation (a separate engine task, not UI). Honest footer notes this.
+>
+> **1.2 — Language picker populated** (`SpeakCore/STT/LocaleSupport.swift` new +102; `SettingsView.swift` TranscriptionSettingsTab):
+>   - `SpeechTranscriberLocaleSource` exposes `supportedLocales()`/`installedLocales()` (both Apple `get async`, compile-verified against local macOS 26 SDK). Picker loads async with a ProgressView placeholder (never blank), "(download)" badge for un-installed models, persists `store.language`, resets to first-supported if stored locale vanishes. Selection flows live: `SpeakEngine.newSession()` reads `settings.language` at call time → next dictation uses it, no restart.
+>   - Caveat: whether SpeechAnalyzer auto-installs a supported-but-not-installed locale at session start is `[unverified — live]`; `provisionAsset` handles download at transcription time regardless.
+>
+> **1.3 — Menubar state colors** (`App/Theme/SpeakTheme.swift` +5 tokens; `App/SpeakApp.swift` MenuBarLabel; `DictationController.swift` `#if DEBUG forceIcon`; `DebugLaunchDispatcher.swift` +2 debug routes):
+>   - Per-state symbol+tint: idle=waveform/secondary, listening=waveform.circle.fill/red, processing=hourglass/yellow, done=checkmark.circle/green, error=xmark.circle/red. +VoiceOver labels. 600ms done-flash reuses existing `doneFlashNanoseconds`. Rendering via `.symbolRenderingMode(.palette)` + `.foregroundStyle(tint)`.
+>   - **⚠️ COLOR RENDERING `[unverified — human visual check]`:** agent env can't screencapture the menubar layer. Verify with `open build/DerivedData/Build/Products/Debug/Speak.app --args --debug-open menubar-icon-listening` → icon should be RED. If monochrome, authorized fallback is `NSStatusItem` + `button.image?.isTemplate = false` (a separate post-P8 task — do NOT do inline).
+>
+> **Worktree note:** the 1.3 worktree (`agent-a4e257b3191f0f3d1`) is the orchestrator's own primary working dir, so it could not self-remove after merge — clean it up next session (`git worktree remove --force` once operating elsewhere). The 1.1/1.2 worktrees were removed.
+>
+> **Next:** Wave 1.4 (cleanup intensity + diff polish in Settings▸AI Cleanup), then Wave 2 (v1 feature ladder). Human-gate track (live paste in 3 apps, latency numbers, menubar-color visual check, P11 release) remains owner-only.
+
+> ## OLD BANNER (handoff banner — 2026-06-22, Wave 0 live-bug cleanup — MERGED)
 > **Two live bugs fixed + integrated to master. ALL 4 GATES GREEN on combined master.**
 > Per `specs/acceleration-roadmap.md` Wave 0. The core loop works live (owner dictated this session).
 >

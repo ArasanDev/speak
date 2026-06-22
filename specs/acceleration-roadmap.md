@@ -37,12 +37,12 @@ Exit: both merged, full gate suite green, worktrees removed.
 
 The remaining non-human v0 items from `roadmap.md` P8/P10 + the top Settings gap.
 
-| # | Task | Owner | Tier |
-|---|------|-------|------|
-| 1.1 | **Hotkey recorder sheet** — record-a-combo UI in Settings▸Shortcuts (the #1 missing affordance); write to `BindingStore`; show current binding via `displayString`. Per-binding Toggle / Push-to-Talk / Hybrid mode picker. | builder-input + builder-app | Sonnet |
-| 1.2 | **Language picker populated** — surface the actual `SpeechAnalyzer` supported locales (not just en-US/en-GB) in Settings▸Transcription, persisted in `SettingsStore`. | builder-audio-stt + builder-app | Sonnet |
-| 1.3 | **Menubar state colors** (P8 deferred-visual) — distinct color/symbol per `MenubarIcon` state (idle/listening/processing/done/error) + the 600ms done-flash, live-correct. | builder-app | Haiku |
-| 1.4 | **Cleanup intensity + diff polish** (W4.1 follow-through) — ensure the 4-level None/Light/Medium/High + raw-vs-cleaned diff are wired end-to-end and surfaced in Settings▸AI Cleanup. | builder-cleanup + builder-app | Sonnet |
+| # | Task | Owner | Tier | State |
+|---|------|-------|------|-------|
+| 1.1 | **Hotkey recorder sheet** — record-a-combo UI in Settings▸Shortcuts; write to `BindingStore`; show current binding via `displayString`. Toggle / Push-to-Talk modes. | builder-input + builder-app | Sonnet | ✅ MERGED (Hybrid deferred → needs HotkeyMonitor timing disambiguation; see Wave 3) |
+| 1.2 | **Language picker populated** — surface actual `SpeechTranscriber.supportedLocales` in Settings▸Transcription, persisted in `SettingsStore`, flows live to next session. | builder-audio-stt + builder-app | Sonnet | ✅ MERGED |
+| 1.3 | **Menubar state colors** — per-state color/symbol + VoiceOver labels + 600ms done-flash, palette rendering. | builder-app | Sonnet | ✅ MERGED (color render `[unverified — human visual check]`) |
+| 1.4 | **Cleanup intensity + diff polish** (W4.1 follow-through) — ensure the 4-level None/Light/Medium/High + raw-vs-cleaned diff are wired end-to-end and surfaced in Settings▸AI Cleanup. | builder-cleanup + builder-app | Sonnet | next |
 
 Parallelizable; isolate file seams (1.1/1.4 both touch Settings → sequence or split panes carefully). Orchestrator owns merges.
 
