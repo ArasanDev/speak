@@ -3,6 +3,30 @@
 // v0 default speech-to-text engine: Apple SpeechAnalyzer (macOS 26+, Apple Silicon).
 // Conforms to `Transcribing`. Engine id: "apple-speech-en-US".
 //
+// B1 — start/stop mic-leak guard (validation-fix Batch B)
+// ─────────────────────────────────────────────────────────
+// `startStream()` fires a separate fire-and-forget Task to register the session
+// Task with the SessionState actor. If `stop()` wins actor entry before that Task
+// runs, `stopSession()` sees nil and no-ops; then `run()` starts the mic and blocks
+// forever on `await bridgeTask.value`. Fix: `stopRequested` flag in SessionState,
+// set in `stopSession()`; checked by `setStopProducer(_:)` immediately after
+// `audioProducer.start()` — if already set, the mic is stopped and run() returns
+// without reaching bridgeTask. Both orderings release the mic.
+//
+// STT P2 — AssetInventory.reserve
+// ─────────────────────────────────
+// `AssetInventory.reserve(locale:) async throws -> Bool` is called around
+// `downloadAndInstall()`. Returns `true` on success, `false` when at the
+// `maximumReservedLocales` limit (not a thrown error — the error type is generic;
+// there is NO `.reservationLimitReached` enum case in the SDK). [verified against
+// arm64e-apple-macos.swiftinterface, MacOSX26.5.sdk, 2026-06-22]
+//
+// STT P3 — converter-init safety
+// ────────────────────────────────
+// If `AVAudioConverter(from:to:)` returns nil (incompatible formats), the bridge
+// task now logs the source/target format strings rather than silently passing the
+// unconverted buffer to the analyzer.
+//
 // Audio injection model
 // ─────────────────────
 // `startStream(locale:)` in the `Transcribing` protocol is non-async and carries
@@ -191,11 +215,21 @@ private struct Session: Sendable {
         let (inputStream, inputCont) = AsyncStream<AnalyzerInput>.makeStream()
         await state.setInputContinuation(inputCont)
 
-        // Start audio capture and store the producer stop closure so stopSession()
-        // can end the buffer stream (which ends the bridge, which triggers finalize).
+        // Start audio capture and register the stop closure with SessionState.
+        // B1: `setStopProducer` returns `true` if `stopRequested` was already set
+        // (i.e. stop() won actor entry before this registration). In that case we
+        // stop the mic immediately and return — the session is abandoned cleanly
+        // without reaching the bridge or blocking on `await bridgeTask.value`.
+        // This guards the race where stop()→stopSession() no-oped because stopProducer
+        // was nil, then run() started the mic and would block forever. [validation-fix B1]
         let bufferStream = try audioProducer.start()
         let producer = audioProducer
-        await state.setStopProducer { producer.stop() }
+        let stopAlreadyRequested = await state.setStopProducer { producer.stop() }
+        if stopAlreadyRequested {
+            SpeakLog.stt.info("Audio capture started but stop was already requested — stopping mic immediately.")
+            producer.stop()
+            return
+        }
         SpeakLog.stt.info("Audio capture started.")
 
         // Bridge task: reads PCM buffers, converts format, feeds AnalyzerInput.
@@ -295,12 +329,38 @@ private struct Session: Sendable {
             SpeakLog.stt.info("Speech model already installed.")
         default:
             // .supported, .downloading, or any future Status value: attempt install.
-            try await installAsset(for: transcriber)
+            try await installAsset(for: transcriber, locale: locale)
         }
     }
 
-    private func installAsset(for transcriber: SpeechTranscriber) async throws {
+    private func installAsset(for transcriber: SpeechTranscriber, locale: Locale) async throws {
         SpeakLog.stt.info("Speech model not installed — requesting download.")
+
+        // STT P2: Reserve the locale before downloading so the OS accounts for it
+        // in its eviction policy. `reserve(locale:)` returns `false` when the device
+        // is already at `maximumReservedLocales` — log and proceed; the download can
+        // still succeed but the model may be evicted under storage pressure.
+        // SDK note: returns Bool (true = reserved, false = at limit); throws on
+        // unexpected error. There is NO `.reservationLimitReached` enum case.
+        // [verified: AssetInventory.reserve(locale:) async throws -> Bool,
+        //  arm64e-apple-macos.swiftinterface, MacOSX26.5.sdk, 2026-06-22]
+        do {
+            let reserved = try await AssetInventory.reserve(locale: locale)
+            if reserved {
+                SpeakLog.stt.info("AssetInventory: locale reserved successfully.")
+            } else {
+                let maxLocales = AssetInventory.maximumReservedLocales
+                SpeakLog.stt.warning(
+                    "AssetInventory: at maximumReservedLocales (\(maxLocales, privacy: .public)); proceeding without reservation — model may be evicted under storage pressure."
+                )
+            }
+        } catch {
+            // Non-fatal: log and continue. The download may still succeed.
+            SpeakLog.stt.error(
+                "AssetInventory.reserve failed (\(error.localizedDescription, privacy: .public)); proceeding without reservation."
+            )
+        }
+
         // [verified] Returns nil if install is already in progress.
         guard let request = try await AssetInventory.assetInstallationRequest(
             supporting: [transcriber]
@@ -358,14 +418,38 @@ private struct Session: Sendable {
         )
         // Build converter only when format dimensions differ.
         // [verified at runtime] P2=Float32 non-interleaved; analyzer=Int16 interleaved.
+        // STT P3: Log format details on converter-init failure so a nil result
+        // (incompatible formats) is never silent. If the converter is nil and the
+        // formats differ, yield the unconverted buffer as a best-effort fallback and
+        // log a warning so the mismatch is visible in Console.
+        // [verified: AVAudioConverter(from:to:) returns nil on incompatible formats]
         let converter: AVAudioConverter? = {
-            guard let src = p2Format else { return nil }
+            guard let src = p2Format else {
+                SpeakLog.stt.error(
+                    "STT bridge: could not build P2 source format (Float32 \(AudioCapture.Constants.targetSampleRate, privacy: .public)Hz mono) — will pass raw buffers to analyzer."
+                )
+                return nil
+            }
             let identical = src.sampleRate == analyzerFormat.sampleRate
                 && src.channelCount == analyzerFormat.channelCount
                 && src.commonFormat == analyzerFormat.commonFormat
                 && src.isInterleaved == analyzerFormat.isInterleaved
             guard !identical else { return nil }
-            return AVAudioConverter(from: src, to: analyzerFormat)
+            if let conv = AVAudioConverter(from: src, to: analyzerFormat) {
+                return conv
+            }
+            // Converter init failed — log the format mismatch so it is diagnosable.
+            SpeakLog.stt.error("""
+                STT bridge: AVAudioConverter init failed. \
+                src=\(src.sampleRate, privacy: .public)Hz \
+                fmt=\(src.commonFormat.rawValue, privacy: .public) \
+                interleaved=\(src.isInterleaved, privacy: .public) → \
+                dst=\(analyzerFormat.sampleRate, privacy: .public)Hz \
+                fmt=\(analyzerFormat.commonFormat.rawValue, privacy: .public) \
+                interleaved=\(analyzerFormat.isInterleaved, privacy: .public). \
+                Passing raw P2 buffers to analyzer; transcription quality may degrade.
+                """)
+            return nil
         }()
 
         return Task<Void, Never>(priority: .userInitiated) {
@@ -445,6 +529,14 @@ private struct Session: Sendable {
 
 /// Actor guarding mutable session handles. Enables clean cancellation from
 /// `stop()` without data races.
+///
+/// B1 — stopRequested flag:
+/// `stopRequested` is set by `stopSession()` before any producer is registered.
+/// `setStopProducer(_:)` returns `true` if the flag was already set — run() must
+/// then stop the mic immediately and return without touching the bridge/results tasks.
+/// This ensures both race orderings release the mic:
+///   • stop() before setStopProducer: flag set → setStopProducer returns true → run() bails.
+///   • stop() after setStopProducer: stopSession() calls stopProducer() directly.
 @available(macOS 26.0, *)
 private actor SessionState {
     private var sessionTask: Task<Void, Never>?
@@ -454,6 +546,9 @@ private actor SessionState {
     /// Closure that stops the audio producer, ending the buffer stream.
     /// This is what causes the bridge task to exit and triggers finalize.
     private var stopProducer: (@Sendable () -> Void)?
+    /// B1: Set in stopSession() before the producer is registered.
+    /// Causes setStopProducer to return true so run() can bail immediately.
+    private var stopRequested = false
 
     func setSessionTask(_ task: Task<Void, Never>) { sessionTask = task }
     func setInputContinuation(_ cont: AsyncStream<AnalyzerInput>.Continuation) {
@@ -461,14 +556,26 @@ private actor SessionState {
     }
     func setBridgeTask(_ task: Task<Void, Never>) { bridgeTask = task }
     func setResultsTask(_ task: Task<Void, Error>) { resultsTask = task }
-    func setStopProducer(_ closure: @escaping @Sendable () -> Void) { stopProducer = closure }
+
+    /// Registers the producer stop closure. Returns `true` if stop() already ran
+    /// (stopRequested == true) — in that case run() must stop the mic and bail. [B1]
+    @discardableResult
+    func setStopProducer(_ closure: @escaping @Sendable () -> Void) -> Bool {
+        stopProducer = closure
+        return stopRequested
+    }
 
     /// Stops the session cleanly:
-    ///   1. Stops the audio producer → ends the buffer stream → bridge task exits.
-    ///   2. The bridge finishing causes inputCont.finish() → analyzer finalize runs.
-    ///   3. Awaits the session task (which awaits bridge → finalize → results drain).
+    ///   1. Sets stopRequested so a racing setStopProducer returns true.
+    ///   2. Stops the audio producer → ends the buffer stream → bridge task exits.
+    ///   3. The bridge finishing causes inputCont.finish() → analyzer finalize runs.
+    ///   4. Awaits the session task (which awaits bridge → finalize → results drain).
     /// No zombie tasks remain after this returns.
     func stopSession() async {
+        // B1: Set the flag FIRST — before calling stopProducer — so a concurrent
+        // setStopProducer (registering after we enter actor) sees it.
+        stopRequested = true
+
         // Stop the producer first — this ends bufferStream, which ends the bridge,
         // which finishes the input continuation, which triggers finalize in run().
         stopProducer?()
