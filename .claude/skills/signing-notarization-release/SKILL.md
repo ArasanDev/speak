@@ -14,7 +14,7 @@ runtime dependency added. `make release` orchestrates the whole chain.
 1. **Sign** with a **Developer ID Application** cert + hardened runtime:
    `codesign --sign "Developer ID Application: …" --options runtime --timestamp …`
    Sign `SpeakCore.framework` and any nested code first, then the `.app` (inside-out).
-2. **Notarize** with `xcrun notarytool` (the current tool — `altool`'s notarization capability was removed; use `notarytool` for notarization — the `altool` binary still ships but its notarize subcommands are gone):
+2. **Notarize** with `xcrun notarytool` (the current tool — `altool`'s notarization capability was deprecated; use `notarytool` for notarization — the `altool` binary still ships but its notarize subcommands are deprecated):
    `xcrun notarytool submit Speak.dmg --keychain-profile <profile> --wait`.
    Store creds once via `xcrun notarytool store-credentials`.
 3. **Staple**: `xcrun stapler staple Speak.app` (and/or the `.dmg`).

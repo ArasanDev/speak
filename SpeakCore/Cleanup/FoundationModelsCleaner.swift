@@ -9,11 +9,13 @@
 //   - SystemLanguageModel.default: static var, non-optional [verified]
 //   - SystemLanguageModel.availability: enum { .available, .unavailable(UnavailableReason) } [verified]
 //   - SystemLanguageModel.isAvailable: Bool (direct property) [verified]
+//   - SystemLanguageModel(useCase:guardrails:) two-step pattern with guardrails on the model [verified]
 //   - UnavailableReason cases: deviceNotEligible, appleIntelligenceNotEnabled, modelNotReady [verified]
-//   - LanguageModelSession.init(model:guardrails:instructions:) [verified]
+//   - LanguageModelSession.init(model:instructions:) — note: guardrails on SystemLanguageModel, not here [verified]
 //   - LanguageModelSession.respond(to:String, options:) async throws -> Response<String> [verified]
 //   - Response<String>.content: String [verified]
-//   - LanguageModelSession.GenerationError: exhaustive enum of API errors [verified]
+//   - LanguageModelSession.GenerationError: non-@frozen enum, exhaustive switches need @unknown default [verified]
+//   - UnavailableReason: non-@frozen enum [verified]
 //
 // Session lifecycle: a fresh LanguageModelSession is created per clean() call
 // so that (a) mode-specific instructions can be injected at init (the idiomatic
