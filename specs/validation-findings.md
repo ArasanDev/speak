@@ -88,7 +88,7 @@ Cloud cleanup (ours is on-device/free — strictly better).
 
 ---
 
-## Phase 2 — per-seam code bug hunt  *(4 of 6 seams in: engine, cleanup, storage, app; input + STT pending)*
+## Phase 2 — per-seam code bug hunt  *(ALL 6 seams in: engine, cleanup, storage, app, STT, input)*
 
 Confidence that the codebase is healthy is **reinforced**: storage SQLi = CLEAN, logging-privacy = CLEAN, cleanup fallback contract + actor-safety = CLEAN, no `print`/force-unwrap/global-state/networking found. The real bugs are concentrated in the **engine session lifecycle** and **cleanup prompt building**.
 
@@ -101,6 +101,19 @@ Confidence that the codebase is healthy is **reinforced**: storage SQLi = CLEAN,
 - **[P2, med-high] Start/stop race leaves the mic hot forever** (`AppleSpeechTranscriber` ~L160,196-198). If `stop()` arrives before the session Task reaches `setStopProducer` (L198), `stopSession()` finds nil producer+task (no-ops), then `run()` starts the mic and blocks on `await bridgeTask.value` with no escape — mic never released. Fix: register `sessionTask` synchronously (not fire-and-forget `Task{}`) or add a `stopRequested` flag checked after `audioProducer.start()`. (hunt-stt N-1.)
 - **[P2] Stream consumer-abandonment leaks the mic** (`AppleSpeechTranscriber` ~L145). `startStream` has no `continuation.onTermination` — a consumer that cancels its task without calling `stop()` orphans the session + leaves the tap installed. Fix: `continuation.onTermination = { _ in Task { await state.stopSession() } }`. (hunt-stt N-2.)
 - **✅ Refuted (STT side):** empty-transcript *hang* — the results stream closes cleanly on silence (hunt-stt P1-1). (Engine-side empty-text clipboard-clobber above is still real.)
+
+#### Input seam (hunt-input — final seam)
+- **[P1] Double-tap detector desync after out-of-band stop** (`HotkeyMonitor.buildTap` ~L349-352 + `DictationController.endDictation` ~L541-563). `DoubleTapDetector.isCapturing` is only reset in `buildTap()`, but sessions end *without the monitor knowing* (Escape→`endDictation`, CLI `--stop`, auto-stop, error). After such a stop `detector.isCapturing` stays `true`, so the **next double-tap is swallowed** (first tap returns `.stopCapture` to an idle engine = no-op; second tap returns nil) — the user must double-tap a *third* time. Reproducible on every Escape-stop. Fix: add `HotkeyMonitor.syncCapturingState(_:)`/`reset()` and call from `endDictation()`. ~5 lines. (hunt-input NEW-1, high conf. **This is high-frequency + user-visible — arguably the most impactful input bug.**)
+- **[P1, MEDIUM-HIGH conf] `tapCallback` over-retains the passed-through CGEvent** (`HotkeyMonitor` ~L423,L427). Returns `Unmanaged.passRetained(event)`; the `CGEventTapCallBack` typedef (`CGEventTypes.h:451`) has **no `CF_RETURNS_RETAINED`** → return is +0, so `passRetained` leaks one CGEvent per flagsChanged (every modifier press while armed). Low-frequency but unbounded over app lifetime. Fix: `passUnretained(event)` at both sites (2-char ×2). **Note:** both compile (Swift can't verify CF ownership from the typedef) — Phase 3 must confirm against an authoritative OSS CGEventTap impl (AltTab). (hunt-input NEW-3.)
+- **[P1, latent] `deinit` UAF — watchdog timer not invalidated** (`HotkeyMonitor` ~L222-232, timer ~L279-303). `deinit` tears down the tap but never invalidates the 100ms `CFRunLoopTimer` (which holds `Unmanaged.passUnretained(self)`) nor `CFRunLoopStop`s the thread. App-lifetime use masks it; **real UAF in tests** that create/destroy short-lived instances. Fix: store timer as ivar, `CFRunLoopTimerInvalidate` + `CFRunLoopStop` in `deinit`. (hunt-input NEW-2, med conf.)
+- **⚠️ CONFLICT — CLI double-`--start` severity.** hunt-engine rated this **P1** (double `beginDictation` on shared transcriber). hunt-input rates the *gate* as illusory but **LOW real-world impact**: both `--start` Tasks are queued on MainActor and run serially, so the second hits a non-idle engine and no-ops. **The two reports disagree on whether the engine actually no-ops the second start.** → **Phase 3 must resolve: does `beginDictation()` self-guard against a non-nil `currentSession`, or not?** If it does, hunt-input is right (low); if not, hunt-engine is right (P1 — the `guard currentSession == nil` fix stands). This is the #1 Phase-3 reconciliation target.
+
+##### Input — MEDIUM/LOW (confirmed)
+- **[P2] `tearDownTap()` mutates `eventTap`/`runLoopSource` off the run-loop thread** (called from `stop()`+`deinit` on main; races `handleTapDisabled`/`buildTap` on the tap thread). `NSLock` guards only the bool flags, not the tap pointers → TSan-visible data race; not hit in practice. Fix: extend lock or route via `CFRunLoopPerformBlock`. (hunt-input NEW-4.)
+- **[P2] `wakeRearmTimer` torn read/write across threads** (written in `handleWakeNotification` on the NSWorkspace thread + the rearm callback on the run-loop thread, unlocked). (hunt-input NEW-5, low.)
+- **[P2] `modifierMask(forKeyCode:)` defaults to `.maskCommand`** (`HotkeyDetection` ~L45) for any unrecognized keyCode → a binding outside Fn/L-Cmd/R-Cmd would derive down-state from the wrong flag and never register. Bounded by what the W1.1 recorder permits. Fix: verify recorder scope; else add cases / return an always-false sentinel. (hunt-input NEW-6, low — **cross-check against recorder allow-list**.)
+- **[P2] `triggerModeCancellable` over-fires** (`DictationController` ~L235-247) — sinks `objectWillChange` (fires on *any* `@Published` change) → spurious `updateBinding()` + UserDefaults write on every unrelated settings edit. Fix: `store.$triggerMode.removeDuplicates()`. (hunt-input NEW-7, low — efficiency/noise only. Overlaps the 1.2 "silent reset" cluster.)
+- **✅ Confirmed SAFE (do NOT fix):** `CLIPortServer` `MainActor.assumeIsolated` (callback is scheduled on `CFRunLoopGetMain()` — correct); `updateBinding` no-re-arm (callback live-reads `binding` — correct by design); `CLIPortServer.encodeReply` `passRetained(data)` (the `CFMessagePortCallBack` return **IS** `CF_RETURNS_RETAINED` — correct, *contrast with NEW-3's CGEventTap which is not*); SecureFieldDetector fail-open direction (correct fail-safe). (hunt-input P1-3/P1-4 + non-bugs.)
 
 ### MEDIUM confirmed bugs
 - **[Med] `cleanupSeconds` near-zero sentinel collision** (`CaptureSession` ~L525). If the two `DispatchTime.now()` reads return the same ns (fast machine / mocked cleaner), the cleanup-ran path yields `0.0` → `LatencyStats` misclassifies it as the **raw** population. Fix: substitute a 1ns floor when end==start so the `==0`/`>0` partition stays honest. (hunt-engine N-4.)
@@ -132,5 +145,70 @@ Confidence that the codebase is healthy is **reinforced**: storage SQLi = CLEAN,
 ### Test-coverage additions (agent-doable, from 1C + confirmed)
 `triggerMode` + `cleanupStyle` + `.mlx` round-trip tests; CLI real-gate (not the reimplementation); `endDictation` error branches E2E; `rebindHotkey`+Combine; snippet-in-session E2E; partials drain; empty-transcript; multi-display positioning; OnboardingViewModel lifecycle.
 
-## Phase 3 — adversarial verification of findings  *(pending — will target the 5 HIGH-VALUE bugs + 2 security injections)*
+## Phase 3 — adversarial verification of findings  *(COMPLETE — 4 of 4 skeptics in)*
+
+Method: independent skeptics, "REFUTED unless the exact reachable path is traced." Read-only.
+
+### skeptic-engine (CONFIRMED all 3; primary-source) ✅
+- **CLAIM 1 — cancel-during-processing paste → CONFIRMED-REAL.** `CaptureSession` is a Swift `actor` (L32); `stop()` suspends at `await task.value` (L237); `cancel()` enters the actor during suspension, sets `state=.error(.sessionCancelled)` (L347); `stop()` resumes with **no state re-check**, pastes at L281, then `state=.done` (L320) overwrites `.error`. Fix (re-check `if case .error = state { throw }` after L237, before L281) = **correct & sufficient.**
+- **CLAIM 2 — empty-transcript clobber → CONFIRMED-REAL.** No empty guard anywhere in `stop()`: L249 `transcribed=""` → L253 `rawText=""` → L263 `runCleanup("")`→(nil,id,0.0) → L284 `inserter.insert("")`. Fix (guard `rawText.isEmpty` after L253 → skip paste+history, reach `.done`) = **correct & sufficient.**
+- **CLAIM 3 — CLI double-`--start` → CONFIRMED-REAL. CONFLICT RESOLVED: hunt-engine RIGHT, hunt-input WRONG.** `SpeakEngine` is `public actor` (L53), **NOT `@MainActor`**. `beginDictation()` (L192-204) has only a mute guard — **zero `currentSession` guard** before `newSession()`. Suspension at `await session.start()` (L203) lets a 2nd call enter, replace `currentSession` (L177), and orphan the 1st session's `streamTask` (leaks indefinitely). hunt-input's "serializes on MainActor → second no-ops" is structurally wrong (it's a bare actor, and the guard it assumed does not exist). Fix (`guard currentSession == nil else { return }` before L201) = **correct & sufficient.**
+
+### skeptic-cleanup (both injections REFUTED) ❌→dropped
+- **Command-mode prompt injection → REFUTED.** Dictated text lands in the session **instructions** slot (`LanguageModelSession(model:instructions:)`); selected text is a separate channel (`session.respond(to:)` L99). The `"\(trimmed)"` quotes are NL prose, not a grammar the model parses to "close quote + inject" — at most a generic jailbreak (dictating "ignore previous…"), not a code-level seam. **No privilege boundary: the user is the operator** (own hotkey → own instruction → own selected text → own document). On-device, no tools/network → no exfiltration. Worst case = unexpected text in the user's own doc. **Fix unnecessary** (string-sanitizing does nothing; the model parses meaning, not quote syntax).
+- **Vocabulary-term prompt injection → REFUTED (the code does not exist).** `FoundationModelsCleaner.swift` is 293 lines — there is no L301-302. `grep` of `SpeakCore/Cleanup/` for vocab/dictionary interpolation = zero hits. `customVocabulary` (SettingsStore L342) flows **only** into `AppleSpeechTranscriber.contextualStrings` (L221-223) as a typed STT recognition hint — never into the cleanup layer. hunt-cleanup N2 mislocated the code.
+- **Threat-model note:** classic injection needs attacker≠user, or model tools/network, or output→trusted downstream. None hold (on-device FM, no function-calling, output is clipboard text the user sees first). → **Both removed from the fix backlog.**
+
+### skeptic-stt (1 confirmed, 1 refuted)
+- **CLAIM 1 — start/stop race → mic hot forever → CONFIRMED-REAL.** `startStream()` creates the session Task (L147) then a **separate fire-and-forget** `Task { await state.setSessionTask(task) }` (L160). Actors serialize but give no ordering guarantee between the two. If `stop()`→`stopSession()` wins actor entry before L160 runs: `stopProducer`/`sessionTask` both nil → no-op; then the session Task proceeds → `audioProducer.start()` (L197, **mic hot**) → `setStopProducer` (L198, nobody will call it) → `await bridgeTask.value` (L248, **blocks forever**). Mic runs until process exit. Fix (`stopRequested` flag set in `stopSession()`, checked right after L197 → `audioProducer.stop()`+return) = **correct & sufficient; no protocol change.**
+- **CLAIM 2 — consumer-abandonment leak → REFUTED (production).** The ONLY production caller is `CaptureSession.start()` (L184); every exit (`stop()` L231, `cancel()` L344) calls `await transcriber.stop()`. No reachable abandonment path; test callers always stop too. `onTermination` would also double-fire `stopSession()` on the normal path (benign but pointless). → **Dropped: unnecessary.**
+
+### skeptic-input (both CONFIRMED; primary-source on the leak)
+- **CLAIM 1 — detector desync after out-of-band stop → CONFIRMED-REAL.** `DoubleTapDetector.register()` (HotkeyDetection L147-165): `isCapturing==true`→`.stopCapture`+reset; else 2nd-tap-in-window→`.startCapture`; else record+nil. `detector.reset()` is called **only** in `buildTap()` (L349), which runs only on the AX untrusted→trusted edge + wake-rearm. `endDictation()` / `cancelDictation()` / Escape / CLI `--stop` never reset it. So after any out-of-band stop, the next double-tap needs a **3rd tap** (tap1→`.stopCapture` no-op + resets, tap2→records+nil, tap3→`.startCapture`). **FIX CAVEAT (important):** `detector` is documented run-loop-thread-only (L163); a `notifySessionEnded()` from the main actor must reset via the `NSLock` **or** a lock-guarded `pendingDetectorReset` flag applied by the run-loop thread (mirror the `armingDesired` pattern) — the naive reset adds a data race. Fix correct in concept; **must** address threading.
+- **CLAIM 2 — `passRetained` CGEvent leak → CONFIRMED-REAL (primary source).** `CGEventTypes.h:451` typedef has **no `CF_RETURNS_RETAINED`**; the header comment (L444-446) states the calling code retains the event and releases it after the callback returns → Get Rule → callback must return **+0**. `passRetained` at HotkeyMonitor L423/L427 hands the system a +1 it never releases → one CGEvent leaked per flagsChanged. Hammerspoon / AltTab / karabiner-elements all pass through with no extra retain. Fix (`passUnretained` at both sites) = **correct & sufficient**, no threading implications.
+
+---
+
+## VERDICT TALLY (Phase 2 + Phase 3)
+
+**CONFIRMED-REAL (9):** cancel-during-processing paste · CLI double-start · empty-transcript clobber · STT start/stop mic-leak race · detector desync · passRetained leak · paste 10ms gap (code-confirmed; live-impact `[unverified]`) · hold-mode stuck on tap death · deinit UAF (latent app / real in tests).
+**REFUTED & DROPPED (4):** command-mode prompt injection · vocab-term injection (code didn't exist) · STT consumer-abandonment leak · STT empty-transcript hang.
+**MEDIUM confirmed (12):** cleanupSeconds sentinel · Int32 trim · search no-LIMIT · stale keycaps · dup watcher · UserDefaults-per-render · picker row selectable · silent language reset · tearDownTap race · wakeRearmTimer race · modifierMask default · triggerMode over-fire.
+
+---
+
+## Phase 4 — prioritized fix batches for user approval
+
+> **AWAITING USER APPROVAL — no code changes yet.** Batches are file-disjoint by seam → safe to fan out in parallel worktrees (one owner each); orchestrator reviews diffs + owns commits. Every batch ends green on `make build/test/lint/verify-moat`.
+
+### ⭐ BATCH A — Safety-critical session integrity *(builder-engine; `CaptureSession.swift` + `SpeakEngine.swift`)*
+Directly protects the hard rules "never paste against intent" + "don't corrupt other apps' clipboard."
+- **A1** Cancel-during-processing paste: re-check `if case .error = state { cleanup; throw }` after the last `await` in `stop()` (post-L237), before paste (L281) and before `.done` (L320).
+- **A2** Empty-transcript clobber: guard `rawText.isEmpty` after L253 → skip paste + skip history, reach `.done`.
+- **A3** CLI double-start: `guard currentSession == nil else { return }` atop `beginDictation()` (before L201).
+- **A4 (bundled MEDIUM)** cleanupSeconds sentinel: 1ns floor when `end==start` so the raw/cleanup partition stays honest.
+- *+regression tests for A1/A2/A3 (cancel-during-await, empty path, re-entrant start).*
+
+### ⭐ BATCH B — Resource-leak / lifecycle P1 *(builder-audio-stt: `AppleSpeechTranscriber.swift`)*
+- **B1** Start/stop mic-leak race: `stopRequested` flag set in `stopSession()`, checked immediately after `audioProducer.start()` (L197) → `audioProducer.stop()` + return. No protocol change. *(Refuted siblings B-abandon NOT done.)*
+
+### ⭐ BATCH C — Hotkey lifecycle & paste P1 *(builder-input: `HotkeyMonitor.swift` + `HotkeyDetection.swift` + `DictationController.swift` + `PasteboardWriter.swift`)*
+One owner — these all cluster in the input seam (C1/C2/C4/C5 share `HotkeyMonitor`).
+- **C1** Detector desync: `notifySessionEnded()` resetting `detector`+`lastBoundKeyDown` via lock / `pendingDetectorReset` flag (NOT a naive main-actor reset — threading caveat), called from `endDictation()` + `cancelDictation()`.
+- **C2** Hold-mode stuck: in `tearDownTap()`, if `_binding.trigger == .hold && lastBoundKeyDown` → `continuation.yield(.stopCapture)` before disarm.
+- **C3** Paste 10ms gap: `try await Task.sleep(for: .milliseconds(10))` between the 4 CGEvents (`simulateCmdV` → `async throws`; call site `try await`). *(code-confirmed vs VoiceInk; live-paste impact is a Human-Gate item.)*
+- **C4** `passRetained`→`passUnretained` at L423/L427.
+- **C5** deinit UAF: store watchdog timer as ivar → `CFRunLoopTimerInvalidate` + `CFRunLoopStop(tapRunLoop)` in `deinit`.
+
+### BATCH D — Medium robustness *(builder-app + builder-engine/storage; storage + app UI files)*
+search() `LIMIT 500` · `Int32`→`int64` in `trimToCapacity` · stale hotkey keycaps (capture at `show()`) · dup `watchForCompletion` watcher · `UserDefaults`-per-render · `.accessibility` picker row selectable · silent language reset (surface feedback) · `triggerMode` `removeDuplicates()` · tearDownTap/wakeRearmTimer lock coverage (TSan) · modifierMask recorder-scope check.
+
+### BATCH E — Polish + test-coverage *(builder-qa; optional, lowest risk)*
+Onboarding dot/Done-screen index · cancel `.done` guard · late-ingest guard · two-`Date()` consistency · prewarm + `AssetInventory.reserve` (STT P2) · the 1C test-coverage additions (triggerMode/cleanupStyle/.mlx round-trips, real CLI gate, endDictation error branches, rebind+Combine, snippet-in-session, partials drain, empty-transcript, multi-display, OnboardingViewModel lifecycle).
+
+### DOC-only (no risk; bundle anytime)
+Fix the 3 skill drifts (Phase 1B): `foundation-models-cleanup` FM init pattern + stale `CleanupMode`; `cgeventtap-hotkey` Input-Monitoring reason; soften altool "removed"→"deprecated". Plus `FoundationModelsCleaner` header `[verified]` tag correction.
+
+### Recommended order
+**A → B/C in parallel → D → E.** A is the safety core (smallest, highest-value). B and C are file-disjoint from A and each other → parallel worktrees. D/E are robustness/polish. Human-Gate items (live paste in 3 apps, latency, false-trigger rate, notarize) remain owner-only and unblock `v0.0.1`.
 ## Phase 4 — prioritized fix batches for user approval  *(pending)*
