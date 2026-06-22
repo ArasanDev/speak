@@ -80,11 +80,42 @@ targets:
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Speak.app/Contents/MacOS/Speak"
         BUNDLE_LOADER: "$(TEST_HOST)"
 
+  # CLI tool target — produces the `speak` binary that drives the running menubar app
+  # via CFMessagePort IPC (Wave 2.3).
+  #
+  # Links SpeakCore for the shared CLIContract constants and codec types.
+  # Does NOT embed the framework (it's a command-line tool, not a bundle);
+  # the rpath points to DerivedData at build time.
+  #
+  # Install path (P11): the Homebrew cask symlinks this binary into PATH.
+  # Standalone rpath (relative to @executable_path/../Frameworks or
+  # /usr/local/lib/speak/) is set up in the P11 release target. [decision: W2.3]
+  SpeakCLI:
+    type: tool
+    platform: macOS
+    sources:
+      - CLI
+    dependencies:
+      - target: SpeakCore
+        embed: false
+    settings:
+      base:
+        PRODUCT_NAME: speak
+        PRODUCT_BUNDLE_IDENTIFIER: com.speak.cli
+        GENERATE_INFOPLIST_FILE: "YES"
+        # Use a distinct Swift module name to avoid the speak.swiftmodule artifact
+        # colliding with Speak.swiftmodule (the app target) on the case-insensitive
+        # APFS filesystem — both land in DerivedData/Build/Products/Debug/ and the
+        # Swift module scanner would treat them as the same path. [decision: W2.3]
+        SWIFT_MODULE_NAME: SpeakCLI
+        # Signing inherited from Signing.xcconfig (see configFiles above).
+
 schemes:
   Speak:
     build:
       targets:
         Speak: all
+        SpeakCLI: all      # build the CLI tool on every `make build`
         SpeakTests: [test]
     test:
       targets:
