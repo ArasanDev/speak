@@ -116,26 +116,85 @@ struct SpeakApp: App {
 }
 
 // MARK: - MenuBarLabel
+//
+// Rendering mechanism (roadmap P8):
+//   Each state is rendered as a SwiftUI Image(systemName:) with
+//   `.symbolRenderingMode(.palette)` + `.foregroundStyle(tint)` applied.
+//
+//   WHY PALETTE:
+//   A plain `.foregroundStyle(color)` on a SwiftUI MenuBarExtra label is
+//   stripped by the system status-item compositor, which forces template
+//   (monochrome) rendering on SF Symbols. `.symbolRenderingMode(.palette)`
+//   is the SwiftUI-native mechanism to break out of that path — it signals
+//   a multi-layer rendering intent that the compositor preserves.
+//   [decision: roadmap P8 — palette is the least-invasive SwiftUI fix;
+//    the NSStatusItem `isTemplate=false` refactor is deferred to post-P8
+//    polish if this proves insufficient]
+//
+//   SINGLE-ARGUMENT .foregroundStyle:
+//   Using `.foregroundStyle(tint)` (not `.foregroundStyle(tint, .clear)`)
+//   because some state symbols (waveform, hourglass) are single-layer; the
+//   two-argument form sets the secondary layer to .clear, which is safe for
+//   multi-layer symbols but redundant for single-layer. Single-argument is
+//   correct in both cases. [decision: P8]
+//
+//   VERIFIED STATUS: [unverified — live menu-bar screencapture is blocked
+//   in the agent's headless environment; the system clock does not appear
+//   in the captured image either, confirming capture is missing the menubar
+//   layer entirely. Human visual check required via:
+//     open <Speak.app> --args --debug-open menubar-icon-listening
+//   then observe whether the waveform.circle.fill icon is red.]
+//
+//   If human check shows monochrome: the authorized fallback is NSStatusItem
+//   with `button.image?.isTemplate = false`. Surface to orchestrator as a
+//   new post-P8 task — do not attempt inline.
+//
+//   The idle state uses Color(.secondaryLabelColor) — a semi-transparent
+//   white on dark menubar, indistinguishable from a normal template icon at
+//   rest. Only active states show distinct hues. [decision: P8]
+//
+//   No animation is used for the done flash — the 600 ms hold already lives
+//   in DictationController (doneFlashNanoseconds). Removing animation here
+//   makes Reduce-Motion handling moot.
 
 private struct MenuBarLabel: View {
     @ObservedObject var controller: DictationController
 
     var body: some View {
-        Image(systemName: systemImage(for: controller.icon))
+        let (symbol, tint, label) = presentation(for: controller.icon)
+        Image(systemName: symbol)
+            .symbolRenderingMode(.palette)   // [decision: P8] prevents template forcing
+            .foregroundStyle(tint)           // primary layer tint; single-arg works for all state symbols
+            .accessibilityLabel(label)
     }
 
-    private func systemImage(for icon: MenubarIcon) -> String {
+    /// Returns `(SF Symbol name, tint color, VoiceOver label)` for each icon state.
+    ///
+    /// Error uses `xmark.circle` (roadmap P8: "red X") rather than
+    /// `exclamationmark.triangle` to match the stated spec and make the symbol
+    /// visually distinct from processing.
+    ///
+    /// Idle uses `.secondary` (system secondary label color) to blend into the
+    /// menubar at rest — only active states show distinct hues. [decision: P8]
+    private func presentation(for icon: MenubarIcon) -> (String, Color, String) {
         switch icon {
         case .idle:
-            return "waveform"                       // [decision]: calm, always-present waveform
+            // [decision]: calm, always-present waveform; secondary color blends into menubar
+            return ("waveform", Color(.secondaryLabelColor), "speak — idle")
         case .listening:
-            return "waveform.circle.fill"           // [decision]: filled = active capture
+            // [decision]: filled circle = mic actively recording; red = recording signal
+            return ("waveform.circle.fill", .speakStateListening, "speak — listening")
         case .processing:
-            return "hourglass"                      // [decision]: processing / cleanup in flight
+            // [decision]: hourglass = work in flight; yellow = in-progress signal
+            return ("hourglass", .speakStateProcessing, "speak — processing")
         case .done:
-            return "checkmark.circle"               // [decision]: brief success flash
+            // [decision]: checkmark = success; green = done signal; held 600 ms by
+            // DictationController.doneFlashNanoseconds before reverting to idle
+            return ("checkmark.circle", .speakStateDone, "speak — done")
         case .error:
-            return "exclamationmark.triangle"       // [decision]: error state
+            // [decision]: xmark.circle = explicit failure glyph (roadmap P8 "red X");
+            // red matches the listening color but distinct symbol makes the state clear
+            return ("xmark.circle", .speakStateError, "speak — error")
         }
     }
 }
