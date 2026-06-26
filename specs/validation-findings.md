@@ -286,8 +286,35 @@ Both `LanguageModelSession.init(model:instructions:String?)` and `session.respon
 
 ---
 
+### Phase 5 — NEW findings from review-input ✅
+
+**[Input-M1][agent] `stop()`+`start()` never re-arms tap if AX was already granted**
+`HotkeyMonitor.swift` — `watchdogTick()`. `wasTrusted` is NOT reset in `stop()` or `tearDownTap()`. After `stop()+start()`, every watchdog tick sees `nowTrusted=true && wasTrustedPrev=true` — the rising edge never fires — `buildTap()` never called — tap permanently dead. Wake re-arm (`handleWakeNotification`) is unaffected (calls `buildTap()` directly). Impact: any disable/re-enable scenario is silently broken. Fix: reset `wasTrusted = false` under the lock in `stop()`. → **Batch D**.
+
+**[Input-M2][agent] `UserDefaultsBindingStore` `@unchecked Sendable` with non-thread-safe instances**
+`BindingStore.swift`. `JSONEncoder` and `JSONDecoder` are instance properties; both are not thread-safe per Apple docs. `save()` is public with no thread constraint. `@unchecked Sendable` suppresses the concurrency checker. Fix: create `JSONEncoder()`/`JSONDecoder()` locally in each call. → **Batch D**.
+
+**[Input-L1]** Two separate lock acquisitions for `wasTrusted` RMW in `watchdogTick()` — fragile TOCTOU (safe today: same thread; hazard if future code writes from another thread). → **Batch D** (combine with Input-M1 fix).
+**[Input-L2]** `shutdown()` call site in App target unverified — `deinit` never fires in practice; leaked CGEventTap at process exit if not called. Needs App-layer verification. → **Batch D** (add `AppDelegate.applicationWillTerminate` call).
+**[Input-L3]** Wake observer fires on main thread; `CFRunLoopAddTimer` cross-thread call undocumented at callsite. Safe per CF threading model but misleading. → **Batch E** (add clarifying comment).
+**[Input-L4]** Task cancellation mid-`simulateCmdV()` can leave ⌘ modifier stuck (if cancelled between event posts). Self-healing but worth noting for a future cancellation-aware paste path. → **Batch E**.
+
+### Phase 5 — NEW findings from review-engine ✅
+
+**[Engine-M1][agent] Double `transcriber.stop()` on cancel()-during-stop() race**
+`CaptureSession.swift` lines ~232 + ~390. Both `stop()` and `cancel()` call `await transcriber.stop()`. A `cancel()` arriving while `stop()` is suspended between transcriber.stop() and stream drain submits a second stop. A1's cancel guard correctly aborts paste/done, but if `AppleSpeechTranscriber.stop()` is not idempotent (double-close of `AVAudioEngine`), behavior is undefined. Fix: `guard !stopping` flag on `CaptureSession`. `[unverified: AppleSpeechTranscriber.stop() idempotency]` → **Batch D** (or Bundle with A1).
+
+**[Engine-M2][agent] Stream drain `await task.value` has no timeout**
+`CaptureSession.swift` line ~237. After `transcriber.stop()`, `stop()` awaits the background stream task indefinitely. STT hang (hardware fault / heavy load) → session permanently stuck in `.processing`, overlay never hides, engine wedged until restart. `T_cleanup` timeout exists for cleanup; none for drain. → **Batch D**.
+
+**[Engine-L1]** `beginDictation` silently returns on re-entrancy — no throw/signal to caller. DictationController's hotkey debouncer is the guard; this is a defence-in-depth gap. → **Batch E**.
+**[Engine-L2]** `currentSession` set before `try await session.start()` — if `start()` throws for a resource error (future), `currentSession` not cleared, wedging `beginDictation`. Fix: `defer { if case .idle = session.state { currentSession = nil } }`. → **Batch D**.
+**[Engine-L3]** `partials()` replaces `partialsContinuation` without explicit `finish()` on prior one. Safe (relies on auto-finish-on-deinit) but intent unclear. → **Batch E**.
+**[Engine-L4]** `llmCleanupFailed` defined but never thrown (cleanup always falls back). Dead code; needs comment. → **Batch E**.
+**[Engine-L5]** `max(0, cleanupSeconds)` floor unreachable (sentinel is `0.0`, delta always ≥ 0). → **Batch E** (add comment or remove).
+
 ## Updated batch assignments (post Phase 5)
 
 **BATCH B additions:** STT-H2 (`cancelAll` on finalization failure) · Cleanup-H1 (isAvailable model mismatch)
-**BATCH D additions:** App-H1 (SQLite handle leak) · App-M2 (error HUD Escape dismiss) · Cleanup-M1 (isAvailable log level) · App-M1 (export missing fields) · Cleanup-L1 (MLX/Ollama log level) · App-L1 (double objectWillChange) · App-L2 (double dispatch) · App-L4 (case-insensitive search) · App-L5 (redundant MainActor.run)
-**BATCH E additions:** STT-H1 (prewarm no-op fix) · Cleanup-M2 (disfavored overloads) · STT-M2 (stop ordering doc) · Cleanup-L2/L3 · App-L3 · STT-L1/L2
+**BATCH D additions:** App-H1 (SQLite handle leak) · App-M2 (error HUD Escape dismiss) · Cleanup-M1 (isAvailable log level) · App-M1 (export missing fields) · Cleanup-L1 (MLX/Ollama log level) · App-L1 (double objectWillChange) · App-L2 (double dispatch) · App-L4 (case-insensitive search) · App-L5 (redundant MainActor.run) · Input-M1 (wasTrusted not reset) · Input-M2 (JSONEncoder thread-safety) · Input-L1+L2 (lock + shutdown) · Engine-M1 (double transcriber.stop) · Engine-M2 (no drain timeout) · Engine-L2 (currentSession not cleared on throw)
+**BATCH E additions:** STT-H1 (prewarm no-op fix) · Cleanup-M2 (disfavored overloads) · STT-M2 (stop ordering doc) · Cleanup-L2/L3 · App-L3 · STT-L1/L2 · Input-L3/L4 · Engine-L1/L3/L4/L5

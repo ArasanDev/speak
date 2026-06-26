@@ -49,13 +49,13 @@
 
 ## In progress
 
-- **Fresh review agents running** (loop #27, 2026-06-26): 5 parallel seam-review agents confirming post-fix-input2 state. Will be reconciled with existing validation-findings.md.
+Nothing. Phase 5 (fresh seam review) is complete as of loop #27-28 (2026-06-26). All 5 agents returned.
 
 ---
 
 ## Blocked
 
-**User approval gate.** The full findings report (`specs/validation-findings.md`) is ready. All Phase 1–3 work is complete. Batches A/B/C-remaining/D/E are documented and prioritized but **code changes require user approval** per the report-first constraint. This is the only gate before implementation.
+**User approval gate.** Full findings report is at `specs/validation-findings.md` (Phase 1–5 complete). No new CRITICAL findings; no new HIGH correctness bugs from review-engine or review-input. Batches A–E documented and prioritized. **Code changes require user approval.** This is the only gate before implementation.
 
 ---
 
