@@ -8,7 +8,7 @@
 
 ## Current phase
 
-**Validation & hardening COMPLETE — all Batches A–E done (loop #28–29, 2026-06-26).**
+**Validation & hardening COMPLETE — all Batches A–E + 1C test coverage + test-suite fixes done (loop #28–31, 2026-06-27).**
 
 Feature-complete through Wave 2. All validation phases (1–5) done. All batches merged:
 - **Batch A** (engine session integrity): cancel-paste guard, empty-transcript guard, double-start guard, cleanupSeconds floor
@@ -16,9 +16,10 @@ Feature-complete through Wave 2. All validation phases (1–5) done. All batches
 - **Batch C** (hotkey + paste): detector desync, CGEvent retain leak, CLI modal mode, deinit UAF, permission flicker, weak-self init, 10ms paste gap
 - **Batch D** (app/storage/engine robustness): search LIMIT, int64 trim, stale keycaps, dup watcher, UD-per-render, picker row, language reset, onboarding dot, SQLite init leak, error HUD Escape, wasTrusted reset, JSONEncoder thread-safety, case-insensitive search, Engine-L2 currentSession clear
 - **Batch E** (polish): STT-H1 real prewarm, Cleanup-M2 typed API, Engine-L1/3/4/5 comments, Input-L3/4 comments, STT-L2/M2 comments, Cleanup-L2/L3, App-L3 comment
+- **1C test coverage** (loop #30): endDictation no-session + A3-wedge tests (SessionIntegrityTests); HotkeyMonitor.updateBinding + rebind regression guard (HotkeyMonitorTests) — 5 new tests; other 1C items already existed
 - **Doc fixes**: skill ⇄ SDK truth corrections, FM header tags
 
-Gates as of loop #29 (2026-06-26): **build ✅ lint 0-serious ✅ moat 7/7 ✅ tests pass ✅**
+Gates as of loop #31 (2026-06-27): **build ✅ lint 0-serious ✅ moat 7/7 ✅ tests pass ✅ (481 / 5 skip / 0 fail)**
 
 ---
 
@@ -38,7 +39,7 @@ Nothing blocking. Human-gate items remain owner-only (live paste in 3 apps, late
 
 **Human-gate** → v0 ship gate → Wave 3.
 
-**Optional agent task (no human required):** test coverage additions from validation 1C (triggerMode round-trip, real CLI gate, endDictation error branches, rebind+Combine, snippet-in-session, partials drain, empty-transcript, multi-display, OnboardingViewModel lifecycle) — can be done before or after human-gate.
+1C test coverage additions: **COMPLETE** (loop #30, 2026-06-26). All identified gaps either already existed in the suite or have been added: `endDictation` error branches, rebind+Combine (HotkeyMonitor.updateBinding). Multi-display positioning remains UI-only (not unit-testable headlessly).
 
 ---
 
