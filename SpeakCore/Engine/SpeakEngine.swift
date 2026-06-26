@@ -214,6 +214,10 @@ public actor SpeakEngine {
         // such gate — this is the bypass-proof enforcement point. [decision A3]
         guard currentSession == nil else {
             SpeakLog.engine.info("SpeakEngine: beginDictation refused — a session is already in flight.")
+            // [Engine-L1] Return (not throw) is intentional: DictationController's hotkey
+            // debouncer is the primary re-entrancy gate; this is defence-in-depth only.
+            // The CLI path does not have a debouncer, but a rapid double-tap there is
+            // a user error, not an exceptional condition worth surfacing as an error.
             return
         }
         let session = newSession()

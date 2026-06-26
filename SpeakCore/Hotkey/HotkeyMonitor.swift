@@ -679,6 +679,11 @@ public final class HotkeyMonitor: @unchecked Sendable {
             &ctx
         )
         lock.withLock { wakeRearmTimer = timer }  // [validation-fix NEW-5]
+        // [Input-L3] CFRunLoopAddTimer called from the NSWorkspace notification thread
+        // (not the run loop's own thread). This is safe: CF explicitly supports adding
+        // sources/timers from any thread — the run loop wakes and picks them up on its
+        // next cycle. The commonModes selector ensures the timer fires even during modal
+        // event tracking. Reference: CF Threading Restrictions, CFRunLoopAddTimer docs.
         CFRunLoopAddTimer(rl, timer, CFRunLoopMode.commonModes)
     }
 }

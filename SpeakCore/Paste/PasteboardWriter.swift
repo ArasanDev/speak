@@ -297,6 +297,11 @@ public final class PasteboardWriter: TextInserting, Sendable {
         // [validation-fix C3] Insert `pasteEventGap` (default 10 ms, VoiceInk pattern)
         // BETWEEN events so Electron/web/Cocoa targets don't drop the chord. No gap
         // after the final event. Tests inject `.zero` to avoid real sleeps.
+        // [Input-L4] Task.sleep can throw (via Task cancellation). If cancelled between
+        // the Cmd-down and Cmd-up posts, the ⌘ modifier would be left held. In practice
+        // this self-heals on the next real key event; no user-visible stuck-key has been
+        // observed. A future cancellation-aware paste path should synthesise a Cmd-up
+        // before propagating the cancellation error. [decision: defer to v0.1 paste seam]
         for (index, event) in events.enumerated() {
             if index > 0 {
                 try await Task.sleep(for: pasteEventGap)

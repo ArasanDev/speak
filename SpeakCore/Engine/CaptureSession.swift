@@ -133,6 +133,10 @@ public actor CaptureSession {
     /// the session is single-consumer per dictation.
     public func partials() -> AsyncStream<TranscriptChunk> {
         let (stream, continuation) = AsyncStream<TranscriptChunk>.makeStream()
+        // [Engine-L3] Replacing the prior continuation without calling finish() first
+        // is safe: AsyncStream.Continuation auto-finishes its stream on deinit, so the
+        // old consumer gets .finished. Single-consumer contract means the prior consumer
+        // is already gone when this is called again (new session, new HUD consumer).
         self.partialsContinuation = continuation
         return stream
     }

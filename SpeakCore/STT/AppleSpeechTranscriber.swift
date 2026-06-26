@@ -181,6 +181,12 @@ public final class AppleSpeechTranscriber: Transcribing, AudioCaptureProviding {
             }
         }
 
+        // [STT-M2] The session task is registered in a separate fire-and-forget Task.
+        // If stop() is called before this Task runs (races actor entry), stopSession()
+        // sees nil and returns early — the B1 bail path in run() then exits immediately
+        // when setStopProducer returns true. Both orderings terminate cleanly; stop()
+        // may return before the session task fully exits in the nil-wins race. This is
+        // by design: the caller awaits the continuation's finish event, not stop() itself.
         Task { await state.setSessionTask(task) }
         return stream
     }

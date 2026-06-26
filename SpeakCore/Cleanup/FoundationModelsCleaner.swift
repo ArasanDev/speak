@@ -11,8 +11,8 @@
 //   - SystemLanguageModel.isAvailable: Bool (direct property) [verified]
 //   - SystemLanguageModel(useCase:guardrails:) two-step pattern with guardrails on the model [verified]
 //   - UnavailableReason cases: deviceNotEligible, appleIntelligenceNotEnabled, modelNotReady [verified]
-//   - LanguageModelSession.init(model:instructions:) — note: guardrails on SystemLanguageModel, not here [verified]
-//   - LanguageModelSession.respond(to:String, options:) async throws -> Response<String> [verified]
+//   - LanguageModelSession.init(model:instructions:Instructions?) — typed API [verified]
+//   - LanguageModelSession.respond(to:Prompt) async throws -> Response<String> — typed API [verified]
 //   - Response<String>.content: String [verified]
 //   - LanguageModelSession.GenerationError: non-@frozen enum, exhaustive switches need @unknown default [verified]
 //   - UnavailableReason: non-@frozen enum [verified]
@@ -91,9 +91,13 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
         // Fresh session per call: mode-specific instructions set at init (the
         // system-prompt slot), no cross-dictation context leakage. [decision]
         // permissiveContentTransformations applied via `model` ivar. [Cleanup-H1]
+        // [Cleanup-M2] Use typed Instructions / Prompt APIs to avoid the
+        // @_disfavoredOverload String-based paths. String conforms to
+        // InstructionsRepresentable + PromptRepresentable, so the values are identical.
+        // [verified: SDK String conformances, arm64e-apple-macos.swiftinterface, 2026-06-26]
         let session = LanguageModelSession(
             model: model,
-            instructions: systemInstructions
+            instructions: Instructions(systemInstructions)
         )
 
         let modeDescription = String(describing: mode)
@@ -102,7 +106,7 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
         SpeakLog.cleanup.debug("FoundationModelsCleaner: mode=\(modeDescription, privacy: .public)")
 
         do {
-            let response = try await session.respond(to: text)
+            let response = try await session.respond(to: Prompt(text))  // [Cleanup-M2]
             let cleaned = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
             SpeakLog.cleanup.debug(
                 "FoundationModelsCleaner: cleaned to \(cleaned.count, privacy: .public) chars"
@@ -266,6 +270,8 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
             // cleaner when level==.none, so this branch is unreachable in production.
             // It is included for exhaustive switch coverage and defensive safety: if
             // somehow called, return a no-op instruction rather than crashing. [decision]
+            // [Cleanup-L3] Signal in debug builds so a code-path regression is caught early.
+            assertionFailure("instructions(for:) called with CleanupLevel.none — SpeakEngine should have short-circuited before here")
             intensity = "Return the text exactly as provided, with no changes whatsoever."
         case .light:
             // Light: filler-word removal + punctuation only. Minimal rewriting.
@@ -304,6 +310,13 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
             // excessively long system prompt on large dictionaries. [decision: 50-term
             // cap — all 50 fit comfortably in the system-prompt context window; users
             // with >50 terms need the highest-priority ones first (UI responsibility).]
+            // [Cleanup-L2] Log when vocabulary is truncated so the user-facing symptom
+            // (unlisted terms not preserved) is diagnosable without guessing.
+            if customVocabulary.count > 50 {
+                SpeakLog.cleanup.debug(
+                    "FoundationModelsCleaner: vocabulary truncated \(customVocabulary.count, privacy: .public) → 50 terms (system-prompt cap)."
+                )
+            }
             let terms = customVocabulary.prefix(50)
                 .map { "\"\($0)\"" }
                 .joined(separator: ", ")

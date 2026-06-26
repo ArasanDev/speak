@@ -33,6 +33,10 @@ public enum SpeakError: Error, Sendable {
     case accessibilityDenied
     case transcriberUnavailable(String)
     case pasteboardBusy
+    // [Engine-L4] Thrown by individual cleaner stubs (OllamaCleaner, MLXCleaner) and
+    // FoundationModelsCleaner on genuine API error. CaptureSession.runCleanup() catches
+    // all throws from clean() and converts them to raw-fallback — so this error never
+    // propagates beyond runCleanup. Kept for protocol conformance and test verifiability.
     case llmCleanupFailed(String)
     case sessionCancelled
     case microphoneMuted

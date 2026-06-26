@@ -86,6 +86,9 @@ public struct LatencyRecord: Sendable {
 
         stopToPasteSeconds     = nanos(tStop, tPasted)          / 1_000_000_000
         transcriptReadySeconds = nanos(tStop, tTranscriptReady) / 1_000_000_000
-        self.cleanupSeconds    = max(0, cleanupSeconds)  // floor at 0 for safety
+        // [Engine-L5] max(0, ...) is a no-op in practice: callers pass either the exact
+        // sentinel 0.0 or a positive value from the 1-ns-floored DispatchTime delta —
+        // cleanupSeconds is never negative. Kept as a defensive callsite contract.
+        self.cleanupSeconds    = max(0, cleanupSeconds)
     }
 }

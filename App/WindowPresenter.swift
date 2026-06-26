@@ -158,6 +158,10 @@ final class WindowPresenter {
             // `eval.isComplete` → early return before this path is reached.
             controller.onCompletion = { [weak self] in
                 self?.showDashboard()
+                // [App-L3] onboardingController is not nilled here because the gate at
+                // the top of showOnboardingIfNeeded() returns early on subsequent calls
+                // (hasCompletedOnboarding == true). Held for app lifetime; cost is small
+                // (one NSWindowController + OnboardingViewModel) and the pattern is uniform.
             }
             onboardingController = controller
         }

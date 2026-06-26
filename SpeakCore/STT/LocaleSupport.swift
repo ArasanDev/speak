@@ -76,6 +76,10 @@ public enum SpeechTranscriberLocaleSource {
     /// not directly tested here; `AppleSpeechTranscriber.provisionAsset` handles the
     /// actual download at transcription time.
     public static func needsDownload(locale: Locale, installedLocales: [Locale]) -> Bool {
+        // [STT-L2] Comparing `.identifier` strings assumes callers provide normalised
+        // BCP-47 identifiers (e.g. "en-US" not "en_US"). AssetInventory returns canonical
+        // identifiers from the SDK, so this assumption holds in production. If callers
+        // supply un-normalised identifiers in tests, the result may be a false "needs download".
         !installedLocales.contains { $0.identifier == locale.identifier }
     }
 

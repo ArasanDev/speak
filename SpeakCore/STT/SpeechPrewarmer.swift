@@ -61,35 +61,35 @@ public final class SpeechPrewarmer: Sendable {
 
     // MARK: - Internals
 
-    /// Performs the warm-up: builds the analyzer with processLifetime retention,
-    /// then queries bestAvailableAudioFormat. This is sufficient to load the
-    /// model into memory without opening the mic or producing transcription output.
+    /// Performs the warm-up: builds the analyzer with processLifetime retention.
+    /// Constructing a SpeechAnalyzer instance is what actually loads the on-device
+    /// model; the static bestAvailableAudioFormat query alone does not guarantee it.
+    /// [STT-H1] [verified: SpeechAnalyzer(modules:options:) + Options(priority:modelRetention:)
+    ///  + ModelRetention.processLifetime — arm64e-apple-macos.swiftinterface, MacOSX26.5.sdk]
     private static func warmModel() async {
-        do {
-            let locale = Locale(identifier: "en-US")
-            guard let resolvedLocale = await SpeechTranscriber.supportedLocale(equivalentTo: locale) else {
-                // Non-English device or locale unavailable — not an error.
-                SpeakLog.stt.info("SpeechPrewarmer: en-US not a supported locale — skipping prewarm.")
-                return
-            }
-            let transcriber = SpeechTranscriber(locale: resolvedLocale, preset: .progressiveTranscription)
-
-            // Only prewarm when the model asset is installed — avoid triggering
-            // a background download during prewarm; that is the session's job.
-            let status = await AssetInventory.status(forModules: [transcriber])
-            guard status == .installed else {
-                SpeakLog.stt.info("SpeechPrewarmer: model not installed (status: \(String(describing: status), privacy: .public)) — skipping prewarm.")
-                return
-            }
-
-            // Query bestAvailableAudioFormat with processLifetime retention.
-            // This causes SpeechAnalyzer to load and retain the model for the
-            // process lifetime. [inferred: modelRetention semantics]
-            // [verified: SpeechAnalyzer.Options API surface, 2026-06-22]
-            _ = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
-            SpeakLog.stt.info("SpeechPrewarmer: model warm-up complete.")
+        let locale = Locale(identifier: "en-US")
+        guard let resolvedLocale = await SpeechTranscriber.supportedLocale(equivalentTo: locale) else {
+            SpeakLog.stt.info("SpeechPrewarmer: en-US not a supported locale — skipping prewarm.")
+            return
         }
-        // No explicit catch needed — warmModel is non-throwing; errors from
-        // the async SpeechTranscriber calls surface as nil/false, handled above.
+        let transcriber = SpeechTranscriber(locale: resolvedLocale, preset: .progressiveTranscription)
+
+        // Only prewarm when the model asset is installed — avoid triggering
+        // a background download during prewarm; that is the session's job.
+        let status = await AssetInventory.status(forModules: [transcriber])
+        guard status == .installed else {
+            SpeakLog.stt.info("SpeechPrewarmer: model not installed (status: \(String(describing: status), privacy: .public)) — skipping prewarm.")
+            return
+        }
+
+        // Constructing the analyzer with processLifetime retention loads and
+        // retains the model for the process lifetime. [STT-H1]
+        // [verified: SpeechAnalyzer(modules:options:) SDK signature, 2026-06-26]
+        let options = SpeechAnalyzer.Options(
+            priority: .background,
+            modelRetention: .processLifetime
+        )
+        _ = SpeechAnalyzer(modules: [transcriber], options: options)
+        SpeakLog.stt.info("SpeechPrewarmer: model warm-up complete.")
     }
 }
