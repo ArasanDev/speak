@@ -674,6 +674,93 @@ enhanced stats. All additive; no moat changes.
 
 ---
 
+### V1-0a — Core AI architecture research + migration plan
+
+**Task**: WWDC26 introduced `import CoreAI` as the successor to CoreML for LLM and
+generative AI workloads. Before implementing V1-1 (MLX), V1-2 (Parakeet), and V1-13
+(Foundation Models provider API), verify whether these should target Core AI rather than
+raw CoreML. Core AI natively supports LLMs, streaming generation, tool calling, and
+third-party model plugins; it also provides dynamic routing (on-device / Private Cloud
+Compute / user extension). `[inferred from official sources]`
+
+This is a **research-only task** — output is documentation and skill updates, no
+production code. Use `apple-docs` MCP + `swiftc -typecheck` to explore the Core AI API
+surface, then write a verdict in `docs/progress.md` so all subsequent v1 engine tasks
+can proceed from a verified foundation.
+
+**Depends on**: v0.1 complete (stable pipeline; no file conflicts)
+
+**Done when**:
+- [ ] `apple-docs` MCP lookup of `CoreAI` (or `import CoreAI`) returns valid type
+      definitions; module confirmed present in local macOS 26 SDK
+- [ ] Written verdict in `docs/progress.md` open questions: "V1 engines should use
+      Core AI because X" OR "Core AI is not the right layer for WhisperKit/MLX because
+      Y — use CoreML / third-party SDK directly"
+- [ ] `apple-native-ecosystem` skill updated: Core AI section upgraded from
+      `[inferred from official sources]` to `[verified]` with confirmed import name and
+      at least one concrete type name from the SDK
+- [ ] If Core AI confirmed: `mlx-swift-cleanup` and `whisperkitv1-stt` skills each
+      receive a one-paragraph "Core AI integration note" section
+- [ ] If Core AI NOT yet in local SDK: logged as `[unverified — not in SDK <version>]`
+      in progress.md; V1-1 and V1-2 proceed with CoreML/third-party SDK path
+
+---
+
+### V1-0b — AppIntents: StartDictationIntent + Siri integration
+
+**Task**: SiriKit was deprecated at WWDC26. Implement AppIntents so users can say
+"Hey Siri, start dictating" or trigger speak via the Shortcuts app. AppIntents uses
+App Schemas — no hardcoded trigger phrases required; Siri understands the intent
+schema naturally. `[inferred from WWDC26]`
+
+Three intents: `StartDictationIntent` (fires `SpeakEngine.startSession()`),
+`StopDictationIntent` (fires `stopSession()`), `GetLastTranscriptIntent` (returns
+last `HistoryEntry.cleanedText`). All placed in `App/Intents/DictationIntents.swift`.
+No cloud egress — AppIntents dispatch is local.
+
+**Depends on**: V01-0 (agent mode code path is the same `startSession()` call;
+intent can reuse it without duplication)
+
+**Done when**:
+- [ ] `StartDictationIntent: AppIntent` in `App/Intents/DictationIntents.swift`
+      compiles and fires `SpeakEngine.startSession()` on invoke
+- [ ] `StopDictationIntent` fires `SpeakEngine.stopSession()`
+- [ ] `GetLastTranscriptIntent` returns the most recent `HistoryEntry.cleanedText`
+      as `IntentResult`
+- [ ] speak appears in the Shortcuts app listing all 3 intents with display names
+- [ ] "Start dictating" (or similar) said to Siri launches a dictation session
+      (manual verification — document result in progress.md)
+- [ ] `make test` 0 failures; `AppIntentsTests.swift` uses AppIntents Testing
+      framework: intent validation, parameter type checks, result type checks (3+ tests)
+- [ ] `make verify-moat` 7/7 — AppIntents add no network egress
+
+---
+
+### V1-0c — Live Activity during dictation
+
+**Task**: Show a Live Activity on macOS while dictation is active — waveform animation,
+elapsed time (mm:ss), and approximate word count ticking up live. A cancel button in
+the Live Activity fires `SpeakEngine.stopSession()`. Implemented with `ActivityKit`
+on macOS 26, which confirmed Live Activity support at WWDC26. `[inferred from official sources]`
+
+Files: `SpeakCore/LiveActivity/DictationLiveActivity.swift` (new) for the
+`ActivityAttributes` conformance; updated `DictationController.swift` to
+start/update/end the activity alongside the dictation session.
+
+**Depends on**: Core pipeline stable (after validation phase)
+
+**Done when**:
+- [ ] `DictationLiveActivity: ActivityAttributes` defined; `ContentState` includes
+      `elapsedSeconds: Int` and `wordCount: Int`
+- [ ] Live Activity appears the moment dictation starts; disappears on stop/cancel
+- [ ] `elapsedSeconds` and `wordCount` update at ≤1s intervals during dictation
+- [ ] Tapping the cancel region in the Live Activity fires `SpeakEngine.stopSession()`
+- [ ] `make test` 0 failures; `LiveActivityTests` mock the `Activity<>` API to verify
+      start/update/end calls (3+ tests)
+- [ ] `make verify-moat` 7/7 — ActivityKit is local; no network egress
+
+---
+
 ### V1-1 — MLX Swift cleanup engine
 
 **Task**: Implement `MLXCleaner` in `SpeakCore/Cleanup/MLXCleaner.swift` as a real

@@ -5,17 +5,32 @@ description: Use when implementing WWDC26 Foundation Models provider API (v1 tas
 
 # Foundation Models Provider API (WWDC26) — Implementation Pointer
 
-## ⚠️ WARNING: All API shapes in this skill are `[inferred from WWDC26 session notes]`
+## Confirmed at WWDC26 `[inferred from official sources]`
 
-This API was introduced at WWDC26. It is **post-cutoff for all current models**. Do NOT write a single line of code based on this skill alone. Verify every symbol against the **local macOS 26 SDK** before coding.
+The **`LanguageModel` protocol** is the public Swift integration point. Third-party providers
+implement this protocol; `LanguageModelSession` accepts them behind the same call site.
+Zero changes to `FoundationModelsCleaner.swift` are needed to adopt future providers.
 
-## What We Know (From WWDC26 Session Notes)
+Source: WWDC26 session "What's new in Foundation Models" —
+https://developer.apple.com/videos/play/wwdc2026/241/
 
-Apple added a **provider API** to `FoundationModels` at WWDC26, allowing third-party model providers to work behind the same `LanguageModelSession` interface. `[inferred]`
+Still verify the exact protocol shape via `apple-docs` MCP at implementation time — the
+above confirms the pattern but NOT the exact method signatures or initializer parameters.
 
-Key insight: **`FoundationModelsCleaner.swift` likely needs zero code changes** to adopt future providers — if the provider API is purely additive (new factory methods on `LanguageModelSession` or a new session init). The existing cleanup code already uses `LanguageModelSession` correctly. `[inferred]`
+---
 
-Providers confirmed at WWDC26 (from session notes): `[inferred]`
+## ⚠️ WARNING: Exact API shapes are `[inferred from official sources]` — verify before coding
+
+This API was introduced at WWDC26. Do NOT write a single line of code based on this skill
+alone. Verify every symbol against the **local macOS 26 SDK** before coding.
+
+## What We Know
+
+Apple added a **provider API** to `FoundationModels` at WWDC26, allowing third-party model providers to work behind the same `LanguageModelSession` interface. `[inferred from official sources]`
+
+Key insight: **`FoundationModelsCleaner.swift` likely needs zero code changes** to adopt future providers — if the provider API is purely additive (new factory methods on `LanguageModelSession` or a new session init). The existing cleanup code already uses `LanguageModelSession` correctly. `[inferred from official sources]`
+
+Providers confirmed at WWDC26: `[inferred from official sources]`
 - Anthropic (cloud, requires API key)
 - Google (cloud, requires API key)
 - MLX (local in-process — most relevant for `speak`)

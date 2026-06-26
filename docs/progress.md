@@ -85,6 +85,7 @@ one spoken dictation + paste-into-TextEdit/Slack/Terminal + latency measurement.
 | V2 | What are the `fix-input2` changes exactly? Should they merge? | Review `.wt/fix-input2` diff before merging |
 | 3 | Does write+`Cmd+V` avoid the paste prompt incl. macOS 26.4 Terminal provenance check? | `[unverified]` — test in Terminal (human) |
 | 4 | Developer ID signing cert for notarization? | Unverified — needed for P11 |
+| V3 | Does `DictationTranscriber` (new SpeechAnalyzer module) support `contextualStrings` custom vocabulary? H4 seam may be silently broken. | Verify via `apple-docs` MCP before V01-1 (WhisperKit) work begins |
 
 ---
 

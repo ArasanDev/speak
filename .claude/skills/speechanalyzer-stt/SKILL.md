@@ -5,6 +5,42 @@ description: Use when implementing or modifying the Apple SpeechAnalyzer speech-
 
 # SpeechAnalyzer STT — Implementation Pointer
 
+## WWDC26: Three Modules — Use `DictationTranscriber` `[inferred from official sources]`
+
+SpeechAnalyzer ships three distinct modules as of macOS 26:
+
+- **`DictationTranscriber`** — short utterances, push-to-talk dictation. **This is speak's correct module.**
+- **`SpeechTranscriber`** — long-form audio (meetings, lectures, multi-speaker). Future meeting-capture mode.
+- **`SpeechDetector`** — voice activity detection (VAD). Must be paired with a transcriber.
+
+**Action**: Verify which module `AppleSpeechTranscriber.swift` currently instantiates via
+`apple-docs` MCP or `swiftc -typecheck`. If it uses the wrong module, the streaming
+behavior and accuracy characteristics may differ from expectations.
+
+Performance: SpeechAnalyzer is 2.2× faster than Whisper Large V3 Turbo on Apple Silicon. `[inferred from WWDC26]`
+
+---
+
+## ⚠️ Critical: Custom Vocabulary Gap `[inferred from WWDC26 search — verify before V01-1]`
+
+The new `DictationTranscriber` and `SpeechTranscriber` modules may **NOT** support Custom
+Vocabulary. Only the legacy `SFSpeechRecognizer` is confirmed to support `contextualStrings`.
+
+Our H4 seam in `AppleSpeechTranscriber.swift` uses `AnalysisContext.contextualStrings[.general]`
+to inject vocabulary hints. This **MUST** be verified before V01-1 (WhisperKit) work begins:
+
+1. Use `apple-docs` MCP: look up `DictationTranscriber` + "vocabulary" / "contextualStrings"
+2. Run `swiftc -typecheck` probe: try `AnalysisContext(contextualStrings:)` with `DictationTranscriber`
+3. If `contextualStrings` NOT supported on new modules:
+   - Vocabulary hints must route to WhisperKit (`vocabulary` param on `WhisperKit.transcribe`) or Sarvam STT (`model` + `language_code` hints) instead
+   - Remove `contextualStrings` injection from `AppleSpeechTranscriber` to avoid silent no-op
+
+Until verified: tag `customVocabulary` in `AppleSpeechTranscriber` as `[unverified in DictationTranscriber context]`.
+
+This is tracked as Open Question V3 in `docs/progress.md`.
+
+---
+
 ## Architectural Seam
 
 Protocol: `Transcribing` — lives at `SpeakCore/STT/Transcriber.swift`
