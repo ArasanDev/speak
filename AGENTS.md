@@ -219,7 +219,72 @@ prove.
 
 ---
 
-## 6b. Skill-creation protocol (how the loop compounds)
+## 6b. Research methodology (how to find current truth)
+
+The loop runs on a model with a knowledge cutoff. Every session, assume your
+training knowledge about Apple frameworks, Swift packages, and AI APIs may be
+wrong. The right response is not to guess — it is to research.
+
+### The question to ask before every task
+
+"What does this task require me to know that was released, changed, or updated
+after mid-2025?"
+
+High-risk domains (always verify):
+- Any Apple framework mentioned in WWDC26 (Core AI, Foundation Models provider
+  API, SpeechAnalyzer DictationTranscriber, AppIntents/App Schemas)
+- Any third-party package pinned to a version (WhisperKit, MLX, FluidAudio)
+- Any external API (Sarvam, Ollama) — endpoints, request format, pricing, models
+- Any deprecation (SiriKit → AppIntents; CoreML → Core AI for LLM/generative work)
+
+### The trust hierarchy
+
+1. `swiftc -typecheck` against the local SDK — absolute ground truth
+2. `apple-docs` MCP — official Apple docs, searchable by symbol
+3. `[verified]` skill claim with source URL — trusted, but re-fetch if > 2 weeks old
+4. Official GitHub README at the current release tag
+5. WebSearch from `developer.apple.com` or official org repos
+6. `[inferred]` skill claim — a hypothesis; verify before shipping it
+7. Training memory — a starting point for searches, never a fact to ship
+
+### Web search patterns that find authoritative sources
+
+For Apple APIs:
+- `"[SymbolName]" site:developer.apple.com`
+- `WWDC26 [FrameworkName] developer.apple.com`
+- `"import [FrameworkName]" swift macos26 2026`
+
+For packages:
+- WebFetch `github.com/<org>/<repo>/releases` → find latest tag → fetch README at that tag
+- `[PackageName] swift [MethodName] site:github.com`
+
+For services:
+- WebFetch the `docs:` URL in the skill file directly (don't search; fetch)
+- `[ServiceName] API documentation [year]`
+
+### What to do with what you find
+
+- Confirms a skill claim → change tag from `[inferred]` → `[verified from: <URL>]`
+- Contradicts a skill claim → update the skill FIRST, then write the code
+- Reveals something not in any skill → create a new skill before continuing
+- Confirms nothing, all results inconclusive → tag claim `[unverified]`, log open
+  question in `progress.md`, try `swiftc -typecheck` as final check
+
+### What good research looks like (concrete example)
+
+Task: implement WhisperKit STT (V01-1).
+1. Read `whisperkitv1-stt` skill → notices `[inferred]` tags on streaming API shape
+2. WebFetch `github.com/argmaxinc/WhisperKit/blob/main/README.md` → confirms init pattern
+3. After SPM resolve: `swiftc -typecheck` with `import WhisperKit` → confirms symbol names
+4. Updates skill: `[inferred]` → `[verified via README + swiftc, 2026-06-26]`
+5. Now writes the code
+
+This takes 5–10 minutes. It eliminates 2 failed build cycles and a wrong API
+call buried in production code. The skill update means the next agent skips steps 1–4.
+
+---
+
+## 6c. Skill-creation protocol (how the loop compounds)
 
 **When you solve a technical problem that required research or experimentation — a verified API shape, a workaround for a platform bug, an integration pattern that wasn't documented — encode it as a skill.**
 
