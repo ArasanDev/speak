@@ -231,4 +231,63 @@ Fix the 3 skill drifts (Phase 1B): `foundation-models-cleanup` FM init pattern +
 
 ### Recommended order
 **A → B/C in parallel → D → E.** A is the safety core (smallest, highest-value). B and C are file-disjoint from A and each other → parallel worktrees. D/E are robustness/polish. Human-Gate items (live paste in 3 apps, latency, false-trigger rate, notarize) remain owner-only and unblock `v0.0.1`.
-## Phase 4 — prioritized fix batches for user approval  *(pending)*
+
+---
+
+## Phase 5 — Fresh seam review (loop #27, 2026-06-26, post fix-input2)
+
+> **Scope:** 5 parallel seam-review agents ran against master post-merge of fix-input2. Read-only.
+> Agents: review-cleanup ✅ · review-app ✅ · review-audio-stt ✅ · review-engine ⏳ · review-input ⏳
+> **All findings below are NEW** (not in Phase 2–3). Merges into Batches A–E or new Batch F.
+
+### Phase 5 — NEW HIGH findings
+
+**[STT-H1][agent] SpeechPrewarmer.warmModel() is effectively a no-op**
+`SpeakCore/STT/SpeechPrewarmer.swift` lines 67–94. `warmModel()` only calls the static `SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith:)` — it never constructs a `SpeechAnalyzer` instance with `Options(priority:.background, modelRetention:.processLifetime)`. Whether a bare static format query causes model loading is `[inferred]`; if not, the prewarm does nothing and the 1–3s cold-start on first dictation is not eliminated. Fix: create a real `SpeechAnalyzer` instance in `warmModel()` using the verified `Options` API (SDK-confirmed). → Add to BATCH E (STT P2).
+
+**[STT-H2][agent] Missing `cancelAll()` on Steps 3–4 failure in `Session.run()` — analyzer abandoned**
+`SpeakCore/STT/AppleSpeechTranscriber.swift` lines 283–290. If `finalizeAndFinishThroughEndOfInput()` (Step 3, `async throws` [SDK verified]) or `resultsTask.value` (Step 4) throws, the error propagates without calling `analyzer.cancelAndFinishNow()` [SDK verified: `async`, no throws]. The analyzer is left live; the bridge task may hold `inputCont`. B1 (mic-leak race in `startStream`) is a separate site. Fix: `defer { Task { await state.cancelAll(analyzer: analyzer) } }` after the analyzer is created. → Add to BATCH B.
+
+**[Cleanup-H1][agent] `isAvailable` checks a different `SystemLanguageModel` instance than `clean()` uses**
+`SpeakCore/Cleanup/FoundationModelsCleaner.swift` lines 55 / 86–89. `isAvailable` reads `SystemLanguageModel.default.availability`; `clean()` constructs `SystemLanguageModel(useCase:.general, guardrails:.permissiveContentTransformations)`. These are different instances. If Apple gates availability per guardrail config, false-available: `isAvailable` → true, `clean()` → throws `assetsUnavailable`. Fix: store a single `let model = SystemLanguageModel(useCase:.general, guardrails:.permissiveContentTransformations)` as an ivar and check `model.availability` in `isAvailable`. → Add to BATCH B (cleanup seam, file-disjoint from A).
+
+**[App-H1][agent] `HistoryStore.init` leaks SQLite handle on open failure or `setupSchema` throw**
+`SpeakCore/Storage/HistoryStore.swift` lines 65–77. `sqlite3_open_v2` sets `*ppDb` to a non-nil error-reporting handle even on failure (documented). The `init` throws → `deinit` never called → `sqlite3_close_v2` never invoked. Same issue if `setupSchema` throws after a successful open. Fix: `if let db { sqlite3_close_v2(db) }` before any `throw` in `init`. → Add to BATCH D.
+
+**[App-M2][agent] Error overlay HUD has no Escape-dismiss path**
+`App/Overlay/OverlayController.swift` lines 209–225 + `App/DictationController.swift` lines 595–601. In the `beginDictation` error path, `start()` was never called, so the Escape monitor was never installed. `showError()` only *keeps* an existing monitor — it doesn't install one. In the `endDictation` error path the monitor IS installed but `onEscapeStop` guards `icon == .listening` (dead in `.error`). Result: error HUD is not user-dismissible via Escape. Fix: in `DictationController.onEscapeStop`, loosen the guard to `icon == .listening || icon == .error`. → Add to BATCH D.
+
+### Phase 5 — NEW MEDIUM findings
+
+**[Cleanup-M1][agent] `isAvailable` emits `.info` on every availability check (hot path)**
+`FoundationModelsCleaner.swift` line 59. `isAvailable` is called per-session. `.info` is visible in Console.app by default. Change to `.debug`. → BATCH D.
+
+**[Cleanup-M2][agent] `respond(to:String)` uses `@_disfavoredOverload` path**
+Both `LanguageModelSession.init(model:instructions:String?)` and `session.respond(to:String)` use `@_disfavoredOverload` (SDK-verified). Compiles and works today; Apple's intent is migration to typed `Instructions`/`Prompt` API. Low urgency but worth tracking before Apple drops the overloads. → BATCH E.
+
+**[App-M1][agent] `HistoryStore.export()` silently drops 3 benchmark fields**
+`SpeakCore/Storage/HistoryStore.swift` lines 197–203. `ExportEntry` omits `duration`, `stopToPasteSeconds`, and `cleanupSeconds` (added in migrations). Export JSON cannot round-trip a full `HistoryEntry`. → BATCH D.
+
+**[STT-M2][agent] `stop()` may return before session task fully terminates**
+`SpeakCore/STT/AppleSpeechTranscriber.swift` line 184. The session task registration (fire-and-forget `Task`) may not run before `stop()` checks `sessionTask == nil` and returns. The tail (B1 bail path) is <1ms but undocumented. → BATCH E (add `@testable` comment; no code change needed unless TSan surfaces it).
+
+### Phase 5 — NEW LOW findings
+
+**[Cleanup-L1][agent]** MLXCleaner/OllamaCleaner emit `.warning` on every `isAvailable` poll → should be `.debug`. → BATCH D.
+**[Cleanup-L2][agent]** 50-term vocab cap: no `.debug` log when truncation occurs. → BATCH E.
+**[Cleanup-L3][agent]** `CleanupLevel.none` unreachable branch has no `assertionFailure` in debug builds. → BATCH E.
+**[App-L1][agent]** `effectiveCleanupLevel` setter fires `objectWillChange` twice (double SwiftUI re-render per picker change). → BATCH D.
+**[App-L2][agent]** Double `DispatchQueue.main.async` wrapping in trigger-mode Combine subscription (outer `.receive(on:)` + inner `async` — one hop sufficient). → BATCH D.
+**[App-L3][agent]** `onboardingController` held for app lifetime after completion (minor memory — objects are small; pattern is uniform). → BATCH E (low priority).
+**[App-L4][agent]** History search is case-sensitive (`instr()` uses BINARY collation); no UI affordance. Fix: `lower(rawText)` + `lower(?)`. → BATCH D.
+**[App-L5][agent]** `startArmStateTask` inner `MainActor.run` is redundant (already on main actor from `@MainActor` class). → BATCH D.
+**[STT-L1][agent]** `SpeechPrewarmer.warmModel()` bare `do {}` scope with misleading "no catch needed" comment. → BATCH E (cleanup alongside STT-H1 fix).
+**[STT-L2][agent]** `LocaleSupport.needsDownload` compares `.identifier` strings — normalization assumption undocumented. → BATCH E (add comment).
+
+---
+
+## Updated batch assignments (post Phase 5)
+
+**BATCH B additions:** STT-H2 (`cancelAll` on finalization failure) · Cleanup-H1 (isAvailable model mismatch)
+**BATCH D additions:** App-H1 (SQLite handle leak) · App-M2 (error HUD Escape dismiss) · Cleanup-M1 (isAvailable log level) · App-M1 (export missing fields) · Cleanup-L1 (MLX/Ollama log level) · App-L1 (double objectWillChange) · App-L2 (double dispatch) · App-L4 (case-insensitive search) · App-L5 (redundant MainActor.run)
+**BATCH E additions:** STT-H1 (prewarm no-op fix) · Cleanup-M2 (disfavored overloads) · STT-M2 (stop ordering doc) · Cleanup-L2/L3 · App-L3 · STT-L1/L2
