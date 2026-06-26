@@ -184,7 +184,13 @@ public final class HotkeyMonitor: @unchecked Sendable {
     private let store: any BindingStoring
 
     /// Wake re-arm timer reference. Invalidated if a new wake fires before it fires.
+    /// [validation-fix NEW-5] Lock-guarded: written on the NSWorkspace notification
+    /// thread (`handleWakeNotification`) and the run-loop thread (wake callback).
     private var wakeRearmTimer: CFRunLoopTimer?
+
+    /// The 100ms re-arm/watchdog timer, retained so `shutdown()` can invalidate it.
+    /// [validation-fix C5] Lock-guarded; set once in `runLoopMain`.
+    private var watchdogTimer: CFRunLoopTimer?
 
     // MARK: Init
 
@@ -220,15 +226,37 @@ public final class HotkeyMonitor: @unchecked Sendable {
     }
 
     deinit {
-        // Tear down the tap from wherever we are; the run loop will stop when the
-        // thread sees the deallocation. Continuation finish clears stream subscribers.
-        lock.withLock {
-            armingDesired = false
-        }
-        tearDownTap()
+        // [validation-fix C5/NEW-2] deinit is effectively unreachable once the
+        // monitor starts (see `shutdown()`), but if it does run, finish cleanly.
+        shutdown()
         continuation.finish()
         armContinuation.finish()
         commandChordContinuation.finish()
+    }
+
+    /// Explicitly tear down the tap, timers, and dedicated run-loop thread.
+    ///
+    /// [validation-fix C5/NEW-2] The detached thread runs `self?.runLoopMain()`;
+    /// Swift retains the optional-chained `self` for the whole call, and
+    /// `runLoopMain()` blocks indefinitely in `CFRunLoopRun()`. So `self` is
+    /// retained for the process lifetime and `deinit` never fires once started —
+    /// the previously-reported "deinit UAF" is in reality a thread/memory LEAK,
+    /// not a use-after-free (no callback ever runs on freed memory). `shutdown()`
+    /// invalidates both timers and stops the run loop, which makes `CFRunLoopRun()`
+    /// return, releases that strong reference, and allows deallocation. Tests
+    /// should call this in teardown; the app may call it on terminate.
+    /// Safe to call multiple times and from any thread.
+    public func shutdown() {
+        let (wd, wk, rl): (CFRunLoopTimer?, CFRunLoopTimer?, CFRunLoop?) = lock.withLock {
+            armingDesired = false
+            let w = watchdogTimer; watchdogTimer = nil
+            let k = wakeRearmTimer; wakeRearmTimer = nil
+            return (w, k, tapRunLoop)
+        }
+        wd.map { CFRunLoopTimerInvalidate($0) }
+        wk.map { CFRunLoopTimerInvalidate($0) }
+        tearDownTap()
+        rl.map { CFRunLoopStop($0) }
     }
 
     // MARK: Tap lifecycle (called from any thread; work handed to run-loop thread)
@@ -263,6 +291,34 @@ public final class HotkeyMonitor: @unchecked Sendable {
         lock.withLock { _binding = newBinding }
         store.save(newBinding)
         SpeakLog.hotkey.info("Hotkey binding updated: keyCode=\(newBinding.keyCode, privacy: .public)")
+    }
+
+    /// Reset the gesture detectors after a dictation session ends OUTSIDE the
+    /// monitor's knowledge — Escape, CLI `--stop`, an engine error, or auto-stop.
+    ///
+    /// [validation-fix C1] `DoubleTapDetector.isCapturing` is otherwise only reset
+    /// in `buildTap()`. After an out-of-band stop it stays `true`, so the next
+    /// double-tap is swallowed: tap 1 returns `.stopCapture` to an already-idle
+    /// engine (a no-op) and resets `isCapturing`; tap 2 only records a timestamp —
+    /// the user must tap a THIRD time to actually start. Calling this from
+    /// `DictationController.endDictation()`/`cancelDictation()` keeps the detector
+    /// in sync so the next gesture starts cleanly.
+    ///
+    /// Threading: `detector`/`commandChord`/`lastBoundKeyDown`/`lastFnDown` are
+    /// owned by the run-loop thread. We schedule the reset ON that thread via
+    /// `CFRunLoopPerformBlock` + `CFRunLoopWakeUp` rather than mutating them from
+    /// the caller's (main) thread, so there is no data race. Idempotent — calling
+    /// it after a normal hotkey-driven stop (detector already reset) is a no-op.
+    public func notifySessionEnded() {
+        guard let rl = lock.withLock({ tapRunLoop }) else { return }
+        CFRunLoopPerformBlock(rl, CFRunLoopMode.commonModes.rawValue) { [weak self] in
+            guard let self else { return }
+            self.detector.reset()
+            self.commandChord.reset()
+            self.lastBoundKeyDown = false
+            self.lastFnDown = false
+        }
+        CFRunLoopWakeUp(rl)
     }
 
     // MARK: - Run-loop thread entry point
@@ -300,6 +356,8 @@ public final class HotkeyMonitor: @unchecked Sendable {
             &context
         )
         // timer is non-optional in Swift bridging of CFRunLoopTimerCreate
+        // [validation-fix C5] retain it so shutdown() can invalidate it.
+        lock.withLock { watchdogTimer = timer }
         CFRunLoopAddTimer(rl, timer, CFRunLoopMode.commonModes)
 
         // Register for workspace wake notifications so we can re-arm after sleep.
@@ -379,10 +437,12 @@ public final class HotkeyMonitor: @unchecked Sendable {
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, port, 0)
         CFRunLoopAddSource(rl, source, .commonModes)
 
-        self.eventTap = port
-        self.runLoopSource = source
-
+        // [validation-fix NEW-4] eventTap/runLoopSource are written here on the
+        // run-loop thread and read/cleared by tearDownTap() (callable from main /
+        // deinit) and handleTapDisabled(); guard them under the lock.
         lock.withLock {
+            self.eventTap = port
+            self.runLoopSource = source
             isArmed = true
             restartRateLimiter.reset()
         }
@@ -394,17 +454,23 @@ public final class HotkeyMonitor: @unchecked Sendable {
     // MARK: - Tap teardown (any thread)
 
     /// Disable and remove the tap. Safe to call multiple times.
+    /// [validation-fix NEW-4] eventTap/runLoopSource/tapRunLoop are read and
+    /// cleared under the lock — this method is callable from stop()/deinit on the
+    /// caller's thread, racing buildTap()/handleTapDisabled() on the run-loop thread.
     private func tearDownTap() {
-        if let port = eventTap {
+        let (port, src, rl): (CFMachPort?, CFRunLoopSource?, CFRunLoop?) = lock.withLock {
+            (eventTap, runLoopSource, tapRunLoop)
+        }
+        if let port {
             CGEvent.tapEnable(tap: port, enable: false)
-            if let src = runLoopSource, let rl = tapRunLoop {
+            if let src, let rl {
                 CFRunLoopRemoveSource(rl, src, .commonModes)
             }
         }
-        eventTap = nil
-        runLoopSource = nil
 
         let wasArmed = lock.withLock {
+            eventTap = nil
+            runLoopSource = nil
             let prev = isArmed
             isArmed = false
             return prev
@@ -419,12 +485,17 @@ public final class HotkeyMonitor: @unchecked Sendable {
     /// The CGEventTap C-style callback. Runs on the private CFRunLoop thread.
     /// `self` is recovered from `userInfo` via Unmanaged.passUnretained (no retain).
     private static let tapCallback: CGEventTapCallBack = { proxy, eventType, event, userInfo in
+        // [validation-fix C4] Return the passed-through event at +0 (Get Rule).
+        // `CGEventTapCallBack` has NO `CF_RETURNS_RETAINED` (CGEventTypes.h) and the
+        // header states the system retains the event and releases it after the
+        // callback returns — so `passRetained` here would leak one CGEvent per
+        // flagsChanged. `passUnretained` matches Hammerspoon/AltTab/karabiner.
         guard let ptr = userInfo else {
-            return Unmanaged.passRetained(event)
+            return Unmanaged.passUnretained(event)
         }
         let monitor = Unmanaged<HotkeyMonitor>.fromOpaque(ptr).takeUnretainedValue()
         monitor.handle(proxy: proxy, type: eventType, event: event)
-        return Unmanaged.passRetained(event)
+        return Unmanaged.passUnretained(event)
     }
 
     /// Handle an incoming CGEvent on the tap's run loop thread.
@@ -540,7 +611,7 @@ public final class HotkeyMonitor: @unchecked Sendable {
     /// Re-enables the tap if within the rate limit; tears down and flags for
     /// re-arm (via watchdog) if the cap is exceeded.
     private func handleTapDisabled() {
-        guard let port = eventTap else { return }
+        guard let port = lock.withLock({ eventTap }) else { return }  // [validation-fix NEW-4]
 
         let now = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000.0
         let allowed = lock.withLock { restartRateLimiter.recordAttempt(now: now) }
@@ -569,9 +640,15 @@ public final class HotkeyMonitor: @unchecked Sendable {
     private func handleWakeNotification() {
         SpeakLog.hotkey.info("HotkeyMonitor: wake notification — scheduling re-arm in 3 s.")
 
-        // Invalidate any pending wake timer.
-        wakeRearmTimer.map { CFRunLoopTimerInvalidate($0) }
-        wakeRearmTimer = nil
+        // [validation-fix NEW-5] Invalidate any pending wake timer under the lock —
+        // this runs on the NSWorkspace notification thread while the wake callback
+        // (which also writes wakeRearmTimer) runs on the run-loop thread.
+        let pending = lock.withLock { () -> CFRunLoopTimer? in
+            let prev = wakeRearmTimer
+            wakeRearmTimer = nil
+            return prev
+        }
+        pending.map { CFRunLoopTimerInvalidate($0) }
 
         guard let rl = lock.withLock({ tapRunLoop }) else { return }
 
@@ -585,7 +662,7 @@ public final class HotkeyMonitor: @unchecked Sendable {
             if shouldArm {
                 monitor.buildTap()
             }
-            monitor.wakeRearmTimer = nil
+            monitor.lock.withLock { monitor.wakeRearmTimer = nil }  // [validation-fix NEW-5]
         }
         var ctx = CFRunLoopTimerContext(version: 0, info: selfPtr, retain: nil, release: nil, copyDescription: nil)
         let wakeDelay: CFTimeInterval = 3.0  // [decision: AltTab pattern, benchmark.md §7]
@@ -597,7 +674,7 @@ public final class HotkeyMonitor: @unchecked Sendable {
             cb,
             &ctx
         )
-        wakeRearmTimer = timer
+        lock.withLock { wakeRearmTimer = timer }  // [validation-fix NEW-5]
         CFRunLoopAddTimer(rl, timer, CFRunLoopMode.commonModes)
     }
 }

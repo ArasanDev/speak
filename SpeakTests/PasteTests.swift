@@ -327,6 +327,7 @@ final class PasteboardWriterTests: XCTestCase {
         let writer = PasteboardWriter(
             isAccessibilityTrusted: { false },
             settle: .zero,
+            pasteEventGap: .zero,   // [validation-fix C3] no real inter-event sleeps in tests
             writeClipboard: { recorder.recordClipboardWrite($0) },
             postEvent: { recorder.recordPostedEvent($0) }
         )
@@ -368,6 +369,7 @@ final class PasteboardWriterTests: XCTestCase {
         let writer = PasteboardWriter(
             isAccessibilityTrusted: { true },
             settle: .zero,
+            pasteEventGap: .zero,   // [validation-fix C3] no real inter-event sleeps in tests
             writeClipboard: { recorder.recordClipboardWrite($0) },
             postEvent: { recorder.recordPostedEvent($0) }
         )
@@ -417,6 +419,7 @@ final class SecureFieldGuardTests: XCTestCase {
             isAccessibilityTrusted: { true },         // AX granted
             isFocusedFieldSecure: { true },           // simulate password field
             settle: .zero,
+            pasteEventGap: .zero,   // [validation-fix C3] no real inter-event sleeps in tests
             writeClipboard: { recorder.recordClipboardWrite($0) },
             postEvent: { recorder.recordPostedEvent($0) }
         )
@@ -457,6 +460,7 @@ final class SecureFieldGuardTests: XCTestCase {
             isAccessibilityTrusted: { true },         // AX granted
             isFocusedFieldSecure: { false },          // simulate non-secure field
             settle: .zero,
+            pasteEventGap: .zero,   // [validation-fix C3] no real inter-event sleeps in tests
             writeClipboard: { recorder.recordClipboardWrite($0) },
             postEvent: { recorder.recordPostedEvent($0) }
         )
@@ -496,6 +500,7 @@ final class SecureFieldGuardTests: XCTestCase {
             isAccessibilityTrusted: { false },        // AX NOT granted
             isFocusedFieldSecure: { true },           // secure field (should not matter)
             settle: .zero,
+            pasteEventGap: .zero,   // [validation-fix C3] no real inter-event sleeps in tests
             writeClipboard: { recorder.recordClipboardWrite($0) },
             postEvent: { recorder.recordPostedEvent($0) }
         )
@@ -538,6 +543,7 @@ final class SecureFieldGuardTests: XCTestCase {
             isAccessibilityTrusted: { true },
             isFocusedFieldSecure: { false },          // fail-safe: query failure → false
             settle: .zero,
+            pasteEventGap: .zero,   // [validation-fix C3] no real inter-event sleeps in tests
             writeClipboard: { recorder.recordClipboardWrite($0) },
             postEvent: { recorder.recordPostedEvent($0) }
         )

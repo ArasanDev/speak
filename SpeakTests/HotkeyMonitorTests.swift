@@ -379,6 +379,31 @@ final class ModifierMaskTests: XCTestCase {
         XCTAssertNotEqual(fnMask, rcmdMask,
             "Fn and Right-Command must map to different CGEventFlags — otherwise binding switch is a no-op")
     }
+
+    // [validation-fix NEW-6] The W1.1 recorder also accepts Right/Left Option;
+    // these previously fell through to the `.maskCommand` default → an Option
+    // binding's down-edge (`flags.contains(.maskCommand)`) was never true, so the
+    // hotkey never fired. Option must map to `.maskAlternate`.
+    func testRightOptionKeyCodeReturnsMaskAlternate() {
+        // kVK_RightOption = 61 → .maskAlternate
+        XCTAssertEqual(modifierMask(forKeyCode: 61), .maskAlternate,
+            "Right-Option (keyCode 61) must map to .maskAlternate — else an ⌥ binding never fires")
+    }
+
+    func testLeftOptionKeyCodeReturnsMaskAlternate() {
+        // kVK_Option = 58 → .maskAlternate
+        XCTAssertEqual(modifierMask(forKeyCode: 58), .maskAlternate)
+    }
+
+    // [validation-fix NEW-6] An unrecognised keyCode must fail CLOSED — return a
+    // flag a modifier key never sets — not masquerade as Command (which would make
+    // the hotkey spuriously "down" whenever ⌘ is held).
+    func testUnknownKeyCodeFailsClosedNotAsCommand() {
+        let mask = modifierMask(forKeyCode: 9999)
+        XCTAssertEqual(mask, .maskNonCoalesced)
+        XCTAssertNotEqual(mask, .maskCommand,
+            "Unknown keyCode must NOT masquerade as Command (would spuriously fire on ⌘)")
+    }
 }
 
 // MARK: - FnDebouncer Tests (W1.1)
