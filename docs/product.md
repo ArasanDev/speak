@@ -159,6 +159,36 @@ settings choice, not a rebuild. This is the architecture done properly — see
 
 ---
 
+## 6b. WWDC26 architectural opportunity
+
+macOS 26 / WWDC26 adds a `LanguageModelSession` **provider API** that allows
+third-party model backends (Anthropic, Google, MLX) to satisfy the same Swift
+`LanguageModelSession` interface that `FoundationModelsCleaner` already uses.
+`[inferred from WWDC26 session notes]`
+
+**What this means for `speak`:**
+
+1. **Zero cleanup-code changes for provider swap.** `FoundationModelsCleaner`
+   calls `LanguageModelSession` today; swapping the backend to MLX or Anthropic
+   is a session-init parameter, not a new conformer. `[inferred]`
+2. **MLX as in-process provider (V1-13)**: MLX Swift models run on the Neural
+   Engine, no daemon, no IPC. Estimated throughput: ~500 tok/s for Qwen3-0.6B
+   on M4 Max. `[inferred from MLX Swift benchmarks]`
+3. **Anthropic as optional cloud provider (V1-13)**: the provider pattern keeps
+   audio 100% local — only the cleanup prompt (cleaned text, never audio) goes
+   over the wire. This is the first opt-in cloud feature; clearly disclosed.
+4. **Google models**: same provider pattern; the user supplies a key. Never
+   default; never mandatory.
+
+**Implementation note**: verify the provider API shape against the local macOS 26
+SDK before writing any conformance code (`swiftc -typecheck`). Do not rely on
+training-data API shapes for WWDC26 additions — they are post-cutoff.
+
+**Roadmap pointer**: provider integration is task V1-13 (WWDC26 Foundation Models
+provider integration) in `roadmap.md`.
+
+---
+
 ## 7. UX principles
 
 ### 7.1 The hotkey (signature UX)
@@ -223,23 +253,61 @@ Everything essential to a private, neat-writing dictation app:
 - 100% local, free, open (MIT), offline.
 - **Done when** `benchmark.md`'s v0 MATCH gate + all BEAT rows pass.
 
-### v1 — attractive & friendly (polish that delights)
-- More languages (SpeechAnalyzer locales; WhisperKit for the long tail).
-- Richer cleanup: tone/style modes, per-app formatting, snippets & custom
-  dictionary, learned vocabulary.
-- Alternative pluggable models surfaced in the UI (Ollama/WhisperKit), with
-  guided setup.
-- Onboarding, menubar, and overlay polish; latency tuning; metrics view.
-- CLI shim (`speak --start/--stop/--status`).
+### v0.1 — Language, Engine & Intelligence (6 tasks, all additive)
 
-### v2 — creative & expansive
-- Code-aware mode (detect code context, format accordingly).
-- Voice editing/commands ("make this shorter," "fix that") via local LLM.
-- Local cross-device continuity (opt-in, never account-mandatory).
-- Advanced, app-specific behaviors.
+| Task | Feature | Key spec |
+|------|---------|---------|
+| V01-1 | WhisperKit STT | 99 langs, MIT, CoreML, guided model download, language auto-detect |
+| V01-2 | Ollama cleanup (real impl) | localhost:11434, Qwen2.5:3B default, 4 model presets, guided setup, loopback-only |
+| V01-3 | Per-app context awareness | Bundle ID → AppContext (7 classes); injects tone/casing into cleanup prompt |
+| V01-4 | Auto-dictionary learning | Post-paste diff → word substitution HUD → `customVocabulary`, max 3/session |
+| V01-5 | Multiple hotkey bindings | Up to 4 bindings per action; mouse buttons 4–10; no app restart |
+| V01-6 | Language auto-detect + overlay pill | Language badge in overlay; quick-switch pill; persists to `SettingsStore` |
 
-### v3+ — frontier & creative
-- Open-ended creative directions (the product earns these as it matures).
+**Done when**: all 6 V01-x done-when checklists pass + 4 gates green.
+
+### v1 — Power User & Polish (14 tasks)
+
+| Task | Feature | Key spec |
+|------|---------|---------|
+| V1-1 | MLX Swift cleanup | In-process, SPM, Qwen3-0.6B/1.7B, Neural Engine, guided download |
+| V1-2 | Parakeet/FluidAudio STT | Apache 2.0, CoreML, ~80ms latency, English champion, guided download |
+| V1-3 | Transforms | Highlight → Polish/Expand/Summarize/Prompt-Engineer via local LLM; custom transforms; diff overlay; auto-transform mode |
+| V1-4 | Code-aware dictation | camelCase/snake_case pref; AX file context; identifier vocabulary |
+| V1-5 | Quiet mode / noise suppression | `AVAudioUnitEQ` high-pass + gain; sensitivity slider; level meter in overlay |
+| V1-6 | Auto-segmentation for messaging | RMS silence detector → auto-stop + Return key; configurable threshold |
+| V1-7 | Course correction | "wait no" / "scratch that" detection → trim + re-accumulate; user-editable markers |
+| V1-8 | Dictation recovery | Per-session `.caf` buffer; crash → relaunch shows Retry/Discard HUD |
+| V1-9 | Inline history retry | Re-run raw text through current engine; before/after diff; Replace/Append |
+| V1-10 | Streak tracking + stats | Daily streak, 30-day word chart (`Charts`), WPM 7-day rolling avg |
+| V1-11 | Personal writing style samples | Up to 5 samples injected as few-shot; empty → no injection, baseline preserved |
+| V1-12 | Clamshell / mic auto-selection | Wake/sleep subscription; best-available mic; clamshell warning HUD |
+| V1-13 | WWDC26 provider integration | `LanguageModelSession` provider API; MLX + optional Anthropic (Keychain, opt-in) |
+| V1-14 | iOS app foundation | `SpeakCore` SPM package; iOS 18+ app target; Custom Keyboard Extension |
+
+**Done when**: all 14 V1-x done-when checklists pass + 4 gates green.
+
+### v2 — Platform & Expansion (5 tasks)
+
+| Task | Feature | Key spec |
+|------|---------|---------|
+| V2-1 | iOS app complete | Dynamic Island, Lock Screen widget, Action Button, iPad keyboard extension |
+| V2-2 | iCloud sync (opt-in) | `NSUbiquitousKeyValueStore` + CloudKit, no speak account, conflict = last-write-wins |
+| V2-3 | Speaker diarization | WhisperKit SpeakerKit; `speakerLabels` in history; toggle in Settings |
+| V2-4 | Team features (serverless) | iCloud folder share for team dictionary/snippets; union merge; no speak server |
+| V2-5 | Android / Windows | Scope after v2 iOS stable; outside Apple-only constraint — platform seam decision deferred |
+
+**Done when**: all V2-1 through V2-4 done-when checklists pass (V2-5 deferred).
+
+### v3+ — Enterprise & Frontier (4 tasks + open-ended)
+
+| Task | Feature | Key spec |
+|------|---------|---------|
+| V3-1 | HIPAA BAA docs + compliance export | PDF export of privacy architecture; `make verify-moat` as technical appendix |
+| V3-2 | Enterprise MDM profile | `.mobileconfig`; managed `UserDefaults`; no speak server |
+| V3-3 | Advanced voice editing (multi-turn) | Edit stack (5 levels), 30s window, "revert" command, local LLM |
+| V3-4 | Developer API / SDK | DocC docs for public `SpeakCore` SPM package; example CLI app |
+| V3-open | Open-ended creative directions | The product earns these as real user patterns emerge |
 
 There is no deadline on any of this. The loop advances the ladder until the
 product is whole; each rung's "done" is defined by testable criteria, not dates.

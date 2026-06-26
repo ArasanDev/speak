@@ -377,54 +377,697 @@ asserted.
 
 ---
 
-## v1 — Attractive & friendly
+## v0.1 — Language, Engine & Intelligence
 
-*Value*: more languages, richer cleanup experience, power-user model choice,
-polish and onboarding improvements, CLI access.
+*Value*: pluggable STT engines, real Ollama cleanup, per-app context awareness,
+and multi-binding hotkeys. All are additive — the v0 moat is untouched.
 
-- **More languages**: SpeechAnalyzer locales surfaced in the language picker;
-  WhisperKit (Argmax) as an optional STT engine for the long tail (99
-  languages, MIT). `[verified]`
-- **Richer cleanup**: tone and style modes (professional, casual, etc.),
-  per-app formatting rules, snippets & custom dictionary, learned vocabulary.
-- **Pluggable cleanup models surfaced in UI**: Ollama (Qwen 2.5 3B / Gemma
-  3 4B / Phi-4-mini) and MLX models as user-selectable alternatives to
-  Foundation Models. Guided setup flow.
-- **Onboarding, menubar, and overlay polish**: latency tuning, first-run UX
-  improvements, latency/metrics view.
-- **CLI shim**: `speak --start`, `speak --stop`, `speak --status`.
-- **Intel Mac**: whisper.cpp fallback STT for non-Apple-Silicon machines.
-
-**Done when**: all features above have their own binary done-when checklists
-(written at implementation time). No dates.
+Each task below is an independently shippable unit with a binary gate.
+**Prerequisite: v0 ships (`benchmark.md` §4 + §3 + `quality.md` §9 all pass).**
 
 ---
 
-## v2 — Creative & expansive
+### V01-1 — WhisperKit STT engine
 
-*Value*: code context awareness, conversational editing via voice, optional
-local cross-device continuity.
+**Task**: Wire WhisperKit v1.0.0 (Argmax, MIT, `argmax-oss/argmax-oss-swift`) as
+a real `Transcribing` conformer behind `EngineFactories.defaultTranscriber(for:)`.
+Add a model picker in Settings › Transcription (SpeechAnalyzer default / WhisperKit
+base / WhisperKit large-v3-turbo). Implement a guided first-run model-download sheet
+(~2 GB for large-v3-turbo; async with progress bar; cancellable). Wire language
+auto-detection: when `settings.language == "auto"`, pass `nil` locale to WhisperKit
+and surface the detected language in the overlay. Files touched:
+`SpeakCore/STT/WhisperKitTranscriber.swift` (new), `EngineFactories.swift`,
+`SettingsStore.swift` (add `sttModelVariant`), `App/Settings/SettingsView.swift`.
 
-- **Code-aware mode**: detect code context (editor active, file type), format
-  transcript accordingly (identifiers, symbols, structure).
-- **Voice editing/commands**: "make this shorter," "fix that sentence" — local
-  LLM driven, no cloud.
-- **Local cross-device continuity**: history and snippets available on other
-  devices via iCloud or local network — **always opt-in, never mandatory,
-  never account-gated**.
-- **Advanced per-app behaviors**: app-specific paste modes, auto-formatting
-  rules.
+**Depends on**: V0 shipped; P3 (`Transcribing` protocol); P10 (settings seam).
 
-**Done when**: per-feature binary checklists written at implementation time.
-No dates.
+**Done when**:
+- [ ] `WhisperKitTranscriber` compiles and passes lint + moat (no new non-Apple SPM
+      deps in the moat-scanned dirs — WhisperKit lives in a `SpeakLLM`-style
+      sub-module or is moat-exempted with a `[decision]` comment)
+- [ ] WhisperKit transcribes the `hello_speech.caf` fixture with WER ≤ 3%
+- [ ] Model picker in Settings shows the three options; selection persists across launches
+- [ ] First-run download sheet appears when `WhisperKit large-v3-turbo` is selected
+      and the model file is absent; shows progress; completes without crash
+- [ ] `settings.language == "auto"` uses WhisperKit language detection; overlay shows
+      detected language badge
+- [ ] All 4 gates green: `make build` / `make test` / `make lint` / `make verify-moat`
+- [ ] `benchmark.md` Languages row updated: v0.1 SpeechAnalyzer installed locales ✓;
+      v1 WhisperKit 99-lang ✓
 
 ---
 
-## v3+ — Frontier & creative
+### V01-2 — Ollama cleanup engine (real implementation)
 
-Open-ended directions the product earns as it matures. Scope defined when
-v2 is stable and real user patterns are established. No pre-commitment. No
-dates.
+**Task**: Replace the `OllamaCleaner` stub in `SpeakCore/Cleanup/OllamaCleaner.swift`
+with a real HTTP implementation against `localhost:11434/api/generate`. Support the
+top cleanup models: `qwen2.5:3b` (default), `phi4-mini`, `gemma3:4b`, `llama3.2:3b`.
+Add a model-name `String` setting in `SettingsStore` and a selector in Settings › AI
+Cleanup. Implement an availability check (`/api/tags` endpoint; timeout 1s) so
+`isAvailable` returns `true` only when the Ollama daemon is running and the selected
+model is pulled. Add a guided setup sheet: "Install Ollama → `ollama pull qwen2.5:3b`
+→ Done" with a deep-link to ollama.ai. The implementation must use `URLSession` with
+`localhost` only — no egress beyond loopback; moat `testNoNetworkEgress` exemption
+documented with a `[decision]` tag (loopback is not network egress). Files touched:
+`SpeakCore/Cleanup/OllamaCleaner.swift`, `EngineFactories.swift`,
+`App/Settings/OllamaSetupSheet.swift` (new), `SettingsStore.swift`, moat allowlist.
+
+**Depends on**: V0 shipped; P3.5 (`LLMCleaning` protocol); P10.
+
+**Done when**:
+- [ ] `OllamaCleaner.clean(_:mode:)` returns cleaned text (filler removed, punctuated)
+      from a running Ollama with `qwen2.5:3b` pulled, for a 50-word raw transcript,
+      in ≤ 3 s on M2 or later
+- [ ] `isAvailable` returns `false` when Ollama is not running; session falls back to
+      raw transcript gracefully (reaches `.done`, not `.error`)
+- [ ] Model selector in Settings shows the four options; persists across launches
+- [ ] Setup sheet opens when cleanup engine = Ollama and Ollama is unavailable;
+      deep-link to ollama.ai resolves
+- [ ] Moat: `testNoNetworkEgress` still passes; loopback exemption is `[decision]`-tagged
+- [ ] All 4 gates green
+
+---
+
+### V01-3 — Per-app context awareness
+
+**Task**: At dictation start, read the frontmost application's bundle ID via
+`NSWorkspace.shared.frontmostApplication?.bundleIdentifier`. Map the bundle ID to
+an `AppContext` enum: `.codeEditor` (Xcode, Cursor, VS Code, Zed), `.email` (Mail,
+Airmail, Spark), `.workMessaging` (Slack, Teams, Discord), `.personalMessaging`
+(Messages, WhatsApp, Telegram), `.aiTool` (Claude.app, ChatGPT.app), `.browser`
+(Safari, Chrome, Firefox — further classify by page title if AX permits), `.other`.
+Inject the context into `CleanupMode` at `CaptureSession` init time so the cleanup
+prompt adapts: code editors → camelCase-friendly, no filler removal, preserve
+symbols; email → formal tone, read recipient from AX if available; messaging → casual;
+AI tools → no formatting adjustment. Add per-app override settings (Settings › AI
+Cleanup › Per-App Context) and a global toggle. `AppContextDetector` is a new type in
+`SpeakCore/Engine/`, keeping all AX reads on `@MainActor`. No context data is stored
+or transmitted — it is read once per dictation and injected into the prompt only.
+
+**Depends on**: V0 shipped; P3.5 (`CleanupMode`); P10.
+
+**Done when**:
+- [ ] Dictating "let me add a new variable called user name" in Xcode produces
+      `let userName` (or `let user_name`) in the cleaned output — confirmed by a
+      `[verified]` live test logged in `progress.md`
+- [ ] Dictating the same phrase in Messages produces casual unformatted output
+- [ ] Global context awareness toggle in Settings disables the behavior (output matches
+      the no-context baseline)
+- [ ] `AppContextDetector` is a pure `@MainActor` type; no background-thread AX reads
+- [ ] No app context data written to history, logs, or any file — confirmed by
+      `MoatAuditTests` grep pass
+- [ ] All 4 gates green
+
+---
+
+### V01-4 — Auto-dictionary learning from corrections
+
+**Task**: After every successful paste, register a one-shot `NSPasteboard` change
+observer (or poll at 200ms intervals for 5 s via a `Task.sleep` loop) on
+`NSPasteboard.general`. If the pasteboard content changes within 5 s (user copied
+corrected text), diff the pasted text vs the new clipboard content using
+`SpeakCore/Diff/TextDiff.swift` to extract changed words. For each substituted word
+(e.g. "Widl" → "Widdle"), show a non-intrusive `NSUserNotification`-style HUD in the
+overlay: "Add 'Widdle' to your dictionary? [Add] [Skip]". On [Add], append to
+`SettingsStore.customVocabulary`. Cap auto-proposals at 3 per session to avoid
+notification fatigue. `[decision]` Note: never read the pasteboard for dictated content
+— this reads only the *new* clipboard value that the user *explicitly* copied
+post-correction, which does not violate the no-pasteboard-read rule.
+
+**Depends on**: V0 shipped; P6 (`PasteboardWriter`); P10 (`customVocabulary` seam H4).
+
+**Done when**:
+- [ ] After a paste, user copies corrected text; overlay HUD appears within 6 s
+      proposing the substituted word
+- [ ] Tapping [Add] adds the word to `SettingsStore.customVocabulary`; confirmed by
+      next session injecting it into `SpeechAnalyzer` contextualStrings
+- [ ] Tapping [Skip] dismisses with no side effect
+- [ ] Max 3 proposals per session — 4th correction in same session produces no HUD
+- [ ] `testNoPasteboardRead` still passes (the read is of user-copied content, not
+      `speak`-written content — moat comment documents the distinction)
+- [ ] All 4 gates green
+
+---
+
+### V01-5 — Multiple hotkey bindings per action + mouse buttons
+
+**Task**: Extend `HotkeyBinding` and `HotkeyMonitor` to support up to 4 simultaneous
+key bindings per action (start/stop, command mode). Each binding is an independent
+`CGEventTap` filter or a shared tap with an extended match set. Add mouse button
+support for dictation trigger: extend the event tap to include
+`CGEventType.otherMouseDown` (middle click) and custom high-button events (buttons
+4–10) via `CGEvent.getIntegerValueField(.mouseEventButtonNumber)`. Persist the full
+binding set in `BindingStore`. Update Settings › Shortcuts to show up to 4 rows per
+action with [+] / [−] controls.
+
+**Depends on**: V0 shipped; P5 (`HotkeyMonitor`, `HotkeyBinding`); P10.
+
+**Done when**:
+- [ ] User binds both Right-Command and middle-click to start dictation; both fire
+      correctly in a live test logged in `progress.md`
+- [ ] Binding a 4th shortcut is permitted; attempting a 5th shows an error in the UI
+- [ ] Removing a binding updates live behavior without app restart
+- [ ] `HotkeyMonitorTests` cover multi-binding dispatch (injected synthetic events)
+- [ ] All 4 gates green
+
+---
+
+### V01-6 — Language auto-detection + quick language picker
+
+**Task**: Expose language auto-detection in the overlay and Settings. When WhisperKit
+is the active STT engine and `settings.language == "auto"`, surface a language badge
+in the overlay (e.g. "🇪🇸 ES detected"). Add a quick-switch language pill to the
+overlay toolbar (equivalent of Wispr's Flow Bar language picker): tapping it cycles
+through `SpeechAnalyzer` installed locales or the top-5 WhisperKit languages. The
+selection persists in `SettingsStore.language`. SpeechAnalyzer path: enumerate
+`SpeechTranscriber.installedLocales` (already in `LocaleSupport.swift`) and present a
+compact picker in the overlay's bottom bar.
+
+**Depends on**: V01-1 (WhisperKit); P3 (SpeechAnalyzer locale seam already wired).
+
+**Done when**:
+- [ ] Dictating in Spanish with WhisperKit auto-detect produces Spanish text; overlay
+      shows "ES" language badge
+- [ ] Language pill in overlay taps through 3+ languages; next dictation uses the
+      selected language
+- [ ] Selection persists across app restart
+- [ ] All 4 gates green
+
+---
+
+## v1 — Power User & Polish
+
+*Value*: in-process MLX engine, English-accuracy Parakeet, Transforms, code-aware
+mode, quiet mode, auto-segmentation, course correction, dictation recovery, and
+enhanced stats. All additive; no moat changes.
+
+**Prerequisite: v0.1 complete.**
+
+---
+
+### V1-1 — MLX Swift cleanup engine
+
+**Task**: Implement `MLXCleaner` in `SpeakCore/Cleanup/MLXCleaner.swift` as a real
+`LLMCleaning` conformer using the `ml-explore/mlx-swift` + `mlx-swift-lm` Swift
+packages (`[decision]`: SPM dependency exempted in the same `SpeakLLM` module as
+WhisperKit — no moat violation for opt-in power-user engines). Expose two model
+presets: `qwen3-0.6b` (speed, ~500ms for 200 words on M3+) and `qwen3-1.7b` (quality,
+~1.5s). Models download on first use to `~/Library/Application Support/speak/models/`.
+`isAvailable` returns `true` only when the model file is present. Wire into
+`EngineFactories` and Settings › AI Cleanup engine selector.
+
+**Depends on**: V0 shipped; V01-2 (Ollama engine as reference implementation).
+
+**Done when**:
+- [ ] `MLXCleaner` cleans a 100-word transcript in ≤ 2 s on M2 or later (qwen3-0.6b)
+- [ ] First-run download sheet appears; model downloads to the correct path; progress shown
+- [ ] `isAvailable` returns `false` if model file absent; graceful fallback to raw
+- [ ] Engine selector in Settings shows MLX option; selection persists
+- [ ] All 4 gates green
+
+---
+
+### V1-2 — Parakeet/FluidAudio STT engine
+
+**Task**: Integrate Parakeet TDT 0.6B via the FluidAudio Swift SDK (CoreML, Neural
+Engine, Apache 2.0, `[verified]` production-proven in VoiceInk and 20+ apps) as an
+optional `Transcribing` conformer `ParakeetTranscriber` in `SpeakCore/STT/`. Wire into
+`EngineFactories` and the STT engine picker in Settings. Position as "English accuracy
+champion" (~2.5% WER, ~80ms latency). Model is ~2–4 GB CoreML bundle; guided download.
+English-only; language selector shows a note when Parakeet is active.
+
+**Depends on**: V0 shipped; V01-1 (WhisperKit as reference for the engine-picker UX).
+
+**Done when**:
+- [ ] `ParakeetTranscriber` transcribes `hello_speech.caf` with WER ≤ 3%
+- [ ] Latency (fixture file, not real-time): transcript result arrives in ≤ 300ms
+      after audio completes
+- [ ] Engine picker in Settings shows Parakeet option with "English only" badge
+- [ ] All 4 gates green
+
+---
+
+### V1-3 — Transforms (highlight text → local LLM rewrite)
+
+**Task**: Extend the existing `CommandModeService` + `AccessibilitySelection` seam to
+support *Transforms*: user selects text in any app, presses a transform shortcut,
+selected text is read via AX, sent to the active cleanup LLM with a transform-specific
+prompt, and the result replaces the selection via AX write + paste. Built-in presets:
+**Polish** (concise and clear), **Expand** (more detail), **Summarize** (one sentence),
+**Prompt Engineer** (restructure as a well-formed AI prompt). Custom transforms: name +
+system-level prompt, stored in `SettingsStore.transforms: [Transform]` (new). Up to 8
+transforms get individual hotkey slots (extend V01-5 binding set). After transform runs,
+show the `CleanupDiffView` diff overlay (already built) with [Accept]/[Revert] controls.
+Auto-transform mode: optionally run a selected transform automatically after every
+dictation. Dashboard › Transforms pane (already scaffolded) surfaces the preset list and
+custom-transform editor.
+
+**Depends on**: V0 shipped; existing `CommandModeService`, `AccessibilitySelection`,
+`CleanupDiffView`; V01-2 or V1-1 (a real cleanup LLM must be available).
+
+**Done when**:
+- [ ] Selecting a 100-word paragraph and triggering Polish shortcut replaces it with
+      a cleaner version in ≤ 3 s via the active local LLM
+- [ ] All 4 built-in presets produce distinct outputs on the same input
+- [ ] Custom transform: user defines name + prompt; shortcut binding works; persists
+      across launches
+- [ ] Diff overlay appears after every transform; [Accept] keeps result; [Revert]
+      restores original
+- [ ] Auto-transform mode: a per-dictation transform runs without a shortcut press
+- [ ] All 4 gates green
+
+---
+
+### V1-4 — Code-aware dictation mode
+
+**Task**: Extend the per-app context awareness from V01-3 with code-specific
+formatting intelligence. When `AppContext == .codeEditor`, apply: (1) a `codeMode`
+cleanup prompt clause that preserves symbol casing (snake_case vs camelCase
+user-preference, stored in `SettingsStore.codeNamingConvention`); (2) suppression of
+filler removal (developers voice-dictate identifiers, not prose); (3) filename tag
+injection — if AX can read the current file's name from the editor title, mention it
+in the cleanup prompt so the LLM knows the file context; (4) special vocabulary for
+common code tokens (`func`, `var`, `let`, `const`, `async`, `await`, `import`).
+
+**Depends on**: V01-3 (per-app context); V01-2 or V1-1 (LLM cleanup).
+
+**Done when**:
+- [ ] Dictating "open paren new variable equals" in Xcode with camelCase setting
+      produces `(newVariable =` in cleaned output
+- [ ] Dictating "function handle event colon" in VS Code produces `func handleEvent:`
+- [ ] Filler removal is suppressed: "um add a func uh handleEvent" →
+      `func handleEvent` (fillers removed), NOT `um add a func uh handleEvent`
+      — wait, filler removal should still work but identifier handling improves.
+      Clarify: fillers still removed; identifier casing is improved
+- [ ] camelCase vs snake_case toggle in Settings works; persists
+- [ ] All 4 gates green
+
+---
+
+### V1-5 — Quiet mode / noise suppression
+
+**Task**: Add an `AVAudioEngine` preprocessing stage between `AudioCapture` and
+`AppleSpeechTranscriber` (or WhisperKit). Implement a noise gate using
+`AVAudioUnitEQ` (high-pass filter at 80Hz to cut rumble + presence boost at 3kHz for
+voice clarity) and a sensitivity boost (adjustable gain, default +6dB, range 0–+12dB,
+stored in `SettingsStore.quietModeSensitivity: Float`). Enable via a toggle in Settings
+› Transcription › "Quiet Mode". When enabled, apply the processing chain before
+buffering to `SpeechAnalyzer`. A live level meter in the overlay shows the boosted
+signal.
+
+**Depends on**: V0 shipped; P2 (`AudioCapture` + `AVAudioEngine`).
+
+**Done when**:
+- [ ] With Quiet Mode on, whispered speech at ≈30cm from the built-in mic transcribes
+      the `hello_speech.caf` fixture phrase at ≥ 85% word accuracy (live test, logged
+      in `progress.md`)
+- [ ] Sensitivity slider changes gain in real time (no restart needed)
+- [ ] Quiet Mode off: behavior byte-for-byte identical to v0 baseline
+      (`make test` still passes all existing audio tests)
+- [ ] All 4 gates green
+
+---
+
+### V1-6 — Auto-segmentation for messaging
+
+**Task**: When `AppContext == .workMessaging` or `.personalMessaging`, optionally
+auto-submit after a configurable silence threshold. Implement a silence detector in
+`CaptureSession`: track RMS level from the audio stream; if RMS < `silenceThreshold`
+for > `silenceDurationMs` ms (default 1500ms, range 500–3000ms, stored in
+`SettingsStore`), fire `stopCapture` automatically. After paste, if the target app is a
+messaging app and `autoSegmentSendOnPause` is enabled, simulate a Return key event
+(`kVK_Return`, `CGEventType.keyDown`/`keyUp` via `.cghidEventTap`) so each thought
+auto-submits. User-configurable toggle in Settings › General › Auto-Segmentation.
+
+**Depends on**: V01-3 (AppContext); P2 (audio level stream, already in `AudioCapture`).
+
+**Done when**:
+- [ ] Dictating three distinct sentences with > 2s pauses in Messages sends each as a
+      separate message automatically — live test logged in `progress.md`
+- [ ] Auto-segmentation off: single long dictation pastes as one block (no regression)
+- [ ] Silence threshold slider in Settings changes behavior; persists
+- [ ] `kVK_Return` verified against local SDK via `swiftc -typecheck` `[verified]` tag
+- [ ] All 4 gates green
+
+---
+
+### V1-7 — Course correction ("wait no" detection)
+
+**Task**: In `CaptureSession.ingest(_:)`, scan each finalized transcript chunk for
+correction markers: `["wait no", "wait, no", "i mean", "actually,", "scratch that",
+"never mind"]` (case-insensitive). On detection, trim `finalizedText` back to the
+position just before the correction marker and reset the accumulator to continue from
+that point. Inject a `courseCorrection: true` flag into `CleanupMode` so the LLM
+knows the input may have already-trimmed back-tracking. The list of markers is stored
+in `SettingsStore.correctionMarkers: [String]` with the above defaults.
+
+**Depends on**: V0 shipped; P3 (`CaptureSession.ingest`).
+
+**Done when**:
+- [ ] Integration test: feed a two-chunk fixture where chunk 1 = "let's meet Tuesday"
+      and chunk 2 = "wait no Friday" → `stop()` returns raw text = "let's meet Friday"
+      (Tuesday trimmed)
+- [ ] Marker list is user-editable in Settings; adding a custom marker works
+- [ ] Course correction disabled: original accumulation behavior unchanged (regression
+      test passes)
+- [ ] All 4 gates green
+
+---
+
+### V1-8 — Dictation recovery
+
+**Task**: At `CaptureSession.start()`, open a temp audio buffer file at
+`~/Library/Application Support/speak/recovery/<UUID>.caf`. Feed each `AVAudioPCMBuffer`
+to both `SpeechAnalyzer` and this file handle in parallel. On clean `stop()` or
+`cancel()`, delete the file. On app launch, scan for orphaned `.caf` files in the
+recovery directory (created > 10s ago, indicating a crash). If found, show a HUD
+banner: "Interrupted dictation recovered — [Retry Cleanup] [Discard]". [Retry Cleanup]
+reads the `.caf`, re-runs it through `AppleSpeechTranscriber` + the active cleaner, and
+pastes. [Discard] deletes the file. `[decision]`: storing audio to disk is the first
+time audio touches storage — add a note to the Privacy tab that recovery files are
+local-only and auto-deleted on clean exit.
+
+**Depends on**: V0 shipped; P2 (`AudioCapture`); P3 (`AppleSpeechTranscriber`).
+
+**Done when**:
+- [ ] Force-quit during a 5-second dictation → relaunch shows recovery HUD banner
+- [ ] [Retry Cleanup] produces a pasted result equivalent to the interrupted dictation
+- [ ] [Discard] deletes the file; no HUD on next launch
+- [ ] Clean session exit: no recovery file exists after `stop()` completes
+- [ ] Privacy tab updated with recovery-file note
+- [ ] All 4 gates green
+
+---
+
+### V1-9 — Inline history retry
+
+**Task**: In the History pane (`App/History/HistoryView.swift`), add a "Retry"
+contextual button (toolbar or swipe action) on each `HistoryEntry`. Tapping it
+re-runs `entry.rawText` through the current cleanup engine + current `CleanupMode`
+settings, producing a new `HistoryEntry` with `parentId: entry.id`. Show a before/after
+diff using `CleanupDiffView` (already built). Options: [Replace] (overwrite the entry's
+`cleanedText`), [Append] (add as a new entry), [Cancel]. This lets users improve old
+dictations after upgrading to a better cleanup model.
+
+**Depends on**: V0 shipped; P9 (`HistoryStore`, `HistoryEntry`); P3.5 (`LLMCleaning`).
+
+**Done when**:
+- [ ] Tapping Retry on a history entry with raw text "um i think we should uh meet"
+      produces cleaned output and shows diff overlay
+- [ ] [Replace] updates `cleanedText` in the DB; re-queried entry shows new text
+- [ ] [Append] adds a new entry; original untouched
+- [ ] All 4 gates green
+
+---
+
+### V1-10 — Streak tracking + enhanced stats
+
+**Task**: Add a `streakDays: Int` field to `HistoryStore` (new SQLite column via
+migration — increment pattern: if last dictation was on the previous calendar day,
+`streak += 1`; if today, no change; if gap > 1 day, reset to 1). Expose via a new
+`HistoryStoring` method `currentStreak() async -> Int`. Show streak in the Home pane
+header ("🔥 12-day streak") and in the Insights pane. Add a daily word-count history
+chart in Insights using SwiftUI `Charts` (Apple framework, not third-party): bar chart
+of words/day for the last 30 days, colored by cleanup engine. WPM trending: 7-day
+rolling average, shown as a line overlay.
+
+**Depends on**: V0 shipped; P9 (`HistoryStore`).
+
+**Done when**:
+- [ ] Dictating on two consecutive days shows streak = 2 in Home pane
+- [ ] Missing a day resets streak to 1 on next dictation (confirmed by unit test with
+      injected `Date` values)
+- [ ] 30-day word-count chart renders in Insights with correct daily totals
+- [ ] `Charts` import appears in moat allowlist (Apple framework); `make verify-moat` passes
+- [ ] All 4 gates green
+
+---
+
+### V1-11 — Personal writing style samples
+
+**Task**: Add a `writingStyleSamples: [String]` field (up to 5 entries, 50–500 words
+each) to `SettingsStore`. In `FoundationModelsCleaner.clean(_:mode:)` (and other LLM
+cleaners), inject the samples into the system prompt as few-shot examples: "Write in
+the same voice as these samples: [sample1] [sample2] ...". Add a "My Style" section in
+Settings › AI Cleanup with a list of samples and an [Add Sample] sheet (multi-line text
+field, 50–500 word validation). Empty samples list → no injection, output matches the
+v0 baseline byte-for-byte. `[decision]`: 50-word minimum prevents noise; 500-word cap
+keeps the prompt size predictable (max ~2,500 tokens of samples).
+
+**Depends on**: V0 shipped; P3.5 (`FoundationModelsCleaner`); P10.
+
+**Done when**:
+- [ ] Adding a 100-word formal writing sample changes cleanup output toward a more
+      formal register (live test, logged in `progress.md`)
+- [ ] Empty samples list: output identical to v0 baseline on the same input
+      (`testFoundationModelsCleaner` baseline still passes)
+- [ ] Word-count validation: < 50 words → [Add] button disabled; > 500 words → truncate
+      warning shown
+- [ ] All 4 gates green
+
+---
+
+### V1-12 — Clamshell mode + microphone auto-selection
+
+**Task**: Subscribe to `NSWorkspace.shared.notificationCenter` for
+`NSWorkspace.screensDidSleepNotification` and `didWakeNotification`. On wake, query
+`AVCaptureDevice.DiscoverySession(deviceTypes: [.microphone], mediaType: .audio,
+position: .unspecified).devices` to find the highest-priority available microphone (USB
+external > Bluetooth > built-in). If the Mac is in clamshell mode (detected via
+`IOServiceMatching("AppleSmartBattery")` lid-closed key or display count = 0) and the
+selected mic is the built-in, show a warning HUD: "Built-in mic active — attach an
+external mic for best quality." Auto-switch to the first available external mic if
+`SettingsStore.autoMicSelection == true` (default on).
+
+**Depends on**: V0 shipped; P2 (`AudioCapture` — mic selection at session start).
+
+**Done when**:
+- [ ] Plugging in a USB mic while Speak is running → next dictation uses the USB mic
+      automatically (live test logged in `progress.md`)
+- [ ] Closing lid with only built-in mic → warning HUD appears
+- [ ] `autoMicSelection = false` → mic never changes automatically
+- [ ] `AVCaptureDevice` API verified against local SDK `[verified]`
+- [ ] All 4 gates green
+
+---
+
+### V1-13 — WWDC26 Foundation Models provider integration
+
+**Task**: Explore the WWDC26 `LanguageModelSession` provider API — which allows
+Anthropic, Google, and MLX models to work behind the same `LanguageModelSession` Swift
+call. `[decision]`: `FoundationModelsCleaner` should require **zero code changes** for
+provider swap; the provider is injected at `LanguageModelSession` init time. Add a
+"Model Provider" picker in Settings › AI Cleanup for power users: Apple (default), MLX
+(via provider), Anthropic (user-supplied API key stored in Keychain — this is the first
+and only credential the app ever handles; clearly opt-in; audio never leaves the
+device). Document the provider API shape against the local macOS 26 SDK
+(`swiftc -typecheck` `[verified]`). MLX provider: no API key, in-process.
+Anthropic provider: cloud cleanup only (audio stays local; only the *cleaned text*
+request goes out); this is the first v1+ *optional* cloud feature — surfaced honestly
+in the Privacy tab.
+
+**Depends on**: V0 shipped; V1-1 (MLX); P3.5 (`FoundationModelsCleaner`).
+
+**Done when**:
+- [ ] `FoundationModelsCleaner` compiles and passes tests unchanged after provider API
+      exploration (no regression)
+- [ ] MLX provider: `LanguageModelSession` with MLX provider produces cleaned output
+      (live test, logged in `progress.md`)
+- [ ] Provider picker in Settings shows Apple / MLX / Anthropic options
+- [ ] Anthropic provider: API key stored in Keychain (`SecItemAdd`); key never logged;
+      `testNoAccountOrAuthCode` moat test updated to explicitly allow opt-in keychain
+      usage (with `[decision]` comment: "opt-in cloud cleanup only, not mandatory")
+- [ ] Privacy tab updated: "Optional Anthropic cleanup: text only, no audio leaves device"
+- [ ] All 4 gates green
+
+---
+
+### V1-14 — iOS app foundation
+
+**Task**: Extract `SpeakCore` as a standalone Swift Package Manager package
+(`Package.swift` root alongside the existing `project.yml`; the Xcode target continues
+to embed it via XcodeGen, and the SPM package is the new canonical form). Add an iOS
+18+ app target in `project.yml`: `SpeakiOS` — a minimal `SpeechAnalyzer` +
+`Foundation Models` dictation flow with no `CGEventTap` (iOS doesn't support global
+hotkeys; in-app tap replaces it). Implement a Custom Keyboard Extension target
+(`SpeakKeyboard`) so the user can trigger dictation from any app's keyboard. The iOS
+app shares `SpeakCore` engine, `HistoryStore` (separate DB file), and `SettingsStore`
+(separate UserDefaults).
+
+**Depends on**: V0 shipped; V2-2 (iCloud sync is the bridge between iOS and Mac data).
+
+**Done when**:
+- [ ] `swift build` on the SPM `SpeakCore` package compiles cleanly on macOS
+- [ ] iOS `SpeakiOS` target builds in Xcode for an iOS 18 simulator
+- [ ] Keyboard extension activates and shows a microphone button in the system keyboard
+- [ ] Tapping the mic button in the keyboard extension starts a dictation session and
+      inserts the result into the focused text field
+- [ ] All 4 gates green on macOS (iOS simulator tests are separate)
+
+---
+
+## v2 — Platform & Expansion
+
+*Value*: full iOS app, iCloud sync, diarization, team features.
+**Prerequisite: v1 complete.**
+
+---
+
+### V2-1 — iOS app complete
+
+**Task**: Build out the full iOS dictation experience on the `SpeakiOS` foundation from
+V1-14. Full flow: keyboard extension mic button → overlay (SwiftUI in-process overlay
+within the extension) → SpeechAnalyzer → Foundation Models cleanup → text inserted at
+cursor. **Dynamic Island live activity** during dictation showing elapsed time and
+partial text (via `ActivityKit`). **Lock Screen widget** for word-count and streak
+(via `WidgetKit`). **Action Button shortcut**: register a `SpeakIntent` for the Action
+Button on iPhone 15 Pro+. iPhone keyboard, iPad keyboard extension, and Action Button
+all share the same `SpeakCore` engine instance via actor isolation.
+
+**Depends on**: V1-14; V2-2 (iCloud sync for history continuity).
+
+**Done when**:
+- [ ] Dictating in any iOS app via the keyboard extension pastes cleaned text
+- [ ] Dynamic Island shows live partial transcript during dictation
+- [ ] Lock Screen widget shows today's word count and current streak
+- [ ] Action Button on iPhone 15 Pro+ triggers dictation
+- [ ] History from iOS sessions appears in Mac history (via iCloud, V2-2)
+
+---
+
+### V2-2 — iCloud sync (opt-in, no account)
+
+**Task**: Sync dictionary, snippets, and settings across devices using the user's own
+iCloud (`NSUbiquitousKeyValueStore` for small data; `CloudKit` for history entries if
+user opts in to history sync). Sync is **opt-in** and **requires no speak account** —
+it uses the user's existing iCloud account entirely. Toggle in Settings › Privacy ›
+"Sync via iCloud". Conflict resolution: last-write-wins with a `modifiedAt` timestamp.
+History sync is a separate sub-toggle (history entries can be large; default off).
+Custom dictionary and snippets default to sync-on when iCloud toggle is enabled.
+
+**Depends on**: V1-14 (iOS target exists); V0 shipped.
+
+**Done when**:
+- [ ] Adding a dictionary word on Mac appears on iPhone within 60 s with iCloud sync on
+- [ ] iCloud sync off: no `NSUbiquitousKeyValueStore` or CloudKit calls made —
+      confirmed by `make verify-moat` (add CloudKit to the moat exemption list with
+      `[decision]` tag: "opt-in sync only")
+- [ ] History sync off by default; toggling it on syncs last 100 entries
+- [ ] Conflict resolution: last-write-wins verified by unit test with injected timestamps
+
+---
+
+### V2-3 — Speaker diarization
+
+**Task**: Use WhisperKit's `SpeakerKit` (part of the `argmax-oss-swift` monorepo,
+already a dependency from V01-1) to identify speaker turns in a multi-speaker
+recording. In `HistoryEntry`, add `speakerLabels: [SpeakerSegment]?` (new SQLite
+column). `SpeakerSegment` carries `speakerId: Int`, `startMs: Int`, `text: String`.
+In `HistoryView`, render diarized entries with interleaved "Speaker 1:" / "Speaker 2:"
+labels in Monaco font. Enable via toggle in Settings › Transcription › "Identify
+speakers".
+
+**Depends on**: V01-1 (WhisperKit already integrated); V0 shipped.
+
+**Done when**:
+- [ ] Recording a two-person conversation produces a history entry with ≥ 2 speaker
+      segments labeled "Speaker 1:" and "Speaker 2:" (live test logged in `progress.md`)
+- [ ] Single-speaker sessions: `speakerLabels == nil`; History view unchanged
+- [ ] Diarization off: no `SpeakerKit` calls — `make verify-moat` still passes
+- [ ] All 4 gates green
+
+---
+
+### V2-4 — Team features without a server
+
+**Task**: Share dictionary and snippets across a small team using iCloud folder sharing
+(no speak server). The "team owner" creates a shared iCloud folder (`FileManager +
+NSMetadataQuery`). Members add the folder path in Settings › Team. The shared folder
+contains `team-dictionary.json` and `team-snippets.json`. Conflict resolution: union
+merge (no deletion propagation — a member can always add, never remove another's entries
+remotely). Local entries take precedence over team entries for the same trigger phrase.
+
+**Depends on**: V2-2 (iCloud baseline).
+
+**Done when**:
+- [ ] Team owner adds a word to the team dictionary; team member's Speak picks it up
+      within 60s via shared iCloud folder
+- [ ] Conflict: both members add "tps" → both definitions appear in the member's
+      dictionary (union merge confirmed by unit test)
+- [ ] No speak server involved — confirmed by `make verify-moat`
+
+---
+
+### V2-5 — Android / Windows
+
+Scope defined when v2 iOS is stable. Outside Apple framework constraint — requires
+platform seam extraction decision. No pre-commitment. `[decision]`: deferred.
+
+---
+
+## v3+ — Enterprise & Frontier
+
+*Scope defined when v2 is stable and real user patterns are established.*
+
+---
+
+### V3-1 — HIPAA BAA documentation + compliance export
+
+**Task**: No code change. Produce a HIPAA Business Associate Agreement template that
+documents `speak`'s architecture: no audio or text egress, no account, all processing
+on-device. Add an "Export Compliance Docs" button in Settings › About that generates
+a PDF summary of the app's privacy architecture (`WKWebView` print-to-PDF of a
+templated HTML, local only). The automated `make verify-moat` output (7/7 pass) serves
+as the technical evidence appendix.
+
+**Done when**:
+- [ ] PDF export works and contains the 5 privacy guarantees from `product.md` §8
+- [ ] BAA template is in `docs/compliance/hipaa-baa-template.md`
+- [ ] All 4 gates green (PDF export uses local WebKit only — no egress)
+
+---
+
+### V3-2 — Enterprise MDM profile
+
+**Task**: Produce a macOS Configuration Profile (`.mobileconfig`) that IT admins can
+deploy to enforce: Privacy Mode on, iCloud sync off, shared dictionary endpoint (local
+path), dictation history retention policy. Read these values at launch via
+`UserDefaults(suiteName: "managed")` (the MDM-managed domain). No speak server.
+
+**Done when**:
+- [ ] `.mobileconfig` installs via System Settings › Profiles
+- [ ] Managed preferences override user settings silently (no UI conflict)
+- [ ] Unmanaged install: behavior unchanged
+
+---
+
+### V3-3 — Advanced voice editing (multi-turn)
+
+**Task**: Extend Command Mode to support multi-turn conversational editing. After a
+transform or command, the user can say a follow-up command ("now make it shorter" /
+"revert last change") within a 30-second window. Maintain an edit stack (max 5 levels)
+with undo. Powered by the active local LLM (Foundation Models, MLX, or Ollama). The
+conversation history stays in-process and is discarded after the window closes.
+
+**Done when**:
+- [ ] Two consecutive voice edits on the same text both apply correctly
+- [ ] "Revert" restores the previous version
+- [ ] Edit stack limited to 5; oldest discarded on overflow
+- [ ] 30s window expires: conversation state cleared; next trigger starts fresh
+
+---
+
+### V3-4 — Developer API / SDK
+
+**Task**: Publish `SpeakCore` (from V1-14's SPM package) as a documented public API.
+Write Swift DocC documentation for all public types. Add a sample macOS CLI app in
+`Examples/speak-cli-example/` showing dictation integration in 50 lines. Publish the
+SPM package URL in README.
+
+**Done when**:
+- [ ] `swift package generate-documentation` produces a DocC archive with no warnings
+- [ ] Example CLI app compiles and runs a 5-second dictation session
+- [ ] `SpeakCore` SPM URL documented in README
 
 ---
 
