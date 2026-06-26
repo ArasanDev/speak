@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(xcodegen:*)",
+      "Bash(swiftlint:*)",
+      "Bash(swiftc:*)",
+      "Bash(xcrun:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git status:*)",
+      "Bash(git worktree:*)",
+      "Bash(git branch:*)",
+      "Bash(git show:*)",
+      "Bash(git stash:*)",
+      "Bash(find .:*)",
+      "Bash(grep:*)",
+      "Bash(wc:*)",
+      "Bash(ls:*)",
+      "Bash(ruby -c:*)",
+      "Bash(plutil:*)"
+    ]
+  },
+  "hooks": {
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "head -60 /Users/tamil/Developers/deepvoice/docs/progress.md"
+          }
+        ]
+      }
+    ]
+  }
+}
