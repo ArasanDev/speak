@@ -356,9 +356,16 @@ final class DictationController: ObservableObject, CLICommandHandler {
         // Guard on `icon == .listening` prevents re-entrancy: if the session has already
         // transitioned to `.processing` or `.error` the press is a no-op.
         overlayController.onEscapeStop = { [weak self] in
-            guard let self, self.icon == .listening else { return }
-            Task { [weak self] in
-                await self?.endDictation()
+            guard let self else { return }
+            if self.icon == .listening {
+                Task { [weak self] in await self?.endDictation() }
+            } else if self.icon == .error {
+                // [App-M2] Error HUD has no Escape-dismiss path. When Escape is
+                // pressed during an error state, dismiss the overlay and reset to
+                // idle — the session is already terminal so endDictation() must
+                // not be called again.
+                self.overlayController.cancelImmediate()
+                self.icon = .idle
             }
         }
         SpeakLog.hotkey.info("DictationController: startMonitoring() — arming monitor.")

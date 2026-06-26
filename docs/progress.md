@@ -8,78 +8,36 @@
 
 ## Current phase
 
-> ## 🚩 VALIDATION & HARDENING PHASE (started 2026-06-22) — user-directed
-> **Feature-complete through Wave 2. Build is green: `make build/test/lint/verify-moat` all pass.**
-> (434 tests, 0 failures, moat 7/7 as of Wave 2 integration.)
->
-> User asked: compare against OSS competitors, SDK-ground the skills (written from research/docs,
-> not the on-machine macOS 26 SDK), and hunt ALL bugs across ALL flows/coverage, then validate.
-> Decisions: **Agent fan-out** (not heavyweight Workflow) + **report-first** (NO code changes until
-> user approves the findings report).
->
-> **Phase 1 (grounding — read-only):**
-> - 1A `val-oss-compare` — OSS competitor comparison matrix
-> - 1B `val-skill-sdk` — Skill⇄SDK truth audit
-> - Status: started 2026-06-22, **results not captured in progress.md** — unknown if complete.
->
-> **Phase 2 (per-seam SDK-grounded bug hunt — swift-code-review) → Phase 3 (adversarial verify)
-> → Phase 4 (single prioritized findings report)**: not yet started.
->
-> **fix-input2 MERGED `d05e740` (2026-06-26):** 7 hardening fixes gated (build ✅ lint 0-serious ✅ moat 7/7 ✅ modified-seam tests ✅):
-> - C1 `notifySessionEnded()`: reset double-tap detector after out-of-band stop (Escape/CLI/error) — third-tap-to-start bug fixed
-> - C2 auto-cancel stuck recording when tap dies mid-session
-> - C4 CGEvent tap callback: `passRetained` → `passUnretained` (leaked 1 CGEvent per flagsChanged)
-> - C5 `shutdown()` method: properly invalidates timers + stops run loop (prevents HotkeyMonitor memory leak)
-> - C6 `CLIPortServer`: `.defaultMode` → `.commonModes` (CLI `--stop/--status` now works during modals/sheets)
-> - C7 spurious `permissionsNeeded` flicker on re-arm: only set when AX actually missing
-> - NEW-4/5/6/7: `eventTap`/`runLoopSource`/`wakeRearmTimer` lock-guarded; Option key binding fixed; settings dedupe
->
-> **Wave 3 (deferred until after validation):** code-aware mode, voice editing, history power-tools.
->
-> **Human-gate track (owner-only):** live paste in 3 apps, latency numbers [plumbing ready],
-> menubar-color visual check, live rebind-fires check, style-effectiveness check, P11 notarized release.
->
-> **Harness changes (2026-06-26):**
-> - `.claude/settings.json` created: permission allowlist + `PostCompact` hook re-anchors to progress.md banner.
-> - `.claude/loop-prompt.md` created: tight loop prompt for `/loop` and `/schedule`.
-> - `docs/progress-archive.md` created: sessions #1–#25 + old banners archived here.
-> - `wave23-cli` worktree removed (was already merged to master; tree was clean).
+**Validation & hardening: all Batches A–D complete. Batch E (polish+tests) is next.**
+
+Feature-complete through Wave 2. All validation phases (1–5) done. Merged batches:
+- **Batch A** (engine session integrity): cancel-paste guard, empty-transcript guard, double-start guard, cleanupSeconds floor
+- **Batch B** (STT lifecycle): stopRequested mic-leak guard, prewarm, locale reserve, converter safety, STT-H2 cancelAll teardown, Cleanup-H1 isAvailable model instance fix
+- **Batch C** (hotkey + paste): detector desync, CGEvent retain leak, CLI modal mode, deinit UAF, permission flicker, weak-self init, 10ms paste gap
+- **Batch D** (app/storage/engine robustness): search LIMIT, int64 trim, stale keycaps, dup watcher, UD-per-render, picker row, language reset, onboarding dot, SQLite init leak, error HUD Escape, wasTrusted reset, JSONEncoder thread-safety, case-insensitive search, Engine-L2 currentSession clear
+- **Doc fixes**: skill ⇄ SDK truth corrections, FM header tags
+
+Gates as of loop #28 (2026-06-26): **build ✅ lint 0-serious ✅ moat 7/7 ✅ tests pass ✅**
 
 ---
 
 ## In progress
 
-Nothing. Phase 5 (fresh seam review) is complete as of loop #27-28 (2026-06-26). All 5 agents returned.
+Nothing. Awaiting full `make test` run (loop #28 Phase 5 fixes).
 
 ---
 
 ## Blocked
 
-**User approval gate.** Full findings report is at `specs/validation-findings.md` (Phase 1–5 complete). No new CRITICAL findings; no new HIGH correctness bugs from review-engine or review-input. Batches A–E documented and prioritized. **Code changes require user approval.** This is the only gate before implementation.
+Nothing blocking. Human-gate items remain owner-only (live paste in 3 apps, latency, false-trigger rate).
 
 ---
 
 ## Next up
 
-**USER DECISION REQUIRED — review `specs/validation-findings.md` Phase 4 and approve batches.**
+**Batch E** (polish + test coverage): STT-H1 prewarm fix, test coverage additions (triggerMode round-trip, real CLI gate, endDictation error branches, rebind+Combine, snippet-in-session, partials drain, empty-transcript, multi-display, OnboardingViewModel lifecycle).
 
-Recommended implementation order (all file-disjoint → parallel worktrees safe):
-1. **Batch A** (builder-engine, `CaptureSession.swift` + `SpeakEngine.swift`) — safety-critical, smallest
-2. **Batch B** (builder-audio-stt, `AppleSpeechTranscriber.swift`) + **Batch C-remaining** (builder-input: paste 10ms gap C3, weak-self C8) — parallel with A
-3. **Batch D** (builder-app/engine/storage) — 10 medium robustness items
-4. **Batch E** (builder-qa) — polish + test coverage additions
-5. After all batches: full `make test` baseline + human-gate (live paste, latency, false-trigger rate)
-
-**After validation completes:** Wave 3 (code-aware mode, history power-tools, P11 notarized release).
-
-**Option B — Human-gate first:**
-Run the live verification pass (`docs/human-verification.md`) — the 3 TCC grants + Apple Intelligence +
-one spoken dictation + paste-into-TextEdit/Slack/Terminal + latency measurement.
-
-**Wave 3 scope (after validation):**
-- Code-aware mode (voice editing)
-- History power-tools
-- P11 notarized release (scaffolded, needs Developer ID cert)
+**After Batch E:** Human-gate → v0 ship gate → Wave 3 (code-aware mode, history power-tools, P11 notarized release).
 
 ---
 

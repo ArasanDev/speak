@@ -281,6 +281,10 @@ public final class HotkeyMonitor: @unchecked Sendable {
     public func stop() {
         lock.withLock {
             armingDesired = false
+            // [Input-M1] Reset wasTrusted so that after stop()+start() the watchdog's
+            // untrusted→trusted rising edge fires and rebuilds the tap. Without this reset,
+            // every tick sees nowTrusted==true && wasTrustedPrev==true — no edge, no tap.
+            wasTrusted = false
         }
         tearDownTap()
         SpeakLog.hotkey.info("HotkeyMonitor.stop() called — tap disarmed.")

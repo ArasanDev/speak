@@ -70,10 +70,21 @@ public actor HistoryStore: HistoryStoring {
         ) == SQLITE_OK else {
             let msg = db.map { String(cString: sqlite3_errmsg($0)) } ?? "unable to open database"
             SpeakLog.storage.error("HistoryStore open failed: \(msg, privacy: .public)")
+            // [App-H1] sqlite3_open_v2 sets *ppDb to a non-nil error-reporting handle
+            // even on failure (SQLite docs). Swift's `init` throws here so `deinit`
+            // never runs — close the handle explicitly to avoid a file-descriptor leak.
+            if let handle = db { sqlite3_close_v2(handle) }
             throw SpeakError.unknown("SQLite open failed: \(msg)")
         }
         SpeakLog.storage.info("HistoryStore opened at \(path, privacy: .sensitive)")
-        try HistoryStore.setupSchema(db: db)
+        do {
+            try HistoryStore.setupSchema(db: db)
+        } catch {
+            // [App-H1] If schema setup throws after a successful open, close before
+            // rethrowing — deinit won't run when init throws.
+            if let handle = db { sqlite3_close_v2(handle) }
+            throw error
+        }
     }
 
     deinit {
@@ -170,11 +181,13 @@ public actor HistoryStore: HistoryStoring {
         // a deterministic worst-case allocation bound.
         // [decision: 500-row search cap — balances full-history coverage with heap
         //  safety; revisit if power-users report truncated results. benchmark.md §7]
+        // [App-L4] Case-insensitive search: lower() + lower(?) so "Hello" matches "hello".
+        // SQLite's instr() uses BINARY collation by default; lower() normalises both sides.
         let sql = """
             SELECT id, rawText, cleanedText, createdAt, engineId, duration,
                    stopToPasteSeconds, cleanupSeconds
             FROM history
-            WHERE instr(rawText, ?) > 0 OR instr(cleanedText, ?) > 0
+            WHERE instr(lower(rawText), lower(?)) > 0 OR instr(lower(cleanedText), lower(?)) > 0
             ORDER BY createdAt DESC, rowid DESC
             LIMIT 500
             """

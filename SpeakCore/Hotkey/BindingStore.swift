@@ -19,18 +19,20 @@ public protocol BindingStoring: Sendable {
 /// Production store backed by UserDefaults.standard.
 public final class UserDefaultsBindingStore: BindingStoring, @unchecked Sendable {
     private let key = "com.speak.hotkeyBinding"
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
+
+    // [Input-M2] JSONEncoder and JSONDecoder are NOT thread-safe (Apple docs).
+    // `save()` is called from multiple threads (run-loop thread, main actor).
+    // Create fresh instances per call to avoid data races under @unchecked Sendable.
 
     public init() {}
 
     public func load() -> HotkeyBinding? {
         guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
-        return try? decoder.decode(HotkeyBinding.self, from: data)
+        return try? JSONDecoder().decode(HotkeyBinding.self, from: data)
     }
 
     public func save(_ binding: HotkeyBinding) {
-        guard let data = try? encoder.encode(binding) else { return }
+        guard let data = try? JSONEncoder().encode(binding) else { return }
         UserDefaults.standard.set(data, forKey: key)
     }
 }

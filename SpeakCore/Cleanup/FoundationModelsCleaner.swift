@@ -44,18 +44,27 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
     /// when cleanup runs.
     public let id = "foundation-models"
 
+    // [Cleanup-H1] Single shared model instance — ensures `isAvailable` and `clean()`
+    // check the same `SystemLanguageModel`. If availability is gated per-guardrail
+    // config, using separate instances risks a false-available: `isAvailable` → true,
+    // `clean()` → throws `assetsUnavailable`.
+    private let model = SystemLanguageModel(
+        useCase: .general,
+        guardrails: .permissiveContentTransformations
+    )
+
     /// Returns `true` when the on-device Foundation Models engine is ready to accept
-    /// requests. Uses `SystemLanguageModel.default.availability` (enum form) rather
-    /// than `.isAvailable` (Bool) so we can log the `UnavailableReason` for diagnostics.
+    /// requests. Uses the shared `model`'s `.availability` (enum form) rather than
+    /// `.isAvailable` (Bool) so we can log the `UnavailableReason` for diagnostics.
     ///
     /// Checked once per `CaptureSession` processing pass; **not** cached across sessions.
     /// `isAvailable == false` is never an error — the caller falls back to raw transcript.
     public var isAvailable: Bool {
         get async {
-            let availability = SystemLanguageModel.default.availability
+            let availability = model.availability
             switch availability {
             case .available:
-                SpeakLog.cleanup.info("FoundationModelsCleaner: model available")
+                SpeakLog.cleanup.debug("FoundationModelsCleaner: model available")
                 return true
             case .unavailable(let reason):
                 let reasonDescription = String(describing: reason)
@@ -81,12 +90,7 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
 
         // Fresh session per call: mode-specific instructions set at init (the
         // system-prompt slot), no cross-dictation context leakage. [decision]
-        // permissiveContentTransformations: avoids spurious refusals on dictation
-        // about sensitive topics (security, medical, legal). [decision]
-        let model = SystemLanguageModel(
-            useCase: .general,
-            guardrails: .permissiveContentTransformations
-        )
+        // permissiveContentTransformations applied via `model` ivar. [Cleanup-H1]
         let session = LanguageModelSession(
             model: model,
             instructions: systemInstructions

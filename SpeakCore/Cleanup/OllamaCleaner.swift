@@ -57,7 +57,7 @@ public final class OllamaCleaner: LLMCleaning, Sendable {
     /// transcript (not an error).
     public var isAvailable: Bool {
         get async {
-            SpeakLog.cleanup.warning(
+            SpeakLog.cleanup.debug(  // [Cleanup-L1] Per-session poll → debug not warning
                 "OllamaCleaner: v0.1 stub — isAvailable=false; real impl deferred to SpeakLLM module."
             )
             return false

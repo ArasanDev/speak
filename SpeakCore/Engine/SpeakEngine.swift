@@ -218,7 +218,15 @@ public actor SpeakEngine {
         }
         let session = newSession()
         SpeakLog.engine.info("SpeakEngine: beginDictation — starting new session.")
-        try await session.start()
+        // [Engine-L2] If session.start() throws (e.g., mic permission denied), clear
+        // currentSession so the A3 re-entrancy guard doesn't permanently block the
+        // next dictation attempt.
+        do {
+            try await session.start()
+        } catch {
+            currentSession = nil
+            throw error
+        }
     }
 
     // MARK: - Hardware mute (SPEC §7.4)

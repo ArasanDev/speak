@@ -283,12 +283,20 @@ private struct Session: Sendable {
 
         // Step 3: Finalize — flushes remaining volatile results and CLOSES
         // transcriber.results. Without this, resultsTask loops forever. [verified]
-        try await analyzer.finalizeAndFinishThroughEndOfInput()
-        SpeakLog.stt.info("Analyzer finalized; awaiting remaining results.")
+        // [STT-H2] Wrap Steps 3-4 in do/catch: if finalization or drain throws
+        // (hardware fault, task cancellation), cancelAll so the analyzer is torn down
+        // and the mic is released — mirrors the Step 1 error path.
+        do {
+            try await analyzer.finalizeAndFinishThroughEndOfInput()
+            SpeakLog.stt.info("Analyzer finalized; awaiting remaining results.")
 
-        // Step 4: Drain remaining results (resultsTask exits because results closed).
-        _ = try await resultsTask.value
-        SpeakLog.stt.info("Transcription session completed normally.")
+            // Step 4: Drain remaining results (resultsTask exits because results closed).
+            _ = try await resultsTask.value
+            SpeakLog.stt.info("Transcription session completed normally.")
+        } catch {
+            await state.cancelAll(analyzer: analyzer)
+            throw error
+        }
     }
 
     // MARK: Setup helpers

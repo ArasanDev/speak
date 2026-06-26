@@ -44,7 +44,7 @@ public final class MLXCleaner: LLMCleaning, Sendable {
     /// `CaptureSession.runCleanup` gracefully falls back to raw transcript.
     public var isAvailable: Bool {
         get async {
-            SpeakLog.cleanup.warning(
+            SpeakLog.cleanup.debug(  // [Cleanup-L1] Per-session poll → debug not warning
                 "MLXCleaner: v0.1+ stub — isAvailable=false; real impl deferred pending MLX Swift dep approval."
             )
             return false
