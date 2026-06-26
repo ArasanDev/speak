@@ -25,20 +25,22 @@
 > **Phase 2 (per-seam SDK-grounded bug hunt — swift-code-review) → Phase 3 (adversarial verify)
 > → Phase 4 (single prioritized findings report)**: not yet started.
 >
-> **Active worktree with uncommitted validation fixes** (DO NOT DISCARD):
-> `.wt/fix-input2` on branch `fix/input2` — 7 modified files + `InputValidationFixTests.swift` (new).
-> Modified: `DictationController.swift`, `CLIPortServer.swift`, `HotkeyDetection.swift`,
-> `HotkeyMonitor.swift`, `PasteboardWriter.swift`, `HotkeyMonitorTests.swift`, `PasteTests.swift`.
-> These are in-progress validation fixes. Review, gate, and merge or discard before proceeding.
+> **fix-input2 MERGED `d05e740` (2026-06-26):** 7 hardening fixes gated (build ✅ lint 0-serious ✅ moat 7/7 ✅ modified-seam tests ✅):
+> - C1 `notifySessionEnded()`: reset double-tap detector after out-of-band stop (Escape/CLI/error) — third-tap-to-start bug fixed
+> - C2 auto-cancel stuck recording when tap dies mid-session
+> - C4 CGEvent tap callback: `passRetained` → `passUnretained` (leaked 1 CGEvent per flagsChanged)
+> - C5 `shutdown()` method: properly invalidates timers + stops run loop (prevents HotkeyMonitor memory leak)
+> - C6 `CLIPortServer`: `.defaultMode` → `.commonModes` (CLI `--stop/--status` now works during modals/sheets)
+> - C7 spurious `permissionsNeeded` flicker on re-arm: only set when AX actually missing
+> - NEW-4/5/6/7: `eventTap`/`runLoopSource`/`wakeRearmTimer` lock-guarded; Option key binding fixed; settings dedupe
 >
 > **Wave 3 (deferred until after validation):** code-aware mode, voice editing, history power-tools.
 >
 > **Human-gate track (owner-only):** live paste in 3 apps, latency numbers [plumbing ready],
 > menubar-color visual check, live rebind-fires check, style-effectiveness check, P11 notarized release.
 >
-> **Harness changes this session (2026-06-26):**
-> - `.claude/settings.json` created: permission allowlist for `make/*`, `xcodebuild/*`, `git/*` etc.
->   (no more per-command prompts in the loop) + `PostCompact` hook re-anchors agent to progress.md banner.
+> **Harness changes (2026-06-26):**
+> - `.claude/settings.json` created: permission allowlist + `PostCompact` hook re-anchors to progress.md banner.
 > - `.claude/loop-prompt.md` created: tight loop prompt for `/loop` and `/schedule`.
 > - `docs/progress-archive.md` created: sessions #1–#25 + old banners archived here.
 > - `wave23-cli` worktree removed (was already merged to master; tree was clean).
@@ -47,24 +49,28 @@
 
 ## In progress
 
-- **Validation phase 1A/1B** — state unknown. Re-run or confirm results before moving to Phase 2.
-- **`fix-input2` worktree** — uncommitted validation fixes. Needs orchestrator review + gate run + decision to merge or discard.
+- **Fresh review agents running** (loop #27, 2026-06-26): 5 parallel seam-review agents confirming post-fix-input2 state. Will be reconciled with existing validation-findings.md.
 
 ---
 
 ## Blocked
 
-Nothing blocking the build. The 4 gates are green. The validation phase is the critical path before Wave 3.
+**User approval gate.** The full findings report (`specs/validation-findings.md`) is ready. All Phase 1–3 work is complete. Batches A/B/C-remaining/D/E are documented and prioritized but **code changes require user approval** per the report-first constraint. This is the only gate before implementation.
 
 ---
 
 ## Next up
 
-**Option A — Continue validation (recommended):**
-1. Determine if Phase 1A/1B agents completed. If not, re-run them.
-2. Review + merge the `fix-input2` validation fixes (run gates: `make build/test/lint/verify-moat`).
-3. Run Phase 2 bug hunt (per-seam swift-code-review fan-out).
-4. Phase 3 adversarial verify → Phase 4 single findings report → user approves → fix.
+**USER DECISION REQUIRED — review `specs/validation-findings.md` Phase 4 and approve batches.**
+
+Recommended implementation order (all file-disjoint → parallel worktrees safe):
+1. **Batch A** (builder-engine, `CaptureSession.swift` + `SpeakEngine.swift`) — safety-critical, smallest
+2. **Batch B** (builder-audio-stt, `AppleSpeechTranscriber.swift`) + **Batch C-remaining** (builder-input: paste 10ms gap C3, weak-self C8) — parallel with A
+3. **Batch D** (builder-app/engine/storage) — 10 medium robustness items
+4. **Batch E** (builder-qa) — polish + test coverage additions
+5. After all batches: full `make test` baseline + human-gate (live paste, latency, false-trigger rate)
+
+**After validation completes:** Wave 3 (code-aware mode, history power-tools, P11 notarized release).
 
 **Option B — Human-gate first:**
 Run the live verification pass (`docs/human-verification.md`) — the 3 TCC grants + Apple Intelligence +
@@ -82,10 +88,10 @@ one spoken dictation + paste-into-TextEdit/Slack/Terminal + latency measurement.
 | # | Question | Status |
 |---|---|---|
 | V1 | Did Phase 1A (`val-oss-compare`) and 1B (`val-skill-sdk`) agents complete? | Unknown — check progress notes or re-run |
-| V2 | What are the `fix-input2` changes exactly? Should they merge? | Review `.wt/fix-input2` diff before merging |
 | 3 | Does write+`Cmd+V` avoid the paste prompt incl. macOS 26.4 Terminal provenance check? | `[unverified]` — test in Terminal (human) |
 | 4 | Developer ID signing cert for notarization? | Unverified — needed for P11 |
-| V3 | Does `DictationTranscriber` (new SpeechAnalyzer module) support `contextualStrings` custom vocabulary? H4 seam may be silently broken. | Verify via `apple-docs` MCP before V01-1 (WhisperKit) work begins |
+| ~~V2~~ | ~~fix-input2 changes — should they merge?~~ | **CLOSED** — merged `d05e740` (2026-06-26), gates green |
+| ~~V3~~ | ~~DictationTranscriber contextualStrings support?~~ | **CLOSED** [verified via SDK arm64e-apple-macos.swiftinterface 2026-06-26]: `DictationTranscriber` exists in `Speech`; `AnalysisContext.contextualStrings[.general]` is a valid property. H4 seam is correct. |
 
 ---
 
