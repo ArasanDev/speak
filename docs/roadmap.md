@@ -387,6 +387,59 @@ Each task below is an independently shippable unit with a binary gate.
 
 ---
 
+### V01-0 — Coding agent integration (Agent Mode)
+
+**Task**: When the frontmost app is a coding agent terminal (Claude Code CLI,
+Cursor, VS Code integrated terminal, Terminal.app, iTerm2), `speak` activates
+**Agent Mode** automatically. In Agent Mode: the cleanup prompt is replaced with
+an imperative technical-task formatter (preserves exact variable names / file paths /
+technical terms; rephrases as clear imperative instructions; removes filler and
+conversational phrasing); the overlay shows an `[Agent Mode]` badge; an optional
+auto-submit fires a simulated Return key after paste so the prompt goes immediately
+to the agent without a keypress.
+
+Detection uses `NSWorkspace.shared.frontmostApplication?.bundleIdentifier` matched
+against a configurable list. Default list (these are `[unverified]` — confirm bundle
+IDs with `osascript -e 'id of app "Claude"'` before shipping):
+- `com.anthropic.claudecode` (Claude Code CLI wrapper)
+- `com.todesktop.230313mzl4w4u92` (Cursor)
+- `com.microsoft.VSCode`
+- `com.apple.Terminal`
+- `com.googlecode.iterm2`
+- `dev.zed.zed`
+
+Settings › Transcription: "Agent apps" section with user-editable bundle ID list
+(add / remove; resets to default on button). Auto-submit toggle, default off.
+
+Files: `SpeakCore/Context/AgentModeDetector.swift` (new), extend
+`AppContextDetector.swift` (or share the `AppContext` seam from V01-3),
+`SpeakCore/Cleanup/CleanupPromptBuilder.swift` (inject agent-mode clause),
+`App/Overlay/OverlayView.swift` (badge), `App/Settings/SettingsView.swift`,
+`SettingsStore.swift` (`agentBundleIDs: [String]`, `agentAutoSubmit: Bool`).
+
+**Depends on**: v0 ship gate. Shares the `AppContext` bundle-ID detection seam
+with V01-3 (per-app context awareness) — implement V01-0 and V01-3 in the same
+sprint or extract the detection logic so both tasks build on it. Either order is
+fine; V01-0 is listed first because its user-felt impact is highest.
+
+**Done when**:
+- [ ] Frontmost app = Claude Code CLI (or Terminal.app) → overlay shows
+      `[Agent Mode]` badge within 200 ms of dictation start
+- [ ] Same 50-word casual speech dictated in Agent Mode vs TextEdit produces
+      noticeably more imperative, technical-term-preserving output (manual verify)
+- [ ] Agent Mode + auto-submit OFF → no Return key simulated after paste
+- [ ] Agent Mode + auto-submit ON → Return key simulated after paste (verify in
+      Terminal.app without causing unintended command execution in test)
+- [ ] Settings › Transcription shows "Agent apps" list; adding/removing bundle IDs
+      persists across launch; default list restores on Reset
+- [ ] Bundle IDs verified against running apps via `osascript` — tag claims `[verified]`
+- [ ] `make test` 0 failures; new `AgentModeTests` suite: bundle ID detection
+      (match / no-match / custom list), prompt injection present, auto-submit toggle
+      (mock paste recorder), badge visibility
+- [ ] `make verify-moat` 7/7 (AX read of frontmost app is allowed; no network egress)
+
+---
+
 ### V01-1 — WhisperKit STT engine
 
 **Task**: Wire WhisperKit v1.0.0 (Argmax, MIT, `argmax-oss/argmax-oss-swift`) as

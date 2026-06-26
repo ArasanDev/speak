@@ -189,6 +189,46 @@ provider integration) in `roadmap.md`.
 
 ---
 
+## 6c. The `speak` difference — and the road to Jarvis
+
+### Five structural advantages (no competitor holds all five simultaneously)
+
+1. **MIT open source** — VoiceInk is GPL; every other competitor is closed.
+2. **100% local LLM, zero setup** — Foundation Models runs on-device, no API key,
+   no model download, no daemon. Works on first launch.
+3. **No account, no usage limits** — Wispr caps free at 2k words/week; SuperWhisper
+   needs a Pro subscription for its best features; VoiceInk needs paid cloud keys.
+4. **Apple-native pipeline** — SpeechAnalyzer + Foundation Models = Neural Engine
+   acceleration, improves with every macOS update for free.
+5. **Free forever** — MIT is the business model. No freemium wall. No tier.
+
+### The soul: voice is a bandwidth multiplier for human thought
+
+When you type, 3–4 lines. When you speak, 10–20 lines — and the ideas come
+out differently: fuller, more connected, more honest. `speak`'s job is not
+"clean transcription." It is:
+
+> **Speak freely. `speak` understands where you are and who's reading,
+> then writes it perfectly for that surface.**
+
+### The progression
+
+- **Today**: speak → STT → LLM cleanup → paste (email, Slack, docs)
+- **v0.1**: speak → context-aware LLM → perfect format for the destination
+  (code, agent prompt, commit message, technical instruction)
+- **v1**: speak → screen context → LLM with full app + selection + clipboard
+  awareness → output indistinguishable from expert writing
+- **v2+**: speak → AI understands intent → structures as agent task → the
+  dictation is the instruction that executes
+
+The agentic era changes what a "good dictation" is. The user speaking into a
+coding terminal is not dictating text — they are giving instructions to an agent.
+`speak` is the **input layer for the agentic era**, starting from dictation and
+growing into that role. SuperWhisper shipped coding-agent integration in April 2026.
+`speak` builds it in v0.1 — locally, free, and open. `[decision]`
+
+---
+
 ## 7. UX principles
 
 ### 7.1 The hotkey (signature UX)
@@ -257,6 +297,7 @@ Everything essential to a private, neat-writing dictation app:
 
 | Task | Feature | Key spec |
 |------|---------|---------|
+| V01-0 | **Coding agent integration** | Detect Claude Code/terminal frontmost → "[Agent Mode]" badge; imperative prompt format; auto-submit option; configurable app list |
 | V01-1 | WhisperKit STT | 99 langs, MIT, CoreML, guided model download, language auto-detect |
 | V01-2 | Ollama cleanup (real impl) | localhost:11434, Qwen2.5:3B default, 4 model presets, guided setup, loopback-only |
 | V01-3 | Per-app context awareness | Bundle ID → AppContext (7 classes); injects tone/casing into cleanup prompt |
@@ -264,7 +305,7 @@ Everything essential to a private, neat-writing dictation app:
 | V01-5 | Multiple hotkey bindings | Up to 4 bindings per action; mouse buttons 4–10; no app restart |
 | V01-6 | Language auto-detect + overlay pill | Language badge in overlay; quick-switch pill; persists to `SettingsStore` |
 
-**Done when**: all 6 V01-x done-when checklists pass + 4 gates green.
+**Done when**: all 7 V01-x done-when checklists pass + 4 gates green.
 
 ### v1 — Power User & Polish (14 tasks)
 
