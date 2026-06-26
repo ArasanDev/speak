@@ -8,22 +8,23 @@
 
 ## Current phase
 
-**Validation & hardening: all Batches A–D complete. Batch E (polish+tests) is next.**
+**Validation & hardening COMPLETE — all Batches A–E done (loop #28–29, 2026-06-26).**
 
-Feature-complete through Wave 2. All validation phases (1–5) done. Merged batches:
+Feature-complete through Wave 2. All validation phases (1–5) done. All batches merged:
 - **Batch A** (engine session integrity): cancel-paste guard, empty-transcript guard, double-start guard, cleanupSeconds floor
 - **Batch B** (STT lifecycle): stopRequested mic-leak guard, prewarm, locale reserve, converter safety, STT-H2 cancelAll teardown, Cleanup-H1 isAvailable model instance fix
 - **Batch C** (hotkey + paste): detector desync, CGEvent retain leak, CLI modal mode, deinit UAF, permission flicker, weak-self init, 10ms paste gap
 - **Batch D** (app/storage/engine robustness): search LIMIT, int64 trim, stale keycaps, dup watcher, UD-per-render, picker row, language reset, onboarding dot, SQLite init leak, error HUD Escape, wasTrusted reset, JSONEncoder thread-safety, case-insensitive search, Engine-L2 currentSession clear
+- **Batch E** (polish): STT-H1 real prewarm, Cleanup-M2 typed API, Engine-L1/3/4/5 comments, Input-L3/4 comments, STT-L2/M2 comments, Cleanup-L2/L3, App-L3 comment
 - **Doc fixes**: skill ⇄ SDK truth corrections, FM header tags
 
-Gates as of loop #28 (2026-06-26): **build ✅ lint 0-serious ✅ moat 7/7 ✅ tests pass ✅**
+Gates as of loop #29 (2026-06-26): **build ✅ lint 0-serious ✅ moat 7/7 ✅ tests pass ✅**
 
 ---
 
 ## In progress
 
-Nothing. Awaiting full `make test` run (loop #28 Phase 5 fixes).
+Nothing.
 
 ---
 
@@ -35,9 +36,9 @@ Nothing blocking. Human-gate items remain owner-only (live paste in 3 apps, late
 
 ## Next up
 
-**Batch E** (polish + test coverage): STT-H1 prewarm fix, test coverage additions (triggerMode round-trip, real CLI gate, endDictation error branches, rebind+Combine, snippet-in-session, partials drain, empty-transcript, multi-display, OnboardingViewModel lifecycle).
+**Human-gate** → v0 ship gate → Wave 3.
 
-**After Batch E:** Human-gate → v0 ship gate → Wave 3 (code-aware mode, history power-tools, P11 notarized release).
+**Optional agent task (no human required):** test coverage additions from validation 1C (triggerMode round-trip, real CLI gate, endDictation error branches, rebind+Combine, snippet-in-session, partials drain, empty-transcript, multi-display, OnboardingViewModel lifecycle) — can be done before or after human-gate.
 
 ---
 
