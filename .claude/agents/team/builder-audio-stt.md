@@ -8,6 +8,8 @@ permissionMode: acceptEdits
 memory: project
 skills:
   - speechanalyzer-stt
+  - whisperkitv1-stt
+  - per-app-context-awareness
   - swift-code-review
 ---
 

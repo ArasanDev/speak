@@ -28,10 +28,17 @@ persistent learning) and is wired to the skills for its seam.
 - `swift-macos-build` — build/test/lint commands + the §6 verification gate.
 - `signing-notarization-release` — P11 sign/notarize/dmg/cask.
 
-**Authored, thin pointers** (Apple API not yet ground-truthed — each says "verify
+**Authored, thin pointers — v0** (Apple API not yet ground-truthed — each says "verify
 against live Apple docs at implementation time, tag `[verified]`"):
 `speechanalyzer-stt`, `foundation-models-cleanup`, `cgeventtap-hotkey`,
 `macos-paste-pipeline`, `permissions-onboarding`.
+
+**Authored, thin pointers — v0.1+ (post-cutoff APIs, all claims tagged `[inferred]` or `[unverified]` — agents MUST verify before coding):**
+- `whisperkitv1-stt` — WhisperKit v1.0.0 `Transcribing` impl pointer; SPM setup; streaming + language-detect API shape; model download flow. Use for V01-1.
+- `ollama-http-cleanup` — Ollama `localhost:11434` REST API; availability check; chat-completion shape; model picker; fallback/error HUD. Use for V01-2.
+- `per-app-context-awareness` — NSWorkspace bundle-ID detection; 8 `AppContext` categories; AX selected-text read; prompt injection strings; bundle-ID reference table. Use for V01-0 + V01-3.
+- `foundation-models-provider-api` — WWDC26 provider API (Anthropic/Google/MLX behind `LanguageModelSession`); **all shapes `[unverified]` — verify via local SDK before writing any code**. Use for V1-13.
+- `mlx-swift-cleanup` — MLX Swift in-process LLM; SPM target discovery; Qwen3 model IDs; first-use download flow; RAM gating. Use for V1-1.
 
 **Vendored from the community** (`.claude/skills/vendored/`, MIT, attributed) — see §4.
 

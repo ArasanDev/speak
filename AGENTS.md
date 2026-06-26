@@ -219,6 +219,32 @@ prove.
 
 ---
 
+## 6b. Skill-creation protocol (how the loop compounds)
+
+**When you solve a technical problem that required research or experimentation — a verified API shape, a workaround for a platform bug, an integration pattern that wasn't documented — encode it as a skill.**
+
+### When to create a skill
+
+- You verified an API shape via `swiftc -typecheck` or `apple-docs` that wasn't documented in an existing skill
+- You found a workaround for a build/runtime issue that took more than 1 attempt
+- You integrated a new third-party package and figured out the correct SPM setup
+- You solved a problem that any future agent tackling the same seam would get wrong
+
+### How to create a skill
+
+1. Create `.claude/skills/<name>/SKILL.md` (kebab-case name matching the API/seam)
+2. Write: architectural seam, hard constraints, API shape (tagged), verification commands
+3. Tag EVERY claim: `[verified]` / `[inferred]` / `[unverified]` / `[decision]`
+4. Add the skill name to the `skills:` list in the relevant agent's `.md` file in `.claude/agents/team/`
+5. Add one line to `docs/agent-tooling.md` skill index under the appropriate section
+6. Commit with `[skill] <name>: <what it encodes>`
+
+### The compounding effect
+
+Each skill reduces future agent cycles. A skill written once saves 2–3 verification cycles every time the seam is touched. After 10 loop cycles, the accumulated skills make the next 100 cycles faster. Skills are the mechanism by which the loop gets smarter, not just faster.
+
+---
+
 ## 7. Commit discipline
 
 - **Commit per completed roadmap task** (not per file, not per session).
