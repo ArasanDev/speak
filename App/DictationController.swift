@@ -165,6 +165,7 @@ final class DictationController: ObservableObject, CLICommandHandler {
     /// Must be called on the main actor (this class is `@MainActor`).
     func rebindHotkey(_ newBinding: HotkeyBinding) {
         monitor.updateBinding(newBinding)
+        lastAppliedTrigger = newBinding.trigger  // [validation-fix NEW-7] keep dedupe baseline in sync
         settingsStore.triggerMode = newBinding.trigger
         activeBinding = newBinding
         SpeakLog.hotkey.info(
@@ -182,6 +183,13 @@ final class DictationController: ObservableObject, CLICommandHandler {
     /// also ensures we are not on any SwiftUI rendering path when we call
     /// `monitor.updateBinding(_:)`.
     private var triggerModeCancellable: AnyCancellable?
+
+    /// The last trigger applied to the live monitor. [validation-fix NEW-7]
+    /// `SettingsStore.triggerMode` is a computed property (no per-key publisher),
+    /// so the subscription fires on `objectWillChange` for EVERY settings write.
+    /// We dedupe against this so an unrelated change (language, cleanup model,
+    /// snippet) no longer triggers a spurious `updateBinding` + UserDefaults write.
+    private var lastAppliedTrigger: HotkeyBinding.Trigger = .doubleTap
 
     // MARK: - Onboarding
 
@@ -227,17 +235,24 @@ final class DictationController: ObservableObject, CLICommandHandler {
         // Seed `activeBinding` from the reconciled initial binding so the Settings UI
         // shows the correct key on first open. [decision: set after reconcile, W1.1]
         activeBinding = updatedBinding
+        lastAppliedTrigger = initialTrigger  // [validation-fix NEW-7] seed the dedupe baseline
         SpeakLog.hotkey.info("DictationController: trigger mode applied at init — \(initialTrigger.rawValue, privacy: .public)")
 
         // Subscribe to future trigger-mode changes from SettingsView.
         // `objectWillChange` fires before the write, so we schedule a read for
         // the next run-loop turn when the value has settled.
+        // [validation-fix NEW-7] `objectWillChange` fires on EVERY @Published write
+        // (language, cleanup model, snippet, …), not just `triggerMode`. Dedupe
+        // against `lastAppliedTrigger` so only an actual trigger change reaches the
+        // monitor — no more spurious `updateBinding` + UserDefaults writes per edit.
         triggerModeCancellable = store.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
                     let newTrigger = self.settingsStore.triggerMode
+                    guard newTrigger != self.lastAppliedTrigger else { return }
+                    self.lastAppliedTrigger = newTrigger
                     let newBinding = self.monitor.binding.with(trigger: newTrigger)
                     self.monitor.updateBinding(newBinding)
                     SpeakLog.hotkey.info(
@@ -416,6 +431,7 @@ final class DictationController: ObservableObject, CLICommandHandler {
             await self.engine.cancelDictation()
             self.overlayController.cancelImmediate()
             self.icon = .idle
+            self.monitor.notifySessionEnded()  // [validation-fix C1] keep detector in sync
             SpeakLog.engine.info("DictationController: dictation cancelled by user (Escape).")
         }
     }
@@ -484,8 +500,29 @@ final class DictationController: ObservableObject, CLICommandHandler {
                         self.permissionsNeeded = false
                         SpeakLog.hotkey.info("DictationController: tap armed — permissionsNeeded cleared.")
                     } else {
-                        self.permissionsNeeded = true
-                        SpeakLog.hotkey.warning("DictationController: tap disarmed — permissionsNeeded set.")
+                        // [validation-fix C7] A disarm fires on EVERY teardown — including
+                        // a normal re-arm cycle (rate-limit trip, wake re-arm) while AX is
+                        // still granted. Only raise the permissions hint when AX is actually
+                        // missing, so the menu doesn't flicker "permissions needed" spuriously.
+                        let axGranted = self.permissionManager.status(.accessibility) == .granted
+                        if !axGranted {
+                            self.permissionsNeeded = true
+                            SpeakLog.hotkey.warning("DictationController: tap disarmed + AX missing — permissionsNeeded set.")
+                        } else {
+                            SpeakLog.hotkey.info("DictationController: tap disarmed during re-arm (AX still granted) — no hint.")
+                        }
+
+                        // [validation-fix C2] If the tap died mid-session, the engine is
+                        // stuck `.recording` (HUD frozen, mic hot) with no way to self-heal.
+                        // Cancel the session so it doesn't hang. Covers BOTH hold and
+                        // double-tap (both surface as `icon == .listening`). We cancel
+                        // (discard) rather than paste: a tap death is not a user stop
+                        // intent, and "never paste against intent / be very safe" takes
+                        // precedence over salvaging the partial transcript.
+                        if self.icon == .listening {
+                            SpeakLog.hotkey.warning("DictationController: tap died mid-session — cancelling to avoid stuck recording.")
+                            self.cancelDictation()
+                        }
                     }
                 }
             }
@@ -566,6 +603,11 @@ final class DictationController: ObservableObject, CLICommandHandler {
     }
 
     private func endDictation() async {
+        // [validation-fix C1] Reset the double-tap detector — this stop may be
+        // out-of-band (Escape, CLI --stop, error) where no hotkey tap reset it.
+        // Idempotent after a normal hotkey-driven stop. Runs before any await so
+        // it is not skipped if endDictation throws/degrades below.
+        monitor.notifySessionEnded()
         do {
             // Phase C: transition overlay to .processing before the cleanup await.
             // This keeps the panel visible showing "Cleaning up…" / "Pasting…" during

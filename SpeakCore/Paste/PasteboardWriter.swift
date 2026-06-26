@@ -123,6 +123,14 @@ public final class PasteboardWriter: TextInserting, Sendable {
     /// Spec dictation-flow.md §5.
     let settle: Duration
 
+    /// Inter-event delay between the four Cmd+V CGEvents. Injected so tests pass `.zero`.
+    /// Default 10 ms — [decision][validation-fix C3] VoiceInk posts each chord event
+    /// with a 10 ms gap (`CursorPaster.pasteShortcutEventDelay = 0.01`). Posting all
+    /// four events in a tight <1 ms loop causes Electron apps, web views, and some
+    /// Cocoa text fields to silently drop the chord (clipboard writes, nothing pastes).
+    /// (Live cross-app impact is a P6 human-gate item; the gap itself matches VoiceInk.)
+    let pasteEventGap: Duration
+
     /// Writes `text` to the system pasteboard (the clipboard floor). Injected so
     /// tests never clobber the real `NSPasteboard.general` — a real write would
     /// hijack the user's clipboard during `make test`. Default writes the general
@@ -150,12 +158,14 @@ public final class PasteboardWriter: TextInserting, Sendable {
         isAccessibilityTrusted: @escaping @Sendable () -> Bool = { AXIsProcessTrusted() },
         isFocusedFieldSecure: @escaping @Sendable () -> Bool = { focusedElementIsSecureField() },
         settle: Duration = .milliseconds(100),   // [decision] spec dictation-flow.md §5
+        pasteEventGap: Duration = .milliseconds(10),  // [decision][validation-fix C3] VoiceInk 10 ms
         writeClipboard: @escaping @Sendable (String) -> Void = PasteboardWriter.defaultWriteClipboard,
         postEvent: @escaping @Sendable (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) }
     ) {
         self.isAccessibilityTrusted = isAccessibilityTrusted
         self.isFocusedFieldSecure = isFocusedFieldSecure
         self.settle = settle
+        self.pasteEventGap = pasteEventGap
         self.writeClipboard = writeClipboard
         self.postEvent = postEvent
     }
@@ -222,7 +232,7 @@ public final class PasteboardWriter: TextInserting, Sendable {
         try await Task.sleep(for: settle)
 
         // ── Step 5: Cmd-down → V-down → V-up → Cmd-up ───────────────────────
-        try simulateCmdV()
+        try await simulateCmdV()
 
         log.info("PasteboardWriter: Cmd+V sequence posted to .cghidEventTap")
     }
@@ -255,7 +265,7 @@ public final class PasteboardWriter: TextInserting, Sendable {
     ///
     /// - Throws: `SpeakError.pasteboardBusy` when `CGEvent` construction fails
     ///   (rare; indicates the event infrastructure is unavailable).
-    private func simulateCmdV() throws {
+    private func simulateCmdV() async throws {
         // `CGEventSource(stateID:)` returns nil when the event infrastructure is
         // unavailable (rare; occurs in headless CI or when Accessibility is denied).
         // Architecture §11 uses `source` as an optional — nil is valid; CGEvent
@@ -283,7 +293,14 @@ public final class PasteboardWriter: TextInserting, Sendable {
         // Via the injected `postEvent` seam — production posts to `.cghidEventTap`
         // ([verified] Swift instance method, not the obsoleted free fn); tests inject
         // a recorder so no real Cmd+V ever reaches the focused window.
-        for event in events {
+        //
+        // [validation-fix C3] Insert `pasteEventGap` (default 10 ms, VoiceInk pattern)
+        // BETWEEN events so Electron/web/Cocoa targets don't drop the chord. No gap
+        // after the final event. Tests inject `.zero` to avoid real sleeps.
+        for (index, event) in events.enumerated() {
+            if index > 0 {
+                try await Task.sleep(for: pasteEventGap)
+            }
             postEvent(event)
         }
     }

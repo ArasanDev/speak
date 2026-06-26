@@ -12,8 +12,9 @@
 //     We route context through `CFMessagePortContext.info` using an unretained
 //     Unmanaged reference to the `CLIPortServer` instance (the server lives for
 //     the app lifetime — there is no UAF risk). [decision: W2.3]
-//   - The port's run-loop source is scheduled on `CFRunLoopGetMain()` so the
-//     callback fires on the main thread.
+//   - The port's run-loop source is scheduled on `CFRunLoopGetMain()` in
+//     `.commonModes` so the callback fires on the main thread even during modal /
+//     event-tracking run-loop modes (onboarding, settings sheet, menu tracking).
 //   - `--status` reads the live state synchronously inside the callback using
 //     `MainActor.assumeIsolated` (we are already on the main thread). [decision: W2.3]
 //   - `--start`/`--stop` dispatch a `Task { @MainActor in ... }` and return an
@@ -120,8 +121,12 @@ public final class CLIPortServer {
         port = localPort
 
         // Schedule on the main run loop so the callback fires on the main thread.
+        // [validation-fix C6] Use .commonModes (not .defaultMode) so the CLI callback
+        // still fires while the run loop is in a modal/event-tracking mode — e.g. the
+        // onboarding window, a settings sheet, or menu tracking. With .defaultMode,
+        // `speak --status`/`--stop` would silently time out (3 s) during a modal.
         let source = CFMessagePortCreateRunLoopSource(nil, localPort, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         runLoopSource = source
 
         SpeakLog.cli.info(
@@ -134,7 +139,7 @@ public final class CLIPortServer {
     /// Called automatically on deinit.
     public func invalidate() {
         if let source = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .defaultMode)
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)  // [validation-fix C6]
             runLoopSource = nil
         }
         if let existingPort = port {

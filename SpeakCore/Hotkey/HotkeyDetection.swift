@@ -30,19 +30,32 @@ import Foundation
 ///   kVK_Function (0x3F = 63)  → `.maskSecondaryFn`  (rawValue 8388608)
 ///   kVK_RightCommand (0x36 = 54) → `.maskCommand`   (rawValue 1048576)
 ///   kVK_Command (0x37 = 55) [left] → `.maskCommand` (rawValue 1048576)
-///   Any other keyCode          → `.maskCommand` (safe fallback; modifier is
-///                                unusual for a hotkey binding, so "down when
-///                                maskCommand set" is the least-surprising default)
+///   kVK_RightOption (0x3D = 61) → `.maskAlternate`  (rawValue 524288)
+///   kVK_Option (0x3A = 58) [left] → `.maskAlternate`(rawValue 524288)
+///   Any other keyCode          → `.maskNonCoalesced` (never-set sentinel; see below)
 ///
-/// Left vs Right Command both set `.maskCommand`; they are disambiguated by
-/// the keyCode field on the same flagsChanged event — not by a separate flag.
-/// [verified: kVK_RightCommand = 54, kVK_Command = 55, swiftc + SDK, 2026-06-21]
+/// Left vs Right Command both set `.maskCommand`; Left vs Right Option both set
+/// `.maskAlternate`; they are disambiguated by the keyCode field on the same
+/// flagsChanged event — not by a separate flag.
+/// [verified: kVK_RightCommand = 54, kVK_Command = 55, kVK_RightOption = 61,
+///  kVK_Option = 58, swiftc + SDK, 2026-06-21]
+///
+/// IMPORTANT [validation-fix NEW-6]: the W1.1 recorder (`HotkeyRecorderView`,
+/// `supportedModifierKeys`) accepts Right-Option (61) and Left-Option (58) in
+/// addition to Command/Fn. The previous `.maskCommand` default meant an Option
+/// binding would derive its down-state from the Command bit — which Option never
+/// sets — so the hotkey would NEVER fire. Option is now mapped to `.maskAlternate`.
+/// For any genuinely-unrecognised keyCode we return `.maskNonCoalesced`, a flag
+/// that is NEVER set by a modifier key on a flagsChanged event — so an unknown
+/// binding fails closed (never spuriously "down") instead of masquerading as ⌘.
 public func modifierMask(forKeyCode keyCode: Int) -> CGEventFlags {
     switch keyCode {
     case Int(kVK_Function):     return .maskSecondaryFn  // 0x3F = 63 [verified]
     case Int(kVK_RightCommand): return .maskCommand      // 0x36 = 54 [verified]
     case Int(kVK_Command):      return .maskCommand      // 0x37 = 55 [verified] (left ⌘)
-    default:                    return .maskCommand      // safe fallback for future bindings
+    case Int(kVK_RightOption):  return .maskAlternate    // 0x3D = 61 [verified] (right ⌥)
+    case Int(kVK_Option):       return .maskAlternate    // 0x3A = 58 [verified] (left ⌥)
+    default:                    return .maskNonCoalesced  // never-set sentinel → fails closed
     }
 }
 
