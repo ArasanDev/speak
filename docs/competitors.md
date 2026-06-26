@@ -180,6 +180,7 @@ $25/mo Patreon for new features. **`speak` does not compete in this lane.**
 | iOS app | 🚧 v2 | ✅ | ✅ | 🔶 (buggy) | ❌ | ❌ |
 | Android app | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Windows support | ❌ | ✅ | ✅ (limited) | ❌ | ❌ | ✅ |
+| Indian lang + codemix STT | 🚧 v0.1 (Sarvam Saaras) | 🔶 (limited multilingual) | 🔶 (WhisperKit some) | 🔶 (Whisper models) | 🔶 (Whisper models) | ❌ |
 | Pricing | **Free, unlimited, MIT** | $15/mo | $8.49/mo / $250 lifetime | $25–49 one-time | €59 one-time | Free + $25/mo beta |
 
 ✅ = done · ❌ = no · 🔶 = partial/paid/limited · 🚧 = planned (roadmap task shown)
@@ -227,8 +228,13 @@ highest user-felt impact to lowest:
 3. **WhisperKit multilingual** [SuperWhisper, VoiceInk] — unlock 99 languages
    and sub-100ms streaming. Expands the audience 10×. → **V01-1**
 
-4. **Real Ollama cleanup** [SuperWhisper] — replaces the stub. Powers users with
-   Ollama already running get best-in-class local LLM cleanup for free. → **V01-2**
+4. **Universal OpenAI-compatible cleanup** — one URLSession client covers Ollama, Sarvam-30B,
+   OpenAI, Groq, OpenRouter. Power users plug in any compatible endpoint; local stays default.
+   → **V01-2** (replaces Ollama-specific stub)
+
+4b. **Sarvam Saaras codemix STT** — no competitor supports Tamil+English / Hindi+English
+   code-switching natively. Sarvam's `codemix` mode handles 23 Indian languages seamlessly.
+   This is the **India-first moat**: built from India, for the world. → **V01-3s**
 
 5. **Transforms** [Wispr Flow] — highlight any text, local LLM rewrites it.
    `speak` BEATS Wispr here because it's 100% on-device. → **V1-3**

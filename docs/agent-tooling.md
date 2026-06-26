@@ -35,7 +35,8 @@ against live Apple docs at implementation time, tag `[verified]`"):
 
 **Authored, thin pointers — v0.1+ (post-cutoff APIs, all claims tagged `[inferred]` or `[unverified]` — agents MUST verify before coding):**
 - `whisperkitv1-stt` — WhisperKit v1.0.0 `Transcribing` impl pointer; SPM setup; streaming + language-detect API shape; model download flow. Use for V01-1.
-- `ollama-http-cleanup` — Ollama `localhost:11434` REST API; availability check; chat-completion shape; model picker; fallback/error HUD. Use for V01-2.
+- `openai-compatible-cleanup` — Universal OpenAI-compatible cleanup: one `URLSession` client, 6 presets (Ollama/Sarvam/OpenAI/Groq/OpenRouter/Custom), Bearer + subscription-key auth, availability check, error HUDs. Use for V01-2. *(replaces `ollama-http-cleanup`)*
+- `sarvam-stt` — Sarvam Saaras v3 STT; 23 Indian languages; `codemix` mode for Tamil+English / Hindi+English; multipart REST API; 30s chunking; Keychain key; privacy fallback. Use for V01-3s.
 - `per-app-context-awareness` — NSWorkspace bundle-ID detection; 8 `AppContext` categories; AX selected-text read; prompt injection strings; bundle-ID reference table. Use for V01-0 + V01-3.
 - `foundation-models-provider-api` — WWDC26 provider API (Anthropic/Google/MLX behind `LanguageModelSession`); **all shapes `[unverified]` — verify via local SDK before writing any code**. Use for V1-13.
 - `mlx-swift-cleanup` — MLX Swift in-process LLM; SPM target discovery; Qwen3 model IDs; first-use download flow; RAM gating. Use for V1-1.

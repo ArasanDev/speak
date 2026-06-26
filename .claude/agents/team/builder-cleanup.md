@@ -8,7 +8,7 @@ permissionMode: acceptEdits
 memory: project
 skills:
   - foundation-models-cleanup
-  - ollama-http-cleanup
+  - openai-compatible-cleanup
   - mlx-swift-cleanup
   - foundation-models-provider-api
   - swift-code-review

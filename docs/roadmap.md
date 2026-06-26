@@ -470,34 +470,47 @@ and surface the detected language in the overlay. Files touched:
 
 ---
 
-### V01-2 — Ollama cleanup engine (real implementation)
+### V01-2 — Universal OpenAI-compatible LLM cleanup engine
 
-**Task**: Replace the `OllamaCleaner` stub in `SpeakCore/Cleanup/OllamaCleaner.swift`
-with a real HTTP implementation against `localhost:11434/api/generate`. Support the
-top cleanup models: `qwen2.5:3b` (default), `phi4-mini`, `gemma3:4b`, `llama3.2:3b`.
-Add a model-name `String` setting in `SettingsStore` and a selector in Settings › AI
-Cleanup. Implement an availability check (`/api/tags` endpoint; timeout 1s) so
-`isAvailable` returns `true` only when the Ollama daemon is running and the selected
-model is pulled. Add a guided setup sheet: "Install Ollama → `ollama pull qwen2.5:3b`
-→ Done" with a deep-link to ollama.ai. The implementation must use `URLSession` with
-`localhost` only — no egress beyond loopback; moat `testNoNetworkEgress` exemption
-documented with a `[decision]` tag (loopback is not network egress). Files touched:
-`SpeakCore/Cleanup/OllamaCleaner.swift`, `EngineFactories.swift`,
-`App/Settings/OllamaSetupSheet.swift` (new), `SettingsStore.swift`, moat allowlist.
+**Task**: Rename `SpeakCore/Cleanup/OllamaModelCleaner.swift` → `OpenAICompatibleCleaner.swift`
+and generalize it into a single `URLSession`-based `LLMCleaning` conformer that works with any
+OpenAI-compatible endpoint. Ships with 6 built-in presets:
+
+| Preset | Base URL | Auth | Default model |
+|--------|----------|------|---------------|
+| `.ollama` | `http://127.0.0.1:11434/v1` | none (loopback) | `qwen2.5:3b` |
+| `.sarvamLLM` | `https://api.sarvam.ai/v1` | `api-subscription-key` | `sarvam-30b` |
+| `.openAI` | `https://api.openai.com/v1` | Bearer | `gpt-4o-mini` |
+| `.groq` | `https://api.groq.com/openai/v1` | Bearer | `llama3-8b-8192` |
+| `.openRouter` | `https://openrouter.ai/api/v1` | Bearer | (user sets) |
+| `.custom(url, authStyle, model)` | user-entered | user-sets | user-sets |
+
+Endpoint: `POST <baseURL>/chat/completions` (standard OpenAI chat completions format). Auth
+style is per-preset: Bearer header OR `api-subscription-key` header (Sarvam). API keys stored
+in Keychain (`kSecClassGenericPassword`). Zero new Swift package dependencies — pure URLSession +
+Codable. Foundation Models remains the default; this engine is opt-in. Files touched:
+`SpeakCore/Cleanup/OpenAICompatibleCleaner.swift` (renamed from OllamaModelCleaner),
+`EngineFactories.swift`, `App/Settings/CleanupEngineSheet.swift` (new), `SettingsStore.swift`.
+
+See `openai-compatible-cleanup` skill for full API shapes, error handling, and curl tests.
 
 **Depends on**: V0 shipped; P3.5 (`LLMCleaning` protocol); P10.
 
 **Done when**:
-- [ ] `OllamaCleaner.clean(_:mode:)` returns cleaned text (filler removed, punctuated)
-      from a running Ollama with `qwen2.5:3b` pulled, for a 50-word raw transcript,
-      in ≤ 3 s on M2 or later
-- [ ] `isAvailable` returns `false` when Ollama is not running; session falls back to
-      raw transcript gracefully (reaches `.done`, not `.error`)
-- [ ] Model selector in Settings shows the four options; persists across launches
-- [ ] Setup sheet opens when cleanup engine = Ollama and Ollama is unavailable;
-      deep-link to ollama.ai resolves
-- [ ] Moat: `testNoNetworkEgress` still passes; loopback exemption is `[decision]`-tagged
-- [ ] All 4 gates green
+- [ ] `OpenAICompatibleCleaner.clean(_:mode:)` returns cleaned text from Ollama running
+      `qwen2.5:3b` for a 50-word raw transcript in ≤ 3 s on M2 or later
+- [ ] Sarvam preset: same clean() call with `api-subscription-key` auth header and
+      `sarvam-30b` model returns cleaned text (requires API key)
+- [ ] `isAvailable` returns `false` when Ollama preset and Ollama is not running;
+      cloud presets return `true` when API key is non-empty
+- [ ] Settings → AI Cleanup: engine picker (On-device / Local server / Cloud), preset
+      dropdown, URL/key/model fields, green/red availability dot; persists across launches
+- [ ] API keys stored in Keychain; Settings field is `SecureField`; no key in UserDefaults
+- [ ] Moat: `testNoNetworkEgress` still passes; Ollama = loopback `[decision]`-tagged;
+      cloud = explicit user config; `make verify-moat` 7/7
+- [ ] `OpenAICompatibleCleanerTests`: Ollama request shape, Sarvam auth header present,
+      response parse, fallback to FoundationModels on error — 4+ tests; 0 failures
+- [ ] Foundation Models remains default engine; OpenAI-compatible is opt-in only
 
 ---
 
@@ -530,6 +543,49 @@ or transmitted — it is read once per dictation and injected into the prompt on
 - [ ] No app context data written to history, logs, or any file — confirmed by
       `MoatAuditTests` grep pass
 - [ ] All 4 gates green
+
+---
+
+### V01-3s — Sarvam STT engine (Saaras v3, 23 Indian languages)
+
+**Task**: Implement `SarvamSpeechTranscriber` conforming to `Transcribing`. Sends audio to
+`POST https://api.sarvam.ai/speech-to-text` as `multipart/form-data`. Default mode: `codemix`
+— handles Tamil+English ("Tanglish"), Hindi+English ("Hinglish") and 23 Indian languages
+natively. This is the **India-first moat**: no local STT model handles code-switching this well.
+
+**30-second chunking**: Sarvam REST API accepts max 30s of audio per request. Record continuously;
+detect silence boundaries (RMS < threshold for 0.5s) to split at ≤ 25s; force-split at 25s if no
+silence. Send chunks sequentially via `URLSession`; concatenate `transcript` fields with `" "`.
+Emit `TranscriptChunk(isFinal: false)` per chunk; final chunk emits `isFinal: true`.
+
+API key stored in Keychain only. Fallback: if no network, no key, or Privacy Mode on → use
+`AppleSpeechTranscriber` silently. Language: user selects from 23 Indian languages + Auto-detect
+(`language_code: "unknown"`) in Settings → Transcription.
+
+See `sarvam-stt` skill for exact API shape, language codes table, mode options, error handling,
+curl tests, and pricing reference.
+
+Files touched: `SpeakCore/STT/SarvamSpeechTranscriber.swift` (new), `EngineFactories.swift`,
+`SettingsStore.swift` (add `sttEngine`, `sarvamLanguage`, `sarvamMode`),
+`App/Settings/SettingsView.swift` (Transcription tab: STT picker + language + mode).
+
+**Depends on**: V0 shipped; V01-1 (establishes transcriber-swap pattern); V01-3 (AppContext
+can feed detected language hint to Sarvam for better auto-detect).
+
+**Done when**:
+- [ ] `SarvamSpeechTranscriber` compiles and passes lint; engine id `"sarvam-saaras-v3"`
+- [ ] Audio recorded as 16kHz mono WAV and sent as multipart; `transcript` field extracted
+- [ ] `codemix` mode is default when language is Indian or `"unknown"`; user can switch to
+      `transcribe` / `verbatim` in Settings
+- [ ] 30s chunking: a 90-second recording generates 4 sequential requests; transcripts joined
+      correctly — verified by `SarvamSpeechTranscriberTests.testChunkingOf90sAudio`
+- [ ] Language picker lists all 23 Sarvam languages + "Auto-detect"; persists across launches
+- [ ] API key stored in Keychain (`SecureField` in Settings); absent key → silent fallback
+- [ ] Privacy Mode on → zero audio sent to Sarvam; `MoatAuditTests` confirms no egress path
+- [ ] No-network → fallback to `AppleSpeechTranscriber`; HUD: "Using on-device STT"
+- [ ] `SarvamSpeechTranscriberTests`: multipart field names correct, response parse, chunking
+      logic (mock 90s audio → 4 chunks), fallback on 401 and no-network — 4+ tests, 0 failures
+- [ ] `make verify-moat` 7/7; Sarvam audio path only active when user has explicitly configured key
 
 ---
 

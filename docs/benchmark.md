@@ -97,6 +97,8 @@ numeric target carries a derivation (§7) — no hardcoded magic numbers.
 | iCloud sync | dictionary/snippets/scratchpad `[verified]` | `NSUbiquitousKeyValueStore` + CloudKit; opt-in only; no speak account | MATCH (opt-in) | v2 (V2-2) | Word added on Mac appears on iPhone within 60s; sync off → zero CloudKit calls confirmed by moat |
 | Speaker diarization | no `[inferred]` | WhisperKit SpeakerKit → `speakerLabels` in history; toggle | **BEAT** | v2 (V2-3) | 2-person recording shows Speaker 1:/Speaker 2: labels in History view |
 | Team shared dictionary | no `[inferred]` | iCloud folder share; union merge; no speak server | **BEAT** | v2 (V2-4) | Team word added by owner appears in member's dictionary within 60s via shared iCloud folder |
+| Indian language + code-switching dictation | Not supported — English-first; limited multilingual `[verified]` | Sarvam Saaras v3 codemix: 23 Indian languages + Tamil+English / Hindi+English mixed speech natively handled | **BEAT** | v0.1 (V01-3s) | Tamil+English mixed sentence transcribed with correct token boundaries; Hindi+English sentence transcribed correctly; codemix mode selected by default when Indian language detected; no competitor matches this natively |
+| Universal LLM cleanup endpoint | cloud-only, proprietary `[verified]` | OpenAI-compatible engine: one URLSession client covers Ollama, Sarvam-30B, OpenAI, Groq, OpenRouter, custom; zero new deps | **BEAT** | v0.1 (V01-2) | User enters base URL + key → any OpenAI-compatible endpoint cleans transcripts; Ollama = loopback only; Foundation Models remains default; **BEAT = local default + pluggable cloud, zero lock-in** |
 
 ---
 

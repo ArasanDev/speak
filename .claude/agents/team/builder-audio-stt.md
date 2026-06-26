@@ -9,6 +9,7 @@ memory: project
 skills:
   - speechanalyzer-stt
   - whisperkitv1-stt
+  - sarvam-stt
   - per-app-context-awareness
   - swift-code-review
 ---
