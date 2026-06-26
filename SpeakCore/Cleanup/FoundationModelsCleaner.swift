@@ -270,8 +270,10 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
             // cleaner when level==.none, so this branch is unreachable in production.
             // It is included for exhaustive switch coverage and defensive safety: if
             // somehow called, return a no-op instruction rather than crashing. [decision]
-            // [Cleanup-L3] Signal in debug builds so a code-path regression is caught early.
-            assertionFailure("instructions(for:) called with CleanupLevel.none — SpeakEngine should have short-circuited before here")
+            // [Cleanup-L3] Log the regression rather than assertionFail: tests legitimately
+            // exercise allCases including .none (StyleModeTests). assertionFailure would
+            // crash the test process rather than produce a meaningful failure message.
+            SpeakLog.cleanup.warning("styledInstructions called with .none — SpeakEngine should short-circuit before reaching the cleaner")
             intensity = "Return the text exactly as provided, with no changes whatsoever."
         case .light:
             // Light: filler-word removal + punctuation only. Minimal rewriting.

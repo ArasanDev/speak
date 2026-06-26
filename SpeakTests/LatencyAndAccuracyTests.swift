@@ -276,14 +276,20 @@ final class LatencyAndAccuracyTests: XCTestCase {
                 locale: Locale(identifier: "en-US")
             )
 
-            let startTime = Date()
             try await session.start()
 
-            // Wait for the fixture to finish producing audio (auto-stops on EOF).
-            // We poll currentState until not .listening (the session auto-transitions
-            // to .processing then .done as the fixture audio drains).
-            // Alternatively, call stop() immediately — CaptureSession.stop() awaits
-            // the STT stream to drain before returning.
+            // Feed the fixture: FixtureAudioProducer delivers ~1.4s of audio in ~10ms
+            // (6 chunks × 1ms sleep). Wait 500ms so Session.run() initialises (registers
+            // stopProducer) AND all audio buffers land in the analyzer.
+            // Calling stop() before stopProducer is registered hits the B1 bail path
+            // (stopRequested=true → run() returns early → empty transcript). [B1]
+            // 500ms >> time-to-register; negligible vs. 30s hard cap.
+            try await Task.sleep(nanoseconds: 500_000_000)
+
+            // Measure "stop→result" latency: the time from when the user releases the
+            // hotkey until the raw transcript is available. This matches benchmark.md §7
+            // L_e2e definition: "median stop→paste (no LLM)". [decision]
+            let startTime = Date()
             let result = try await session.stop()
             let elapsed = Date().timeIntervalSince(startTime)
 
