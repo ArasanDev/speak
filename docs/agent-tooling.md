@@ -40,6 +40,7 @@ against live Apple docs at implementation time, tag `[verified]`"):
 - `per-app-context-awareness` — NSWorkspace bundle-ID detection; 8 `AppContext` categories; AX selected-text read; prompt injection strings; bundle-ID reference table. Use for V01-0 + V01-3.
 - `foundation-models-provider-api` — WWDC26 provider API (Anthropic/Google/MLX behind `LanguageModelSession`); **all shapes `[unverified]` — verify via local SDK before writing any code**. Use for V1-13.
 - `mlx-swift-cleanup` — MLX Swift in-process LLM; SPM target discovery; Qwen3 model IDs; first-use download flow; RAM gating. Use for V1-1.
+- `apple-native-ecosystem` — Master catalog of all Apple-native macOS 26 frameworks (SpeechAnalyzer modules, Core AI, Foundation Models, NaturalLanguage, AppIntents, ActivityKit, vDSP). Read this BEFORE reaching for any third-party package. Includes the Neural Engine pipeline, Core AI architectural notes, and "what NOT to use" table.
 
 **Vendored from the community** (`.claude/skills/vendored/`, MIT, attributed) — see §4.
 
