@@ -158,7 +158,7 @@ struct SpeakApp: App {
 //   makes Reduce-Motion handling moot.
 
 private struct MenuBarLabel: View {
-    @ObservedObject var controller: DictationController
+    let controller: DictationController
 
     var body: some View {
         let (symbol, tint, label) = presentation(for: controller.icon)
@@ -206,7 +206,7 @@ private struct MenuBarLabel: View {
 // MARK: - SpeakMenu
 
 private struct SpeakMenu: View {
-    @ObservedObject var controller: DictationController
+    let controller: DictationController
 
     var body: some View {
         Text(statusLine(for: controller.icon))

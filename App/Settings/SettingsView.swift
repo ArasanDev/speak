@@ -46,7 +46,7 @@ struct SettingsView: View {
     // (observed reactively post-recorder-save) and `rebindHotkey(_:)`.
     // `store` is extracted separately so child tabs don't depend on the whole controller.
     let store: SettingsStore
-    @ObservedObject var controller: DictationController
+    let controller: DictationController
 
     // [decision: W3.1 — default tab is General; user re-selects across launches]
     @State private var selectedTab: SettingsTab = .general
@@ -181,7 +181,7 @@ private struct GeneralSettingsTab: View {
 /// working modes only.
 private struct ShortcutsSettingsTab: View {
     let store: SettingsStore
-    @ObservedObject var controller: DictationController
+    let controller: DictationController
 
     // Sheet state for the recorder.
     @State private var showingRecorder: Bool = false

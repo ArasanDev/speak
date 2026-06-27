@@ -15,8 +15,8 @@
 // autonomously-verified piece is the MenubarIcon mapping (unit tests).
 //
 // Threading:
-//   - `DictationController` is `@MainActor`: all `@Published` mutations are
-//     on the main thread (required by SwiftUI/Combine).
+//   - `DictationController` is `@MainActor`: all observable property mutations are
+//     on the main thread (required by SwiftUI and the Observation framework).
 //   - `SpeakEngine` and `HistoryStore` are actors: all calls to them are `await`.
 //   - The hotkey-event Task reads `monitor.events` (an AsyncStream) and awaits
 //     engine calls; it captures `[weak self]` to avoid a retain cycle.
@@ -65,25 +65,32 @@ private final class NullHistoryStore: HistoryStoring, @unchecked Sendable {
 
 // MARK: - DictationController
 
+@Observable
 @MainActor
-final class DictationController: ObservableObject, CLICommandHandler {
+final class DictationController: CLICommandHandler {
 
-    // MARK: - Published state
+    // MARK: - Observable state
 
     /// The current menubar icon semantic — drives `MenuBarExtra` systemImage.
-    @Published private(set) var icon: MenubarIcon = .idle
+    private(set) var icon: MenubarIcon = .idle {
+        didSet {
+            if icon == .listening, oldValue != .listening {
+                _hotkeySubject.send()
+            }
+        }
+    }
 
     /// `true` when the hotkey monitor has not yet armed (AX not granted).
     /// Drives a ⚠️ hint in the menu so the user knows to grant permissions.
-    @Published private(set) var permissionsNeeded: Bool = false
+    private(set) var permissionsNeeded: Bool = false
 
     /// The current running partial transcript text (empty when not listening).
     /// Mirrors `overlayController.partialText` for callers that observe this controller.
-    @Published private(set) var partialText: String = ""
+    private(set) var partialText: String = ""
 
     /// Hardware-mute state (SPEC §7.4). Mirrors `engine.isMuted` for the menu
     /// checkmark. The authoritative state lives in the engine.
-    @Published private(set) var isMuted: Bool = false
+    private(set) var isMuted: Bool = false
 
     // MARK: - Private components
 
@@ -104,8 +111,8 @@ final class DictationController: ObservableObject, CLICommandHandler {
 
     /// The most recent finished transcript (cleaned if available, else raw). Drives the
     /// "Paste Last Transcript" menu item (Wispr's Ctrl+Cmd+V re-paste); empty until the
-    /// first dictation completes. `@Published` so the menu enables/disables reactively.
-    @Published private(set) var lastTranscript: String = ""
+    /// first dictation completes. Observed reactively so the menu enables/disables.
+    private(set) var lastTranscript: String = ""
 
     // MARK: - Collaborators (H3)
 
@@ -117,15 +124,19 @@ final class DictationController: ObservableObject, CLICommandHandler {
     /// that `showDashboard()` / `showHistory()` / `showOnboardingIfNeeded()` work
     /// whether or not `startMonitoring()` has been called (e.g. the DEBUG path or
     /// a very-early menu open before monitoring arms).
-    /// [decision: lazy guard, not init-time construction — hotkeyFiredPublisher derives
-    /// from self.$icon via a Combine pipeline, which requires self to be fully initialised
-    /// before the publisher can be formed without a definite-initialisation compile error.]
+    /// [decision: lazy guard, not init-time construction — keeps showDashboard / showHistory /
+    ///  showOnboardingIfNeeded safe whether or not startMonitoring() has run.]
     private var windowPresenter: WindowPresenter?
 
     /// Drives Command Mode (Wave D) from the Fn+Ctrl chord. Constructed in
     /// `startMonitoring()`; consumes `monitor.commandChordEvents`.
     private var commandModeController: CommandModeController?
     private var commandChordTask: Task<Void, Never>?
+
+    /// Fires on the main thread each time `icon` transitions idle → listening.
+    /// Used by `ensureWindowPresenter()` to supply `hotkeyFiredPublisher` to the
+    /// onboarding flow without requiring a Combine `@Published` projected value.
+    private let _hotkeySubject = PassthroughSubject<Void, Never>()
 
     // MARK: - CLI IPC server (W2.3)
 
@@ -139,11 +150,11 @@ final class DictationController: ObservableObject, CLICommandHandler {
 
     private(set) var settingsStore: SettingsStore
 
-    /// The current active hotkey binding. `@Published` so the Shortcuts settings tab
-    /// can observe and refresh its "Current Hotkey" label without a relaunch.
+    /// The current active hotkey binding. Observed reactively so the Shortcuts settings tab
+    /// refreshes its "Current Hotkey" label without a relaunch.
     /// Updated atomically by `rebindHotkey(_:)` alongside `monitor.updateBinding`.
-    /// [decision: W1.1 — published so SwiftUI can react to recorder saves]
-    @Published private(set) var activeBinding: HotkeyBinding = .defaultBinding
+    /// [decision: W1.1 — observable so SwiftUI can react to recorder saves]
+    private(set) var activeBinding: HotkeyBinding = .defaultBinding
 
     /// The human-readable label for the current hotkey binding, e.g. "⌘ Right Command ×2".
     /// Forwarded from the live `HotkeyMonitor.binding.displayString` so the Settings
@@ -158,9 +169,8 @@ final class DictationController: ObservableObject, CLICommandHandler {
     ///      `UserDefaultsBindingStore.save` [verified: HotkeyMonitor.updateBinding, 2026-06-22].
     ///   2. Updates `settingsStore.triggerMode` so the next-launch reconcile in
     ///      `DictationController.init` converges on the saved trigger.
-    ///      The `objectWillChange` subscription fires after this write; its deferred
-    ///      `.with(trigger:)` is a no-op because the binding already carries the new
-    ///      trigger — the key is preserved.
+    ///      The `withObservationTracking` loop fires after this write; the dedupe
+    ///      guard skips it because `lastAppliedTrigger` was already updated above.
     ///   3. Publishes `activeBinding` so the Settings UI refreshes without relaunch.
     ///
     /// Must be called on the main actor (this class is `@MainActor`).
@@ -278,12 +288,9 @@ final class DictationController: ObservableObject, CLICommandHandler {
 
     /// Returns the live `WindowPresenter`, constructing it on the first call.
     ///
-    /// Construction is deferred out of `init()` for two reasons:
-    /// 1. `hotkeyFiredPublisher` is derived from `self.$icon` (a Combine `@Published`
-    ///    pipeline), which requires `self` to be fully initialised before access.
-    /// 2. Keeps `showDashboard()` / `showHistory()` / `showOnboardingIfNeeded()` safe
-    ///    whether or not `startMonitoring()` has run — the DEBUG launch path, an early
-    ///    menu click, and the normal startup path all converge here.
+    /// Construction is deferred out of `init()` so `showDashboard()` /
+    /// `showHistory()` / `showOnboardingIfNeeded()` work whether or not
+    /// `startMonitoring()` has run (DEBUG path, early menu click, normal startup).
     ///
     /// [decision: guarded-lazy over non-optional `let` — avoids the init-time
     ///  definite-initialisation constraint while still guaranteeing a non-nil result
@@ -293,16 +300,10 @@ final class DictationController: ObservableObject, CLICommandHandler {
         if let existing = windowPresenter { return existing }
 
         // Derive a publisher that fires (on the main thread) each time the hotkey
-        // triggers a new dictation session. `$icon` transitions to `.listening` on
-        // every startCapture event — this is the observable proxy for hotkey fires.
-        // `.removeDuplicates()` ensures we only emit on the idle→listening EDGE,
-        // not if `.listening` is re-published while already listening.
-        // `receive(on: RunLoop.main)` ensures the subscriber (onboarding VM) hops to
-        // the main thread before touching @Published properties.
-        let hotkeyFiredPublisher = $icon
-            .removeDuplicates()
-            .filter { $0 == .listening }
-            .map { _ in () }
+        // triggers a new dictation session. `_hotkeySubject` fires in `icon.didSet`
+        // on the idle → listening edge — the observable proxy for hotkey fires.
+        // Already on the main actor so no receive(on:) hop needed.
+        let hotkeyFiredPublisher = _hotkeySubject
             .receive(on: RunLoop.main)
             .eraseToAnyPublisher()
 
