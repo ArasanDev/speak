@@ -18,7 +18,7 @@ import SwiftUI
 struct HomePaneView: View {
     let context: DashboardContext
 
-    @ObservedObject private var settings: SettingsStore
+    let settings: SettingsStore
     @State private var entries: [HistoryEntry] = []
     @State private var loaded = false
 

@@ -7,9 +7,10 @@
 //     injected `UserDefaults` instance, which is documented thread-safe by Apple.
 //     This lets `SpeakEngine` (an actor) read `settings.cleanupEnabled` etc.
 //     synchronously without a cross-actor `await`.
-//   - `ObservableObject`: SwiftUI views bind to this directly via `@ObservedObject`
-//     or `@EnvironmentObject`. Setters send `objectWillChange` before mutating so
-//     Combine/SwiftUI re-renders on every property write.
+//   - `@Observable`: SwiftUI views bind to this directly via plain `let` (no
+//     `@ObservedObject` needed). Computed properties over UserDefaults are manually
+//     instrumented with `access(keyPath:)` / `withMutation(keyPath:)` so the
+//     observation registrar tracks reads and writes correctly.
 //   - Testable via injection: `init(defaults:)` accepts any `UserDefaults` instance.
 //     Tests pass `UserDefaults(suiteName: UUID().uuidString)!` to avoid `.standard`
 //     pollution. Production uses `.standard`.
@@ -26,8 +27,8 @@
 //   All UserDefaults keys live in `Keys` to avoid typos and make the key
 //   namespace discoverable. There are no magic strings elsewhere in this file.
 
-import Combine
 import Foundation
+import Observation
 import os
 
 // MARK: - Engine enums
@@ -83,7 +84,8 @@ public enum PasteMode: String, Codable, Sendable, Equatable {
 ///
 /// Inject into the SwiftUI environment and read from `SpeakEngine` actors;
 /// do not access `UserDefaults.standard` directly anywhere else.
-public final class SettingsStore: ObservableObject, @unchecked Sendable {
+@Observable
+public final class SettingsStore: @unchecked Sendable {
 
     // MARK: - UserDefaults key namespace
 
@@ -138,10 +140,14 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
     /// `true` (default): cleaned text is pasted.
     /// `false`: raw transcript is pasted without an LLM pass.
     public var cleanupEnabled: Bool {
-        get { defaults.bool(forKey: Keys.cleanupEnabled) }
+        get {
+            access(keyPath: \.cleanupEnabled)
+            return defaults.bool(forKey: Keys.cleanupEnabled)
+        }
         set {
-            objectWillChange.send()
-            defaults.set(newValue, forKey: Keys.cleanupEnabled)
+            withMutation(keyPath: \.cleanupEnabled) {
+                defaults.set(newValue, forKey: Keys.cleanupEnabled)
+            }
         }
     }
 
@@ -151,6 +157,7 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
     /// Default: `.foundationModels`.
     public var cleanupEngine: CleanupEngine {
         get {
+            access(keyPath: \.cleanupEngine)
             guard let data = defaults.data(forKey: Keys.cleanupEngine),
                   let decoded = try? JSONDecoder().decode(CleanupEngine.self, from: data) else {
                 return .foundationModels   // v0 default
@@ -158,11 +165,12 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
             return decoded
         }
         set {
-            objectWillChange.send()
-            if let data = try? JSONEncoder().encode(newValue) {
-                defaults.set(data, forKey: Keys.cleanupEngine)
-            } else {
-                SpeakLog.storage.error("SettingsStore: failed to encode cleanupEngine — value not persisted.")
+            withMutation(keyPath: \.cleanupEngine) {
+                if let data = try? JSONEncoder().encode(newValue) {
+                    defaults.set(data, forKey: Keys.cleanupEngine)
+                } else {
+                    SpeakLog.storage.error("SettingsStore: failed to encode cleanupEngine — value not persisted.")
+                }
             }
         }
     }
@@ -173,6 +181,7 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
     /// Default: `.appleSpeech` (SpeechAnalyzer, zero-cost, on-device).
     public var sttEngine: STTEngine {
         get {
+            access(keyPath: \.sttEngine)
             guard let data = defaults.data(forKey: Keys.sttEngine),
                   let decoded = try? JSONDecoder().decode(STTEngine.self, from: data) else {
                 return .appleSpeech   // v0 default
@@ -180,11 +189,12 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
             return decoded
         }
         set {
-            objectWillChange.send()
-            if let data = try? JSONEncoder().encode(newValue) {
-                defaults.set(data, forKey: Keys.sttEngine)
-            } else {
-                SpeakLog.storage.error("SettingsStore: failed to encode sttEngine — value not persisted.")
+            withMutation(keyPath: \.sttEngine) {
+                if let data = try? JSONEncoder().encode(newValue) {
+                    defaults.set(data, forKey: Keys.sttEngine)
+                } else {
+                    SpeakLog.storage.error("SettingsStore: failed to encode sttEngine — value not persisted.")
+                }
             }
         }
     }
@@ -196,12 +206,14 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
     /// Stored as the locale's `identifier` string (e.g., `"en-US"`).
     public var language: Locale {
         get {
+            access(keyPath: \.language)
             let id = defaults.string(forKey: Keys.language) ?? "en-US"
             return Locale(identifier: id)
         }
         set {
-            objectWillChange.send()
-            defaults.set(newValue.identifier, forKey: Keys.language)
+            withMutation(keyPath: \.language) {
+                defaults.set(newValue.identifier, forKey: Keys.language)
+            }
         }
     }
 
@@ -212,13 +224,17 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
     /// presented on launch. Defaults to `false` so a fresh install always shows
     /// onboarding. [decision: false default — new installs must onboard]
     public var hasCompletedOnboarding: Bool {
-        get { defaults.bool(forKey: Keys.hasCompletedOnboarding) }
+        get {
+            access(keyPath: \.hasCompletedOnboarding)
+            return defaults.bool(forKey: Keys.hasCompletedOnboarding)
+        }
         set {
-            objectWillChange.send()
-            defaults.set(newValue, forKey: Keys.hasCompletedOnboarding)
-            SpeakLog.storage.info(
-                "SettingsStore: hasCompletedOnboarding → \(newValue, privacy: .public)"
-            )
+            withMutation(keyPath: \.hasCompletedOnboarding) {
+                defaults.set(newValue, forKey: Keys.hasCompletedOnboarding)
+                SpeakLog.storage.info(
+                    "SettingsStore: hasCompletedOnboarding → \(newValue, privacy: .public)"
+                )
+            }
         }
     }
 
@@ -228,12 +244,14 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
     /// Default: `.cmdV` (simulate Cmd+V via CGEventTap).
     public var pasteMode: PasteMode {
         get {
+            access(keyPath: \.pasteMode)
             let raw = defaults.string(forKey: Keys.pasteMode) ?? PasteMode.cmdV.rawValue
             return PasteMode(rawValue: raw) ?? .cmdV
         }
         set {
-            objectWillChange.send()
-            defaults.set(newValue.rawValue, forKey: Keys.pasteMode)
+            withMutation(keyPath: \.pasteMode) {
+                defaults.set(newValue.rawValue, forKey: Keys.pasteMode)
+            }
         }
     }
 
@@ -257,12 +275,14 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
     /// `UserDefaultsBindingStore` is the monitor's runtime view of the same value.
     public var triggerMode: HotkeyBinding.Trigger {
         get {
+            access(keyPath: \.triggerMode)
             let raw = defaults.string(forKey: Keys.triggerMode) ?? HotkeyBinding.Trigger.doubleTap.rawValue
             return HotkeyBinding.Trigger(rawValue: raw) ?? .doubleTap
         }
         set {
-            objectWillChange.send()
-            defaults.set(newValue.rawValue, forKey: Keys.triggerMode)
+            withMutation(keyPath: \.triggerMode) {
+                defaults.set(newValue.rawValue, forKey: Keys.triggerMode)
+            }
         }
     }
 
@@ -274,12 +294,14 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
     /// as the enum's `rawValue` String — `defaults.register` seeds the default.
     public var cleanupStyle: CleanupStyle {
         get {
+            access(keyPath: \.cleanupStyle)
             let raw = defaults.string(forKey: Keys.cleanupStyle) ?? CleanupStyle.default.rawValue
             return CleanupStyle(rawValue: raw) ?? .default
         }
         set {
-            objectWillChange.send()
-            defaults.set(newValue.rawValue, forKey: Keys.cleanupStyle)
+            withMutation(keyPath: \.cleanupStyle) {
+                defaults.set(newValue.rawValue, forKey: Keys.cleanupStyle)
+            }
         }
     }
 
@@ -290,12 +312,14 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
     /// Read alongside `cleanupStyle` at `newSession()` time (H1 pattern).
     public var cleanupLevel: CleanupLevel {
         get {
+            access(keyPath: \.cleanupLevel)
             let raw = defaults.string(forKey: Keys.cleanupLevel) ?? CleanupLevel.medium.rawValue
             return CleanupLevel(rawValue: raw) ?? .medium
         }
         set {
-            objectWillChange.send()
-            defaults.set(newValue.rawValue, forKey: Keys.cleanupLevel)
+            withMutation(keyPath: \.cleanupLevel) {
+                defaults.set(newValue.rawValue, forKey: Keys.cleanupLevel)
+            }
         }
     }
 
@@ -314,7 +338,10 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
     /// independently — those remain the authoritative values. This is purely a
     /// UI-facing convenience that keeps both in sync from one picker. [decision: W3.1]
     public var effectiveCleanupLevel: CleanupLevel {
-        get { cleanupEnabled ? cleanupLevel : .none }
+        get {
+            access(keyPath: \.effectiveCleanupLevel)
+            return cleanupEnabled ? cleanupLevel : .none
+        }
         set {
             if newValue == .none {
                 cleanupEnabled = false
@@ -340,10 +367,14 @@ public final class SettingsStore: ObservableObject, @unchecked Sendable {
     /// [decision: stored as [String] because UserDefaults natively supports string
     ///  arrays; no codec needed; injection point is AnalysisContext.contextualStrings[.general]]
     public var customVocabulary: [String] {
-        get { defaults.stringArray(forKey: Keys.customVocabulary) ?? [] }
+        get {
+            access(keyPath: \.customVocabulary)
+            return defaults.stringArray(forKey: Keys.customVocabulary) ?? []
+        }
         set {
-            objectWillChange.send()
-            defaults.set(newValue, forKey: Keys.customVocabulary)
+            withMutation(keyPath: \.customVocabulary) {
+                defaults.set(newValue, forKey: Keys.customVocabulary)
+            }
         }
     }
 }

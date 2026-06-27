@@ -17,7 +17,7 @@ import SwiftUI
 struct DictionaryPaneView: View {
     let context: DashboardContext
 
-    @ObservedObject private var settings: SettingsStore
+    let settings: SettingsStore
     @State private var newTerm: String = ""
 
     init(context: DashboardContext) {

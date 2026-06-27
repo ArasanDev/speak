@@ -47,6 +47,7 @@
 import AppKit
 import Combine
 import Foundation
+import Observation
 import SpeakCore
 import SwiftUI
 
@@ -175,20 +176,17 @@ final class DictationController: ObservableObject, CLICommandHandler {
 
     // MARK: - Trigger-mode wiring (Phase B)
 
-    /// Holds the Combine subscription that applies `settingsStore.triggerMode`
-    /// changes to the live monitor without relaunch.
+    /// Task that re-arms observation tracking each time `settingsStore.triggerMode`
+    /// changes, applying the new trigger to the live monitor without relaunch.
     ///
-    /// `objectWillChange` fires *before* the value is written, so the `sink`
-    /// callback defers reading via `DispatchQueue.main.async`. The async hop
-    /// also ensures we are not on any SwiftUI rendering path when we call
-    /// `monitor.updateBinding(_:)`.
-    private var triggerModeCancellable: AnyCancellable?
+    /// Uses `withObservationTracking` (from `@Observable`) instead of a Combine
+    /// subscription — fires only on `triggerMode` mutations (not on every settings
+    /// write), so the dedupe guard is a last-defence against same-value writes.
+    private var triggerModeObserverTask: Task<Void, Never>?
 
     /// The last trigger applied to the live monitor. [validation-fix NEW-7]
-    /// `SettingsStore.triggerMode` is a computed property (no per-key publisher),
-    /// so the subscription fires on `objectWillChange` for EVERY settings write.
-    /// We dedupe against this so an unrelated change (language, cleanup model,
-    /// snippet) no longer triggers a spurious `updateBinding` + UserDefaults write.
+    /// Guards against same-value `withMutation` fires that would produce spurious
+    /// `updateBinding` + UserDefaults writes.
     private var lastAppliedTrigger: HotkeyBinding.Trigger = .doubleTap
 
     // MARK: - Onboarding
@@ -238,28 +236,42 @@ final class DictationController: ObservableObject, CLICommandHandler {
         lastAppliedTrigger = initialTrigger  // [validation-fix NEW-7] seed the dedupe baseline
         SpeakLog.hotkey.info("DictationController: trigger mode applied at init — \(initialTrigger.rawValue, privacy: .public)")
 
-        // Subscribe to future trigger-mode changes from SettingsView.
-        // `objectWillChange` fires before the write, so we schedule a read for
-        // the next run-loop turn when the value has settled.
-        // [validation-fix NEW-7] `objectWillChange` fires on EVERY @Published write
-        // (language, cleanup model, snippet, …), not just `triggerMode`. Dedupe
-        // against `lastAppliedTrigger` so only an actual trigger change reaches the
-        // monitor — no more spurious `updateBinding` + UserDefaults writes per edit.
-        triggerModeCancellable = store.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                DispatchQueue.main.async { [weak self] in
-                    guard let self else { return }
-                    let newTrigger = self.settingsStore.triggerMode
-                    guard newTrigger != self.lastAppliedTrigger else { return }
-                    self.lastAppliedTrigger = newTrigger
-                    let newBinding = self.monitor.binding.with(trigger: newTrigger)
-                    self.monitor.updateBinding(newBinding)
-                    SpeakLog.hotkey.info(
-                        "DictationController: trigger mode changed — \(newTrigger.rawValue, privacy: .public)"
-                    )
+        // Start observing future trigger-mode changes from SettingsView.
+        // Uses withObservationTracking — fires only on triggerMode mutations.
+        startObservingTriggerMode()
+    }
+
+    // MARK: - Trigger-mode observation
+
+    /// Re-arming observation loop: tracks `settingsStore.triggerMode` via
+    /// `withObservationTracking` and applies changes to the live monitor.
+    ///
+    /// `withObservationTracking` is one-shot — the loop re-arms after each fire.
+    /// After `onChange` fires, we read the new value on the main actor (the task
+    /// is `@MainActor`) then dedupe and apply. [validation-fix NEW-7]
+    private func startObservingTriggerMode() {
+        triggerModeObserverTask?.cancel()
+        triggerModeObserverTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self else { break }
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    withObservationTracking {
+                        _ = self.settingsStore.triggerMode
+                    } onChange: {
+                        continuation.resume()
+                    }
                 }
+                guard !Task.isCancelled else { break }
+                let newTrigger = self.settingsStore.triggerMode
+                guard newTrigger != self.lastAppliedTrigger else { continue }
+                self.lastAppliedTrigger = newTrigger
+                let newBinding = self.monitor.binding.with(trigger: newTrigger)
+                self.monitor.updateBinding(newBinding)
+                SpeakLog.hotkey.info(
+                    "DictationController: trigger mode changed — \(newTrigger.rawValue, privacy: .public)"
+                )
             }
+        }
     }
 
     // MARK: - Lazy WindowPresenter construction

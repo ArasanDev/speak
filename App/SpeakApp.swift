@@ -289,7 +289,7 @@ private struct SpeakMenu: View {
 /// Style and the transcription Language, both bound to `SettingsStore` so a change
 /// applies on the next dictation. Observes the store so the checkmark stays in sync.
 private struct QuickSettingsMenu: View {
-    @ObservedObject var store: SettingsStore
+    let store: SettingsStore
 
     var body: some View {
         Menu("Style") {

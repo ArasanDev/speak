@@ -45,7 +45,7 @@ struct SettingsView: View {
     // The controller is needed for the Shortcuts tab: it provides `activeBinding`
     // (observed reactively post-recorder-save) and `rebindHotkey(_:)`.
     // `store` is extracted separately so child tabs don't depend on the whole controller.
-    @ObservedObject var store: SettingsStore
+    let store: SettingsStore
     @ObservedObject var controller: DictationController
 
     // [decision: W3.1 — default tab is General; user re-selects across launches]
@@ -112,7 +112,7 @@ private enum SettingsTab: Hashable {
 /// General: paste mode + future general controls.
 /// `pasteMode` was previously in "Text Insertion" — folded here per W3.1 scope note.
 private struct GeneralSettingsTab: View {
-    @ObservedObject var store: SettingsStore
+    let store: SettingsStore
 
     var body: some View {
         Form {
@@ -180,7 +180,7 @@ private struct GeneralSettingsTab: View {
 /// logic in HotkeyMonitor and is deferred to a later wave. The picker offers the two
 /// working modes only.
 private struct ShortcutsSettingsTab: View {
-    @ObservedObject var store: SettingsStore
+    let store: SettingsStore
     @ObservedObject var controller: DictationController
 
     // Sheet state for the recorder.
@@ -269,7 +269,7 @@ private struct ShortcutsSettingsTab: View {
 // MARK: - 3. Transcription
 
 private struct TranscriptionSettingsTab: View {
-    @ObservedObject var store: SettingsStore
+    let store: SettingsStore
 
     // Locale list loaded async from SpeechTranscriber.supportedLocales.
     // Seeded with the current selection so the picker is never visually blank
@@ -425,7 +425,7 @@ private struct TranscriptionSettingsTab: View {
 /// The engine picker is *independent of* the cleanup level — it controls which engine
 /// runs when cleanup is active, so it is only disabled when `cleanupActive == false`.
 private struct AICleanupSettingsTab: View {
-    @ObservedObject var store: SettingsStore
+    let store: SettingsStore
 
     /// Derived: cleanup is active when effectiveCleanupLevel != .none.
     private var cleanupActive: Bool { store.effectiveCleanupLevel != .none }
@@ -662,7 +662,7 @@ private struct AICleanupSettingsTab: View {
 /// Binding pattern mirrors DictionaryPaneView to stay consistent — the store
 /// is the single source of truth for both surfaces.
 private struct DictionarySettingsTab: View {
-    @ObservedObject var store: SettingsStore
+    let store: SettingsStore
     @State private var newTerm: String = ""
 
     var body: some View {

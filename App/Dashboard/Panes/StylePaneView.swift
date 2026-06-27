@@ -17,7 +17,7 @@ import SwiftUI
 struct StylePaneView: View {
     let context: DashboardContext
 
-    @ObservedObject private var settings: SettingsStore
+    let settings: SettingsStore
 
     init(context: DashboardContext) {
         self.context = context
