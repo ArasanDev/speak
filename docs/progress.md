@@ -8,6 +8,24 @@
 
 ## Current phase
 
+**Code quality pass — loop #34 (2026-06-28). Extension splits + TestStorage + Swift Testing migration done.**
+
+Gates as of loop #34 (2026-06-28): **build ✅ lint 0-serious ✅ moat 7/7 ✅ tests pass ✅**
+
+**Loop #34** (code quality, priorities 2–4):
+- **`a4754f1`** — Extension-per-responsibility splits (style):
+  - `DictationController+CLI.swift` — `cliBeginDictation/cliEndDictation` (CLICommandHandler W2.3)
+  - `DictationController+ErrorHandling.swift` — `beginDictation/endDictation` (error routing + permission recovery)
+  - `CaptureSession+Cleanup.swift` — `runCleanup()` (LLM cleanup pipeline, extracted from CaptureSession.swift)
+  - `CaptureSession+Paste.swift` — `runPaste()` (paste delivery, extracted from `stop()`)
+- **`41212b5`** — `HistoryStoreTests`: replaced local `tempDatabaseURL()` + `addTeardownBlock` with `TestStorage.tempDatabaseURL()`
+- **`22d5619`** — `SpeakEngineIntegrationTests`: same `TestStorage` adoption
+- **`2b872fb`** — `MenubarIconTests`: migrated 6 XCTest methods → 1 `@Test(arguments:)` with 5 parameterized cases
+
+`SessionIntegrityTests.swift` skipped (uses `NullHistory`, no SQLite temp file pattern to migrate; only `UserDefaults.removePersistentDomain` teardown blocks remain — correct as-is).
+
+---
+
 **@Observable migration COMPLETE — all 6 ObservableObject classes migrated (loop #33, 2026-06-28).**
 
 Feature-complete through Wave 2 + code quality pass. All batches A–E + 1C done (prior sessions).
@@ -40,19 +58,11 @@ Nothing blocking. Human-gate items remain owner-only (live paste in 3 apps, late
 
 ## Next up
 
-Code quality pass (priorities 2–4 from .claude/prompt.md §9, while P11/P13/P14 await owner):
+Priorities 2–4 DONE (loop #34). Remaining:
 
-**Priority 2 — Extension-per-responsibility splits:**
-- `DictationController.swift` (704 lines) → extract `+Hotkey`, `+CLI`, `+ErrorHandling`
-- `CaptureSession.swift` (637 lines) → extract `+Cleanup`, `+Paste`
+**Human-gate** → P11 → P13 → P14 → v0 ship → V01-0 Agent Mode.
 
-**Priority 3 — TestStorage adoption (14 files still using addTeardownBlock pattern):**
-- Start with `HistoryStoreTests.swift` — its `tempDatabaseURL()` is identical to `TestStorage.tempDatabaseURL()`
-
-**Priority 4 — MenubarIconTests → Swift Testing + parameterized:**
-- 5 separate test functions → 1 `@Test(arguments:)` with 5 cases
-
-**Then: human-gate** → P11 → P13 → P14 → v0 ship → V01-0 Agent Mode.
+(14 files still use `addTeardownBlock` for `UserDefaults` teardown — separate from the SQLite `tempDatabaseURL` pattern, no migration needed.)
 
 ---
 
