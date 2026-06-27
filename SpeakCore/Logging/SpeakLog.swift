@@ -7,9 +7,9 @@
 import os
 
 public enum SpeakLog {
-    // Reverse-DNS subsystem. Placeholder bundle prefix until the app target
-    // fixes the real bundle id at Phase 0/1; categories below are stable.
-    private static let subsystem = "com.speak.core"
+    // Reverse-DNS subsystem matching the app bundle ID (com.speak.app).
+    // Filter in Console.app: subsystem == "com.speak.app", then narrow by category.
+    private static let subsystem = "com.speak.app"
 
     public static let engine      = Logger(subsystem: subsystem, category: "engine")
     public static let audio       = Logger(subsystem: subsystem, category: "audio")
@@ -20,4 +20,6 @@ public enum SpeakLog {
     public static let permissions = Logger(subsystem: subsystem, category: "permissions")
     public static let storage     = Logger(subsystem: subsystem, category: "storage")
     public static let cli         = Logger(subsystem: subsystem, category: "cli")
+    public static let app         = Logger(subsystem: subsystem, category: "app")
+    public static let overlay     = Logger(subsystem: subsystem, category: "overlay")
 }

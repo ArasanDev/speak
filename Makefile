@@ -51,7 +51,7 @@ EXPORT_PLIST   := scripts/export-options.plist
 DEV_CERT  := speak-local-codesign
 BUNDLE_ID := com.speak.app
 
-.PHONY: all generate build test lint run lsp clean release verify-moat dev-cert reset-permissions release-preflight
+.PHONY: all generate build test lint fmt run lsp clean release verify-moat dev-cert reset-permissions release-preflight
 
 all: build
 
@@ -90,6 +90,14 @@ test: generate
 ## lint: SwiftLint over the source tree
 lint:
 	swiftlint
+
+## fmt: Format source with swift-format (install: brew install swift-format).
+## Uses .swift-format at the repo root — the same config Apple uses in the
+## container project. Run before committing; CI will gate on this when wired.
+fmt:
+	@which swift-format > /dev/null || (echo "swift-format not installed. Run: brew install swift-format" && exit 1)
+	swift-format format --recursive --configuration .swift-format --in-place App SpeakCore SpeakTests
+	@echo "fmt: done."
 
 ## run: build then launch the menubar app
 run: build

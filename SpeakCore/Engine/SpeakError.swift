@@ -49,26 +49,52 @@ public enum SpeakError: Error, Sendable {
     case pasteIntoSecureField(text: String)
     case unknown(String)
 
+    /// Machine-readable error code for structured logging and telemetry.
+    /// Use in `SpeakLog.*.error("...: \(error.code, privacy: .public)")`.
+    public var code: String {
+        switch self {
+        case .microphoneDenied:              return "microphoneDenied"
+        case .accessibilityDenied:           return "accessibilityDenied"
+        case .transcriberUnavailable:        return "transcriberUnavailable"
+        case .pasteboardBusy:                return "pasteboardBusy"
+        case .llmCleanupFailed:              return "llmCleanupFailed"
+        case .sessionCancelled:              return "sessionCancelled"
+        case .microphoneMuted:               return "microphoneMuted"
+        case .pasteRequiresAccessibility:    return "pasteRequiresAccessibility"
+        case .pasteIntoSecureField:          return "pasteIntoSecureField"
+        case .unknown:                       return "unknown"
+        }
+    }
+
     public var recoverySuggestion: String {
         switch self {
         case .microphoneDenied:
             return "Open System Settings → Privacy → Microphone and enable speak."
+
         case .accessibilityDenied:
             return "Open System Settings → Privacy → Accessibility and enable speak."
+
         case .transcriberUnavailable(let detail):
             return "Speech engine unavailable: \(detail). Try a fallback engine in Settings."
+
         case .pasteboardBusy:
             return "Pasteboard busy. Retry in a moment."
+
         case .llmCleanupFailed(let detail):
             return "LLM cleanup failed: \(detail). Showing raw transcript."
+
         case .sessionCancelled:
             return "Session cancelled."
+
         case .microphoneMuted:
             return "Microphone is muted. Unmute speak to dictate."
+
         case .pasteRequiresAccessibility:
             return "Text copied to clipboard. Enable speak in System Settings → Privacy → Accessibility to paste automatically."
+
         case .pasteIntoSecureField:
             return "Won't paste into a password field — text saved to history."
+
         case .unknown(let detail):
             return "Unknown error: \(detail)."
         }

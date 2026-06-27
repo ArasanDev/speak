@@ -112,7 +112,6 @@ public final class CLIPortServer {
         ) else {
             let portName = CLIContract.portName as String
             SpeakLog.cli.error(
-                // swiftlint:disable:next line_length
                 "CLIPortServer: failed to create local CFMessagePort '\(portName, privacy: .public)' — already registered?"
             )
             return

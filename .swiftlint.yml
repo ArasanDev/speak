@@ -1,5 +1,6 @@
 # SwiftLint configuration for `speak`.
 # Enforces the AGENTS.md §3 conventions (no force-unwrap/try!/as!, no print).
+# Line length matches .swift-format (lineLength: 180), sourced from Apple's container project.
 
 included:
   - App
@@ -10,26 +11,39 @@ excluded:
   - build
   - Speak.xcodeproj
 
-# Opt-in rules that match the project's hard conventions.
+# Opt-in rules that align with .swift-format enforcement.
 opt_in_rules:
   - force_unwrapping          # AGENTS.md §3: no force-unwraps in production
   - empty_count
   - closure_spacing
   - explicit_init
   - redundant_nil_coalescing
+  - sorted_imports            # matches OrderedImports in .swift-format
+  - vertical_whitespace_between_cases
 
 # force_cast / force_try are on by default (error); keep them.
 analyzer_rules: []
 
 line_length:
-  warning: 120
+  warning: 180
   error: 200
   ignores_comments: true
 
 identifier_name:
-  min_length: 2          # allow short names like `id`, `os`
+  min_length: 1
   excluded:
     - id
+    - i
+    - j
+    - n
+    - m
+    - k
+    - x
+    - y
+    - w
+    - v
+    - t
+    - e
 
 # Force-unwrap is allowed in test code (XCTest fixtures), per AGENTS.md §3.
 force_unwrapping:
