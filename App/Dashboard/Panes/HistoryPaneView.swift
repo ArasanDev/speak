@@ -4,7 +4,7 @@
 // dashboard's detail column. We deliberately reuse rather than reimplement so the
 // macOS-26 List/diffRows crash fix (see HistoryView header) is preserved.
 //
-// The pane owns the `HistoryViewModel` lifetime via `@StateObject` so the list survives
+// The pane owns the `HistoryViewModel` lifetime via `@State` so the list survives
 // section switches within a single dashboard window.
 
 import SpeakCore
@@ -15,11 +15,11 @@ import SwiftUI
 struct HistoryPaneView: View {
     let context: DashboardContext
 
-    @StateObject private var viewModel: HistoryViewModel
+    @State private var viewModel: HistoryViewModel
 
     init(context: DashboardContext) {
         self.context = context
-        _viewModel = StateObject(wrappedValue: HistoryViewModel(store: context.historyStore))
+        _viewModel = State(initialValue: HistoryViewModel(store: context.historyStore))
     }
 
     var body: some View {

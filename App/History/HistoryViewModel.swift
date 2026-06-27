@@ -1,6 +1,6 @@
 // App/History/HistoryViewModel.swift
 //
-// The `@MainActor ObservableObject` that drives the History window (roadmap P9).
+// The `@MainActor @Observable` that drives the History window (roadmap P9).
 //
 // RESPONSIBILITIES:
 //   - Loads recent entries from the shared `HistoryStoring` store (the same one
@@ -14,11 +14,12 @@
 //   export NSSavePanel works is [deferred — needs human verification: §4.5].
 //
 // THREADING:
-//   - `@MainActor` throughout; all `@Published` mutations happen on main.
+//   - `@MainActor` throughout; all property mutations happen on main.
 //   - `HistoryStoring` is a `Sendable` actor (or NullHistoryStore); every call is
 //     `await`-ed off the main actor and the result is assigned back on main.
 
 import AppKit
+import Observation
 import os
 import SpeakCore
 import SwiftUI
@@ -26,21 +27,22 @@ import UniformTypeIdentifiers
 
 // MARK: - HistoryViewModel
 
+@Observable
 @MainActor
-final class HistoryViewModel: ObservableObject {
+final class HistoryViewModel {
 
-    // MARK: - Published state
+    // MARK: - Observable state
 
     /// The entries currently displayed (recent, or search results), newest first.
-    @Published private(set) var entries: [HistoryEntry] = []
+    private(set) var entries: [HistoryEntry] = []
 
     /// The live search text. Empty → show recent entries.
-    @Published var searchText: String = "" {
+    var searchText: String = "" {
         didSet { scheduleReload() }
     }
 
     /// `true` while a load/search is in flight (drives a progress affordance).
-    @Published private(set) var isLoading: Bool = false
+    private(set) var isLoading: Bool = false
 
     // MARK: - Private
 

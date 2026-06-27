@@ -38,7 +38,7 @@ import SwiftUI
 // MARK: - HistoryView
 
 struct HistoryView: View {
-    @ObservedObject var viewModel: HistoryViewModel
+    @Bindable var viewModel: HistoryViewModel
 
     var body: some View {
         VStack(spacing: 0) {
