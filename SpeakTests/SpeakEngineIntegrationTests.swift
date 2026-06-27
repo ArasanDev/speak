@@ -64,14 +64,6 @@ final class SpeakEngineIntegrationTests: XCTestCase {
             .appendingPathComponent("Fixtures/hello_speech.caf")
     }
 
-    /// Creates a unique temp-file database URL and registers teardown cleanup.
-    private func tempDatabaseURL() -> URL {
-        let name = "speak-engine-integration-\(UUID().uuidString).sqlite"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
-        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
-        return url
-    }
-
     /// Guards that the en-US speech model is installed. Throws `XCTSkip` if not.
     private func requireSpeechModel(locale: Locale) async throws {
         guard SpeechTranscriber.isAvailable else {
@@ -128,7 +120,7 @@ final class SpeakEngineIntegrationTests: XCTestCase {
 
         // Build real components (named so they can be asserted after the run)
         let mockInserter = MockTextInserter()
-        let historyStore = try HistoryStore(databaseURL: tempDatabaseURL())
+        let historyStore = try HistoryStore(databaseURL: TestStorage.tempDatabaseURL())
 
         // Inject a test-isolated SettingsStore (never touches .standard).
         // Set cleanupEnabled=true so this test exercises the real FM path
