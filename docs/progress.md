@@ -8,17 +8,21 @@
 
 ## Current phase
 
-**Validation & hardening COMPLETE — all Batches A–E + 1C test coverage + test-suite fixes done (loop #28–32, 2026-06-27).**
+**@Observable migration COMPLETE — all 6 ObservableObject classes migrated (loop #33, 2026-06-28).**
 
-Feature-complete through Wave 2. All validation phases (1–5) done. All batches merged:
-- **Batch A** (engine session integrity): cancel-paste guard, empty-transcript guard, double-start guard, cleanupSeconds floor
-- **Batch B** (STT lifecycle): stopRequested mic-leak guard, prewarm, locale reserve, converter safety, STT-H2 cancelAll teardown, Cleanup-H1 isAvailable model instance fix
-- **Batch C** (hotkey + paste): detector desync, CGEvent retain leak, CLI modal mode, deinit UAF, permission flicker, weak-self init, 10ms paste gap
-- **Batch D** (app/storage/engine robustness): search LIMIT, int64 trim, stale keycaps, dup watcher, UD-per-render, picker row, language reset, onboarding dot, SQLite init leak, error HUD Escape, wasTrusted reset, JSONEncoder thread-safety, case-insensitive search, Engine-L2 currentSession clear
-- **Batch E** (polish): STT-H1 real prewarm, Cleanup-M2 typed API, Engine-L1/3/4/5 comments, Input-L3/4 comments, STT-L2/M2 comments, Cleanup-L2/L3, App-L3 comment
-- **Loop #32** (prompt-quality + test-suite hardening): transcriptGuard + XML wrapping in FM cleanup (confirmed working — FM now returns cleaned output on this Mac); stopRequested reset fix (B1 session-reuse bug); 5 new tests (EndDictationErrorBranch + HotkeyMonitorUpdateBinding); removed 2 hanging SpeechTranscriberTests (zero-buffer SpeechAnalyzer finalize hang); StyleModeTests/TextDiffTests updated for modeInstructions(); integration test made FM-state-adaptive
+Feature-complete through Wave 2 + code quality pass. All batches A–E + 1C done (prior sessions).
 
-Gates as of loop #32 (2026-06-27): **build ✅ lint 0-serious ✅ moat 7/7 ✅ tests pass ✅ (498 / 0 skip / 0 fail)**
+**Loop #33** (@Observable migration, priority 1 of 4):
+- **SettingsStore** — `@Observable` + manual `access(keyPath:)`/`withMutation(keyPath:)` on all 11 computed-over-UserDefaults properties; removed `import Combine`; updated 9 call sites
+- **SnippetStore** — same computed-property instrumentation; removed `import Combine`
+- **HistoryViewModel** — stored-property migration; `@StateObject` → `@State` in HistoryPaneView; `@Bindable` in HistoryView (needed for `$viewModel.searchText`)
+- **OnboardingViewModel** — removed `@Published`; kept `import Combine` for `AnyPublisher` param; removed `deinit` (tasks use `[weak self]`)
+- **OverlayViewModel** — trivial stored-property migration
+- **DictationController** — replaced `objectWillChange.sink` with `withObservationTracking` re-arming loop (`startObservingTriggerMode()`); replaced `$icon` Combine publisher with `PassthroughSubject` + `icon.didSet`; all `@ObservedObject` call sites updated
+
+UI reactivity (`access`/`withMutation` for UserDefaults-backed properties) is `[unverified]` — needs human dogfood (P13 gate).
+
+Gates as of loop #33 (2026-06-28): **build ✅ lint 0-serious ✅ moat 7/7 ✅ tests pass ✅ (481 / 0 / 0)**
 
 ---
 
@@ -36,9 +40,19 @@ Nothing blocking. Human-gate items remain owner-only (live paste in 3 apps, late
 
 ## Next up
 
-**Human-gate** → v0 ship gate → Wave 3.
+Code quality pass (priorities 2–4 from .claude/prompt.md §9, while P11/P13/P14 await owner):
 
-1C test coverage additions: **COMPLETE** (loop #30, 2026-06-26). All identified gaps either already existed in the suite or have been added: `endDictation` error branches, rebind+Combine (HotkeyMonitor.updateBinding). Multi-display positioning remains UI-only (not unit-testable headlessly).
+**Priority 2 — Extension-per-responsibility splits:**
+- `DictationController.swift` (704 lines) → extract `+Hotkey`, `+CLI`, `+ErrorHandling`
+- `CaptureSession.swift` (637 lines) → extract `+Cleanup`, `+Paste`
+
+**Priority 3 — TestStorage adoption (14 files still using addTeardownBlock pattern):**
+- Start with `HistoryStoreTests.swift` — its `tempDatabaseURL()` is identical to `TestStorage.tempDatabaseURL()`
+
+**Priority 4 — MenubarIconTests → Swift Testing + parameterized:**
+- 5 separate test functions → 1 `@Test(arguments:)` with 5 cases
+
+**Then: human-gate** → P11 → P13 → P14 → v0 ship → V01-0 Agent Mode.
 
 ---
 
