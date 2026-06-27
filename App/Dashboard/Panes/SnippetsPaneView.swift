@@ -15,7 +15,7 @@ import SwiftUI
 struct SnippetsPaneView: View {
     let context: DashboardContext
 
-    @ObservedObject private var store: SnippetStore
+    let store: SnippetStore
     @State private var trigger: String = ""
     @State private var expansion: String = ""
 

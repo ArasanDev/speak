@@ -3,19 +3,21 @@
 // Persists the user's snippets as a JSON-encoded `[Snippet]` in UserDefaults.
 //
 // DESIGN (mirrors SettingsStore):
-//   - `ObservableObject` so the Snippets pane binds via `@ObservedObject` and re-renders
-//     on every mutation.
-//   - `@unchecked Sendable` so `SpeakEngine` (an actor) can read `snippets` synchronously
-//     at `newSession()` time (UserDefaults is documented thread-safe).
+//   - `@Observable` so the Snippets pane binds via a plain `let` reference and
+//     re-renders on every mutation. The `snippets` computed property over
+//     UserDefaults is manually instrumented with `access`/`withMutation`.
+//   - `@unchecked Sendable` so `SpeakEngine` (an actor) can read `snippets`
+//     synchronously at `newSession()` time (UserDefaults is documented thread-safe).
 //   - Injected `UserDefaults` for test isolation (named suite), like SettingsStore.
 
-import Combine
 import Foundation
+import Observation
 import os
 
 // MARK: - SnippetStore
 
-public final class SnippetStore: ObservableObject, @unchecked Sendable {
+@Observable
+public final class SnippetStore: @unchecked Sendable {
 
     private enum Keys {
         static let snippets = "speak.snippets.list"
@@ -28,9 +30,10 @@ public final class SnippetStore: ObservableObject, @unchecked Sendable {
     }
 
     /// The persisted snippets, newest last. Reading decodes from UserDefaults each call;
-    /// writing re-encodes and fires `objectWillChange` for SwiftUI.
+    /// writing re-encodes and triggers SwiftUI observation via `withMutation`.
     public var snippets: [Snippet] {
         get {
+            access(keyPath: \.snippets)
             guard let data = defaults.data(forKey: Keys.snippets),
                   let decoded = try? JSONDecoder().decode([Snippet].self, from: data) else {
                 return []
@@ -38,11 +41,12 @@ public final class SnippetStore: ObservableObject, @unchecked Sendable {
             return decoded
         }
         set {
-            objectWillChange.send()
-            if let data = try? JSONEncoder().encode(newValue) {
-                defaults.set(data, forKey: Keys.snippets)
-            } else {
-                SpeakLog.storage.error("SnippetStore: failed to encode snippets — not persisted.")
+            withMutation(keyPath: \.snippets) {
+                if let data = try? JSONEncoder().encode(newValue) {
+                    defaults.set(data, forKey: Keys.snippets)
+                } else {
+                    SpeakLog.storage.error("SnippetStore: failed to encode snippets — not persisted.")
+                }
             }
         }
     }
