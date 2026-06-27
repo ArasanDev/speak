@@ -41,24 +41,25 @@ public enum OverlayState: Sendable, Equatable {
 
 /// Observable model bridging `DictationController` → `TranscriptOverlayView`.
 /// `@MainActor` because all writes come from `DictationController` (also @MainActor).
+@Observable
 @MainActor
-final class OverlayViewModel: ObservableObject {
-    @Published var partialText: String = ""
-    @Published var overlayState: OverlayState = .listening
+final class OverlayViewModel {
+    var partialText: String = ""
+    var overlayState: OverlayState = .listening
 
     /// Elapsed seconds since the current dictation started listening.
-    @Published var elapsedSeconds: Int = 0
+    var elapsedSeconds: Int = 0
 
     /// Microphone level (0…1), smoothed RMS from `AudioCapture` (W2.1).
     /// 0.0 when idle; driven live during `.listening`.
-    @Published var level: Double = 0.0
+    var level: Double = 0.0
 
     /// W2.2: Short error reason shown in the error pill. Nil when not in `.error` state.
-    @Published var errorReason: String?
+    var errorReason: String?
 
     /// W2.2: `true` when AI cleanup will run after capture; drives "Cleaning up…" vs "Pasting…".
     /// Set at `start()` time from `DictationController.settingsStore`.
-    @Published var isCleaningUp: Bool = true
+    var isCleaningUp: Bool = true
 }
 
 // MARK: - VisualEffectView
@@ -201,7 +202,7 @@ private struct WaveformView: View {
 /// The visible card shown during live dictation.
 /// Renders four visual states: listening, processing, done, error.
 struct TranscriptOverlayView: View {
-    @ObservedObject var model: OverlayViewModel
+    let model: OverlayViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
