@@ -458,6 +458,96 @@ final class SnippetInSessionTests: XCTestCase {
     }
 }
 
+// MARK: - endDictation error branches
+
+/// Transcriber whose stream throws immediately on start — used to trigger the
+/// A3-wedge-fix code path in SpeakEngine.endDictation().
+private final class ImmediatelyFailingTranscriber: Transcribing, @unchecked Sendable {
+    let id: String = "failing-stt"
+    // nonisolated(unsafe): only incremented from one background Task at a time
+    // in each test, and read only after a Task.sleep gap that follows the Task's
+    // completion — no concurrent access in practice.
+    nonisolated(unsafe) private var _startCount = 0
+    func startStreamCount() -> Int { _startCount }
+
+    func startStream(locale: Locale) -> AsyncThrowingStream<TranscriptChunk, Error> {
+        _startCount += 1
+        return AsyncThrowingStream { continuation in
+            continuation.finish(throwing: SpeakError.unknown("simulated STT stream failure"))
+        }
+    }
+
+    func stop() async {}
+}
+
+/// Tests that SpeakEngine.endDictation() surfaces the right errors:
+///   - No active session → SpeakError.unknown
+///   - session.stop() throws → currentSession cleared (A3 wedge fix) so
+///     beginDictation() can re-enter (verified by startStream call count).
+final class EndDictationErrorBranchTests: XCTestCase {
+
+    private func makeEngine(
+        transcriber: any Transcribing
+    ) throws -> SpeakEngine {
+        let suiteName = "EndDictationError.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = SettingsStore(defaults: defaults)
+        settings.cleanupEnabled = false
+        return SpeakEngine(
+            transcriber: transcriber,
+            cleaner: nil,
+            history: NullHistory(),
+            settings: settings
+        )
+    }
+
+    func testEndDictationWithNoActiveSessionThrows() async throws {
+        let engine = try makeEngine(transcriber: GatedTranscriber(chunks: []))
+        do {
+            _ = try await engine.endDictation()
+            XCTFail("endDictation() with no active session must throw")
+        } catch let speakError as SpeakError {
+            guard case .unknown = speakError else {
+                XCTFail("Expected SpeakError.unknown, got \(speakError)")
+                return
+            }
+        } catch {
+            XCTFail("Expected SpeakError.unknown, got \(error)")
+        }
+    }
+
+    func testEndDictationStopFailureClearsCurrentSession() async throws {
+        let transcriber = ImmediatelyFailingTranscriber()
+        let engine = try makeEngine(transcriber: transcriber)
+
+        // beginDictation starts the session; the stream task fails in the background.
+        try await engine.beginDictation()
+
+        // Give the stream task a tick to fail and move state to .error.
+        try await Task.sleep(nanoseconds: 10_000_000)  // 10 ms
+
+        // endDictation must throw because CaptureSession.stop() surfaces the stream error.
+        do {
+            _ = try await engine.endDictation()
+            XCTFail("endDictation must throw when the STT stream failed")
+        } catch {
+            // Expected. A3 wedge fix must have cleared currentSession before re-throwing.
+        }
+
+        // A3 wedge fix: currentSession is now nil → beginDictation must create a new
+        // session (startStream call count goes from 1 to 2) rather than silently returning.
+        try await engine.beginDictation()
+        // Give the second session's stream task a tick to fail (same transcriber).
+        try await Task.sleep(nanoseconds: 10_000_000)
+        XCTAssertEqual(
+            transcriber.startStreamCount(), 2,
+            "A3 wedge fix: currentSession must be nil after a failed endDictation so beginDictation can re-enter. " +
+            "startStream called \(transcriber.startStreamCount()) time(s); expected 2."
+        )
+    }
+}
+
 // MARK: - Shared helpers
 
 /// No-op history store — used by multiple test suites above.

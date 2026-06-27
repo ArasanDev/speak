@@ -504,3 +504,58 @@ final class HotkeyBindingDisplayTests: XCTestCase {
         XCTAssertTrue(display.hasPrefix("⌘⌘"), "Double-tap Right-Command display must start with ⌘⌘")
     }
 }
+
+// MARK: - HotkeyMonitor.updateBinding + rebind regression guard
+
+/// Guards the rebind path that `DictationController.rebindHotkey()` depends on
+/// (validation-findings.md Phase 1C). A regression in `updateBinding` would
+/// silently break the hold/double-tap switch without surfacing an error.
+///
+/// Uses `InMemoryBindingStore` (defined above this class in this file) to avoid
+/// touching UserDefaults.
+final class HotkeyMonitorUpdateBindingTests: XCTestCase {
+
+    func testUpdateBindingUpdatesMonitorBinding() {
+        let store = InMemoryBindingStore()
+        let monitor = HotkeyMonitor(binding: .defaultBinding, store: store)
+
+        let holdBinding = HotkeyBinding.defaultBinding.with(trigger: .hold)
+        monitor.updateBinding(holdBinding)
+
+        XCTAssertEqual(
+            monitor.binding.trigger, .hold,
+            "updateBinding must update monitor.binding.trigger; rebind regression would break hold mode."
+        )
+        XCTAssertEqual(
+            monitor.binding.keyCode, HotkeyBinding.defaultBinding.keyCode,
+            "updateBinding must preserve the key code."
+        )
+    }
+
+    func testUpdateBindingPersistsViaStore() {
+        let store = InMemoryBindingStore()
+        let monitor = HotkeyMonitor(binding: .defaultBinding, store: store)
+
+        let holdBinding = HotkeyBinding.fnBinding.with(trigger: .hold)
+        monitor.updateBinding(holdBinding)
+
+        let persisted = store.load()
+        XCTAssertNotNil(persisted, "updateBinding must persist via BindingStoring.save().")
+        XCTAssertEqual(persisted?.trigger, .hold)
+        XCTAssertEqual(persisted?.keyCode, HotkeyBinding.fnBinding.keyCode)
+    }
+
+    func testWithTriggerPreservesKeyCodeAndModifiers() {
+        let base = HotkeyBinding.fnBinding  // Fn, doubleTap
+        let reboundToHold = base.with(trigger: .hold)
+
+        XCTAssertEqual(reboundToHold.keyCode, base.keyCode,
+            "with(trigger:) must preserve keyCode.")
+        XCTAssertEqual(reboundToHold.modifiers, base.modifiers,
+            "with(trigger:) must preserve modifiers.")
+        XCTAssertEqual(reboundToHold.trigger, .hold,
+            "with(trigger:) must swap the trigger to .hold.")
+        XCTAssertNotEqual(reboundToHold.trigger, base.trigger,
+            "Original trigger must differ from the rebound trigger.")
+    }
+}

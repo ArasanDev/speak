@@ -124,15 +124,36 @@ final class StyleModeTests: XCTestCase {
                       "High must describe restructuring or paragraph breaks.")
     }
 
-    // MARK: - .styled routes through instructions(for:)
+    // MARK: - transcriptGuard is present in instructions(for:)
+
+    @available(macOS 26.0, *)
+    func testInstructionsIncludesTranscriptGuard() {
+        for mode: CleanupMode in [.fillersOnly, .styled(.professional, .high)] {
+            let prompt = FoundationModelsCleaner.instructions(for: mode)
+            XCTAssertTrue(
+                prompt.contains("transcript editing function"),
+                "instructions(for: \(mode)) must include the transcriptGuard preamble."
+            )
+            let modeOnly = FoundationModelsCleaner.modeInstructions(for: mode)
+            XCTAssertTrue(
+                prompt.hasSuffix(modeOnly) || prompt.contains(modeOnly),
+                "instructions(for: \(mode)) must contain modeInstructions as a suffix."
+            )
+        }
+    }
+
+    // MARK: - .styled routes through modeInstructions(for:)
 
     @available(macOS 26.0, *)
     func testInstructionsForStyledModeMatchesStyledInstructions() {
         // W4.1: use .high instead of removed .thorough
-        let viaMode = FoundationModelsCleaner.instructions(for: .styled(.professional, .high))
+        // Use modeInstructions(for:) — the mode-only layer — to compare against styledInstructions
+        // directly. instructions(for:) now prepends the universal transcriptGuard, so
+        // modeInstructions(for:) is the right seam for these routing assertions.
+        let viaMode = FoundationModelsCleaner.modeInstructions(for: .styled(.professional, .high))
         let direct = FoundationModelsCleaner.styledInstructions(style: .professional, level: .high)
         XCTAssertEqual(viaMode, direct,
-                       "instructions(for: .styled(...)) must delegate to styledInstructions.")
+                       "modeInstructions(for: .styled(...)) must delegate to styledInstructions.")
     }
 
     // MARK: - Command Mode (Wave D) prompt core
@@ -148,10 +169,10 @@ final class StyleModeTests: XCTestCase {
 
     @available(macOS 26.0, *)
     func testInstructionsForCommandModeRoutesToCommandInstructions() {
-        let viaMode = FoundationModelsCleaner.instructions(for: .command(instruction: "translate to Polish"))
+        let viaMode = FoundationModelsCleaner.modeInstructions(for: .command(instruction: "translate to Polish"))
         let direct = FoundationModelsCleaner.commandInstructions(instruction: "translate to Polish")
         XCTAssertEqual(viaMode, direct,
-                       "instructions(for: .command(...)) must delegate to commandInstructions.")
+                       "modeInstructions(for: .command(...)) must delegate to commandInstructions.")
     }
 
     // MARK: - Custom vocabulary → FM prompt (Wave 2.2)
@@ -227,16 +248,16 @@ final class StyleModeTests: XCTestCase {
         }
     }
 
-    /// `.styled(style, level, customVocabulary:)` via `instructions(for:)` must route
+    /// `.styled(style, level, customVocabulary:)` via `modeInstructions(for:)` must route
     /// to `styledInstructions(style:level:customVocabulary:)` and carry the terms through.
     @available(macOS 26.0, *)
     func testInstructionsForStyledWithVocabularyRoutesCorrectly() {
         let terms = ["Anthropic", "ClaudeCode"]
-        let viaMode = FoundationModelsCleaner.instructions(
+        let viaMode = FoundationModelsCleaner.modeInstructions(
             for: .styled(.email, .high, customVocabulary: terms))
         let direct = FoundationModelsCleaner.styledInstructions(style: .email, level: .high,
                                                                   customVocabulary: terms)
         XCTAssertEqual(viaMode, direct,
-                       "instructions(for: .styled(..., customVocabulary:)) must delegate to styledInstructions with the same terms.")
+                       "modeInstructions(for: .styled(..., customVocabulary:)) must delegate to styledInstructions with the same terms.")
     }
 }

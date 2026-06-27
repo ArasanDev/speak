@@ -17,14 +17,15 @@
 //   This test XCTSkips (not fails) if the en-US speech model is not installed —
 //   the same guard used by SpeechTranscriberTests.testTranscribesFixture.
 //   A skip is NOT a pass. A green (non-skip) test means all real components
-//   ran end-to-end and the assertions held.
+//   ran end-to-end. FM availability is detected at runtime — the test asserts
+//   the correct path whichever state the dev Mac is in.
 //
 // ASSERTIONS (what this test catches that the all-mock suite cannot):
 //   1. SpeakEngine.beginDictation() reaches .listening without error.
 //   2. A real STT session produces a non-empty final transcript.
-//   3. FoundationModelsCleaner.isAvailable == false (on this dev Mac) →
-//      graceful fallback: cleanedText == nil, session reaches .done (not .error).
-//   4. The mock inserter received the raw transcript (cleanedText ?? rawText == rawText).
+//   3. FoundationModelsCleaner runs; if available → cleanedText != nil,
+//      if unavailable → cleanedText == nil (graceful fallback, not .error).
+//   4. The mock inserter received cleanedText (if FM ran) else rawText.
 //   5. HistoryStore has exactly one entry matching the result.
 //
 // TIMING:
@@ -118,8 +119,9 @@ final class SpeakEngineIntegrationTests: XCTestCase {
 
     // MARK: - Integration test
 
-    /// End-to-end dictation through SpeakEngine: real STT, real FM (unavailable
-    /// path → raw fallback), real SQLite HistoryStore, mock TextInserter.
+    /// End-to-end dictation through SpeakEngine: real STT, real FM (availability
+    /// state-adaptive: asserts cleaned path when FM available, raw fallback when not),
+    /// real SQLite HistoryStore, mock TextInserter.
     func testEndToEndDictationWithRealComponents() async throws {
         let enUS = Locale(identifier: "en-US")
         try await requireSpeechModel(locale: enUS)
@@ -129,8 +131,8 @@ final class SpeakEngineIntegrationTests: XCTestCase {
         let historyStore = try HistoryStore(databaseURL: tempDatabaseURL())
 
         // Inject a test-isolated SettingsStore (never touches .standard).
-        // Set cleanupEnabled=true so this test exercises the FM-unavailable
-        // raw-fallback path, NOT the toggle-off path. The two are distinct:
+        // Set cleanupEnabled=true so this test exercises the real FM path
+        // (or FM-unavailable raw-fallback path). The two are distinct:
         // toggle-off → activeCleaner==nil by toggle; FM-unavailable → activeCleaner
         // is non-nil but isAvailable==false → CaptureSession falls back to raw.
         let suiteName = "SpeakEngineIntegrationTests.\(UUID().uuidString)"
@@ -149,7 +151,7 @@ final class SpeakEngineIntegrationTests: XCTestCase {
             transcriber: AppleSpeechTranscriber(
                 audioProducer: SpeechTranscriberTests.FixtureAudioProducer(fileURL: fixtureURL)
             ),
-            cleaner: FoundationModelsCleaner(),   // isAvailable==false → raw fallback
+            cleaner: FoundationModelsCleaner(),   // real FM: cleaned path or raw fallback
             inserter: mockInserter,
             history: historyStore,
             settings: testSettings
@@ -176,28 +178,38 @@ final class SpeakEngineIntegrationTests: XCTestCase {
             "rawText must be non-empty. Fixture contains speech. Check SpeakLog.stt.")
         assertContainsFixtureWords(result.rawText)
 
-        // 2. FM unavailable → cleanedText == nil (graceful fallback, NOT .error)
-        XCTAssertNil(result.cleanedText,
-            "cleanedText must be nil: FM unavailable on this Mac → raw fallback.")
+        // 2. FM state determines cleanedText presence; both paths are valid.
+        let fmAvailable = await FoundationModelsCleaner().isAvailable
+        if fmAvailable {
+            XCTAssertNotNil(result.cleanedText,
+                "FM is available: cleanedText must be non-nil (FM ran the cleanup pass).")
+        } else {
+            XCTAssertNil(result.cleanedText,
+                "FM unavailable: cleanedText must be nil (graceful raw fallback, not .error).")
+        }
 
-        // 3. Inserter received rawText (cleanedText ?? rawText == rawText when cleaned is nil)
+        // 3. Inserter received cleanedText when FM ran, else rawText.
         let insertedTexts = await mockInserter.insertedTexts
         XCTAssertEqual(insertedTexts.count, 1, "Inserter must receive exactly one insert call.")
-        XCTAssertEqual(insertedTexts.first, result.rawText,
-            "Inserter must receive rawText when cleanedText is nil.")
+        let expectedInserted = result.cleanedText ?? result.rawText
+        XCTAssertEqual(insertedTexts.first, expectedInserted,
+            "Inserter must receive cleanedText when FM available, else rawText.")
 
         // 4. HistoryStore has exactly one entry matching the result
         let entries = try await historyStore.recent(limit: 100)
         XCTAssertEqual(entries.count, 1, "HistoryStore must have exactly one entry.")
         if let entry = entries.first {
             XCTAssertEqual(entry.rawText, result.rawText, "Entry rawText must match result.")
-            XCTAssertNil(entry.cleanedText, "Entry cleanedText must be nil (FM unavailable).")
+            XCTAssertEqual(entry.cleanedText, result.cleanedText,
+                "Entry cleanedText must match result (nil when FM unavailable, non-nil when available).")
             XCTAssertEqual(entry.engineId, result.engineId, "Entry engineId must match result.")
         }
 
+        let cleanedDesc = result.cleanedText.map { "'\($0)'" } ?? "nil (raw fallback)"
         SpeakLog.engine.info("""
             SpeakEngineIntegration PASSED: \
             raw='\(result.rawText, privacy: .public)' \
+            cleaned=\(cleanedDesc, privacy: .public) \
             engineId='\(result.engineId, privacy: .public)'
             """)
     }

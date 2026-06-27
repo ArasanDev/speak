@@ -292,11 +292,13 @@ final class TextDiffTests: XCTestCase {
     @available(macOS 26.0, *)
     func testPromptMapping_instructionsForStyledRoutesThroughStyledInstructions() {
         // Verify the dispatch path: .styled(style, level) → styledInstructions.
+        // Use modeInstructions(for:) — the mode-only layer — since instructions(for:)
+        // now prepends the universal transcriptGuard which is not mode-specific.
         for level in CleanupLevel.allCases {
-            let viaMode = FoundationModelsCleaner.instructions(for: .styled(.professional, level))
+            let viaMode = FoundationModelsCleaner.modeInstructions(for: .styled(.professional, level))
             let direct = FoundationModelsCleaner.styledInstructions(style: .professional, level: level)
             XCTAssertEqual(viaMode, direct,
-                           "instructions(for: .styled(.professional, .\(level))) must equal styledInstructions.")
+                           "modeInstructions(for: .styled(.professional, .\(level))) must equal styledInstructions.")
         }
     }
 }

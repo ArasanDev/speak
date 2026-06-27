@@ -1,0 +1,421 @@
+tamil@Tamilarasans-MacBook-Pro deepvoice % log stream --predicate 'process == "Speak"' --style compact 2>/dev/null
+Filtering the log data using "process == "Speak""
+Timestamp               Ty Process[PID:TID]
+2026-06-27 04:43:28.106 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:completion:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.108 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106a580] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.110 Df Speak[59541:32ca920] [com.apple.AppKit:AutomaticTermination] void _NSEnableAutomaticTerminationAndLog(NSString *) No windows open yet
+2026-06-27 04:43:28.110 Df Speak[59541:32cb60f] [com.apple.UIIntelligenceSupport:xpc] establishing connection to agent
+2026-06-27 04:43:28.110 Df Speak[59541:32cb60f] [com.apple.xpc:session] [0xbd0d1ecb0] Session created.
+2026-06-27 04:43:28.110 Df Speak[59541:32cb60f] [com.apple.xpc:session] [0xbd0d1ecb0] Session created from connection [0xbd106a6c0]
+2026-06-27 04:43:28.110 Df Speak[59541:32cb60f] [com.apple.xpc:connection] [0xbd106a6c0] activating connection: mach=true listener=false peer=false name=com.apple.uiintelligencesupport.agent
+2026-06-27 04:43:28.113 Df Speak[59541:32ca920] [com.apple.SkyLight:default] New connection 0x177ed3 secondary
+2026-06-27 04:43:28.121 Df Speak[59541:32cb60f] [com.apple.xpc:session] [0xbd0d1ecb0] Session activated
+2026-06-27 04:43:28.122 Df Speak[59541:32cb3ad] [com.apple.UIIntelligenceSupport:xpc] Connection established with agent PID: 84874
+2026-06-27 04:43:28.165 A  Speak[59541:32cb3ad] (RunningBoardServices) didChangeInheritances
+2026-06-27 04:43:28.185 Df Speak[59541:32cb60f] [com.apple.xpc:connection] [0xbd106a580] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.186 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:completion:] Fetching languages of supported GeneralASR assets.
+2026-06-27 04:43:28.186 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106a580] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.186 Df Speak[59541:32cb60f] [com.apple.xpc:connection] [0xbd106a580] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.186 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.186 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106a800] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.186 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106a800] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.186 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.187 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106a800] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.187 Df Speak[59541:32cb60f] [com.apple.xpc:connection] [0xbd106a800] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.187 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.187 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106a800] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.187 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106a800] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.187 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.187 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106a580] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.187 Df Speak[59541:32cb60f] [com.apple.xpc:connection] [0xbd106a580] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.187 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.187 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106a800] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.187 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106a800] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.187 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.187 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106a580] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.188 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106a580] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.188 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.188 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106a800] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.188 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106a800] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.188 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.188 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106a580] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.188 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106a580] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.188 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.188 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106a800] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.188 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.188 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106a800] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.188 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106a580] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.188 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106a580] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.189 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106a580] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.189 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106a800] activating connection: mach=false listener=false peer=false name=(anonymous)
+2026-06-27 04:43:28.189 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106a940] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.190 Df Speak[59541:32cb60f] [com.apple.xpc:connection] [0xbd106a940] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.190 Df Speak[59541:32cb60f] [com.apple.xpc:connection] [0xbd106a940] activating connection: mach=false listener=false peer=false name=(anonymous)
+2026-06-27 04:43:28.190 Df Speak[59541:32cb60f] [com.apple.xpc:connection] [0xbd106a940] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.191 Df Speak[59541:32cb60f] [com.apple.xpc:connection] [0xbd106a940] activating connection: mach=true listener=false peer=false name=com.apple.audio.AudioComponentRegistrar
+2026-06-27 04:43:28.195 Df Speak[59541:32cb60f] [com.apple.audio.caulk:alloc] Registered notify signal com.apple.caulk.alloc.rtdump (0)
+2026-06-27 04:43:28.195 Df Speak[59541:32cb60f] [com.apple.coreaudio:AMCP] System_Input_Processing_Notification_Handler.mm:456   System_Input_Processing_Notification_Handler::is_vi_available(): Voice isolation DSP is available for client with bundle id com.speak.app (AVFoundation is available, application is not in client deny list, application is not FaceTime variant)
+2026-06-27 04:43:28.196 Df Speak[59541:32cb60f] [com.apple.xpc:connection] [0xbd106aa80] activating connection: mach=true listener=false peer=false name=com.apple.cmio.registerassistantservice.system-extensions
+2026-06-27 04:43:28.201 Df Speak[59541:32cb60f] [com.apple.cameracapture:] <<<< AVAUVoiceIOChatFlavor >>>> AVAUVoiceIOInitializeListenersForBundleID: for <private> -> <private>
+2026-06-27 04:43:28.202 Df Speak[59541:32cb60f] [com.apple.cameracapture:] <<<< AVAUVoiceIOChatFlavor >>>> vpio_preferenceChangedListener: new value ((null)) for key AUVoiceIOClients/com-speak-app/AUVoiceIOChatFlavor, translatedBundleID com.speak.app, bundleIDs {(
+    "com.speak.app"
+)}
+2026-06-27 04:43:28.202 Df Speak[59541:32cb60f] [com.apple.cameracapture:] <<<< AVAUVoiceIOChatFlavor >>>> vpio_preferenceChangedListener: new value ((null)) for key AUVoiceIOClients/com-speak-app/AUVoiceIOIsAutoChatFlavorEnabled, translatedBundleID com.speak.app, bundleIDs {(
+    "com.speak.app"
+)}
+2026-06-27 04:43:28.202 Df Speak[59541:32cb60f] [com.apple.cameracapture:] <<<< AVAUVoiceIOChatFlavor >>>> AVAUVoiceIOGetSupportedChatFlavorsForBundleID: <private>-><private> get supported chat flavors: <private>
+2026-06-27 04:43:28.202 Df Speak[59541:32cb60f] (CoreAudio)             HALSystem.cpp:134    Enabling HAL Voice Isolation support
+2026-06-27 04:43:28.202 Df Speak[59541:32cb60f] [com.apple.cameracapture:] <<<< AVAUVoiceIOChatFlavor >>>> AVAUVoiceIOSetHiddenChatFlavorsForBundleID: <private>-><private> setting to: <private>
+2026-06-27 04:43:28.202 A  Speak[59541:32cb60f] (TCC) TCCAccessRequest() IPC
+2026-06-27 04:43:28.202 Df Speak[59541:32cb60f] [com.apple.cameracapture:] <<<< AVAUVoiceIOChatFlavor >>>> AVAUVoiceIOGetPreferredChatFlavorForBundleID: <private>-><private> get value: 0
+2026-06-27 04:43:28.202 Df Speak[59541:32cb60f] [com.apple.cameracapture:] <<<< AVAUVoiceIOChatFlavor >>>> AVAUVoiceIOSetSupportedChatFlavorsForBundleID: <private>-><private> setting to: <private>
+2026-06-27 04:43:28.210 Df Speak[59541:32cb60f] (CoreAudio)   HALPlugInManagement.cpp:440    HALPlugInManagement::RegisterPlugIns: skipping in-process plug-ins
+2026-06-27 04:43:28.210 E  Speak[59541:32cb60f] [com.apple.CFBundle:plugin] AddInstanceForFactory: No factory registered for id <CFUUID 0xbd0727c40> F8BB1C28-BAE8-11D6-9C31-00039315CD46
+2026-06-27 04:43:28.216 A  Speak[59541:32cb60e] (CoreSpotlight) end-index-batch
+2026-06-27 04:43:28.216 A  Speak[59541:32cb60e] (CoreSpotlight) index-items
+2026-06-27 04:43:28.217 Df Speak[59541:32cb3ad] [com.apple.corespotlight:index] CSInlineDonation:<private>: Skipping donation (feature flag disabled)
+2026-06-27 04:43:28.218 Df Speak[59541:32cb60f] [com.apple.cameracapture:] <<<< AVAUVoiceIOChatFlavor >>>> AVAUVoiceIOGetPreferredChatFlavorForBundleID: <private>-><private> get value: 0
+2026-06-27 04:43:28.218 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:420   AUHAL: (0xbd171c040) Selecting device 72 from constructor
+2026-06-27 04:43:28.218 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:629   SelectDevice: -> (0xbd171c040)
+2026-06-27 04:43:28.218 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:681   SelectDevice: (0xbd171c040) not already running
+2026-06-27 04:43:28.218 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:757   SelectDevice: (0xbd171c040) nothing to teardown
+2026-06-27 04:43:28.218 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:762   SelectDevice: (0xbd171c040) connecting device 72
+2026-06-27 04:43:28.218 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:3418  IsDeviceUsable: (0xbd171c040) Device ID: 72 (Input:No | Output:Yes): true
+2026-06-27 04:43:28.218 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:774   SelectDevice: (0xbd171c040) created ioproc 0xa for device 72
+2026-06-27 04:43:28.218 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:863   SelectDevice: (0xbd171c040) adding 7 device listeners to device 72
+2026-06-27 04:43:28.218 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:863   SelectDevice: (0xbd171c040) adding 0 device delegate listeners to device 72
+2026-06-27 04:43:28.218 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1586  UpdateStreamFormats: -> (0xbd171c040)
+2026-06-27 04:43:28.219 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1682  UpdateStreamFormats: 
+  output stream 0 [0x49]:  2 ch,  48000 Hz, Float32, interleaved
+2026-06-27 04:43:28.219 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1694  UpdateStreamFormats: 1 output streams; not all mono
+2026-06-27 04:43:28.219 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1706  UpdateStreamFormats: 
+  Output render format:  2 ch,  48000 Hz, Float32, interleaved
+2026-06-27 04:43:28.219 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1694  UpdateStreamFormats: 0 input streams; not all mono
+2026-06-27 04:43:28.219 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1706  UpdateStreamFormats: 
+  Input render format:  0 ch,      0 Hz, lpcm (0x00000029) 32-bit little-endian float, deinterleaved
+2026-06-27 04:43:28.219 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1776  UpdateStreamFormats: AUHAL(0xbd171c040) Calling PropertyChanged() for kAudioUnitProperty_StreamFormat, Scope:Output, Bus:Output
+2026-06-27 04:43:28.219 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1782  UpdateStreamFormats: AUHAL(0xbd171c040) Calling PropertyChanged() for kAudioUnitProperty_StreamFormat, Scope:Input, Bus:Input
+2026-06-27 04:43:28.219 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1792  UpdateStreamFormats: <-
+2026-06-27 04:43:28.219 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:900   SelectDevice: (0xbd171c040) removing 0 device listeners from device 0
+2026-06-27 04:43:28.219 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:900   SelectDevice: (0xbd171c040) removing 0 device delegate listeners from device 0
+2026-06-27 04:43:28.219 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:916   SelectDevice: <- (0xbd171c040)
+2026-06-27 04:43:28.219 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Output stream enables: Stream 0 is DISABLED
+2026-06-27 04:43:28.219 Df Speak[59541:32cb60f] [com.apple.coreaudio:ddagg]        AggregateDevice.mm:887   Creating DefaultDeviceAggregate
+2026-06-27 04:43:28.219 Df Speak[59541:32cb60f] [com.apple.coreaudio:ddagg]        AggregateDevice.mm:914   fetched default output device, ID = 72
+2026-06-27 04:43:28.219 Df Speak[59541:32cb60f] [com.apple.coreaudio:ddagg]        AggregateDevice.mm:914   fetched default input device, ID = 79
+2026-06-27 04:43:28.226 Df Speak[59541:32cb60f] [com.apple.coreaudio:ddagg]        AggregateDevice.mm:688   Built valid aggregate 124
+2026-06-27 04:43:28.227 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:2303  SetProperty: (0xbd171c040) caller requesting device change from 72 to 124
+2026-06-27 04:43:28.227 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:629   SelectDevice: -> (0xbd171c040)
+2026-06-27 04:43:28.227 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:681   SelectDevice: (0xbd171c040) not already running
+2026-06-27 04:43:28.227 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:687   SelectDevice: (0xbd171c040) disconnecting device 72
+2026-06-27 04:43:28.227 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:751   SelectDevice: (0xbd171c040) destroying ioproc 0xa for device 72
+2026-06-27 04:43:28.227 Df Speak[59541:32cb60e] [com.apple.coreaudio:as_client]   AVAudioSession_MacOS.mm:1021  initForMacOS
+2026-06-27 04:43:28.227 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106ad00] activating connection: mach=true listener=false peer=false name=com.apple.audio.AudioSession
+2026-06-27 04:43:28.228 Df Speak[59541:32cb60e] [com.apple.coreaudio:as_client]     SessionCore_Create.mm:99    Created session 0xbd0c47680 with ID: 0xee116
+2026-06-27 04:43:28.228 E  Speak[59541:32cb60e] [com.apple.libsqlite3:logging-persist] cannot open file at line 51044 of [f0ca7bba1c]
+2026-06-27 04:43:28.228 E  Speak[59541:32cb60e] [com.apple.libsqlite3:logging-persist] os_unix.c:51044: (2) open(/private/var/db/DetachedSignatures) - No such file or directory
+2026-06-27 04:43:28.228 A  Speak[59541:32cb60e] (Security) SecKeyVerifySignature
+2026-06-27 04:43:28.229 A  Speak[59541:32cb60e] (Security) SecTrustEvaluateIfNecessary
+2026-06-27 04:43:28.229 Df Speak[59541:32cb60e] [com.apple.securityd:keychain] Enabling System Keychain Always due to platform
+2026-06-27 04:43:28.229 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106ae40] activating connection: mach=true listener=false peer=false name=com.apple.trustd.agent
+2026-06-27 04:43:28.229 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106af80] activating connection: mach=true listener=false peer=false name=com.apple.audioanalyticsd
+2026-06-27 04:43:28.229 E  Speak[59541:32cb60e] [com.apple.audioanalytics:carc] Reporter disconnected. { function=sendMessage, reporterID=255726647771137 }
+2026-06-27 04:43:28.229 Df Speak[59541:32cb60e] [com.apple.coreaudio:as_client] SessionCore_macOS_Legacy.mm:131   --> setPlayState Stopped Unknown {BuiltInSpeakerDevice, 0xa}
+2026-06-27 04:43:28.229 Df Speak[59541:32cb60e] [com.apple.coreaudio:as_client] SessionCore_macOS_Legacy.mm:162   <-- setPlayState IOState: [0, 0]. BT device UIDS: {(
+)} Server update was not required.
+2026-06-27 04:43:28.229 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:762   SelectDevice: (0xbd171c040) connecting device 124
+2026-06-27 04:43:28.229 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:3418  IsDeviceUsable: (0xbd171c040) Device ID: 124 (Input:No | Output:No): true
+2026-06-27 04:43:28.231 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:774   SelectDevice: (0xbd171c040) created ioproc 0xa for device 124
+2026-06-27 04:43:28.231 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:863   SelectDevice: (0xbd171c040) adding 7 device listeners to device 124
+2026-06-27 04:43:28.231 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:863   SelectDevice: (0xbd171c040) adding 0 device delegate listeners to device 124
+2026-06-27 04:43:28.231 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1586  UpdateStreamFormats: -> (0xbd171c040)
+2026-06-27 04:43:28.231 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1682  UpdateStreamFormats: 
+  output stream 0 [0x7d]:  2 ch,  48000 Hz, Float32, interleaved
+2026-06-27 04:43:28.231 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1694  UpdateStreamFormats: 1 output streams; not all mono
+2026-06-27 04:43:28.231 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1706  UpdateStreamFormats: 
+  Output render format:  2 ch,  48000 Hz, Float32, interleaved
+2026-06-27 04:43:28.232 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1682  UpdateStreamFormats: 
+  input stream 0 [0x7e]:  1 ch,  48000 Hz, Float32
+2026-06-27 04:43:28.232 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1694  UpdateStreamFormats: 1 input streams; all mono
+2026-06-27 04:43:28.232 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1706  UpdateStreamFormats: 
+  Input render format:  1 ch,  48000 Hz, Float32
+2026-06-27 04:43:28.232 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1776  UpdateStreamFormats: AUHAL(0xbd171c040) Calling PropertyChanged() for kAudioUnitProperty_StreamFormat, Scope:Output, Bus:Output
+2026-06-27 04:43:28.232 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1782  UpdateStreamFormats: AUHAL(0xbd171c040) Calling PropertyChanged() for kAudioUnitProperty_StreamFormat, Scope:Input, Bus:Input
+2026-06-27 04:43:28.232 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1792  UpdateStreamFormats: <-
+2026-06-27 04:43:28.232 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:900   SelectDevice: (0xbd171c040) removing 7 device listeners from device 72
+2026-06-27 04:43:28.232 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:900   SelectDevice: (0xbd171c040) removing 0 device delegate listeners from device 72
+2026-06-27 04:43:28.232 Df Speak[59541:32cb60e] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:916   SelectDevice: <- (0xbd171c040)
+2026-06-27 04:43:28.232 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Input stream enables: Stream 0 is ENABLED
+2026-06-27 04:43:28.234 Df Speak[59541:32cb60f] [com.apple.coreaudio:AudioConverter]        ACv2Workarounds.mm:51    com.speak.app: fix84702776_86723525_86479548_89800354_SinglePacketDesc: false
+2026-06-27 04:43:28.235 Df Speak[59541:32cb60f] [com.apple.audio.caulk:alloc] Registered notify signal com.apple.caulk.alloc.audiodump (0)
+2026-06-27 04:43:28.235 Df Speak[59541:32cb60f] [com.apple.coreaudio:AudioConverter]        AudioConverter.cpp:1077  Created a new in process converter -> 0xbd160ed90, from  2 ch,  44100 Hz, Float32, deinterleaved to  2 ch,  48000 Hz, Float32, interleaved
+2026-06-27 04:43:28.235 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Output stream enables: Stream 0 is DISABLED
+2026-06-27 04:43:28.235 Df Speak[59541:32cb60f] [com.apple.coreaudio:AudioConverter]        AudioConverter.cpp:1077  Created a new in process converter -> 0xbd160f9c0, from  1 ch,  48000 Hz, Float32 to  2 ch,  44100 Hz, Float32, deinterleaved
+2026-06-27 04:43:28.235 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Input stream enables: Stream 0 is ENABLED
+2026-06-27 04:43:28.237 E  Speak[59541:32cb612] (CoreAudio) throwing -10877
+2026-06-27 04:43:28.238 E  Speak[59541:32cb612] (CoreAudio) throwing -10877
+2026-06-27 04:43:28.239 Df Speak[59541:32cb60f] [com.apple.coreaudio:AudioConverter]        AudioConverter.cpp:1077  Created a new in process converter -> 0xbd160f9c0, from  2 ch,  44100 Hz, Float32, deinterleaved to  2 ch,  48000 Hz, Float32, interleaved
+2026-06-27 04:43:28.239 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Output stream enables: Stream 0 is DISABLED
+2026-06-27 04:43:28.239 Df Speak[59541:32cb60f] [com.apple.coreaudio:AudioConverter]        AudioConverter.cpp:1077  Created a new in process converter -> 0xbd160ed90, from  1 ch,  48000 Hz, Float32 to  2 ch,  44100 Hz, Float32, deinterleaved
+2026-06-27 04:43:28.239 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Input stream enables: Stream 0 is ENABLED
+2026-06-27 04:43:28.241 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Input stream enables: Stream 0 is ENABLED
+2026-06-27 04:43:28.242 Df Speak[59541:32cb60f] [com.apple.coreaudio:AudioConverter]        AudioConverter.cpp:1077  Created a new in process converter -> 0xbd160f9c0, from  1 ch,  48000 Hz, Float32 (actually:  1 ch,  48000 Hz, Float32) to  1 ch,  16000 Hz, Float32 (actually:  1 ch,  16000 Hz, Float32)
+2026-06-27 04:43:28.242 Df Speak[59541:32cb60f] [com.apple.coreaudio:AudioConverter]        AudioConverter.cpp:1077  Created a new in process converter -> 0xbd160fa20, from  2 ch,  44100 Hz, Float32, deinterleaved to  2 ch,  48000 Hz, Float32, interleaved
+2026-06-27 04:43:28.243 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Output stream enables: Stream 0 is DISABLED
+2026-06-27 04:43:28.243 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Input stream enables: Stream 0 is ENABLED
+2026-06-27 04:43:28.245 Df Speak[59541:32cb60f] [com.apple.coreaudio:AudioConverter]        AudioConverter.cpp:1077  Created a new in process converter -> 0xbd160fa20, from  2 ch,  44100 Hz, Float32, deinterleaved to  2 ch,  48000 Hz, Float32, interleaved
+2026-06-27 04:43:28.245 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Output stream enables: Stream 0 is DISABLED
+2026-06-27 04:43:28.245 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Input stream enables: Stream 0 is ENABLED
+2026-06-27 04:43:28.247 Df Speak[59541:32cb60f] [com.apple.coreaudio:AudioConverter]        AudioConverter.cpp:1077  Created a new in process converter -> 0xbd160fa20, from  2 ch,  44100 Hz, Float32, deinterleaved to  2 ch,  48000 Hz, Float32, interleaved
+2026-06-27 04:43:28.247 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Output stream enables: Stream 0 is DISABLED
+2026-06-27 04:43:28.247 Df Speak[59541:32cb60f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Input stream enables: Stream 0 is ENABLED
+2026-06-27 04:43:28.248 Df Speak[59541:32cb60f] [com.apple.avfaudio:avae]          AVAudioEngine.mm:1182  Engine@0xbd116d6d0: start, was running 0
+2026-06-27 04:43:28.289 Df Speak[59541:32cb60f] [com.apple.coreaudio:as_client] SessionCore_macOS_Legacy.mm:131   --> setPlayState Started  Input {CADefaultDeviceAggregate-59541-0, 0xa}
+2026-06-27 04:43:28.290 Df Speak[59541:32cb60f] [com.apple.coreaudio:as_client] SessionCore_macOS_Legacy.mm:124   Sent updated IOState to server: [1, 0]. BT device UIDS: {(
+)}
+2026-06-27 04:43:28.290 Df Speak[59541:32cb60f] [com.apple.coreaudio:as_client] SessionCore_macOS_Legacy.mm:167   <-- setPlayState Server update was required.
+2026-06-27 04:43:28.290 Df Speak[59541:32cb60f] [com.apple.coreaudio:AudioConverter]        AudioConverter.cpp:1077  Created a new in process converter -> 0xbd160ed90, from  1 ch,  16000 Hz, Float32 (actually:  1 ch,  16000 Hz, Float32) to  1 ch,  16000 Hz, Int16
+2026-06-27 04:43:28.397 Df Speak[59541:32cb60e] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:completion:] Fetching languages of supported GeneralASR assets.
+2026-06-27 04:43:28.397 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106b0c0] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.398 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106b0c0] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.398 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.398 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106b200] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.398 Df Speak[59541:32cb60f] [com.apple.xpc:connection] [0xbd106b200] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.398 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.398 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106b0c0] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.399 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106b0c0] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.399 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.399 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106b200] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.399 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106b200] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.399 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.399 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106b0c0] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.399 Df Speak[59541:32cb60f] [com.apple.xpc:connection] [0xbd106b0c0] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.399 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.400 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106b200] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.400 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106b200] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.400 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.400 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106b0c0] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.400 Df Speak[59541:32cb60f] [com.apple.xpc:connection] [0xbd106b0c0] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.400 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.400 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106b200] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.401 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106b200] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.401 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.401 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106b0c0] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.401 Df Speak[59541:32cb60f] [com.apple.xpc:connection] [0xbd106b0c0] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.401 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.401 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106b200] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.401 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106b200] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.401 Df Speak[59541:32cb3ad] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:43:28.401 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106b0c0] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:43:28.402 Df Speak[59541:32cb60f] [com.apple.xpc:connection] [0xbd106b0c0] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.403 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106b0c0] activating connection: mach=false listener=false peer=false name=(anonymous)
+2026-06-27 04:43:28.403 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106b0c0] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:28.486 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106b0c0] activating connection: mach=false listener=false peer=false name=(anonymous)
+2026-06-27 04:43:28.486 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106b200] Connection returned listener port: 0x17123
+2026-06-27 04:43:28.486 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106b200] activating connection: mach=false listener=true peer=false name=(anonymous)
+2026-06-27 04:43:28.487 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd106b340] activating connection: mach=false listener=false peer=false name=(anonymous)
+2026-06-27 04:43:28.487 Df Speak[59541:32cb3ad] [com.apple.xpc:connection] [0xbd111a580] activating connection: mach=false listener=false peer=true name=com.apple.xpc.anonymous.0xbd106b200.peer[60378].0xbd111a580
+2026-06-27 04:43:48.876 Df Speak[59541:32cb611] [com.apple.avfaudio:avae]          AVAudioEngine.mm:1237  Engine@0xbd116d6d0: stop, was running 1
+2026-06-27 04:43:48.876 Df Speak[59541:32cb611] [com.apple.avfaudio:avae]          AVAudioEngine.mm:1220  Engine@0xbd116d6d0: pause, was running 1
+2026-06-27 04:43:48.886 Df Speak[59541:32cb66e] [com.apple.coreaudio:as_client] SessionCore_macOS_Legacy.mm:131   --> setPlayState Stopped  Input {CADefaultDeviceAggregate-59541-0, 0xa}
+2026-06-27 04:43:48.887 Df Speak[59541:32cb66e] [com.apple.coreaudio:as_client] SessionCore_macOS_Legacy.mm:124   Sent updated IOState to server: [0, 0]. BT device UIDS: {(
+)}
+2026-06-27 04:43:48.887 Df Speak[59541:32cb66e] [com.apple.coreaudio:as_client] SessionCore_macOS_Legacy.mm:167   <-- setPlayState Server update was required.
+2026-06-27 04:43:48.887 Df Speak[59541:32cb612] [com.apple.xpc:connection] [0xbd106b340] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:49.079 Df Speak[59541:32cb60e] [com.apple.xpc:connection] [0xbd106a440] activating connection: mach=true listener=false peer=false name=com.apple.powerlog.plxpclogger.xpc
+2026-06-27 04:43:49.079 Df Speak[59541:32cb611] [com.apple.xpc:connection] [0xbd106b0c0] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:49.079 Df Speak[59541:32cb3ad] [com.apple.tokengeneration:Inference] Creating ModelManagerSession with asset bundle URIs: com.apple.fm.language.instruct_3b.fm_api_generic
+2026-06-27 04:43:49.079 Df Speak[59541:32cb3ad] [com.apple.modelmanager:General] Creating ModelServiceClient
+2026-06-27 04:43:49.079 A  Speak[59541:32cb612] (ModelManagerServices) Client creating session
+2026-06-27 04:43:49.079 Df Speak[59541:32cb612] [com.apple.modelmanager:General] Sending create session for BEBC3538-70A7-4BAB-94B1-081B07AB1DC4
+2026-06-27 04:43:49.079 Df Speak[59541:32cb612] [com.apple.xpc:session] [0xbd06558b0] Session created.
+2026-06-27 04:43:49.079 Df Speak[59541:32cb612] [com.apple.xpc:session] [0xbd06558b0] Session createdwith Mach Service: <private>
+2026-06-27 04:43:49.079 Df Speak[59541:32cb612] [com.apple.xpc:connection] [0xbd106b0c0] activating connection: mach=true listener=false peer=false name=com.apple.modelmanager
+2026-06-27 04:43:49.079 Df Speak[59541:32cb612] [com.apple.xpc:session] [0xbd06558b0] Session activated
+2026-06-27 04:43:49.080 Df Speak[59541:32cb3ad] [com.apple.SensitiveContentAnalysisML:textAnalyzer] Begin SCMLTextSanitizer init inst=0xbd0672580 loc=en_US mode=3 region=0 backends=0x4 useCase=<private> pid=-1
+2026-06-27 04:43:49.081 Df Speak[59541:32cb612] [com.apple.xpc:connection] [0xbd111a580] invalidated because the client process (pid 60378) either cancelled the connection or exited
+2026-06-27 04:43:49.081 Df Speak[59541:32cb612] [com.apple.xpc:connection] [0xbd106b200] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:49.081 Df Speak[59541:32cb3ad] [com.apple.GenerativeModels:general] InternalVariantArguments: Defaulting to english language code.
+2026-06-27 04:43:49.081 Df Speak[59541:32cb3ad] [com.apple.tokengenerationcore:ModelBundle] ModelBundle: Creating with identifier: com.apple.fm.language.instruct_300m.safety
+2026-06-27 04:43:49.081 Df Speak[59541:32cb3ad] [com.apple.ModelCatalog:Framework] ResourceBundleQuery: Creating with configuration identifier: <private>, arguments: <private>
+2026-06-27 04:43:49.081 Df Speak[59541:32cb3ad] [com.apple.ModelCatalog:Framework] ResourceBundleQuery: Creating with configuration identifier: <private>, arguments: <private>
+2026-06-27 04:43:49.081 Df Speak[59541:32cb3ad] [com.apple.tokengenerationcore:ModelBundle] ModelBundle: resolving com.apple.fm.language.instruct_300m.safety to <private>. Query parameters already provided.
+2026-06-27 04:43:49.081 Df Speak[59541:32cb3ad] [com.apple.tokengeneration:Inference] Creating ModelManagerSession with asset bundle URIs: <private>
+2026-06-27 04:43:49.081 Df Speak[59541:32cb3ad] [com.apple.modelmanager:Voucher] voucher_get_current_persona_originator_info() failed
+2026-06-27 04:43:49.081 Df Speak[59541:32cb3ad] [com.apple.modelmanager:General] No onBehalfOfPID specified, querying originator pid failed, falling back to current process PID: 59541
+2026-06-27 04:43:49.081 A  Speak[59541:32cb612] (ModelManagerServices) Client creating session
+2026-06-27 04:43:49.081 Df Speak[59541:32cb612] [com.apple.modelmanager:General] Sending create session for ADA28DEE-C56D-45D9-9BF1-7BF1CD0C6590
+2026-06-27 04:43:49.081 Df Speak[59541:32cb3ad] [com.apple.SensitiveContentAnalysisML:textAnalyzer] End SCMLTextSanitizer init
+2026-06-27 04:43:49.081 A  Speak[59541:32cb611] (ModelManagerServices) Client prewarming session
+2026-06-27 04:43:49.086 Df Speak[59541:32cb612] [com.apple.GenerativeModels:guardrail] StringRenderedPromptSanitizerRunner:cacheModels requested
+2026-06-27 04:43:49.086 Df Speak[59541:32cb612] [com.apple.GenerativeModels:guardrail] StringRenderedPromptSanitizerRunner:cacheModels finished successfully
+2026-06-27 04:43:49.086 Df Speak[59541:32cb612] [com.apple.GenerativeModels:guardrail] StringRenderedPromptSanitizerRunner:scrub start
+2026-06-27 04:43:49.086 Df Speak[59541:32cb612] [com.apple.GenerativeModels:override] StringRenderedPromptSanitizerRunner: Overrides scrub start
+2026-06-27 04:43:49.087 Df Speak[59541:32cb612] [com.apple.runningboard:monitor] Updating configuration of monitor M59541-1
+2026-06-27 04:43:49.087 A  Speak[59541:32cb980] (ModelManagerServices) Client creating session
+2026-06-27 04:43:49.087 Df Speak[59541:32cb980] [com.apple.modelmanager:General] Sending create session for 46B227E5-030A-4D9C-AB4D-67A0157EFFDC
+2026-06-27 04:43:49.087 A  Speak[59541:32cb612] (ModelManagerServices) Client executing request
+2026-06-27 04:43:49.089 Df Speak[59541:32cb980] [com.apple.modelmanager:General] Sending execute request for 4A2E980E-1167-4435-AA9E-0DAE2ABC08FC:46B227E5-030A-4D9C-AB4D-67A0157EFFDC
+2026-06-27 04:43:49.103 Df Speak[59541:32cb980] [com.apple.GenerativeModels:override] StringRenderedPromptSanitizerRunner: Overrides scrub finished successfully
+2026-06-27 04:43:49.103 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringRenderedPromptSanitizerRunner: Guardrails scrub start
+2026-06-27 04:43:49.103 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringRenderedPromptSanitizerRunner: Guardrails scrub finished successfully
+2026-06-27 04:43:49.103 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringRenderedPromptSanitizerRunner:cacheModels requested
+2026-06-27 04:43:49.103 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringRenderedPromptSanitizerRunner:cacheModels finished successfully
+2026-06-27 04:43:49.103 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringResponseSanitizerRunner:cacheModels finished successfully
+2026-06-27 04:43:49.103 Df Speak[59541:32cb980] [com.apple.tokengeneration:Inference] Scrubbing entire prompt as use case is Foundation Models
+2026-06-27 04:43:49.103 Df Speak[59541:32cb980] [com.apple.ModelCatalog:Daemon] Initializing modelcatalogd service
+2026-06-27 04:43:49.103 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringRenderedPromptSanitizerRunner:scrub start
+2026-06-27 04:43:49.103 Df Speak[59541:32cb980] [com.apple.GenerativeModels:override] StringRenderedPromptSanitizerRunner: Overrides scrub start
+2026-06-27 04:43:49.104 A  Speak[59541:32cb980] (ModelManagerServices) Client executing request
+2026-06-27 04:43:49.104 Df Speak[59541:32cb980] [com.apple.modelmanager:General] Sending execute request for 8A835F9C-C769-415A-B42D-04E615E5B707:46B227E5-030A-4D9C-AB4D-67A0157EFFDC
+2026-06-27 04:43:49.106 Df Speak[59541:32cb980] [com.apple.GenerativeModels:override] StringRenderedPromptSanitizerRunner: Overrides scrub finished successfully
+2026-06-27 04:43:49.106 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringRenderedPromptSanitizerRunner: Guardrails scrub start
+2026-06-27 04:43:49.106 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringRenderedPromptSanitizerRunner: Guardrails scrub finished successfully
+2026-06-27 04:43:49.106 Df Speak[59541:32cb980] [com.apple.tokengeneration:Prompt] Input validation did not change the original prompt.
+2026-06-27 04:43:49.106 Df Speak[59541:32cb980] [com.apple.ModelCatalog:Daemon] Initializing modelcatalogd service
+2026-06-27 04:43:49.107 A  Speak[59541:32cb612] (ModelManagerServices) Client requesting stream
+2026-06-27 04:43:49.107 Df Speak[59541:32cb612] [com.apple.modelmanager:General] Sending execute streaming request for ACCCBD80-23AF-499A-B847-7E2A6E3C21CB:BEBC3538-70A7-4BAB-94B1-081B07AB1DC4
+2026-06-27 04:43:49.107 Df Speak[59541:32cb612] [com.apple.modelmanager:RunningBoardSelfAssertions] Acquired RBSAssertion for self. Reason: Finish Task Uninterruptable
+2026-06-27 04:43:49.461 Df Speak[59541:32cb980] [com.apple.xpc:session] [0xbd06559f0] Session created.
+2026-06-27 04:43:49.461 Df Speak[59541:32cb980] [com.apple.xpc:session] [0xbd06559f0] Session createdwith Endpoint.
+2026-06-27 04:43:49.461 Df Speak[59541:32cb980] [com.apple.xpc:connection] [0xbd106b200] activating connection: mach=false listener=false peer=false name=(anonymous)
+2026-06-27 04:43:49.461 Df Speak[59541:32cb980] [com.apple.xpc:session] [0xbd06559f0] Session activated
+2026-06-27 04:43:50.076 Df Speak[59541:32cb97f] [com.apple.modelmanager:General] Sending InferenceProvider EndOfStream message for ACCCBD80-23AF-499A-B847-7E2A6E3C21CB, subrequest 0
+2026-06-27 04:43:50.076 Df Speak[59541:32cb97f] [com.apple.modelmanager:General] Invalidating direct InferenceProvider connection.
+2026-06-27 04:43:50.076 Df Speak[59541:32cb612] [com.apple.xpc:connection] [0xbd106b200] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:50.076 Df Speak[59541:32cb612] [com.apple.xpc:session] [0xbd06559f0] Session canceled.
+2026-06-27 04:43:50.076 Df Speak[59541:32cb97f] [com.apple.modelmanager:RunningBoardSelfAssertions] Relinquished RBSAssertion for self. Reason: Finish Task Uninterruptable
+2026-06-27 04:43:50.076 Df Speak[59541:32cb97f] [com.apple.modelmanager:General] Invalidating direct InferenceProvider connection.
+2026-06-27 04:43:50.076 Df Speak[59541:32cb980] [com.apple.xpc:session] [0xbd06559f0] Disposing of session
+2026-06-27 04:43:50.076 Df Speak[59541:32cb97f] [com.apple.GenerativeModels:guardrail] StringResponseSanitizerRunner:scrub start
+2026-06-27 04:43:50.076 Df Speak[59541:32cb97f] [com.apple.GenerativeModels:override] StringResponseSanitizer: Overrides scrub start
+2026-06-27 04:43:50.076 A  Speak[59541:32cb612] (ModelManagerServices) Client creating session
+2026-06-27 04:43:50.076 Df Speak[59541:32cb612] [com.apple.modelmanager:General] Sending create session for 0959ED68-E23B-4F83-8860-74E99C363A0A
+2026-06-27 04:43:50.076 A  Speak[59541:32cb97f] (ModelManagerServices) Client executing request
+2026-06-27 04:43:50.079 Df Speak[59541:32cb97f] [com.apple.modelmanager:General] Sending execute request for C93AA0A4-6DDA-4670-9F94-13FF4F8AE30B:0959ED68-E23B-4F83-8860-74E99C363A0A
+2026-06-27 04:43:50.086 Df Speak[59541:32cb97f] [com.apple.GenerativeModels:override] StringResponseSanitizer: Overrides scrub finished successfully
+2026-06-27 04:43:50.086 Df Speak[59541:32cb97f] [com.apple.GenerativeModels:guardrail] StringResponseSanitizerRunner: Guardrails scrub start
+2026-06-27 04:43:50.086 Df Speak[59541:32cb97f] [com.apple.GenerativeModels:guardrail] StringResponseSanitizerRunner: Guardrails scrub finished successfully
+2026-06-27 04:43:50.086 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringResponseSanitizerRunner:cacheModels finished successfully
+2026-06-27 04:43:50.086 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringResponseSanitizerRunner:scrub start
+2026-06-27 04:43:50.086 Df Speak[59541:32cb980] [com.apple.GenerativeModels:override] StringResponseSanitizer: Overrides scrub start
+2026-06-27 04:43:50.086 A  Speak[59541:32cb980] (ModelManagerServices) Client executing request
+2026-06-27 04:43:50.086 Df Speak[59541:32cb980] [com.apple.modelmanager:General] Sending execute request for F1DB7C20-1056-49F8-9907-AF7EC29D9D91:0959ED68-E23B-4F83-8860-74E99C363A0A
+2026-06-27 04:43:50.088 Df Speak[59541:32cb980] [com.apple.GenerativeModels:override] StringResponseSanitizer: Overrides scrub finished successfully
+2026-06-27 04:43:50.088 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringResponseSanitizerRunner: Guardrails scrub start
+2026-06-27 04:43:50.088 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringResponseSanitizerRunner: Guardrails scrub finished successfully
+2026-06-27 04:43:50.088 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringResponseSanitizerRunner:cacheModels finished successfully
+2026-06-27 04:43:50.088 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringResponseSanitizerRunner:scrub start
+2026-06-27 04:43:50.088 Df Speak[59541:32cb980] [com.apple.GenerativeModels:override] StringResponseSanitizer: Overrides scrub start
+2026-06-27 04:43:50.088 A  Speak[59541:32cb980] (ModelManagerServices) Client executing request
+2026-06-27 04:43:50.088 Df Speak[59541:32cb980] [com.apple.modelmanager:General] Sending execute request for A0404BFE-8BEE-46CA-A313-FA76E5CD8407:0959ED68-E23B-4F83-8860-74E99C363A0A
+2026-06-27 04:43:50.091 Df Speak[59541:32cb980] [com.apple.GenerativeModels:override] StringResponseSanitizer: Overrides scrub finished successfully
+2026-06-27 04:43:50.091 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringResponseSanitizerRunner: Guardrails scrub start
+2026-06-27 04:43:50.091 Df Speak[59541:32cb980] [com.apple.GenerativeModels:guardrail] StringResponseSanitizerRunner: Guardrails scrub finished successfully
+2026-06-27 04:43:50.091 A  Speak[59541:32cb97f] (ModelManagerServices) Client cancelling session
+2026-06-27 04:43:50.091 Df Speak[59541:32cb97f] [com.apple.modelmanager:General] Sending cancel session for BEBC3538-70A7-4BAB-94B1-081B07AB1DC4
+2026-06-27 04:43:50.091 A  Speak[59541:32cb611] (ModelManagerServices) Client deleting session
+2026-06-27 04:43:50.091 Df Speak[59541:32cb611] [com.apple.modelmanager:General] Sending delete session for 46B227E5-030A-4D9C-AB4D-67A0157EFFDC
+2026-06-27 04:43:50.091 A  Speak[59541:32cb612] (ModelManagerServices) Client deleting session
+2026-06-27 04:43:50.091 Df Speak[59541:32cb612] [com.apple.modelmanager:General] Sending delete session for 0959ED68-E23B-4F83-8860-74E99C363A0A
+2026-06-27 04:43:50.091 A  Speak[59541:32cb611] (ModelManagerServices) Client cancelling session
+2026-06-27 04:43:50.091 Df Speak[59541:32cb611] [com.apple.modelmanager:General] Sending cancel session for ADA28DEE-C56D-45D9-9BF1-7BF1CD0C6590
+2026-06-27 04:43:50.091 A  Speak[59541:32cb611] (ModelManagerServices) Client deleting session
+2026-06-27 04:43:50.091 Df Speak[59541:32cb611] [com.apple.modelmanager:General] Sending delete session for BEBC3538-70A7-4BAB-94B1-081B07AB1DC4
+2026-06-27 04:43:50.091 A  Speak[59541:32cb611] (ModelManagerServices) Client deleting session
+2026-06-27 04:43:50.091 Df Speak[59541:32cb611] [com.apple.modelmanager:General] Sending delete session for ADA28DEE-C56D-45D9-9BF1-7BF1CD0C6590
+2026-06-27 04:43:50.091 A  Speak[59541:32cb980] (TCC) TCCAccessRequest() IPC
+2026-06-27 04:43:50.091 Df Speak[59541:32cb980] [com.apple.xpc:connection] [0xbd106b480] activating connection: mach=true listener=false peer=false name=com.apple.tccd.system
+2026-06-27 04:43:50.094 Df Speak[59541:32cb980] [com.apple.xpc:connection] [0xbd106b480] invalidated after the last release of the connection object
+2026-06-27 04:43:50.208 Df Speak[59541:32cb980] (HIDAnalytics) HIDAnalytics Set Value Send event com.apple.iokituser.hid.iohidpostevent
+2026-06-27 04:43:50.208 Df Speak[59541:32cb612] (HIDAnalytics) HIDAnalytics Timer Send event com.apple.iokituser.hid.iohidpostevent
+2026-06-27 04:43:50.208 Df Speak[59541:32cb980] (HIDAnalytics) HIDAnalytics Unregister Send event com.apple.iokituser.hid.iohidpostevent
+2026-06-27 04:43:51.085 Df Speak[59541:32cb97f] [com.apple.xpc:connection] [0xbd106a6c0] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:43:51.085 Df Speak[59541:32cb97f] [com.apple.xpc:session] [0xbd0d1ecb0] Session canceled.
+2026-06-27 04:43:51.085 Df Speak[59541:32cb612] [com.apple.UIIntelligenceSupport:xpc] agent connection cancelled (details: Session manually canceled)
+2026-06-27 04:43:51.085 Df Speak[59541:32cb612] [com.apple.xpc:session] [0xbd0d1ecb0] Disposing of session
+2026-06-27 04:43:51.158 A  Speak[59541:32cb97f] (CoreSpotlight) end-index-batch
+2026-06-27 04:43:51.158 A  Speak[59541:32cb97f] (CoreSpotlight) index-items
+2026-06-27 04:43:51.159 Df Speak[59541:32cb97f] [com.apple.corespotlight:index] CSInlineDonation:<private>: Skipping donation (feature flag disabled)
+2026-06-27 04:43:51.466 A  Speak[59541:32cb612] (RunningBoardServices) didChangeInheritances
+2026-06-27 04:43:56.415 Df Speak[59541:32cb97f] [com.apple.launchservices:db] NotifyToken::RegisterDispatch(user.uid.501.com.apple.LaunchServices.database) fired for session key <private>
+2026-06-27 04:44:05.890 Df Speak[59541:32cb97f] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:completion:] Fetching languages of supportedAssistant assets.
+2026-06-27 04:44:05.891 Df Speak[59541:32cb97f] [com.apple.xpc:connection] [0xbd106b480] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:44:05.892 Df Speak[59541:32cbc30] [com.apple.UIIntelligenceSupport:xpc] establishing connection to agent
+2026-06-27 04:44:05.892 Df Speak[59541:32cbc30] [com.apple.xpc:session] [0xbd0d1f160] Session created.
+2026-06-27 04:44:05.892 Df Speak[59541:32cbc30] [com.apple.xpc:session] [0xbd0d1f160] Session createdfrom connection [0xbd106b200]
+2026-06-27 04:44:05.892 Df Speak[59541:32cbc30] [com.apple.xpc:connection] [0xbd106b200] activating connection: mach=true listener=false peer=false name=com.apple.uiintelligencesupport.agent
+2026-06-27 04:44:05.892 Df Speak[59541:32cbc30] [com.apple.xpc:session] [0xbd0d1f160] Session activated
+2026-06-27 04:44:05.892 Df Speak[59541:32cb97f] [com.apple.xpc:connection] [0xbd106b480] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:44:05.892 Df Speak[59541:32ca920] [com.apple.SkyLight:default] New connection 0x643ab secondary
+2026-06-27 04:44:05.893 Df Speak[59541:32cb97f] [com.apple.UIIntelligenceSupport:xpc] Connection established with agent PID: 84874
+2026-06-27 04:44:05.893 Df Speak[59541:32cbc2f] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:completion:] Fetching languages of supportedGeneralASR assets.
+2026-06-27 04:44:05.893 Df Speak[59541:32cbc2f] [com.apple.xpc:connection] [0xbd106b480] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:44:05.894 Df Speak[59541:32cb97f] [com.apple.xpc:connection] [0xbd106b480] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:44:05.894 Df Speak[59541:32cbc2f] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:44:05.894 Df Speak[59541:32cbc2f] [com.apple.xpc:connection] [0xbd106b340] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:44:05.895 Df Speak[59541:32cb97f] [com.apple.xpc:connection] [0xbd106b340] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:44:05.895 Df Speak[59541:32cbc2f] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:44:05.895 Df Speak[59541:32cbc2f] [com.apple.xpc:connection] [0xbd106b480] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:44:05.896 Df Speak[59541:32cb97f] [com.apple.xpc:connection] [0xbd106b480] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:44:05.896 Df Speak[59541:32cbc2f] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:44:05.896 Df Speak[59541:32cbc2f] [com.apple.xpc:connection] [0xbd106b480] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:44:05.896 Df Speak[59541:32cb97f] [com.apple.xpc:connection] [0xbd106b480] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:44:05.896 Df Speak[59541:32cbc2f] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:44:05.896 Df Speak[59541:32cbc2f] [com.apple.xpc:connection] [0xbd106b340] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:44:05.897 Df Speak[59541:32cb97f] [com.apple.xpc:connection] [0xbd106b340] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:44:05.897 Df Speak[59541:32cbc2f] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:44:05.897 Df Speak[59541:32cbc2f] [com.apple.xpc:connection] [0xbd106b480] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:44:05.897 Df Speak[59541:32cb97f] [com.apple.xpc:connection] [0xbd106b480] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:44:05.897 Df Speak[59541:32cbc2f] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:44:05.897 Df Speak[59541:32cbc2f] [com.apple.xpc:connection] [0xbd106b480] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:44:05.898 Df Speak[59541:32cbc32] [com.apple.xpc:connection] [0xbd106b480] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:44:05.898 Df Speak[59541:32cbc2f] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:44:05.898 Df Speak[59541:32cbc2f] [com.apple.xpc:connection] [0xbd106b340] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:44:05.898 Df Speak[59541:32cbc32] [com.apple.xpc:connection] [0xbd106b340] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:44:05.898 Df Speak[59541:32cbc2f] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:44:05.899 Df Speak[59541:32cbc2f] [com.apple.xpc:connection] [0xbd106b480] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:44:05.899 Df Speak[59541:32cbc32] [com.apple.xpc:connection] [0xbd106b480] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:44:05.899 Df Speak[59541:32cbc2f] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:44:05.899 Df Speak[59541:32cbc2f] [com.apple.xpc:connection] [0xbd106b480] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:44:05.899 Df Speak[59541:32cbc32] [com.apple.xpc:connection] [0xbd106b480] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:44:05.899 Df Speak[59541:32cbc2f] [com.apple.speech.localspeechrecognition:SpeechFramework] +[SFSpeechAssetManager supportedLanguagesForTaskHint:] Fetching languages of supported Assistant assets.
+2026-06-27 04:44:05.899 Df Speak[59541:32cbc2f] [com.apple.xpc:connection] [0xbd106b340] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:44:05.900 Df Speak[59541:32cbc32] [com.apple.xpc:connection] [0xbd106b340] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:44:05.900 Df Speak[59541:32cbc2f] [com.apple.xpc:connection] [0xbd106b340] activating connection: mach=false listener=false peer=false name=com.apple.speech.localspeechrecognition
+2026-06-27 04:44:05.901 Df Speak[59541:32cbc32] [com.apple.xpc:connection] [0xbd106b340] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:44:05.901 Df Speak[59541:32cbc2f] [com.apple.xpc:connection] [0xbd106b340] activating connection: mach=false listener=false peer=false name=(anonymous)
+2026-06-27 04:44:05.901 Df Speak[59541:32cb97f] [com.apple.xpc:connection] [0xbd106b340] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:44:05.902 Df Speak[59541:32cb97f] [com.apple.coreaudio:AudioConverter]        AudioConverter.cpp:1077  Created a new in process converter -> 0xbd1221020, from  1 ch,  48000 Hz, Float32 (actually:  1 ch,  48000 Hz, Float32) to  1 ch,  16000 Hz, Float32 (actually:  1 ch,  16000 Hz, Float32)
+2026-06-27 04:44:05.903 Df Speak[59541:32cb97f] [com.apple.coreaudio:AudioConverter]        AudioConverter.cpp:1077  Created a new in process converter -> 0xbd1220fc0, from  2 ch,  44100 Hz, Float32, deinterleaved to  2 ch,  48000 Hz, Float32, interleaved
+2026-06-27 04:44:05.903 Df Speak[59541:32cb97f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Output stream enables: Stream 0 is DISABLED
+2026-06-27 04:44:05.903 Df Speak[59541:32cb97f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Input stream enables: Stream 0 is ENABLED
+2026-06-27 04:44:05.915 Df Speak[59541:32cb97f] [com.apple.coreaudio:AudioConverter]        AudioConverter.cpp:1077  Created a new in process converter -> 0xbd1220fc0, from  2 ch,  44100 Hz, Float32, deinterleaved to  2 ch,  48000 Hz, Float32, interleaved
+2026-06-27 04:44:05.915 Df Speak[59541:32cb97f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Output stream enables: Stream 0 is DISABLED
+2026-06-27 04:44:05.916 Df Speak[59541:32cb97f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Input stream enables: Stream 0 is ENABLED
+2026-06-27 04:44:05.921 Df Speak[59541:32cb97f] [com.apple.coreaudio:AudioConverter]        AudioConverter.cpp:1077  Created a new in process converter -> 0xbd1220fc0, from  2 ch,  44100 Hz, Float32, deinterleaved to  2 ch,  48000 Hz, Float32, interleaved
+2026-06-27 04:44:05.921 Df Speak[59541:32cb97f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Output stream enables: Stream 0 is DISABLED
+2026-06-27 04:44:05.921 Df Speak[59541:32cb97f] [com.apple.coreaudio:AUHAL]                 AUHAL.cpp:1898  SetStreamUsage: Input stream enables: Stream 0 is ENABLED
+2026-06-27 04:44:05.925 Df Speak[59541:32cb97f] [com.apple.avfaudio:avae]          AVAudioEngine.mm:1182  Engine@0xbd116d6d0: start, was running 0
+2026-06-27 04:44:05.935 A  Speak[59541:32cbc2f] (RunningBoardServices) didChangeInheritances
+2026-06-27 04:44:05.970 Df Speak[59541:32cb97f] [com.apple.coreaudio:as_client] SessionCore_macOS_Legacy.mm:131   --> setPlayState Started  Input {CADefaultDeviceAggregate-59541-0, 0xa}
+2026-06-27 04:44:05.973 Df Speak[59541:32cb97f] [com.apple.coreaudio:as_client] SessionCore_macOS_Legacy.mm:124   Sent updated IOState to server: [1, 0]. BT device UIDS: {(
+)}
+2026-06-27 04:44:05.973 Df Speak[59541:32cb97f] [com.apple.coreaudio:as_client] SessionCore_macOS_Legacy.mm:167   <-- setPlayState Server update was required.
+2026-06-27 04:44:05.973 Df Speak[59541:32cb97f] [com.apple.avfaudio:avae]          AVAudioEngine.mm:1237  Engine@0xbd116d6d0: stop, was running 1
+2026-06-27 04:44:05.973 Df Speak[59541:32cb97f] [com.apple.avfaudio:avae]          AVAudioEngine.mm:1220  Engine@0xbd116d6d0: pause, was running 1
+2026-06-27 04:44:05.981 Df Speak[59541:32cbc36] [com.apple.coreaudio:as_client] SessionCore_macOS_Legacy.mm:131   --> setPlayState Stopped  Input {CADefaultDeviceAggregate-59541-0, 0xa}
+2026-06-27 04:44:05.981 Df Speak[59541:32cbc36] [com.apple.coreaudio:as_client] SessionCore_macOS_Legacy.mm:124   Sent updated IOState to server: [0, 0]. BT device UIDS: {(
+)}
+2026-06-27 04:44:05.981 Df Speak[59541:32cbc36] [com.apple.coreaudio:as_client] SessionCore_macOS_Legacy.mm:167   <-- setPlayState Server update was required.
+2026-06-27 04:44:06.079 A  Speak[59541:32cbc32] (CoreSpotlight) end-index-batch
+2026-06-27 04:44:06.080 A  Speak[59541:32cbc32] (CoreSpotlight) index-items
+2026-06-27 04:44:06.080 Df Speak[59541:32cbc32] [com.apple.corespotlight:index] CSInlineDonation:<private>: Skipping donation (feature flag disabled)
+2026-06-27 04:44:17.272 Df Speak[59541:32cbc32] [com.apple.xpc:connection] [0xbd106b200] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-06-27 04:44:17.272 Df Speak[59541:32cbc32] [com.apple.xpc:session] [0xbd0d1f160] Session canceled.
+2026-06-27 04:44:17.272 Df Speak[59541:32cbc2f] [com.apple.UIIntelligenceSupport:xpc] agent connection cancelled (details: Session manually canceled)
+2026-06-27 04:44:17.272 Df Speak[59541:32cbc2f] [com.apple.xpc:session] [0xbd0d1f160] Disposing of session
+2026-06-27 04:44:17.339 A  Speak[59541:32cb97f] (CoreSpotlight) end-index-batch
+2026-06-27 04:44:17.339 A  Speak[59541:32cb97f] (CoreSpotlight) index-items
+2026-06-27 04:44:17.339 Df Speak[59541:32cb97f] [com.apple.corespotlight:index] CSInlineDonation:<private>: Skipping donation (feature flag disabled)
+2026-06-27 04:44:17.644 A  Speak[59541:32cbc32] (RunningBoardServices) didChangeInheritances

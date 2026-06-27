@@ -601,6 +601,9 @@ private actor SessionState {
         sessionTask = nil
         bridgeTask = nil
         resultsTask = nil
+        // Reset so the same AppleSpeechTranscriber (reused across sessions in SpeakEngine)
+        // does not false-trigger the B1 bail path on the next startStream() call.
+        stopRequested = false
         SpeakLog.stt.info("STT session stopped cleanly.")
     }
 

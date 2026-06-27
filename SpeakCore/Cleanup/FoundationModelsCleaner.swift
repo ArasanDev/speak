@@ -105,8 +105,12 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
         SpeakLog.cleanup.debug("FoundationModelsCleaner: cleaning \(charCount, privacy: .public) chars")
         SpeakLog.cleanup.debug("FoundationModelsCleaner: mode=\(modeDescription, privacy: .public)")
 
+        // Wrap in XML tags so the model treats the content as data to edit,
+        // not as a conversational turn. Structural signal beats negative instructions
+        // ("do NOT answer") for small on-device LLMs. [decision 2026-06-27]
+        let wrappedText = Self.wrapTranscript(text)
         do {
-            let response = try await session.respond(to: Prompt(text))  // [Cleanup-M2]
+            let response = try await session.respond(to: Prompt(wrappedText))  // [Cleanup-M2]
             let cleaned = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
             SpeakLog.cleanup.debug(
                 "FoundationModelsCleaner: cleaned to \(cleaned.count, privacy: .public) chars"
@@ -129,12 +133,44 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
 
     // MARK: - Prompt construction
 
+    /// Universal guard prepended to every mode's system instructions.
+    ///
+    /// Small on-device LLMs are RLHF-trained to be conversational — negative
+    /// instructions ("do NOT answer") are consistently the weakest instruction type
+    /// and get overridden by the model's training reflex to respond to questions.
+    /// Fix: positive-only framing ("your output is ONLY the edited text") + XML
+    /// wrapping of the input so the model treats it as data, not a conversational turn.
+    /// [decision: positive framing + structural XML boundary beats negative instructions
+    ///  for small on-device models; see research finding 2026-06-27]
+    private static let transcriptGuard = """
+        You are a transcript editing function. \
+        You receive raw spoken words inside <transcript> tags. \
+        Your output is ALWAYS and ONLY the edited version of those spoken words — \
+        plain text, nothing else. \
+        One task only: clean and format the text per the instructions below. \
+        Output format: the edited transcript text, no tags, no explanation, no preamble.
+        """
+
+    /// Wraps the raw transcript in XML tags so the model treats it as data,
+    /// not as a conversational turn directed at itself.
+    /// [decision: XML boundary is a structural signal that outperforms negative
+    ///  instructions ("do not answer") for small on-device models]
+    static func wrapTranscript(_ text: String) -> String {
+        "<transcript>\(text)</transcript>"
+    }
+
     /// Returns the system instructions string for the given cleanup mode.
     /// Inlined here (not in `SpeakLLM/`) because `SpeakLLM/` targets the
     /// Ollama v0.1 engine and is a separate module not available in SpeakCore.
     /// `internal` (not `private`) so the prompt mapping is unit-testable without a
     /// live Foundation Models pass (StyleModeTests). [decision Wave B]
     static func instructions(for mode: CleanupMode) -> String {
+        return transcriptGuard + "\n\n" + modeInstructions(for: mode)
+    }
+
+    /// Mode-specific instructions without the universal guard. Separated so
+    /// unit tests can assert mode-specific prompt content in isolation.
+    static func modeInstructions(for mode: CleanupMode) -> String {
         switch mode {
 
         case .fillersOnly:
