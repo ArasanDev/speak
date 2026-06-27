@@ -21,17 +21,6 @@ final class HistoryStoreTests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// Returns a unique temp file URL and registers cleanup on tearDown.
-    private func tempDatabaseURL() -> URL {
-        let dir = FileManager.default.temporaryDirectory
-        let name = "history-test-\(UUID().uuidString).sqlite"
-        let url = dir.appendingPathComponent(name)
-        addTeardownBlock {
-            try? FileManager.default.removeItem(at: url)
-        }
-        return url
-    }
-
     /// Creates a HistoryStore at `url`. Fails the test on throw.
     private func makeStore(
         url: URL,
@@ -44,7 +33,7 @@ final class HistoryStoreTests: XCTestCase {
 
     /// save → entry persists; open a NEW HistoryStore on the same file → still there.
     func testSaveAndReopenPersistence() async throws {
-        let url = tempDatabaseURL()
+        let url = TestStorage.tempDatabaseURL()
         let entry = HistoryEntry(
             rawText: "hello world",
             cleanedText: "Hello, world.",
@@ -76,7 +65,7 @@ final class HistoryStoreTests: XCTestCase {
     // MARK: - P9: recent(limit:) newest-first + respects limit
 
     func testRecentNewestFirstAndLimit() async throws {
-        let url = tempDatabaseURL()
+        let url = TestStorage.tempDatabaseURL()
         let store = try await makeStore(url: url)
 
         let base = Date(timeIntervalSince1970: 1_000_000)
@@ -103,7 +92,7 @@ final class HistoryStoreTests: XCTestCase {
     // MARK: - P9: search
 
     func testSearchMatchesRawText() async throws {
-        let url = tempDatabaseURL()
+        let url = TestStorage.tempDatabaseURL()
         let store = try await makeStore(url: url)
 
         try await store.save(HistoryEntry(rawText: "the quick brown fox", cleanedText: nil,
@@ -117,7 +106,7 @@ final class HistoryStoreTests: XCTestCase {
     }
 
     func testSearchMatchesCleanedText() async throws {
-        let url = tempDatabaseURL()
+        let url = TestStorage.tempDatabaseURL()
         let store = try await makeStore(url: url)
 
         try await store.save(HistoryEntry(rawText: "raw stuff",
@@ -132,7 +121,7 @@ final class HistoryStoreTests: XCTestCase {
     }
 
     func testSearchReturnsEmptyForNoMatch() async throws {
-        let url = tempDatabaseURL()
+        let url = TestStorage.tempDatabaseURL()
         let store = try await makeStore(url: url)
 
         try await store.save(HistoryEntry(rawText: "hello world", cleanedText: nil, createdAt: Date(), engineId: "e"))
@@ -144,7 +133,7 @@ final class HistoryStoreTests: XCTestCase {
     // MARK: - P9: clear()
 
     func testClearEmptiesStore() async throws {
-        let url = tempDatabaseURL()
+        let url = TestStorage.tempDatabaseURL()
         let store = try await makeStore(url: url)
 
         try await store.save(HistoryEntry(rawText: "entry 1", cleanedText: nil, createdAt: Date(), engineId: "e"))
@@ -159,7 +148,7 @@ final class HistoryStoreTests: XCTestCase {
     // MARK: - P9: export()
 
     func testExportContainsEntriesText() async throws {
-        let url = tempDatabaseURL()
+        let url = TestStorage.tempDatabaseURL()
         let store = try await makeStore(url: url)
 
         try await store.save(HistoryEntry(
@@ -176,7 +165,7 @@ final class HistoryStoreTests: XCTestCase {
     }
 
     func testExportEmptyStore() async throws {
-        let url = tempDatabaseURL()
+        let url = TestStorage.tempDatabaseURL()
         let store = try await makeStore(url: url)
 
         let output = try await store.export()
@@ -190,7 +179,7 @@ final class HistoryStoreTests: XCTestCase {
     // MARK: - P9: capacity trim
 
     func testCapacityTrimKeepsNewest() async throws {
-        let url = tempDatabaseURL()
+        let url = TestStorage.tempDatabaseURL()
         let cap = 3
         let store = try await makeStore(url: url, maxEntries: cap)
 
@@ -221,7 +210,7 @@ final class HistoryStoreTests: XCTestCase {
     // MARK: - P9: nil cleanedText round-trips correctly
 
     func testNilCleanedTextRoundTrips() async throws {
-        let url = tempDatabaseURL()
+        let url = TestStorage.tempDatabaseURL()
         let store = try await makeStore(url: url)
 
         let entry = HistoryEntry(rawText: "no cleanup", cleanedText: nil, createdAt: Date(), engineId: "stt-only")
@@ -235,7 +224,7 @@ final class HistoryStoreTests: XCTestCase {
     // MARK: - Bonus: non-nil cleanedText round-trips correctly
 
     func testNonNilCleanedTextRoundTrips() async throws {
-        let url = tempDatabaseURL()
+        let url = TestStorage.tempDatabaseURL()
         let store = try await makeStore(url: url)
 
         let entry = HistoryEntry(rawText: "raw", cleanedText: "Cleaned.", createdAt: Date(), engineId: "e")
