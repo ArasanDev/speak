@@ -1,10 +1,10 @@
 // App/Onboarding/OnboardingViewModel.swift
 //
-// The `@MainActor ObservableObject` that drives the onboarding window.
+// The `@MainActor @Observable` that drives the onboarding window.
 //
 // RESPONSIBILITIES:
 //   - Owns a `PermissionManager` reference (shared from DictationController).
-//   - Exposes the current `OnboardingEvaluation` as a `@Published` property.
+//   - Exposes the current `OnboardingEvaluation` as an observable property.
 //   - Handles the "Grant Microphone" action (async prompt) and the
 //     "Open System Settings" deep-link for Accessibility.
 //   - Polls `PermissionManager.status()` for manual-grant permissions
@@ -28,25 +28,26 @@ import SwiftUI
 
 // MARK: - OnboardingViewModel
 
+@Observable
 @MainActor
-final class OnboardingViewModel: ObservableObject {
+final class OnboardingViewModel {
 
-    // MARK: - Published state
+    // MARK: - Observable state
 
     /// The current evaluation result (step, completeness, blockers).
-    @Published private(set) var evaluation: OnboardingEvaluation
+    private(set) var evaluation: OnboardingEvaluation
 
     /// `true` while `requestMicrophone()` is in-flight (shows a spinner).
-    @Published private(set) var isRequestingMic: Bool = false
+    private(set) var isRequestingMic: Bool = false
 
     /// `true` once the user has fired the hotkey at least once during the hotkey step.
     /// Turns the "Try it now" pill green.
-    @Published private(set) var hotkeyTriggered: Bool = false
+    private(set) var hotkeyTriggered: Bool = false
 
     /// `true` for Accessibility after the first tap — TCC prompt has been fired,
     /// waiting for the user to toggle the switch in System Settings.
     /// Used by the view to disable the primary button and show "Waiting…" label.
-    @Published private(set) var isWaitingForAccessibility: Bool = false
+    private(set) var isWaitingForAccessibility: Bool = false
 
     // MARK: - Live hotkey display string
 
@@ -61,17 +62,17 @@ final class OnboardingViewModel: ObservableObject {
     ///
     /// Examples: "⌘⌘ Right Command", "Fn ×2", "⌘ Right Command (hold)".
     ///
-    /// Cached as a `@Published` property so SwiftUI body re-renders read an already-
+    /// Cached as an observable property so SwiftUI body re-renders read an already-
     /// computed value instead of allocating a `UserDefaultsBindingStore` and hitting
     /// UserDefaults on every body evaluation. Refreshed in `refreshEvaluation()` and
     /// at `init` time.
     ///
     /// [decision: read UserDefaultsBindingStore in-seam — avoids an out-of-seam
     ///  dependency on DictationController while producing the same value. 2026-06-22]
-    /// [decision: cached @Published — no hotkey rebind is expected during onboarding;
+    /// [decision: cached property — no hotkey rebind is expected during onboarding;
     ///  refreshEvaluation() is called after every user action, covering the trigger-
     ///  mode change path. benchmark.md §7]
-    @Published private(set) var currentHotkeyDisplayString: String = ""
+    private(set) var currentHotkeyDisplayString: String = ""
 
     // MARK: - Private
 
@@ -80,7 +81,7 @@ final class OnboardingViewModel: ObservableObject {
 
     /// The displayed step while navigating forward. Starts at `.welcome` so
     /// the user sees the title card first, regardless of permission state.
-    @Published private(set) var displayedStep: OnboardingStep = .welcome
+    private(set) var displayedStep: OnboardingStep = .welcome
 
     /// Tracks which manual-grant permissions have had their TCC registration
     /// prompt fired this session. Guards against re-firing `AXIsProcessTrustedWithOptions`
@@ -114,10 +115,8 @@ final class OnboardingViewModel: ObservableObject {
         self.currentHotkeyDisplayString = Self.computeHotkeyDisplayString(settings: settings)
     }
 
-    deinit {
-        pollTask?.cancel()
-        hotkeyListenTask?.cancel()
-    }
+    // Note: no deinit needed — both tasks capture [weak self] and exit their
+    // while loops when self is deallocated (guard let self fails → break).
 
 #if DEBUG
     // MARK: - Debug (verification harness only)

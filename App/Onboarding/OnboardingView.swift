@@ -30,7 +30,7 @@ import SwiftUI
 
 /// The root onboarding view. Rendered inside `OnboardingWindowController`.
 struct OnboardingView: View {
-    @ObservedObject var viewModel: OnboardingViewModel
+    let viewModel: OnboardingViewModel
 
     var body: some View {
         VStack(spacing: 0) {
