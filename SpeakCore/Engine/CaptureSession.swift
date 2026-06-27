@@ -387,6 +387,7 @@ public actor CaptureSession {
         switch state {
         case .error, .done:
             return
+
         default:
             break
         }
@@ -425,6 +426,7 @@ public actor CaptureSession {
         switch state {
         case .done, .error:
             return
+
         default:
             break
         }
@@ -450,6 +452,7 @@ public actor CaptureSession {
         switch state {
         case .done, .error:
             return
+
         default:
             break
         }
@@ -613,6 +616,7 @@ public actor CaptureSession {
                 from \(rawText.count, privacy: .public) raw chars
                 """)
             return (cleaned, "\(sttId)+\(cleanerId)", cleanupSeconds)
+
         case .failure(let detail):
             // [decision: cleanup error → graceful fallback to raw transcript, NOT .error.
             //  See runCleanup() doc comment above for the full rationale.]
@@ -620,6 +624,7 @@ public actor CaptureSession {
                 "CaptureSession: cleanup failed — falling back to raw transcript. Detail: \(detail, privacy: .public)"
             )
             return (nil, sttId, cleanupSeconds)
+
         case .timedOut:
             // [decision: cleanup timeout → graceful fallback to raw transcript.
             //  The cleanup task was cancelled (best-effort). The overlay must hide.]

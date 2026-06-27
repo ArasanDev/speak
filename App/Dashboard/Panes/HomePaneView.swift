@@ -10,8 +10,8 @@
 // Reads `SettingsStore` reactively (cleanup status) and fetches history off-main via
 // `.task`. Content is Monaco; chrome/labels use the system font.
 
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - HomePaneView
 

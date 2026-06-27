@@ -20,11 +20,11 @@
 //   - `@MainActor` throughout. `requestMicrophone()` is `async` and `await`-ed.
 //   - The poll `Task` captures `[weak self]` to avoid a retain cycle.
 
-import SwiftUI
 import AppKit
 import Combine
-import SpeakCore
 import os
+import SpeakCore
+import SwiftUI
 
 // MARK: - OnboardingViewModel
 
@@ -255,6 +255,7 @@ final class OnboardingViewModel: ObservableObject {
             // Microphone is prompted programmatically (requestMicrophone), but if
             // denied the user must re-enable it manually in System Settings.
             urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+
         case .accessibility:
             urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
         }
@@ -359,6 +360,7 @@ final class OnboardingViewModel: ObservableObject {
                         self.isWaitingForAccessibility = false
                         self.displayedStep = .hotkey
                     }
+
                 default:
                     break
                 }

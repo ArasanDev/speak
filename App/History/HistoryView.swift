@@ -32,8 +32,8 @@
 //   (zero rows never touch the crashing diffRows path). This is surfaced to the
 //   orchestrator as a preview-only, non-regression defect.
 
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - HistoryView
 

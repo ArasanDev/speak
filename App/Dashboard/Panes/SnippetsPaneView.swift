@@ -7,8 +7,8 @@
 // Matches the verified Wispr Snippets screen: a trigger field + an expansion field +
 // the list of saved snippets with delete.
 
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - SnippetsPaneView
 

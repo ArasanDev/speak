@@ -13,9 +13,9 @@
 // (HotkeyDetection.swift) filters the OS dictation burst.
 // [decision: next-iteration-plan.md §2, 2026-06-21]
 
-import Foundation
-import CoreGraphics
 import Carbon.HIToolbox
+import CoreGraphics
+import Foundation
 
 // MARK: - HotkeyEvent
 
@@ -154,10 +154,13 @@ extension HotkeyBinding {
         case Int(kVK_Function):
             // Fn is its own symbol; avoid "Fn Fn ×2" or "Fn Fn (hold)".
             return trigger == .doubleTap ? "Fn ×2" : "Fn (hold)"
+
         case Int(kVK_RightCommand):
             return trigger == .doubleTap ? "⌘⌘ Right Command" : "⌘ Right Command (hold)"
+
         case Int(kVK_Command):
             return trigger == .doubleTap ? "⌘⌘ Command" : "⌘ Command (hold)"
+
         default:
             let sym = keySymbol
             return trigger == .doubleTap ? "\(sym)\(sym) Key \(keyCode)" : "\(sym) Key \(keyCode) (hold)"

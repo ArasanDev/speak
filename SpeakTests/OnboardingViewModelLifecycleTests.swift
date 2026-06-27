@@ -19,9 +19,9 @@
 //
 // [decision: @MainActor throughout — OnboardingViewModel is @MainActor.]
 
-import XCTest
-import SpeakCore
 @testable import Speak
+import SpeakCore
+import XCTest
 
 @MainActor
 final class OnboardingViewModelLifecycleTests: XCTestCase {

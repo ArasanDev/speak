@@ -30,8 +30,8 @@
 //
 // TAGS: benchmark.md §3 #1–#4 #7; quality.md §9; AGENTS.md §2
 
-import XCTest
 import Foundation
+import XCTest
 
 final class MoatAuditTests: XCTestCase {
 
@@ -132,7 +132,7 @@ final class MoatAuditTests: XCTestCase {
         "UniformTypeIdentifiers",  // Apple framework; UTType.json for history export save-panel
         "SQLite3",
         "SpeakCore",
-        "CoreFoundation",   // CFRunLoop, CFRunLoopTimer — used in HotkeyMonitor for the tap thread
+        "CoreFoundation"   // CFRunLoop, CFRunLoopTimer — used in HotkeyMonitor for the tap thread
     ]
 
     /// BEAT §3 / AGENTS.md §2.4 — No third-party dependencies.
@@ -206,7 +206,7 @@ final class MoatAuditTests: XCTestCase {
         "NSURLRequest",
         "XMLHTTPRequest",
         "WebSocket",
-        "URLWebSocketTask",
+        "URLWebSocketTask"
     ]
 
     /// BEAT §3 #1 + #7 — No network egress.
@@ -269,7 +269,7 @@ final class MoatAuditTests: XCTestCase {
         "AccessToken",
         "RefreshToken",
         "UserDefaults.*account",         // would be: UserDefaults key "account..."
-        "credentialStorage",
+        "credentialStorage"
     ]
 
     /// BEAT §3 #4 — No account / no auth.
@@ -292,7 +292,7 @@ final class MoatAuditTests: XCTestCase {
             "SecItemUpdate(",
             "SecItemDelete(",
             "SignInWithAppleButton",
-            "import AuthenticationServices",
+            "import AuthenticationServices"
         ]
 
         for (url, lines) in sourceLines {
@@ -346,7 +346,7 @@ final class MoatAuditTests: XCTestCase {
             "isTrial",
             "trialDaysLeft",
             "paywall",
-            "Paywall",
+            "Paywall"
         ]
 
         for (url, lines) in sourceLines {
@@ -431,7 +431,7 @@ final class MoatAuditTests: XCTestCase {
             "data(forType:",
             "canReadObject(",
             "availableType(",
-            "pasteboardData(",
+            "pasteboardData("
         ]
 
         for (url, lines) in sourceLines {

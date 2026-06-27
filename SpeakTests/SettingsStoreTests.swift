@@ -19,8 +19,8 @@
 //   These tests cover the persistence layer and factory logic — [verified] by the
 //   test suite. The Settings window UI rendering is [deferred — human verification].
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 @available(macOS 26.0, *)
 final class SettingsStoreTests: XCTestCase {

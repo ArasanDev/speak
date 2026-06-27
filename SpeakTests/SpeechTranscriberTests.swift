@@ -16,10 +16,10 @@
 //   chunk only — "testing" is dropped because synthetic `say` speech transcribes
 //   it inconsistently (observed: "cased"); the digits are stable.
 
-import XCTest
 import AVFoundation
-import Speech
 @testable import SpeakCore
+import Speech
+import XCTest
 
 @available(macOS 26.0, *)
 final class SpeechTranscriberTests: XCTestCase {

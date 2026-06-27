@@ -19,8 +19,8 @@
 //   value (while keeping the spy available) causes clean() to be called — proving
 //   the spy mechanism is sound.
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 final class SpeakEngineCleanupLevelTests: XCTestCase {
 

@@ -36,10 +36,10 @@
 //     • Fixture file not found
 //   A skip is NOT a pass. The results are valid only when the tests run green.
 
-import XCTest
 import AVFoundation
-import Speech
 @testable import SpeakCore
+import Speech
+import XCTest
 
 // MARK: - Latency measurement tests
 
@@ -136,7 +136,7 @@ final class LatencyAndAccuracyTests: XCTestCase {
             let startTime = Date()
             let stream = stt.startStream(locale: locale)
 
-            var firstChunkLatency: Double? = nil
+            var firstChunkLatency: Double?
             for try await chunk in stream {
                 firstChunkLatency = Date().timeIntervalSince(startTime)
                 _ = chunk // consume

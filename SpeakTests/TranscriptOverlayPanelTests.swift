@@ -21,9 +21,9 @@
 // [decision: MainActor-isolated because NSPanel construction touches AppKit;
 //  all AppKit window creation must happen on the main thread per macOS convention.]
 
-import XCTest
 import AppKit
 @testable import Speak   // H2: requires TEST_HOST=Speak so the App module is importable
+import XCTest
 
 @MainActor
 final class TranscriptOverlayPanelTests: XCTestCase {

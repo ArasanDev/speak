@@ -27,8 +27,8 @@
 
 import AppKit
 import Combine
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - WindowPresenter
 

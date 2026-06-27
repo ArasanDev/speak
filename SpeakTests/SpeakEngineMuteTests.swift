@@ -17,8 +17,8 @@
 //   in the UI) is what makes the guarantee bypass-proof: there is no other path
 //   to start capture.
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 final class SpeakEngineMuteTests: XCTestCase {
 

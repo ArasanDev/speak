@@ -11,8 +11,8 @@
 //   DoubleTapDetector        — pure value-type double-tap state machine
 //   TapRestartRateLimiter    — rate limiter for CGEventTap re-enable events
 
-import CoreGraphics
 import Carbon.HIToolbox
+import CoreGraphics
 import Foundation
 
 // MARK: - Modifier mask helper

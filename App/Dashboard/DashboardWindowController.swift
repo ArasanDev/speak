@@ -23,9 +23,9 @@
 //   NSWindowDelegate so we can observe the close. [decision: research/wispr-flow-ui-verified.md]
 
 import AppKit
-import SwiftUI
-import SpeakCore
 import os
+import SpeakCore
+import SwiftUI
 
 // MARK: - DashboardWindowController
 

@@ -7,8 +7,8 @@
 // The pane owns the `HistoryViewModel` lifetime via `@StateObject` so the list survives
 // section switches within a single dashboard window.
 
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - HistoryPaneView
 

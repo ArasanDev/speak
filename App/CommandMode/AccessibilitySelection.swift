@@ -16,8 +16,8 @@
 // No force-casts (`as!`): CFTypeRef → AXUIElement uses a checked `as?` downcast, so a
 // non-AXUIElement value yields nil rather than a crash (swiftlint force_cast is an error).
 
-import Foundation
 import ApplicationServices
+import Foundation
 import SpeakCore
 
 // MARK: - AccessibilitySelection

@@ -22,9 +22,9 @@
 //   MenubarIcon (SpeakCore, pure+tested) → SF Symbol name (here, App layer).
 //   Full P8 polish is deferred; these are functional placeholders.
 
-import SwiftUI
 import AppKit
 import SpeakCore
+import SwiftUI
 
 // MARK: - AppDelegate
 
@@ -181,16 +181,20 @@ private struct MenuBarLabel: View {
         case .idle:
             // [decision]: calm, always-present waveform; secondary color blends into menubar
             return ("waveform", Color(.secondaryLabelColor), "speak — idle")
+
         case .listening:
             // [decision]: filled circle = mic actively recording; red = recording signal
             return ("waveform.circle.fill", .speakStateListening, "speak — listening")
+
         case .processing:
             // [decision]: hourglass = work in flight; yellow = in-progress signal
             return ("hourglass", .speakStateProcessing, "speak — processing")
+
         case .done:
             // [decision]: checkmark = success; green = done signal; held 600 ms by
             // DictationController.doneFlashNanoseconds before reverting to idle
             return ("checkmark.circle", .speakStateDone, "speak — done")
+
         case .error:
             // [decision]: xmark.circle = explicit failure glyph (roadmap P8 "red X");
             // red matches the listening color but distinct symbol makes the state clear

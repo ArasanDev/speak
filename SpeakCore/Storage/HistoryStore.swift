@@ -22,8 +22,8 @@
 // failures throw `SpeakError.unknown(String)` with the sqlite3_errmsg detail.
 
 import Foundation
-import SQLite3
 import os
+import SQLite3
 
 // MARK: - SQLITE_TRANSIENT shim
 // `SQLITE_TRANSIENT` is a C macro that evaluates to `(sqlite3_destructor_type)(-1)`.

@@ -58,11 +58,11 @@
 // Default 0.4 s = 400 ms. Source: benchmark.md §7 [decision], empirically tuned
 // at P13 dogfood. Not a magic number — the trace comment is the authority.
 
+import AppKit
+import ApplicationServices
+import Carbon.HIToolbox
 import CoreFoundation
 import CoreGraphics
-import ApplicationServices
-import AppKit
-import Carbon.HIToolbox
 import os
 
 // MARK: - HotkeyMonitor

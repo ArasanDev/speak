@@ -28,10 +28,10 @@
 //              [unverified] (architecture §14.3); must be tested by a human
 //              with a real PasteboardWriter in a running app session.
 
-import XCTest
 import AppKit
 import Carbon.HIToolbox
 @testable import SpeakCore
+import XCTest
 
 // MARK: - MockInserter
 
@@ -293,24 +293,24 @@ final class PasteboardWriterTests: XCTestCase {
         let vKey = CGKeyCode(kVK_ANSI_V)
 
         // [0] Cmd-down
-        XCTAssertEqual(plan[0].keyCode, cmdKey,          "[0] keyCode must be kVK_Command")
-        XCTAssertTrue(plan[0].keyDown,                   "[0] must be keyDown=true (Cmd-down)")
-        XCTAssertEqual(plan[0].flags, .maskCommand,      "[0] flags must be .maskCommand")
+        XCTAssertEqual(plan[0].keyCode, cmdKey, "[0] keyCode must be kVK_Command")
+        XCTAssertTrue(plan[0].keyDown, "[0] must be keyDown=true (Cmd-down)")
+        XCTAssertEqual(plan[0].flags, .maskCommand, "[0] flags must be .maskCommand")
 
         // [1] V-down
-        XCTAssertEqual(plan[1].keyCode, vKey,            "[1] keyCode must be kVK_ANSI_V")
-        XCTAssertTrue(plan[1].keyDown,                   "[1] must be keyDown=true (V-down)")
-        XCTAssertEqual(plan[1].flags, .maskCommand,      "[1] flags must be .maskCommand")
+        XCTAssertEqual(plan[1].keyCode, vKey, "[1] keyCode must be kVK_ANSI_V")
+        XCTAssertTrue(plan[1].keyDown, "[1] must be keyDown=true (V-down)")
+        XCTAssertEqual(plan[1].flags, .maskCommand, "[1] flags must be .maskCommand")
 
         // [2] V-up
-        XCTAssertEqual(plan[2].keyCode, vKey,            "[2] keyCode must be kVK_ANSI_V")
-        XCTAssertFalse(plan[2].keyDown,                  "[2] must be keyDown=false (V-up)")
-        XCTAssertEqual(plan[2].flags, .maskCommand,      "[2] flags must be .maskCommand")
+        XCTAssertEqual(plan[2].keyCode, vKey, "[2] keyCode must be kVK_ANSI_V")
+        XCTAssertFalse(plan[2].keyDown, "[2] must be keyDown=false (V-up)")
+        XCTAssertEqual(plan[2].flags, .maskCommand, "[2] flags must be .maskCommand")
 
         // [3] Cmd-up
-        XCTAssertEqual(plan[3].keyCode, cmdKey,          "[3] keyCode must be kVK_Command")
-        XCTAssertFalse(plan[3].keyDown,                  "[3] must be keyDown=false (Cmd-up)")
-        XCTAssertEqual(plan[3].flags, [],                "[3] flags must be empty []")
+        XCTAssertEqual(plan[3].keyCode, cmdKey, "[3] keyCode must be kVK_Command")
+        XCTAssertFalse(plan[3].keyDown, "[3] must be keyDown=false (Cmd-up)")
+        XCTAssertEqual(plan[3].flags, [], "[3] flags must be empty []")
     }
 
     // MARK: - AX not trusted → throw + clipboard floor still written

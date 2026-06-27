@@ -26,8 +26,8 @@
 //   All UserDefaults keys live in `Keys` to avoid typos and make the key
 //   namespace discoverable. There are no magic strings elsewhere in this file.
 
-import Foundation
 import Combine
+import Foundation
 import os
 
 // MARK: - Engine enums

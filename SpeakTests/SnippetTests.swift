@@ -4,8 +4,8 @@
 // that must be correct for snippets to apply BEFORE LLM cleanup: the whole-word,
 // case-insensitive expander, and the store's encode/decode + mutation helpers.
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 final class SnippetTests: XCTestCase {
 

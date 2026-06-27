@@ -15,8 +15,8 @@
 //
 // THREADING: @MainActor — owns the session reference and the run Task.
 
-import Foundation
 import AppKit
+import Foundation
 import SpeakCore
 
 // MARK: - CommandModeController
@@ -59,8 +59,7 @@ final class CommandModeController {
         instructionSession = session
         SpeakLog.engine.info("CommandMode: chord begin — capturing instruction.")
         Task {
-            do { try await session.start() }
-            catch { SpeakLog.engine.error("CommandMode: instruction capture failed to start — \(error.localizedDescription, privacy: .public)") }
+            do { try await session.start() } catch { SpeakLog.engine.error("CommandMode: instruction capture failed to start — \(error.localizedDescription, privacy: .public)") }
         }
     }
 

@@ -48,8 +48,8 @@
 //   `NSHostingView` is expensive to set up and the panel retains its position.
 
 import AppKit
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - Panel subclass
 

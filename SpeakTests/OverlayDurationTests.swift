@@ -3,8 +3,8 @@
 // Wave D — unit test for the HUD duration formatter. The live counter + overlay render
 // are [deferred — human verification], but the m:ss formatting is pure and testable.
 
-import XCTest
 @testable import Speak
+import XCTest
 
 final class OverlayDurationTests: XCTestCase {
 

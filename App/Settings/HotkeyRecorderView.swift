@@ -47,10 +47,10 @@
 //   - sheet min width 400/height 260: [decision: fits the preview label + two-button row
 //     comfortably at default Dynamic Type size, W1.1]
 
-import SwiftUI
 import AppKit
-import SpeakCore
 import Carbon.HIToolbox
+import SpeakCore
+import SwiftUI
 
 // MARK: - HotkeyCapture (pure, testable)
 
@@ -94,7 +94,7 @@ public func captureFromFlagsChanged(keyCode: Int, cgFlags: CGEventFlags) -> Hotk
         Int(kVK_Command),      // 55 [verified: Carbon/HIToolbox]
         Int(kVK_Function),     // 63 [verified: Carbon/HIToolbox + SDK, 2026-06-20]
         Int(kVK_RightOption),  // 61 [verified: Carbon/HIToolbox]
-        Int(kVK_Option),       // 58 [verified: Carbon/HIToolbox]
+        Int(kVK_Option)       // 58 [verified: Carbon/HIToolbox]
     ]
     guard supportedModifierKeys.contains(keyCode) else { return nil }
     return HotkeyCapture(keyCode: keyCode, modifiers: cgFlags, isModifierOnly: true)
@@ -158,7 +158,7 @@ public func validateCapture(_ capture: HotkeyCapture) -> HotkeyRecorderWarning? 
         Int(kVK_Command),  // 55 — left ⌘, high-collision
         Int(kVK_Option),   // 58 — left ⌥, high-collision
         Int(kVK_Shift),    // 56 — left ⇧, high-collision
-        Int(kVK_Control),  // 59 — left ⌃, high-collision
+        Int(kVK_Control)  // 59 — left ⌃, high-collision
     ]
     if capture.isModifierOnly && ambiguousModifierKeys.contains(capture.keyCode) {
         return .ambiguousModifier
@@ -372,6 +372,7 @@ struct HotkeyRecorderView: View {
         switch warning {
         case .ambiguousModifier:
             return "This key is used in many common shortcuts and may trigger accidentally. Consider using Right-Command or Fn instead."
+
         case .unrecognised:
             return "The captured combo was not recognised. Try a different key."
         }

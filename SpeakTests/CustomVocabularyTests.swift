@@ -3,8 +3,8 @@
 // Wave B.3 — unit tests for the pure custom-vocabulary edit rules backing the
 // Dictionary pane. No UI, no UserDefaults — just the list transforms.
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 final class CustomVocabularyTests: XCTestCase {
 

@@ -7,9 +7,9 @@
 // Input Monitoring was removed from v0: the CGEventTap uses .defaultTap and is
 // gated on Accessibility alone. PermissionKind now has 2 cases (mic + AX).
 
-import Testing
 import Foundation
 @testable import SpeakCore
+import Testing
 
 @Test @MainActor
 func statusResolvesForEveryKindWithoutHanging() {

@@ -8,8 +8,8 @@
 // survives relaunch — no cloud, no account (the local-first moat). Multi-tab notes are a
 // later enhancement. The text is Monaco (content voice); chrome is the system font.
 
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - ScratchpadPaneView
 

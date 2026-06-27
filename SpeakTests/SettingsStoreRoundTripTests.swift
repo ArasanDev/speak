@@ -14,8 +14,8 @@
 //   Every test creates its own named UserDefaults suite and removes it on teardown.
 //   `.standard` is NEVER touched. Tests can run in any order without interference.
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 @available(macOS 26.0, *)
 final class SettingsStoreRoundTripTests: XCTestCase {

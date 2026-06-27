@@ -30,8 +30,8 @@
 //   time regardless, so the UI label is informational, not a gate.
 
 import Foundation
-import Speech
 import os
+import Speech
 
 // MARK: - SpeechTranscriberLocaleSource
 

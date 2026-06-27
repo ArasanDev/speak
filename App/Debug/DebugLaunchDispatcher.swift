@@ -37,9 +37,9 @@
 #if DEBUG
 
 import AppKit
-import SwiftUI
-import SpeakCore
 import os
+import SpeakCore
+import SwiftUI
 
 // MARK: - DebugTarget
 
@@ -115,50 +115,64 @@ final class DebugLaunchDispatcher {
         case .onboardingWelcome:
             openOnboarding(step: .welcome, controller: controller)
             return false
+
         case .onboardingMicrophone:
             openOnboarding(step: .microphone, controller: controller)
             return false
+
         case .onboardingAccessibility:
             openOnboarding(step: .accessibility, controller: controller)
             return false
+
         case .onboardingHotkey:
             openOnboarding(step: .hotkey, controller: controller)
             return false
+
         case .onboardingDone:
             openOnboarding(step: .done, controller: controller)
             return false
+
         case .settings:
             openSettings(controller: controller)
             return false
+
         case .history:
             openHistory(controller: controller)
             return false
+
         case .dashboard:
             openDashboard(controller: controller)
             return false
+
         case .overlayDemo:
             openOverlayDemo(state: .listening, controller: controller)
             return false
+
         case .overlayDemoProcessing:
             openOverlayDemo(state: .processing, controller: controller)
             return false
+
         case .overlayDemoDone:
             openOverlayDemo(state: .done, controller: controller)
             return false
+
         case .overlayDemoError:
             openOverlayDemo(state: .error, controller: controller)
             return false
+
         case .simulateDictation:
             // Simulate-dictation must not call startMonitoring() — it needs focus
             // to remain in the target app (e.g. TextEdit) so paste lands correctly.
             // Return true to tell AppDelegate to skip startMonitoring().
             startSimulateDictation(controller: controller)
             return true
+
         case .menubarIconListening:
             // Force the menubar icon to .listening (red) and hold it indefinitely.
             // Allows screencapture to verify the color survives the system compositor.
             controller.forceIcon(.listening)
             return false
+
         case .menubarIconError:
             // Force the menubar icon to .error (red + xmark) and hold it indefinitely.
             controller.forceIcon(.error)
@@ -291,12 +305,15 @@ final class DebugLaunchDispatcher {
             //  the partial-text rendering path. Static level 0.6 shows mid-range bars.]
             overlayModel.partialText = "the quick brown fox"
             overlayModel.level = 0.6   // [decision: 0.6 = mid-level, visually interesting]
+
         case .processing:
             // Processing shows spinner + label, no text needed.
             overlayModel.partialText = ""
+
         case .done:
             // Done shows checkmark only.
             overlayModel.partialText = ""
+
         case .error:
             // W2.2: error demo — show a sample reason in the red pill.
             overlayModel.errorReason = "Speech engine unavailable"

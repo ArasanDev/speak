@@ -20,9 +20,9 @@
 // Design tokens: all from `SpeakTheme` — no magic font names or raw hex colors.
 // Bar constants are tagged [decision] with sources in benchmark.md §7.
 
-import SwiftUI
 import AppKit
 import SpeakCore
+import SwiftUI
 
 // MARK: - OverlayState
 
@@ -54,7 +54,7 @@ final class OverlayViewModel: ObservableObject {
     @Published var level: Double = 0.0
 
     /// W2.2: Short error reason shown in the error pill. Nil when not in `.error` state.
-    @Published var errorReason: String? = nil
+    @Published var errorReason: String?
 
     /// W2.2: `true` when AI cleanup will run after capture; drives "Cleaning up…" vs "Pasting…".
     /// Set at `start()` time from `DictationController.settingsStore`.
@@ -224,10 +224,13 @@ struct TranscriptOverlayView: View {
         switch model.overlayState {
         case .listening:
             listeningContent
+
         case .processing:
             processingContent
+
         case .done:
             doneContent
+
         case .error:
             errorContent
         }

@@ -66,6 +66,7 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
             case .available:
                 SpeakLog.cleanup.debug("FoundationModelsCleaner: model available")
                 return true
+
             case .unavailable(let reason):
                 let reasonDescription = String(describing: reason)
                 SpeakLog.cleanup.warning(
@@ -275,20 +276,24 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
         case .default:
             voice = "Convert the raw spoken transcript into clean, natural written text, " +
                     "preserving the speaker's own wording and voice."
+
         case .professional:
             voice = "Convert the raw spoken transcript into polished, professional prose " +
                     "suitable for written workplace communication. Smooth informal phrasing " +
                     "and sentence fragments into complete, well-formed sentences."
+
         case .casual:
             voice = "Convert the raw spoken transcript into relaxed, friendly written text. " +
                     "Keep it conversational and natural — contractions are welcome — without " +
                     "sounding stiff or formal."
+
         case .code:
             voice = "Convert the raw spoken transcript into clean written text for a software " +
                     "developer. Preserve technical identifiers verbatim — variable, function, " +
                     "and method names, acronyms, command-line flags, and file paths. Do not " +
                     "autocorrect, camelCase, or alter technical terms. Honor spelled-out or " +
                     "\"capital H\" intent."
+
         case .email:
             voice = "Convert the raw spoken transcript into a clear, courteous email body. " +
                     "Organize the thoughts into coherent sentences and short paragraphs with " +
@@ -311,6 +316,7 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
             // crash the test process rather than produce a meaningful failure message.
             SpeakLog.cleanup.warning("styledInstructions called with .none — SpeakEngine should short-circuit before reaching the cleaner")
             intensity = "Return the text exactly as provided, with no changes whatsoever."
+
         case .light:
             // Light: filler-word removal + punctuation only. Minimal rewriting.
             // [decision W4.1: "light touch" is the distinguishing phrase tested in
@@ -318,12 +324,14 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
             intensity = "Apply a light touch: add punctuation and fix capitalization, and " +
                         "remove only obvious filler sounds (um, uh, hmm). Otherwise leave the " +
                         "speaker's words and structure intact."
+
         case .medium:
             // Medium: filler removal + punctuation + sentence tightening.
             // [decision W4.1: "sentence tightening" is the distinguishing phrase tested]
             intensity = "Apply standard cleanup: correct punctuation, capitalization, and " +
                         "grammar, remove filler words (um, uh, like, you know, kind of, sort of), " +
                         "and tighten run-on sentences. Do not paraphrase or change the speaker's meaning."
+
         case .high:
             // High: full restructuring including paragraph breaks. The most aggressive level.
             // [decision W4.1: "paragraph" and "restructure" are the distinguishing phrases tested]

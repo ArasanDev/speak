@@ -3,8 +3,8 @@
 // Wave D — unit tests for the pure Fn+Ctrl Command Mode chord detector. The live tap
 // that feeds it is [deferred — human verification]; the edge logic is pure + tested here.
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 final class CommandChordDetectorTests: XCTestCase {
 

@@ -30,8 +30,8 @@
 //   - Live, end-to-end dictation with real STT + real cleanup is the P13
 //     dogfood bar (quality.md §2). Out of scope here.
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 // MARK: - Mocks
 
@@ -522,17 +522,17 @@ final class CaptureSessionTests: XCTestCase {
         let now = Date()
         let multiSegmentScript: [TranscriptChunk] = [
             // Window 1 volatile partials
-            TranscriptChunk(text: "hel",         isFinal: false, timestamp: now),
-            TranscriptChunk(text: "hello",       isFinal: false, timestamp: now.addingTimeInterval(0.1)),
-            TranscriptChunk(text: "hello wor",   isFinal: false, timestamp: now.addingTimeInterval(0.2)),
+            TranscriptChunk(text: "hel", isFinal: false, timestamp: now),
+            TranscriptChunk(text: "hello", isFinal: false, timestamp: now.addingTimeInterval(0.1)),
+            TranscriptChunk(text: "hello wor", isFinal: false, timestamp: now.addingTimeInterval(0.2)),
             // Window 1 final
-            TranscriptChunk(text: "hello world", isFinal: true,  timestamp: now.addingTimeInterval(0.3)),
+            TranscriptChunk(text: "hello world", isFinal: true, timestamp: now.addingTimeInterval(0.3)),
             // Window 2 volatile partials
-            TranscriptChunk(text: "ho",          isFinal: false, timestamp: now.addingTimeInterval(0.4)),
-            TranscriptChunk(text: "how",         isFinal: false, timestamp: now.addingTimeInterval(0.5)),
-            TranscriptChunk(text: "how are",     isFinal: false, timestamp: now.addingTimeInterval(0.6)),
+            TranscriptChunk(text: "ho", isFinal: false, timestamp: now.addingTimeInterval(0.4)),
+            TranscriptChunk(text: "how", isFinal: false, timestamp: now.addingTimeInterval(0.5)),
+            TranscriptChunk(text: "how are", isFinal: false, timestamp: now.addingTimeInterval(0.6)),
             // Window 2 final
-            TranscriptChunk(text: "how are you", isFinal: true,  timestamp: now.addingTimeInterval(0.7))
+            TranscriptChunk(text: "how are you", isFinal: true, timestamp: now.addingTimeInterval(0.7))
         ]
 
         let transcriber = MockTranscriber(script: multiSegmentScript)
@@ -563,8 +563,8 @@ final class CaptureSessionTests: XCTestCase {
         // before SpeechAnalyzer emits an isFinal for that window.
         let now = Date()
         let volatileOnlyScript: [TranscriptChunk] = [
-            TranscriptChunk(text: "spe",     isFinal: false, timestamp: now),
-            TranscriptChunk(text: "speak",   isFinal: false, timestamp: now.addingTimeInterval(0.1)),
+            TranscriptChunk(text: "spe", isFinal: false, timestamp: now),
+            TranscriptChunk(text: "speak", isFinal: false, timestamp: now.addingTimeInterval(0.1)),
             TranscriptChunk(text: "speak c", isFinal: false, timestamp: now.addingTimeInterval(0.2))
         ]
 
@@ -615,8 +615,10 @@ extension CaptureSession.State: @retroactive Equatable {
         case (.idle, .idle), (.listening, .listening),
              (.processing, .processing), (.done, .done):
             return true
+
         case (.error(let lhsErr), .error(let rhsErr)):
             return lhsErr.recoverySuggestion == rhsErr.recoverySuggestion
+
         default:
             return false
         }

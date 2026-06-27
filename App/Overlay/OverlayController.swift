@@ -45,8 +45,8 @@
 //   - `[weak self]` captures avoid retain cycles in drain Tasks.
 
 import AppKit
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - OverlayController
 

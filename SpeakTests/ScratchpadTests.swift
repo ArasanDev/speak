@@ -2,8 +2,8 @@
 //
 // Wave D — unit test for the Scratchpad append helper (paste-failure fallback target).
 
-import XCTest
 @testable import Speak
+import XCTest
 
 final class ScratchpadTests: XCTestCase {
 

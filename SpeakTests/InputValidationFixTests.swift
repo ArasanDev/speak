@@ -5,9 +5,9 @@
 // silently regress. These are PURE, deterministic tests — no CGEventTap, no live
 // run loop, no real Cmd+V.
 
-import XCTest
 import CoreGraphics
 @testable import SpeakCore
+import XCTest
 
 // NOTE: modifierMask(forKeyCode:) tests (NEW-6, incl. the Option + fail-closed
 // cases) live in HotkeyMonitorTests.swift's `ModifierMaskTests` to keep all

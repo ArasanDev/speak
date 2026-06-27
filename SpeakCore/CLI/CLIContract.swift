@@ -253,10 +253,13 @@ public final class CFMessagePortTransport: CLITransport, @unchecked Sendable {
         switch status {
         case kCFMessagePortSuccess:
             break
+
         case kCFMessagePortSendTimeout, kCFMessagePortReceiveTimeout:
             throw CLITransportError.timeout
+
         case kCFMessagePortIsInvalid, kCFMessagePortTransportError:
             throw CLITransportError.portNotFound
+
         default:
             throw CLITransportError.sendFailed(status)
         }

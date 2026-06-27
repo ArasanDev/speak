@@ -24,9 +24,9 @@
 // [decision: @MainActor-isolated because OverlayController is @MainActor and
 //  NSPanel construction requires the main thread per macOS/AppKit convention.]
 
-import XCTest
-import SpeakCore
 @testable import Speak
+import SpeakCore
+import XCTest
 
 @MainActor
 final class OverlayControllerTests: XCTestCase {

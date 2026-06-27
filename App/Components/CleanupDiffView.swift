@@ -29,8 +29,8 @@
 //   - No `print`. No force-unwrap. No magic numbers (all sizes token-traced).
 //   - No third-party import. `SpeakCore` is the only non-Apple framework import.
 
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - Diff color tokens (extend SpeakTheme palette)
 
@@ -136,8 +136,10 @@ public struct CleanupDiffView: View {
             switch displayMode {
             case .inline:
                 inlineDiffView(raw: rawText, cleaned: cleaned)
+
             case .sideBySide:
                 sideBySideView(raw: rawText, cleaned: cleaned)
+
             case .cleanedOnly:
                 cleanedOnlyView(text: cleaned)
             }

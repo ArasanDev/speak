@@ -8,8 +8,8 @@
 // SCAFFOLD: lists the built-in transforms so the IA is complete and discoverable. The
 // per-transform run/edit + custom-transform authoring lands in Wave D. Keep the PaneHeader.
 
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - TransformsPaneView
 

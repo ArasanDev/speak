@@ -21,9 +21,9 @@
 // Input Monitoring tests were removed: IM was removed from v0. The CGEventTap
 // uses .defaultTap and is gated on Accessibility alone.
 
-import XCTest
-import SpeakCore
 @testable import Speak
+import SpeakCore
+import XCTest
 
 // MARK: - Stub
 

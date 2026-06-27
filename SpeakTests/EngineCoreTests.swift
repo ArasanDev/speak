@@ -10,9 +10,9 @@
 // these run under Command Line Tools alone. When the Xcode `SpeakTests` target
 // is created, swift-testing is equally supported there.
 
-import Testing
 import Foundation
 @testable import SpeakCore
+import Testing
 
 // MARK: SpeakError
 

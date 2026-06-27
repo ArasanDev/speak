@@ -15,8 +15,8 @@
 //   8. Multiple non-empty chunks: latest wins.
 //   9. Return value of next(_:) matches displayText after each call.
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 final class OverlayTextTests: XCTestCase {
 

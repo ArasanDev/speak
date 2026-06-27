@@ -11,8 +11,8 @@
 // this test suite fails to compile — not just fails — if a new State case is
 // added without a corresponding MenubarIcon mapping. [verified]
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 final class MenubarIconTests: XCTestCase {
 

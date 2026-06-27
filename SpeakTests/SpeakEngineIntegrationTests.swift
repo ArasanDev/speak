@@ -35,10 +35,10 @@
 //   the audio before the analyzer finalizes, producing an empty transcript.
 //   The isFinal-wait is deterministic; a blind sleep is the fragile fallback.
 
-import XCTest
 import AVFoundation
-import Speech
 @testable import SpeakCore
+import Speech
+import XCTest
 
 @available(macOS 26.0, *)
 final class SpeakEngineIntegrationTests: XCTestCase {

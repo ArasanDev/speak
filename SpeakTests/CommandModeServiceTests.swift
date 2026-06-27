@@ -4,8 +4,8 @@
 // read/replace is [deferred — human verification]; here we inject mocks to verify the
 // read → transform → replace flow and the no-op contracts.
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 final class CommandModeServiceTests: XCTestCase {
 

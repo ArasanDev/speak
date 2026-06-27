@@ -19,10 +19,10 @@
 //   @MainActor throughout — NSWindow must only be touched on the main thread.
 
 import AppKit
-import SwiftUI
 import Combine
-import SpeakCore
 import os
+import SpeakCore
+import SwiftUI
 
 // MARK: - OnboardingWindowController
 

@@ -15,9 +15,9 @@
 // THREADING: @MainActor throughout — NSWindow is main-thread-only.
 
 import AppKit
-import SwiftUI
-import SpeakCore
 import os
+import SpeakCore
+import SwiftUI
 
 // MARK: - HistoryWindowController
 

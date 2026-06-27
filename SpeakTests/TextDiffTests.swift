@@ -12,8 +12,8 @@
 // no SwiftUI rendering is tested here (Canvas preview serves that role).
 // No live model invoked.
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 final class TextDiffTests: XCTestCase {
 

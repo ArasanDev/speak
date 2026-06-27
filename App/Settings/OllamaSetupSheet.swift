@@ -14,8 +14,8 @@
 //   This sheet is informational only: it tells the user what to install, but
 //   cannot verify connectivity in v0. [decision Wave 2.1: no live detection]
 
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - OllamaModel
 
@@ -53,7 +53,7 @@ struct OllamaSetupSheet: View {
         OllamaModel(tag: "phi4-mini",
                     label: "Phi-4 Mini",
                     detail: "Microsoft\u{2019}s compact model, very fast.",
-                    recommended: false),
+                    recommended: false)
     ]
 
     var body: some View {

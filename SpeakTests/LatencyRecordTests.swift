@@ -29,8 +29,8 @@
 //   These tests verify pure arithmetic derivation. Live wall-clock accuracy
 //   (real mic + paste + FM) requires human verification [deferred — human-verification.md].
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 @available(macOS 26.0, *)
 final class LatencyRecordTests: XCTestCase {

@@ -10,8 +10,8 @@
 // All members are reference types owned by `DictationController` (the app's brain) and
 // merely shared here — the context does NOT own their lifetimes.
 
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - DashboardContext
 

@@ -9,8 +9,8 @@
 // The live re-arm (AX grant → tap arms within ~0.2 s) is [deferred — human
 // verification required] per the standard deferred row.
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 // MARK: - TapRestartRateLimiter Tests
 

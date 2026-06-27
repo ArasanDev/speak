@@ -15,8 +15,8 @@
 // HONESTY BOUNDARY: `InsightsStats` is a pure value type; these tests are
 // [verified] by the test suite. UI rendering is [deferred — human verification].
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 @available(macOS 26.0, *)
 final class InsightsStatsTests: XCTestCase {

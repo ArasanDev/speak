@@ -10,8 +10,8 @@
 // the P13 dogfood; this suite proves the wiring + prompt mapping, which is what a unit
 // test can own honestly.
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 final class StyleModeTests: XCTestCase {
 

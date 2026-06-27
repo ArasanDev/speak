@@ -18,11 +18,11 @@
 //   - `HistoryStoring` is a `Sendable` actor (or NullHistoryStore); every call is
 //     `await`-ed off the main actor and the result is assigned back on main.
 
-import SwiftUI
 import AppKit
-import SpeakCore
-import UniformTypeIdentifiers
 import os
+import SpeakCore
+import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - HistoryViewModel
 

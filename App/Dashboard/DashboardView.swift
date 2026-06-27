@@ -13,8 +13,8 @@
 // render *content + data* in Monaco via the theme tokens. The split view itself is plain
 // AppKit chrome.
 
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - DashboardView
 

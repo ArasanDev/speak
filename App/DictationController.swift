@@ -44,11 +44,11 @@
 //   own retry. `permissionsNeeded` is set when AX is missing; cleared when the
 //   arm-state stream yields `true`.
 
-import Foundation
-import SwiftUI
 import AppKit
 import Combine
+import Foundation
 import SpeakCore
+import SwiftUI
 
 // MARK: - NullHistoryStore
 
@@ -577,6 +577,7 @@ final class DictationController: ObservableObject, CLICommandHandler {
         switch event {
         case .startCapture:
             await beginDictation()
+
         case .stopCapture:
             await endDictation()
         }

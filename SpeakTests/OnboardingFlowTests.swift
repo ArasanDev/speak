@@ -11,9 +11,9 @@
 // Input Monitoring was removed from the flow — the CGEventTap uses .defaultTap
 // and is gated on Accessibility alone (verified: HotkeyMonitor.swift §84–86).
 
-import Testing
 import Foundation
 @testable import SpeakCore
+import Testing
 
 // MARK: - All granted + complete
 

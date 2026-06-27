@@ -81,8 +81,8 @@
 // P2 outputs 16kHz mono Float32 non-interleaved. An AVAudioConverter bridges them.
 
 import AVFoundation
-import Speech
 import os
+import Speech
 
 // MARK: - Audio buffer source abstraction
 
@@ -339,8 +339,10 @@ private struct Session: Sendable {
             throw SpeakError.transcriberUnavailable(
                 "Speech model not supported on this device."
             )
+
         case .installed:
             SpeakLog.stt.info("Speech model already installed.")
+
         default:
             // .supported, .downloading, or any future Status value: attempt install.
             try await installAsset(for: transcriber, locale: locale)

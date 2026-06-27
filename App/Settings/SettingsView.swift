@@ -35,8 +35,8 @@
 //   labels, and picker text (per SpeakTheme header contract). SpeakSpacing grid
 //   for all padding/spacing — no magic numbers.
 
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - SettingsView (root)
 
@@ -61,7 +61,7 @@ struct SettingsView: View {
 
             // 1 — General
             GeneralSettingsTab(store: store)
-                .tabItem { Label("General",  systemImage: "gearshape") }
+                .tabItem { Label("General", systemImage: "gearshape") }
                 .tag(SettingsTab.general)
 
             // 2 — Shortcuts (recorder live in W1.1)
@@ -76,22 +76,22 @@ struct SettingsView: View {
 
             // 4 — AI Cleanup (effectiveCleanupLevel collapse lives here)
             AICleanupSettingsTab(store: store)
-                .tabItem { Label("AI Cleanup",   systemImage: "wand.and.stars") }
+                .tabItem { Label("AI Cleanup", systemImage: "wand.and.stars") }
                 .tag(SettingsTab.aiCleanup)
 
             // 5 — Dictionary (custom vocabulary — matches DictionaryPaneView binding)
             DictionarySettingsTab(store: store)
-                .tabItem { Label("Dictionary",   systemImage: "character.book.closed") }
+                .tabItem { Label("Dictionary", systemImage: "character.book.closed") }
                 .tag(SettingsTab.dictionary)
 
             // 6 — Privacy (moat surface)
             PrivacySettingsTab()
-                .tabItem { Label("Privacy",      systemImage: "lock.shield") }
+                .tabItem { Label("Privacy", systemImage: "lock.shield") }
                 .tag(SettingsTab.privacy)
 
             // 7 — About
             AboutSettingsTab()
-                .tabItem { Label("About",        systemImage: "info.circle") }
+                .tabItem { Label("About", systemImage: "info.circle") }
                 .tag(SettingsTab.about)
         }
         // [decision: W3.1 — 560pt wide suits a 7-tab layout; 480pt min-height
@@ -206,6 +206,7 @@ private struct ShortcutsSettingsTab: View {
                         Text("Tap the hotkey twice to start; tap once to stop.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+
                     case .hold:
                         Text("Hold the hotkey to record; release to stop and paste.")
                             .font(.caption)
@@ -457,15 +458,18 @@ private struct AICleanupSettingsTab: View {
         case .none:
             // None = raw passthrough; cleanedText nil triggers "No AI cleanup" state.
             return nil
+
         case .light:
             // Light: filler removal + punctuation. Words and structure unchanged.
             return "I was thinking that maybe we should like move the meeting to Thursday, " +
                    "because on Wednesday I have a conflict with another thing."
+
         case .medium:
             // Medium: + sentence tightening. "was thinking that maybe" → "think",
             //         "another thing" → "another commitment".
             return "I think we should move the meeting to Thursday. " +
                    "I have a conflict on Wednesday."
+
         case .high:
             // High: + restructuring + paragraph clarity. Two clean, complete sentences.
             return "Let\u{2019}s move the meeting to Thursday. I have a scheduling conflict on Wednesday."
@@ -608,6 +612,7 @@ private struct AICleanupSettingsTab: View {
             Text("Foundation Models runs on-device — no network, no account.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
         case .ollama:
             HStack(spacing: SpeakSpacing.xs) {
                 Image(systemName: "info.circle")
@@ -621,6 +626,7 @@ private struct AICleanupSettingsTab: View {
                     .font(.caption)
                     .buttonStyle(.borderless)
             }
+
         case .mlx:
             Text("MLX support arrives in v0.1 — currently falling back to raw transcript.")
                 .font(.caption)
@@ -636,10 +642,12 @@ private struct AICleanupSettingsTab: View {
             Text("Requires Apple Intelligence on this Mac. Falls back to raw transcript when unavailable.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
         case .ollama:
             Text("Ollama support arrives in v0.1. In v0, speak falls back to raw transcript when this engine is selected.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
         case .mlx:
             Text("MLX requires third-party Swift packages; available from v0.1.")
                 .font(.caption)

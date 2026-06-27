@@ -9,8 +9,8 @@
 // The pane disables itself when AI cleanup is off (raw transcript mode), since style has
 // no effect without the LLM pass — surfaced honestly rather than silently ignored.
 
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - StylePaneView
 

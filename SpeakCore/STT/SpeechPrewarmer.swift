@@ -30,8 +30,8 @@
 // from the modelRetention API semantics and observed VoiceInk prewarm behavior —
 // not measurable without a live benchmark corpus.
 
-import Speech
 import os
+import Speech
 
 /// Warms the SpeechAnalyzer model non-blocking so first-dictation cold-start
 /// latency is reduced. Calling `prewarm()` is idempotent and safe at any time.

@@ -23,8 +23,8 @@
 //   SwiftUI View bodies are @MainActor by default.
 //   `viewModel` is @StateObject (owns lifetime) or @ObservedObject (injected).
 
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - OnboardingView
 
@@ -51,6 +51,7 @@ struct OnboardingView: View {
         switch viewModel.displayedStep {
         case .welcome:
             WelcomeStepView(onContinue: { viewModel.advance() })
+
         case .microphone:
             PermissionStepView(
                 kind: .microphone,
@@ -62,6 +63,7 @@ struct OnboardingView: View {
                 onContinue: { viewModel.advance() },
                 onOpenSettings: { viewModel.openSystemSettings(for: .microphone) }
             )
+
         case .accessibility:
             PermissionStepView(
                 kind: .accessibility,
@@ -73,12 +75,14 @@ struct OnboardingView: View {
                 onContinue: { viewModel.advance() },
                 onOpenSettings: { viewModel.openSystemSettings(for: .accessibility) }
             )
+
         case .hotkey:
             HotkeyStepView(
                 hotkeyLabel: viewModel.currentHotkeyDisplayString,
                 hotkeyTriggered: viewModel.hotkeyTriggered,
                 onContinue: { viewModel.advance() }
             )
+
         case .done:
             DoneStepView(hotkeyLabel: viewModel.currentHotkeyDisplayString)
         }
@@ -273,6 +277,7 @@ private struct PermissionStepView: View {
         switch kind {
         case .microphone:
             return "speak captures your voice to transcribe it. Audio is processed on-device and never sent anywhere."
+
         case .accessibility:
             // swiftlint:disable:next line_length
             return "speak needs Accessibility access to simulate the Cmd+V keystroke that pastes your transcribed text at the cursor."
@@ -283,6 +288,7 @@ private struct PermissionStepView: View {
         switch kind {
         case .microphone:
             return "Grant Microphone Access"
+
         case .accessibility:
             return "Open System Settings"
         }
@@ -292,6 +298,7 @@ private struct PermissionStepView: View {
         switch status {
         case .granted:
             return "checkmark.circle.fill"
+
         case .needed:
             switch kind {
             case .microphone:    return "mic.fill"

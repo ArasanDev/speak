@@ -8,8 +8,8 @@
 // Fetching is done via `.task` (off-main, idiomatic SwiftUI async), matching the
 // approach used in `HistoryViewModel` but without the debounce/search overhead.
 
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - InsightsPaneView
 

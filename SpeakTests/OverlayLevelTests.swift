@@ -39,9 +39,9 @@
 //   29. levelSmoothedAsymmetric(…)        — falling uses decayCoeff
 //   30. levelSmoothedAsymmetric(…)        — attack is faster than release
 
-import XCTest
 import AVFoundation
 @testable import SpeakCore
+import XCTest
 
 final class OverlayLevelTests: XCTestCase {
 

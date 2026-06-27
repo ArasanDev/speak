@@ -27,6 +27,7 @@ public func defaultTranscriber(for settings: SettingsStore) -> any Transcribing 
     switch settings.sttEngine {
     case .appleSpeech:
         return AppleSpeechTranscriber()
+
     case .whisperKit:
         // [decision] WhisperKit is v0.1 — not built in v0. Falls back to Apple Speech.
         // When WhisperKit is added, replace this branch with `return WhisperKitTranscriber()`.
@@ -34,6 +35,7 @@ public func defaultTranscriber(for settings: SettingsStore) -> any Transcribing 
             "defaultTranscriber: .whisperKit requested but not built in v0 — using AppleSpeechTranscriber."
         )
         return AppleSpeechTranscriber()
+
     case .whisperCpp:
         // [decision] whisper.cpp is v1 — not built in v0. Falls back to Apple Speech.
         SpeakLog.stt.error(
@@ -63,6 +65,7 @@ public func defaultCleaner(for settings: SettingsStore) -> (any LLMCleaning)? {
     switch settings.cleanupEngine {
     case .foundationModels:
         return FoundationModelsCleaner()
+
     case .ollama(let model):
         // Wave 2.1: OllamaCleaner stub exists now. Returns `isAvailable == false` always —
         // networking code that would do the real localhost check cannot live in SpeakCore/
@@ -73,6 +76,7 @@ public func defaultCleaner(for settings: SettingsStore) -> (any LLMCleaning)? {
             "defaultCleaner: .ollama(model: \(model, privacy: .public)) — using v0.1 stub (isAvailable=false)."
         )
         return OllamaCleaner(model: model)
+
     case .mlx(let model):
         // Wave 2.1: MLXCleaner stub. MLX requires third-party Swift packages — forbidden
         // in v0 (AGENTS.md §2.9). Stub returns `isAvailable == false`; graceful fallback.

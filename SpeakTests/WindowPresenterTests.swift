@@ -24,9 +24,9 @@
 // [decision: @MainActor-isolated because WindowPresenter is @MainActor and
 //  NSWindowController requires the main thread per macOS/AppKit convention.]
 
-import XCTest
 @testable import Speak
 import SpeakCore
+import XCTest
 
 // MARK: - TestNullHistoryStore
 

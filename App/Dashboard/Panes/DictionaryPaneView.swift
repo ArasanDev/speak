@@ -9,8 +9,8 @@
 // Matches the verified Wispr Dictionary: add a term, see the list, delete a term.
 // (Auto-learned ✨ words are a future enhancement once STT surfaces them.)
 
-import SwiftUI
 import SpeakCore
+import SwiftUI
 
 // MARK: - DictionaryPaneView
 

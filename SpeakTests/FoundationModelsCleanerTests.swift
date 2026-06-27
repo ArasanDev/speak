@@ -29,8 +29,8 @@
 //   [ ] unavailable → cleanedText nil + session reaches done (not error)
 //   [ ] engineId stored in TranscriptionResult
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 @available(macOS 26.0, *)
 final class FoundationModelsCleanerTests: XCTestCase {

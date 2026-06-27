@@ -8,8 +8,8 @@
 //   5. Stub CLITransport — verifies the protocol seam is testable without a
 //      live CFMessagePort.
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 final class CLIContractTests: XCTestCase {
 
@@ -251,8 +251,10 @@ private func idempotencyDecision(command: CLICommand, icon: MenubarIcon) -> Idem
     switch command {
     case .start:
         return icon == .idle ? .dispatch : .noOp
+
     case .stop:
         return icon == .listening ? .dispatch : .noOp
+
     case .status:
         return .read
     }

@@ -18,8 +18,8 @@
 //   confirms that an explicitly set non-en locale flows through, which
 //   proves the seam is live without breaking the default.
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 final class SpeakEngineLanguageTests: XCTestCase {
 

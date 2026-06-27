@@ -64,7 +64,7 @@ public func levelPerceptual(rms: Double) -> Double {
     // [decision W2.3] dB floor for silence anchor: -55 dBFS. benchmark.md §7.
     let noiseFloorDB: Double = -55.0
     // [decision W2.3] dB ceiling for full-bar speech: -3 dBFS. benchmark.md §7.
-    let clipFloorDB:  Double = -3.0
+    let clipFloorDB: Double = -3.0
 
     let clamped = min(max(rms, 0.0), 1.0)
     guard clamped > 0.0 else { return 0.0 }

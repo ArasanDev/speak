@@ -14,8 +14,8 @@
 //   [x] capacity: saving > maxEntries trims oldest; count stays ≤ cap
 //   [x] cleanedText == nil round-trips correctly (nil preserved, not "")
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 final class HistoryStoreTests: XCTestCase {
 

@@ -13,8 +13,8 @@
 // — they must not XCTSkip. They use the same mock patterns as CaptureSessionTests.swift
 // and SpeakEngineMuteTests.swift so patterns stay consistent.
 
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 // MARK: - Mocks shared across this file
 

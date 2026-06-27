@@ -37,12 +37,16 @@ extension MenubarIcon {
         switch state {
         case .idle:
             self = .idle
+
         case .listening:
             self = .listening
+
         case .processing:
             self = .processing
+
         case .done:
             self = .done
+
         case .error:
             self = .error
         }

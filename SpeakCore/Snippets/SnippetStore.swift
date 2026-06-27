@@ -9,8 +9,8 @@
 //     at `newSession()` time (UserDefaults is documented thread-safe).
 //   - Injected `UserDefaults` for test isolation (named suite), like SettingsStore.
 
-import Foundation
 import Combine
+import Foundation
 import os
 
 // MARK: - SnippetStore

@@ -9,8 +9,8 @@
 // on Accessibility alone — IOHIDCheckAccess/IOHIDRequestAccess are no longer
 // called. [verified: HotkeyMonitor.swift §84–86, 2026-06-22]
 
-import AVFoundation
 import ApplicationServices
+import AVFoundation
 import os
 
 @MainActor
@@ -23,6 +23,7 @@ public final class PermissionManager: PermissionManaging {
         switch kind {
         case .microphone:
             return Self.map(AVCaptureDevice.authorizationStatus(for: .audio))
+
         case .accessibility:
             return AXIsProcessTrusted() ? .granted : .denied
         }
