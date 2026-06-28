@@ -441,8 +441,13 @@ public actor CaptureSession {
             // swallowed; streaming failure does not abort the session (raw paste at
             // stop is the fallback). AX-denied is expected and logged; no error
             // transition. [P11-c §4 error handling]
-            if let streamingInserter {
-                // Dispatch keystroke injection without blocking the stream task.
+            // CRITICAL: Keystroke injection must be serialized (not fire-and-forget Tasks)
+            // to prevent CGEvent.post() collisions. Skip streaming for now; will re-enable
+            // in v0.1 with proper serial queue management.
+            // TODO: v0.1 — implement serial keystroke queue (DispatchQueue.serialQueue)
+            if let streamingInserter, false {
+                // DISABLED: streaming causes system hangs due to unserialized CGEvent.post() calls.
+                // Re-enable in v0.1 with proper serial queue.
                 Task {
                     do {
                         try await streamingInserter.insertChunk(chunk.text)
