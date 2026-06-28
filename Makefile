@@ -43,6 +43,7 @@ EXPORT_DIR     := $(RELEASE_DIR)/export
 APP_EXPORT     := $(EXPORT_DIR)/Speak.app
 DMG            := $(RELEASE_DIR)/Speak.dmg
 EXPORT_PLIST   := scripts/export-options.plist
+RELEASE_APP    := $(DERIVED)/Build/Products/Release/Speak.app
 
 # Stable local code-signing identity. When present, build re-signs the app with it
 # so macOS TCC permission grants (Accessibility, Input Monitoring) survive rebuilds.
@@ -51,7 +52,7 @@ EXPORT_PLIST   := scripts/export-options.plist
 DEV_CERT  := speak-local-codesign
 BUNDLE_ID := com.speak.app
 
-.PHONY: all generate build test lint fmt run lsp clean release verify-moat dev-cert reset-permissions release-preflight
+.PHONY: all generate build test lint fmt run lsp clean install github-release release verify-moat dev-cert reset-permissions release-preflight
 
 all: build
 
@@ -102,6 +103,45 @@ fmt:
 ## run: build then launch the menubar app
 run: build
 	open $(APP)
+
+## install: build Speak.app and copy it to /Applications/.
+##
+## Requires the app already be built (runs make build first).
+## For TCC permission grants (Accessibility, Microphone) to survive future
+## rebuilds, run `make dev-cert` once beforehand.
+install: build
+	@echo "==> install: copying Speak.app to /Applications/ ..."
+	@rm -rf /Applications/Speak.app
+	cp -r "$(APP)" /Applications/Speak.app
+	@echo "install: Speak.app → /Applications/. Launch from Spotlight or:"
+	@echo "         open /Applications/Speak.app"
+
+## github-release: build Release, ad-hoc sign, and zip for a GitHub Releases artifact.
+##
+## No Developer ID cert is required. Produces build/release/Speak.zip.
+## Users must run once after download:
+##   xattr -dr com.apple.quarantine Speak.app
+github-release: generate
+	@echo "==> github-release: building Release configuration..."
+	@mkdir -p "$(RELEASE_DIR)"
+	xcodebuild build \
+	  -project $(PROJECT) \
+	  -scheme $(SCHEME) \
+	  -configuration Release \
+	  -derivedDataPath $(DERIVED)
+	@echo "==> github-release: ad-hoc signing (overrides any existing signature)..."
+	codesign -s - --deep --force --timestamp=none "$(RELEASE_APP)"
+	@echo "==> github-release: packaging as zip..."
+	@rm -f "$(RELEASE_DIR)/Speak.zip"
+	ditto -c -k --keepParent "$(RELEASE_APP)" "$(RELEASE_DIR)/Speak.zip"
+	@echo ""
+	@echo "==> github-release: SUCCESS"
+	@echo "    Artifact: $(RELEASE_DIR)/Speak.zip"
+	@echo "    sha256:   $$(shasum -a 256 "$(RELEASE_DIR)/Speak.zip" | awk '{print $$1}')"
+	@echo ""
+	@echo "    Upload to GitHub Releases. Users run once after download:"
+	@echo "      xattr -dr com.apple.quarantine Speak.app"
+	@echo ""
 
 ## lsp: configure sourcekit-lsp (buildServer.json) so editors/agents get SDK-correct
 ##      Swift semantics. Build first so xcode-build-server has fresh compile args,

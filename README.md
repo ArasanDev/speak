@@ -6,7 +6,7 @@
 [![Status: pre-release (v0 in active development)](https://img.shields.io/badge/status-pre--release-orange)](docs/progress.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform: macOS 26+ · Apple Silicon](https://img.shields.io/badge/platform-macOS%2026%2B%20%C2%B7%20Apple%20Silicon-lightgrey)](#build-from-source)
-[![Tests: 150 passing](https://img.shields.io/badge/tests-150%20passing-green)](docs/progress.md)
+[![Tests: 481 passing](https://img.shields.io/badge/tests-481%20passing-green)](docs/progress.md)
 [![Moat audit: 7/7](https://img.shields.io/badge/moat%20audit-7%2F7-green)](#privacy)
 
 `speak` is a menubar app. Press a hotkey, talk, stop. A live overlay streams your
@@ -105,17 +105,43 @@ mute toggle is a menu item; a global mute *chord* is a tracked follow-up
 
 ## Install
 
-**`speak` v0 is pre-release.** The engine, UI, and all core features are built
-and pass 150 tests. Live verification (paste compatibility with real apps, hotkey
-firing with real permissions, notarized release) is in progress — see
-[`docs/human-verification.md`](docs/human-verification.md).
+**`speak` v0 is pre-release** (developer preview — live human verification in
+progress; see [`docs/human-verification.md`](docs/human-verification.md)).
 
-**Planned install path (at P11, once signed and notarized):**
+Two install paths are available today, both cert-free:
+
+### Path 1 — Homebrew formula (recommended)
+
+Builds on your machine from source. Gatekeeper never fires — it only inspects
+downloaded binaries, not local builds. Requires Xcode 26+ and xcodegen.
+
 ```bash
-brew install --cask speak
+brew tap speak-dev/speak   # custom tap (not yet on homebrew-core)
+brew install speak
+# Then follow the post-install caveat to copy Speak.app to /Applications/
 ```
 
-**Until then, build from source** (see below).
+> **Note:** the tap will be published at first tag (`v0.0.1`). Until then,
+> build from source directly (see below).
+
+### Path 2 — GitHub Release (ad-hoc signed zip)
+
+Download the pre-built `.zip` from [GitHub Releases](https://github.com/yourusername/speak/releases),
+then run once:
+
+```bash
+# After unzipping Speak.app:
+xattr -dr com.apple.quarantine Speak.app
+open Speak.app
+```
+
+> Right-click → Open is the GUI equivalent if you prefer not to use the terminal.
+
+### Path 3 — Official Homebrew Cask (planned for v0.1)
+
+```bash
+brew install --cask speak   # requires Developer ID cert (P11-b, target: before Sep 1 2026)
+```
 
 ---
 
@@ -131,7 +157,7 @@ brew install xcodegen swiftlint xcbeautify
 git clone https://github.com/yourhandle/speak.git
 cd speak
 make build    # generates Speak.xcodeproj, builds Speak.app + SpeakCore.framework
-make test     # 150 tests (130 XCTest + 20 Swift Testing), 0 failures
+make test     # 481 tests, 0 failures
 make lint     # SwiftLint (force-unwrap / force-cast / force-try = error)
 make verify-moat  # 7/7 structural BEAT rows (offline, no egress, MIT, no account, ...)
 make run      # launch the menubar app
@@ -165,7 +191,7 @@ launch:
 - Local history: SQLite via raw C API, searchable, exportable
 - Settings: cleanup toggle, STT/cleanup engine selection, language, paste mode
 - Permissions onboarding: three-step flow, auto-advances on grant
-- Tests: **150 (130 XCTest + 20 Swift Testing), 0 failures**
+- Tests: **481, 0 failures**
 - Moat audit: **7/7** (MIT, no third-party imports, no network egress, no
   auth code, no paywall, offline by construction, no pasteboard reads)
 

@@ -8,7 +8,28 @@
 
 ## Current phase
 
-**Code quality pass — loop #34 (2026-06-28). Extension splits + TestStorage + Swift Testing migration done.**
+**P11-a: build-from-source install — loop #35 (2026-06-28). `make install`, `make github-release`, `dist/speak.rb` Homebrew formula, README install section.**
+
+Gates as of loop #35 (2026-06-28): **build ✅ lint 0-serious ✅ moat 7/7 ✅** (full test suite not re-run — Makefile/docs/Ruby change only)
+
+**Loop #35** (P11-a: build-from-source install):
+- **`make install`** — new Makefile target: `make build` then `cp -r Speak.app /Applications/`
+- **`make github-release`** — new Makefile target: Release build → `codesign -s -` ad-hoc sign → `ditto` zip → sha256 printed; users run `xattr -dr com.apple.quarantine` once
+- **`dist/speak.rb`** — Homebrew formula (custom tap, build-from-source): `make build CONFIG=Release` → installs to `#{prefix}/Applications/`; Ruby syntax `[verified via ruby -c]`; `url`+`sha256` are PLACEHOLDER until first tag
+- **`README.md`** — Install section rewritten: Path 1 (Homebrew formula), Path 2 (GitHub Release zip), Path 3 (official cask at P11-b); test count badge updated 150→481
+
+**P11-a done-when checklist:**
+- [x] `make dev-cert` creates a stable local signing identity — done in prior loop
+- [x] `make build` produces a runnable `Speak.app` from a clean clone — done in prior loop
+- [x] `make install` copies `Speak.app` to `/Applications/` — new target added
+- [x] `make github-release` ad-hoc signs, zips, and produces a release artifact — new target added
+- [x] `dist/speak.rb` Homebrew formula (custom tap, build-from-source) created — Ruby syntax verified
+- [x] `README.md` install section covers both paths with exact commands — updated
+
+**Remaining (human-gated / needs first tag):**
+- `dist/speak.rb` url+sha256: PLACEHOLDER until `v0.0.1` tag created and GitHub Release published
+- Live test of `make install` (copies Speak.app to /Applications/ — requires user)
+- Live test of `make github-release` (builds Release + signs + zips — ~5 min build)
 
 Gates as of loop #34 (2026-06-28): **build ✅ lint 0-serious ✅ moat 7/7 ✅ tests pass ✅**
 
@@ -58,9 +79,15 @@ Nothing blocking. Human-gate items remain owner-only (live paste in 3 apps, late
 
 ## Next up
 
-Priorities 2–4 DONE (loop #34). Remaining:
+P11-a agent work DONE (loop #35). Remaining before v0 ships:
 
-**Human-gate** → P11 → P13 → P14 → v0 ship → V01-0 Agent Mode.
+**Human-gate (live run)** → P11-b (Developer ID cert — optional, blocks official cask only) → P13 dogfood → P14 top-3 fixes → v0 ship gate → V01-0 Agent Mode.
+
+Human-gate items that unblock the loop (any of these, in any order):
+- Run `make install` → confirm `/Applications/Speak.app` appears
+- Run `make github-release` → confirm `build/release/Speak.zip` produced + verify `codesign -dvvv` shows `Signature=adhoc`
+- Grant Accessibility permission + run `make run` → verify live dictation works end-to-end (P5/P6 live deferred items)
+- Test live paste into Terminal (macOS 26.4 paste-provenance check — project's #1 `[unverified]` item)
 
 (14 files still use `addTeardownBlock` for `UserDefaults` teardown — separate from the SQLite `tempDatabaseURL` pattern, no migration needed.)
 
