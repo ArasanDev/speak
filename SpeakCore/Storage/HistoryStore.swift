@@ -202,6 +202,22 @@ public actor HistoryStore: HistoryStoring {
         SpeakLog.storage.info("HistoryStore cleared")
     }
 
+    /// Clear all history entries created before the given date (exclusive).
+    /// Entries created at or after the date are preserved.
+    /// - Parameter beforeDate: Delete entries with `createdAt < beforeDate`.
+    public func clearBefore(_ beforeDate: Date) throws {
+        let beforeTimestamp = beforeDate.timeIntervalSince1970
+        let sql = "DELETE FROM history WHERE createdAt < ?"
+        try execute(sql: sql) { stmt in
+            guard sqlite3_bind_double(stmt, 1, beforeTimestamp) == SQLITE_OK else {
+                throw dbError("bind beforeDate")
+            }
+        }
+        SpeakLog.storage.info(
+            "HistoryStore cleared entries before \(beforeDate, privacy: .public)"
+        )
+    }
+
     public func export() throws -> String {
         let entries = try recent(limit: Int.max)
 

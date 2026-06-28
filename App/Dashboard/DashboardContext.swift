@@ -28,6 +28,14 @@ struct DashboardContext {
     /// The snippets store (Snippets pane binds to it; the engine reads it at dictation start).
     let snippetStore: SnippetStore
 
+    /// The speech engine (for starting dictation from the Dashboard CTA button).
+    /// [unverified: injected from DictationController in P11-c phase 3]
+    let speakEngine: SpeakEngine?
+
+    /// The permission manager (for checking microphone and accessibility status).
+    /// [unverified: injected from DictationController in P11-c phase 3]
+    let permissionManager: PermissionManager?
+
     /// The active hotkey combo, pre-rendered as keycap labels (e.g. ["Fn", "Fn"]).
     /// Supplied by the controller from the live `HotkeyMonitor.binding`.
     ///
@@ -39,17 +47,21 @@ struct DashboardContext {
     /// update path is: mutate context before the hosting view reads it on show()]
     var hotkeyCombo: [String]
 
-    /// Explicit init with `snippetStore` defaulted to a fresh store, so SwiftUI
-    /// previews can omit it; production call sites inject the shared store.
+    /// Explicit init with optional engine/permission manager (both deferred to P11-c).
+    /// Previews can create a minimal context without these dependencies.
     init(
         settingsStore: SettingsStore,
         historyStore: any HistoryStoring,
         hotkeyCombo: [String],
-        snippetStore: SnippetStore = SnippetStore()
+        snippetStore: SnippetStore = SnippetStore(),
+        speakEngine: SpeakEngine? = nil,
+        permissionManager: PermissionManager? = nil
     ) {
         self.settingsStore = settingsStore
         self.historyStore = historyStore
         self.hotkeyCombo = hotkeyCombo
         self.snippetStore = snippetStore
+        self.speakEngine = speakEngine
+        self.permissionManager = permissionManager
     }
 }

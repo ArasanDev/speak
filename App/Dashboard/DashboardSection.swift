@@ -23,6 +23,7 @@ enum DashboardSection: String, CaseIterable, Identifiable, Hashable {
     case transforms
     case scratchpad
     case history
+    case privacy
 
     var id: String { rawValue }
 
@@ -38,6 +39,7 @@ enum DashboardSection: String, CaseIterable, Identifiable, Hashable {
         case .transforms: return "Transforms"
         case .scratchpad: return "Scratchpad"
         case .history:    return "History"
+        case .privacy:    return "Privacy"
         }
     }
 
@@ -52,6 +54,7 @@ enum DashboardSection: String, CaseIterable, Identifiable, Hashable {
         case .transforms: return "arrow.triangle.2.circlepath"
         case .scratchpad: return "note.text"
         case .history:    return "clock.arrow.circlepath"
+        case .privacy:    return "lock.fill"
         }
     }
 }

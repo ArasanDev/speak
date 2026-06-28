@@ -78,6 +78,25 @@ public enum PasteMode: String, Codable, Sendable, Equatable {
     case accessibility
 }
 
+/// Whether to stream cleaned text as keystrokes during active dictation. v0 = `.off`.
+public enum StreamingMode: String, Codable, Sendable, Equatable {
+    /// Streaming disabled. Cleaned text is pasted all at once after dictation ends.
+    case off = "off"
+    /// Real-time keystroke injection. Cleaned text is delivered character-by-character
+    /// as dictation progresses, creating a live-typing effect in the target app.
+    case keystrokeInjection = "keystroke"
+}
+
+/// Application appearance theme. v0 default = `.system` (follow macOS setting).
+public enum AppTheme: String, Codable, Sendable, Equatable {
+    /// Light mode always.
+    case light
+    /// Dark mode always.
+    case dark
+    /// Follow system setting (default).
+    case system
+}
+
 // MARK: - SettingsStore
 
 /// The single source of truth for all persisted user preferences in `speak`.
@@ -101,6 +120,11 @@ public final class SettingsStore: @unchecked Sendable {
         static let customVocabulary      = "speak.settings.customVocabulary"
         static let cleanupStyle          = "speak.settings.cleanupStyle"
         static let cleanupLevel          = "speak.settings.cleanupLevel"
+        static let streamingRawTextEnabled = "speak.settings.streamingRawTextEnabled"
+        static let streamingMode         = "speak.settings.streamingMode"
+        static let appTheme              = "speak.settings.appTheme"
+        static let notificationsEnabled  = "speak.settings.notificationsEnabled"
+        static let autoPasteEnabled      = "speak.settings.autoPasteEnabled"
     }
 
     // MARK: - Injected defaults (the testability seam)
@@ -127,7 +151,12 @@ public final class SettingsStore: @unchecked Sendable {
             // W4.1: default is .medium (the "balanced" equivalent in the new 4-level scale).
             // Old stored rawValues (basic/balanced/thorough) will not decode after this
             // rename — the getter falls back to .medium. [decision: clean break, no shim]
-            Keys.cleanupLevel: CleanupLevel.medium.rawValue
+            Keys.cleanupLevel: CleanupLevel.medium.rawValue,
+            Keys.streamingRawTextEnabled: true,
+            Keys.streamingMode: StreamingMode.keystrokeInjection.rawValue,
+            Keys.appTheme: AppTheme.system.rawValue,
+            Keys.notificationsEnabled: true,
+            Keys.autoPasteEnabled: true
         ])
         // Enum defaults are handled via `?? fallback` at the getter level because
         // Codable JSON cannot be registered as a `[String: Any]` literal.
@@ -376,5 +405,151 @@ public final class SettingsStore: @unchecked Sendable {
                 defaults.set(newValue, forKey: Keys.customVocabulary)
             }
         }
+    }
+
+    // MARK: - Streaming settings (keystroke injection)
+
+    /// Whether raw (unprocessed) text is streamed character-by-character during dictation
+    /// when `streamingMode == .keystrokeInjection`.
+    ///
+    /// `true` (default): raw transcript is delivered live as you speak.
+    /// `false`: only cleaned text is streamed (after the LLM pass completes).
+    ///
+    /// Has no effect when `streamingMode == .off` (text is always delivered in a single paste).
+    public var streamingRawTextEnabled: Bool {
+        get {
+            access(keyPath: \.streamingRawTextEnabled)
+            return defaults.bool(forKey: Keys.streamingRawTextEnabled)
+        }
+        set {
+            withMutation(keyPath: \.streamingRawTextEnabled) {
+                defaults.set(newValue, forKey: Keys.streamingRawTextEnabled)
+            }
+        }
+    }
+
+    /// Whether keystroke injection (real-time text delivery) is active.
+    /// Default: `.keystrokeInjection`.
+    public var streamingMode: StreamingMode {
+        get {
+            access(keyPath: \.streamingMode)
+            let raw = defaults.string(forKey: Keys.streamingMode) ?? StreamingMode.keystrokeInjection.rawValue
+            return StreamingMode(rawValue: raw) ?? .keystrokeInjection
+        }
+        set {
+            withMutation(keyPath: \.streamingMode) {
+                defaults.set(newValue.rawValue, forKey: Keys.streamingMode)
+            }
+        }
+    }
+
+    // MARK: - Application theme (UI appearance)
+
+    /// The application appearance theme. Default: `.system` (follow macOS setting).
+    public var appTheme: AppTheme {
+        get {
+            access(keyPath: \.appTheme)
+            let raw = defaults.string(forKey: Keys.appTheme) ?? AppTheme.system.rawValue
+            return AppTheme(rawValue: raw) ?? .system
+        }
+        set {
+            withMutation(keyPath: \.appTheme) {
+                defaults.set(newValue.rawValue, forKey: Keys.appTheme)
+            }
+        }
+    }
+
+    // MARK: - Notifications
+
+    /// Whether to show notifications (e.g., dictation complete, errors). Default: `true`.
+    public var notificationsEnabled: Bool {
+        get {
+            access(keyPath: \.notificationsEnabled)
+            return defaults.bool(forKey: Keys.notificationsEnabled)
+        }
+        set {
+            withMutation(keyPath: \.notificationsEnabled) {
+                defaults.set(newValue, forKey: Keys.notificationsEnabled)
+            }
+        }
+    }
+
+    // MARK: - Auto-paste
+
+    /// Whether to automatically paste cleaned text after dictation ends.
+    /// Default: `true`. When `false`, user must manually paste via Cmd+V.
+    public var autoPasteEnabled: Bool {
+        get {
+            access(keyPath: \.autoPasteEnabled)
+            return defaults.bool(forKey: Keys.autoPasteEnabled)
+        }
+        set {
+            withMutation(keyPath: \.autoPasteEnabled) {
+                defaults.set(newValue, forKey: Keys.autoPasteEnabled)
+            }
+        }
+    }
+
+    // MARK: - Reset to defaults
+
+    /// Resets all user settings to their default values. All preferences are wiped;
+    /// history is NOT cleared (separate operation). [decision: reset != clear history]
+    public func resetToDefaults() {
+        access(keyPath: \.cleanupEnabled)
+        access(keyPath: \.cleanupEngine)
+        access(keyPath: \.sttEngine)
+        access(keyPath: \.language)
+        access(keyPath: \.pasteMode)
+        access(keyPath: \.triggerMode)
+        access(keyPath: \.customVocabulary)
+        access(keyPath: \.cleanupStyle)
+        access(keyPath: \.cleanupLevel)
+        access(keyPath: \.streamingRawTextEnabled)
+        access(keyPath: \.streamingMode)
+        access(keyPath: \.appTheme)
+        access(keyPath: \.notificationsEnabled)
+        access(keyPath: \.autoPasteEnabled)
+
+        withMutation(keyPath: \.cleanupEnabled) {
+            defaults.set(true, forKey: Keys.cleanupEnabled)
+        }
+        withMutation(keyPath: \.sttEngine) {
+            defaults.removeObject(forKey: Keys.sttEngine)
+        }
+        withMutation(keyPath: \.language) {
+            defaults.set("en-US", forKey: Keys.language)
+        }
+        withMutation(keyPath: \.pasteMode) {
+            defaults.set(PasteMode.cmdV.rawValue, forKey: Keys.pasteMode)
+        }
+        withMutation(keyPath: \.triggerMode) {
+            defaults.removeObject(forKey: Keys.triggerMode)
+        }
+        withMutation(keyPath: \.customVocabulary) {
+            defaults.removeObject(forKey: Keys.customVocabulary)
+        }
+        withMutation(keyPath: \.cleanupStyle) {
+            defaults.set(CleanupStyle.default.rawValue, forKey: Keys.cleanupStyle)
+        }
+        withMutation(keyPath: \.cleanupLevel) {
+            defaults.set(CleanupLevel.medium.rawValue, forKey: Keys.cleanupLevel)
+        }
+        withMutation(keyPath: \.streamingRawTextEnabled) {
+            defaults.set(true, forKey: Keys.streamingRawTextEnabled)
+        }
+        withMutation(keyPath: \.streamingMode) {
+            defaults.set(StreamingMode.keystrokeInjection.rawValue, forKey: Keys.streamingMode)
+        }
+        withMutation(keyPath: \.appTheme) {
+            defaults.set(AppTheme.system.rawValue, forKey: Keys.appTheme)
+        }
+        withMutation(keyPath: \.notificationsEnabled) {
+            defaults.set(true, forKey: Keys.notificationsEnabled)
+        }
+        withMutation(keyPath: \.autoPasteEnabled) {
+            defaults.set(true, forKey: Keys.autoPasteEnabled)
+        }
+
+        SpeakLog.storage.info("SettingsStore reset to defaults")
     }
 }

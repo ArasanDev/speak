@@ -8,9 +8,9 @@
 
 ## Current phase
 
-**P11-a: build-from-source install — loop #35 (2026-06-28). `make install`, `make github-release`, `dist/speak.rb` Homebrew formula, README install section.**
+**P11-c: Streaming raw text + full-stack UI redesign — loop #36 (2026-06-28). Keystroke injection for raw-text streaming + complete sidebar-nav application (Dashboard, History, Settings, Privacy, About panes).**
 
-Gates as of loop #35 (2026-06-28): **build ✅ lint 0-serious ✅ moat 7/7 ✅** (full test suite not re-run — Makefile/docs/Ruby change only)
+Gates as of loop #36 (2026-06-28): **design locked ✅ streaming architecture designed ✅ app structure specified ✅** (implementation phase beginning)
 
 **Loop #35** (P11-a: build-from-source install):
 - **`make install`** — new Makefile target: `make build` then `cp -r Speak.app /Applications/`
@@ -67,7 +67,31 @@ Gates as of loop #33 (2026-06-28): **build ✅ lint 0-serious ✅ moat 7/7 ✅ t
 
 ## In progress
 
-Nothing.
+**Loop #36 (P11-c: Streaming raw text + full-stack UI redesign):**
+
+**Phase 1: Strategic Research & Design (COMPLETE)**
+- ✅ **T1** — Architecture: Option D (keystroke injection, not blind-delete)
+- ✅ **T2** — SettingsStore: `streamingRawTextEnabled` + `StreamingMode` enum
+- ✅ **T3** — KeystrokeStreamingInserter: character-by-character injection via CGEvent (10 tests, moat-safe)
+- ✅ **T12** — Landscape research: 7 smart patterns identified, underutilized areas flagged
+- ✅ **T15** — Strategic research: competitor analysis (8 apps × 12 UX dimensions), design philosophy (10 principles), speak's vision & constraints
+- ✅ **T16** — Design synthesis: locked specification (sidebar nav, 5 panes, 6 settings tabs, privacy pane, Monaco theme, color tokens, component specs, user flows, implementation roadmap)
+
+**Phase 2: Implementation (STARTING NOW)**
+- **T17-T24** (parallel): AppShell foundation, Dashboard/History/Settings/Privacy/About panes, Overlay HUD, integration & testing
+- Critical path: AppShell → Dashboard → History → Settings → Overlay → Testing
+
+**Key Decisions Locked:**
+- Navigation: Sidebar (5 panes: Dashboard, History, Settings, Privacy, About) — proven UX, scales to v0.1
+- Settings: 6 tabs (General, Transcription, AI Cleanup, Hotkey, Privacy, About) with progressive disclosure
+- Privacy pane: **Dedicated sidebar item** (not buried) — speak's BEAT row, trust-building
+- Overlay HUD: read-only, streaming partials, state colors (red/yellow/green), gear popover for quick access
+- Theme: Monaco monospace + semantic colors + 4pt grid (user locked choice)
+- Streaming: keystroke injection (no Cmd+V during live phase, avoiding Terminal paste-provenance prompt risk)
+
+**Design Documents:**
+- `specs/ui-ux-strategic-research-2026-06-28.md` (competitor analysis, philosophy, speak's position)
+- `specs/speak-ui-design-final-2026-06-28.md` (locked design spec, component specs, user flows, implementation roadmap)
 
 ---
 
@@ -79,17 +103,19 @@ Nothing blocking. Human-gate items remain owner-only (live paste in 3 apps, late
 
 ## Next up
 
-P11-a agent work DONE (loop #35). Remaining before v0 ships:
+**P11-c implementation (loop #36):**
+1. **Phase 2A: Core UI foundation** (AppShell + sidebar navigation)
+2. **Phase 2B: Dashboard panes** (Dashboard, History, Settings, Privacy, About — can parallelize)
+3. **Phase 2C: Overlay HUD + integration** (wire to SpeakEngine, streaming indicators, gear popover)
+4. **Phase 2D: Testing & verification** (integration tests, live verification on 3 apps, latency measurement)
 
-**Human-gate (live run)** → P11-b (Developer ID cert — optional, blocks official cask only) → P13 dogfood → P14 top-3 fixes → v0 ship gate → V01-0 Agent Mode.
-
-Human-gate items that unblock the loop (any of these, in any order):
-- Run `make install` → confirm `/Applications/Speak.app` appears
-- Run `make github-release` → confirm `build/release/Speak.zip` produced + verify `codesign -dvvv` shows `Signature=adhoc`
-- Grant Accessibility permission + run `make run` → verify live dictation works end-to-end (P5/P6 live deferred items)
-- Test live paste into Terminal (macOS 26.4 paste-provenance check — project's #1 `[unverified]` item)
-
-(14 files still use `addTeardownBlock` for `UserDefaults` teardown — separate from the SQLite `tempDatabaseURL` pattern, no migration needed.)
+**After P11-c complete:**
+- P11-a human-gate (live test of `make install` / `make github-release`)
+- P11-b (Developer ID cert — optional, blocks official cask)
+- P13 (dogfood: real use, log findings)
+- P14 (fix top 3 bugs from P13)
+- **v0 ship gate** (all MATCH + BEAT rows pass, quality.md checklist)
+- V01-0 (Agent Mode — next iteration)
 
 ---
 

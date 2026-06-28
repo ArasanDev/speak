@@ -78,7 +78,10 @@ final class TranscriptOverlayPanel: NSPanel {
 
     // MARK: - Init
 
-    init(overlayModel: OverlayViewModel) {
+    init(
+        overlayModel: OverlayViewModel,
+        onSettingsPressed: @escaping () -> Void = {}
+    ) {
         // Step 1: style mask — .nonactivatingPanel is the primary focus-steal guard.
         let mask: NSWindow.StyleMask = [
             .nonactivatingPanel,
@@ -114,7 +117,12 @@ final class TranscriptOverlayPanel: NSPanel {
         ]
 
         // Step 4: host the SwiftUI recording HUD view.
-        let hostingView = NSHostingView(rootView: TranscriptOverlayView(model: overlayModel))
+        let hostingView = NSHostingView(
+            rootView: TranscriptOverlayView(
+                model: overlayModel,
+                onSettingsPressed: onSettingsPressed
+            )
+        )
         hostingView.frame = CGRect(origin: .zero, size: frame.size)
         hostingView.autoresizingMask = [NSView.AutoresizingMask.width, NSView.AutoresizingMask.height]
         self.contentView = hostingView

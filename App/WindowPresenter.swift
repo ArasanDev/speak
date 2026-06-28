@@ -47,6 +47,7 @@ final class WindowPresenter {
     private var historyController: HistoryWindowController?
     private var onboardingController: OnboardingWindowController?
     private var dashboardController: DashboardWindowController?
+    private var settingsController: SettingsWindowController?
 
     /// Supplies the live hotkey combo (e.g. ["Fn", "Fn"]) for the dashboard at show
     /// time. Injected by `DictationController`, which owns the `HotkeyMonitor`. Read
@@ -61,13 +62,17 @@ final class WindowPresenter {
 
     // MARK: - Init
 
+    // Store reference to DictationController for SettingsWindowController
+    private weak var dictationController: DictationController?
+
     init(
         historyStore: any HistoryStoring,
         permissionManager: PermissionManager,
         settingsStore: SettingsStore,
         snippetStore: SnippetStore,
         hotkeyComboProvider: @escaping @MainActor () -> [String],
-        hotkeyFiredPublisher: AnyPublisher<Void, Never>? = nil
+        hotkeyFiredPublisher: AnyPublisher<Void, Never>? = nil,
+        dictationController: DictationController? = nil
     ) {
         self.historyStore = historyStore
         self.permissionManager = permissionManager
@@ -75,6 +80,7 @@ final class WindowPresenter {
         self.snippetStore = snippetStore
         self.hotkeyComboProvider = hotkeyComboProvider
         self.hotkeyFiredPublisher = hotkeyFiredPublisher
+        self.dictationController = dictationController
     }
 
     // MARK: - History window
@@ -166,5 +172,25 @@ final class WindowPresenter {
             onboardingController = controller
         }
         onboardingController?.show()
+    }
+
+    // MARK: - Settings window
+
+    /// Lazily create and show the Settings window.
+    /// Returns the controller — exposed as `internal` for testability.
+    @discardableResult
+    func ensureSettingsController() -> SettingsWindowController? {
+        if let existing = settingsController {
+            return existing
+        }
+        guard let controller = dictationController else { return nil }
+        let settingsController = SettingsWindowController(controller: controller)
+        self.settingsController = settingsController
+        return settingsController
+    }
+
+    /// Show the Settings window. The window controller is created lazily on first call.
+    func showSettings() {
+        ensureSettingsController()?.show()
     }
 }

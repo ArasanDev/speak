@@ -203,15 +203,31 @@ private struct WaveformView: View {
 /// Renders four visual states: listening, processing, done, error.
 struct TranscriptOverlayView: View {
     let model: OverlayViewModel
+    let onSettingsPressed: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    init(model: OverlayViewModel, onSettingsPressed: @escaping () -> Void = {}) {
+        self.model = model
+        self.onSettingsPressed = onSettingsPressed
+    }
+
     var body: some View {
-        ZStack {
+        ZStack(alignment: .bottomLeading) {
             // Frosted-glass background — pulls from behind the panel.
             VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
             contentLayer
+
+            // Settings gear icon in bottom-left corner
+            Button(action: onSettingsPressed) {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Settings")
+            .padding(10)
         }
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .padding(2)  // prevent shadow clipping at the edge

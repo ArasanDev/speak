@@ -381,4 +381,22 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.cleanupEngine, .ollama(model: "phi-4"))
     }
 
+    // MARK: - Streaming settings
+
+    func testStreamingRawTextEnabledDefaultTrue() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertTrue(store.streamingRawTextEnabled,
+            "streamingRawTextEnabled default must be true.")
+    }
+
+    func testStreamingModePersistedAcrossRestart() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.streamingMode = .off
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.streamingMode, .off,
+            "streamingMode=.off must survive a SettingsStore reload on the same defaults.")
+    }
+
 }

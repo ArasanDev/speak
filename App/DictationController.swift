@@ -313,7 +313,8 @@ final class DictationController: CLICommandHandler {
             settingsStore: settingsStore,
             snippetStore: snippetStore,
             hotkeyComboProvider: { [weak self] in self?.currentHotkeyCombo() ?? ["Fn"] },
-            hotkeyFiredPublisher: hotkeyFiredPublisher
+            hotkeyFiredPublisher: hotkeyFiredPublisher,
+            dictationController: self
         )
         windowPresenter = presenter
         return presenter
@@ -336,8 +337,11 @@ final class DictationController: CLICommandHandler {
         ensureWindowPresenter().showOnboardingIfNeeded()
 
         // Delegate panel creation to OverlayController — panel is expensive and
-        // must be created once, not per-dictation.
-        overlayController.createPanel()
+        // must be created once, not per-dictation. Pass the settings callback so the
+        // gear icon in the overlay can open the Settings window.
+        overlayController.createPanel(onSettingsPressed: { [weak self] in
+            self?.showSettings()
+        })
         // W2.2 (updated): wire Escape stop — when the user presses Escape while
         // actively dictating, stop the session and paste (same path as single-press stop).
         // Guard on `icon == .listening` prevents re-entrancy: if the session has already
@@ -410,6 +414,13 @@ final class DictationController: CLICommandHandler {
     /// Delegates to `WindowPresenter.showDashboard()`.
     func showDashboard() {
         ensureWindowPresenter().showDashboard()
+    }
+
+    /// Show the Settings window.
+    /// Called from the overlay gear icon or menu.
+    /// Delegates to `WindowPresenter.showSettings()`.
+    func showSettings() {
+        ensureWindowPresenter().showSettings()
     }
 
     /// Cancel the current dictation without pasting. Previously called by the Escape

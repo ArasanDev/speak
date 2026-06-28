@@ -2,15 +2,15 @@
 //
 // The Settings window — a TabView-based multi-section preferences UI.
 //
-// ARCHITECTURE (W3.1):
-//   Replaced the flat 4-section Form with a 7-tab TabView following the macOS
-//   `Settings` scene idiom (`tabItem` + SF Symbol). Sections:
-//     General · Shortcuts · Transcription · AI Cleanup · Dictionary · Privacy · About
+// ARCHITECTURE (P11-c):
+//   A 6-tab TabView following the macOS `Settings` scene idiom (`tabItem` + SF Symbol).
+//   Sections:
+//     General · Transcription · AI Cleanup · Hotkey & Input · Privacy & Data · About
 //
 //   Progressive disclosure: each tab puts the common, day-to-day control up top;
 //   advanced/future options (alt engines) are clearly secondary below a divider.
 //
-// CLEANUP-ENABLED COLLAPSE (W3.1):
+// CLEANUP-ENABLED COLLAPSE (P11-c):
 //   The legacy `cleanupEnabled` boolean and the 4-level `cleanupLevel` picker were
 //   two overlapping "no cleanup" controls. They are now unified:
 //     - The AI Cleanup tab shows ONE picker (`effectiveCleanupLevel`, computed on
@@ -19,12 +19,10 @@
 //     - Style/engine pickers are disabled when level == .none (progressive disclosure).
 //   `SettingsStore.cleanupEnabled` and `.cleanupLevel` remain the stored source of
 //   truth so `SpeakEngine` and the dashboard StylePane continue to work unchanged.
-//   The `effectiveCleanupLevel` setter keeps both in sync. [decision: W3.1]
+//   The `effectiveCleanupLevel` setter keeps both in sync. [decision: P11-c]
 //
-// EXTENSION POINTS (do NOT fill in — later waves own these):
-//   - Shortcuts / hotkey recorder: W3.2 (builder-input + builder-app)
-//   - Pasting / restore-clipboard: W3.4 (builder-input)
-//   - Snippets section: future wave
+// EXTENSION POINTS (do NOT fill in — later phases own these):
+//   - Snippets section: future phase
 //
 // THREADING:
 //   All SwiftUI view bodies are implicitly @MainActor.
@@ -42,13 +40,14 @@ import SwiftUI
 
 struct SettingsView: View {
 
-    // The controller is needed for the Shortcuts tab: it provides `activeBinding`
+    // The controller is needed for the Hotkey & Input tab: it provides `activeBinding`
     // (observed reactively post-recorder-save) and `rebindHotkey(_:)`.
+    // It also provides `historyStore` for the Privacy & Data tab.
     // `store` is extracted separately so child tabs don't depend on the whole controller.
     let store: SettingsStore
     let controller: DictationController
 
-    // [decision: W3.1 — default tab is General; user re-selects across launches]
+    // [decision: P11-c — default tab is General; user re-selects across launches]
     @State private var selectedTab: SettingsTab = .general
 
     init(controller: DictationController) {
@@ -59,72 +58,147 @@ struct SettingsView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
 
-            // 1 — General
+            // 1 — General (theme, notifications, language)
             GeneralSettingsTab(store: store)
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag(SettingsTab.general)
 
-            // 2 — Shortcuts (recorder live in W1.1)
-            ShortcutsSettingsTab(store: store, controller: controller)
-                .tabItem { Label("Shortcuts", systemImage: "keyboard") }
-                .tag(SettingsTab.shortcuts)
-
-            // 3 — Transcription
+            // 2 — Transcription (language, engine, custom vocabulary)
             TranscriptionSettingsTab(store: store)
                 .tabItem { Label("Transcription", systemImage: "mic") }
                 .tag(SettingsTab.transcription)
 
-            // 4 — AI Cleanup (effectiveCleanupLevel collapse lives here)
+            // 3 — AI Cleanup (effectiveCleanupLevel collapse lives here)
             AICleanupSettingsTab(store: store)
                 .tabItem { Label("AI Cleanup", systemImage: "wand.and.stars") }
                 .tag(SettingsTab.aiCleanup)
 
-            // 5 — Dictionary (custom vocabulary — matches DictionaryPaneView binding)
-            DictionarySettingsTab(store: store)
-                .tabItem { Label("Dictionary", systemImage: "character.book.closed") }
-                .tag(SettingsTab.dictionary)
+            // 4 — Hotkey & Input (hotkey recorder, streaming, auto-paste)
+            HotkeyInputSettingsTab(store: store, controller: controller)
+                .tabItem { Label("Hotkey & Input", systemImage: "keyboard") }
+                .tag(SettingsTab.hotkeyInput)
 
-            // 6 — Privacy (moat surface)
-            PrivacySettingsTab()
-                .tabItem { Label("Privacy", systemImage: "lock.shield") }
-                .tag(SettingsTab.privacy)
+            // 5 — Privacy & Data (moat surface + clear/export history)
+            PrivacyDataSettingsTab(store: store, controller: controller)
+                .tabItem { Label("Privacy & Data", systemImage: "lock.shield") }
+                .tag(SettingsTab.privacyData)
 
-            // 7 — About
+            // 6 — About
             AboutSettingsTab()
                 .tabItem { Label("About", systemImage: "info.circle") }
                 .tag(SettingsTab.about)
         }
-        // [decision: W3.1 — 560pt wide suits a 7-tab layout; 480pt min-height
-        //  fits the Privacy section with its badge + four claims. SpeakSpacing.xl = 32,
-        //  so 560 = 32 * ~17.5; rounded to the nearest clean value.]
-        .frame(minWidth: 560, minHeight: 480)
+        // [decision: P11-c — 760pt wide × 520pt tall for 6-tab layout.
+        //  SpeakSpacing.xl = 32, so 760 = 32 * ~23.75; 520 fits Privacy & Data
+        //  section with badge, four guarantee rows, and button controls.]
+        .frame(minWidth: 760, minHeight: 520)
     }
 }
 
 // MARK: - Tab identifier
 
 private enum SettingsTab: Hashable {
-    case general, shortcuts, transcription, aiCleanup, dictionary, privacy, about
+    case general, transcription, aiCleanup, hotkeyInput, privacyData, about
 }
 
 // MARK: - 1. General
 
-/// General: paste mode + future general controls.
-/// `pasteMode` was previously in "Text Insertion" — folded here per W3.1 scope note.
+/// General: appearance (theme), notifications, paste mode, and language selection.
+/// [decision: P11-c — consolidates user-facing preferences that apply globally]
 private struct GeneralSettingsTab: View {
     let store: SettingsStore
+
+    // Locale list loaded async from SpeechTranscriber.supportedLocales.
+    @State private var supportedLocales: [Locale] = []
+    @State private var installedLocaleIDs: Set<String> = []
+    @State private var localesLoaded = false
+    @State private var showLanguageResetAlert = false
+    @State private var pendingResetLocale: Locale?
 
     var body: some View {
         Form {
             Section {
+                Picker("Appearance", selection: Binding(
+                    get: { store.appTheme },
+                    set: { store.appTheme = $0 }
+                )) {
+                    Text("Light").tag(AppTheme.light)
+                    Text("Dark").tag(AppTheme.dark)
+                    Text("System (default)").tag(AppTheme.system)
+                }
+                .pickerStyle(.menu)
+            } header: {
+                Text("Theme")
+            }
+
+            Section {
+                Toggle("Enable notifications", isOn: Binding(
+                    get: { store.notificationsEnabled },
+                    set: { store.notificationsEnabled = $0 }
+                ))
+                Text("Show notifications for dictation completion and errors.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Notifications")
+            }
+
+            Section {
+                if !localesLoaded {
+                    HStack {
+                        Text("Language")
+                        Spacer()
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                } else {
+                    Picker("Language", selection: Binding(
+                        get: { store.language.identifier },
+                        set: { store.language = Locale(identifier: $0) }
+                    )) {
+                        ForEach(supportedLocales, id: \.identifier) { locale in
+                            HStack(spacing: SpeakSpacing.xs) {
+                                Text(SpeechTranscriberLocaleSource.displayName(for: locale))
+                                if !installedLocaleIDs.contains(locale.identifier) {
+                                    Text("(download)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .tag(locale.identifier)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+            } header: {
+                Text("Language")
+            } footer: {
+                if localesLoaded && supportedLocales.isEmpty {
+                    Text("No supported languages found — SpeechAnalyzer may not be available on this device.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .task {
+                async let supported = SpeechTranscriberLocaleSource.supportedLocales()
+                async let installed = SpeechTranscriberLocaleSource.installedLocales()
+                let (s, i) = await (supported, installed)
+                supportedLocales = s
+                installedLocaleIDs = Set(i.map(\.identifier))
+                localesLoaded = true
+
+                if !s.isEmpty && !s.contains(where: { $0.identifier == store.language.identifier }) {
+                    let fallback = s[0]
+                    store.language = fallback
+                    pendingResetLocale = fallback
+                    showLanguageResetAlert = true
+                }
+            }
+
+            Section {
                 Picker("Paste Mode", selection: Binding(
                     get: { store.pasteMode },
                     set: {
-                        // Guard: `.accessibility` is a v1 stub — `.disabled(true)` on the
-                        // tag row is visual-only and does not block keyboard navigation.
-                        // Intercept and reject the write so the stored value stays `.cmdV`.
-                        // [decision: custom binding guard — the only correct way to prevent
-                        //  a disabled Picker row from being selected via keyboard nav on macOS]
                         guard $0 != .accessibility else { return }
                         store.pasteMode = $0
                     }
@@ -142,55 +216,47 @@ private struct GeneralSettingsTab: View {
             } header: {
                 Text("Text Insertion")
             }
-
-            // W3.4 extension point — Pasting / restore-clipboard belongs here.
-            // [stub: W3.4 (builder-input) owns the restore-clipboard toggle]
-            Section {
-                HStack {
-                    Image(systemName: "arrow.uturn.left.circle")
-                        .foregroundStyle(.secondary)
-                    Text("Restore clipboard after paste")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("Coming in W3.4")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            } header: {
-                Text("Clipboard")
-            }
         }
         .formStyle(.grouped)
         .padding(SpeakSpacing.md)
+        .alert(
+            "Language Reset",
+            isPresented: $showLanguageResetAlert,
+            actions: {
+                Button("OK", role: .cancel) { pendingResetLocale = nil }
+            },
+            message: {
+                let name = pendingResetLocale.flatMap {
+                    $0.localizedString(forIdentifier: $0.identifier)
+                } ?? pendingResetLocale?.identifier ?? "the first supported language"
+                Text("Your previously selected language is no longer available. " +
+                     "Language has been reset to \(name).")
+            }
+        )
     }
 }
 
-// MARK: - 2. Shortcuts
+// MARK: - 4. Hotkey & Input
 
-/// Shortcuts: shows the current hotkey binding and lets the user record a new one.
-/// The recorder sheet (HotkeyRecorderView) was added in W1.1.
+/// Hotkey & Input: hotkey binding, activation mode, and input/output controls.
+/// Shows the current hotkey binding and lets the user record a new one.
 ///
 /// Trigger-mode changes made *within* the recorder sheet are applied atomically via
 /// `controller.rebindHotkey(_:)`, which updates both the live monitor and
-/// `store.triggerMode` in one call. The picker below remains as a shortcut for
-/// changing only the trigger mode without re-recording the key.
+/// `store.triggerMode` in one call. [decision: P11-c]
 ///
 /// Note on Hybrid mode: `HotkeyBinding.Trigger` has two cases (`doubleTap`, `hold`).
 /// A third `hybrid` case was intentionally not added — it requires runtime detection
-/// logic in HotkeyMonitor and is deferred to a later wave. The picker offers the two
-/// working modes only.
-private struct ShortcutsSettingsTab: View {
+/// logic in HotkeyMonitor and is deferred to a later phase.
+private struct HotkeyInputSettingsTab: View {
     let store: SettingsStore
     let controller: DictationController
 
-    // Sheet state for the recorder.
     @State private var showingRecorder: Bool = false
 
     var body: some View {
         Form {
             Section {
-                // Trigger mode picker — key-agnostic labels; the actual key
-                // is shown via `controller.activeBinding.displayString` below.
                 Picker("Activation Mode", selection: Binding(
                     get: { store.triggerMode },
                     set: { store.triggerMode = $0 }
@@ -221,9 +287,6 @@ private struct ShortcutsSettingsTab: View {
                 HStack {
                     Text("Current Hotkey")
                     Spacer()
-                    // Monaco for the keybinding label (data, not chrome). [decision: W3.1]
-                    // Reads `controller.activeBinding.displayString` so the label refreshes
-                    // immediately after a recorder save without a relaunch. [decision: W1.1]
                     Text(controller.activeBinding.displayString)
                         .font(.speakMonoBody)
                         .foregroundStyle(.primary)
@@ -235,7 +298,6 @@ private struct ShortcutsSettingsTab: View {
                         )
                 }
 
-                // Record button — opens the HotkeyRecorderView sheet.
                 Button("Record\u{2026}") {
                     showingRecorder = true
                 }
@@ -254,11 +316,21 @@ private struct ShortcutsSettingsTab: View {
             } header: {
                 Text("Hotkey")
             } footer: {
-                // Hybrid mode (hold + double-tap timing disambiguation) is deferred
-                // — it requires HotkeyMonitor detection work. Only two modes ship in W1.1.
-                Text("Record any key+modifier combo or a modifier-only key (e.g. Right-Command, Fn). Hybrid mode comes in a later wave.")
+                Text("Record any key+modifier combo or a modifier-only key (e.g. Right-Command, Fn).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Auto-paste after dictation", isOn: Binding(
+                    get: { store.autoPasteEnabled },
+                    set: { store.autoPasteEnabled = $0 }
+                ))
+                Text("When enabled, cleaned text is automatically pasted at the cursor after dictation ends.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Output")
             }
         }
         .formStyle(.grouped)
@@ -266,95 +338,16 @@ private struct ShortcutsSettingsTab: View {
     }
 }
 
-// MARK: - 3. Transcription
+// MARK: - 2. Transcription
 
+/// Transcription: speech engine configuration and custom vocabulary hints.
+/// Language selection is now in General. [decision: P11-c]
 private struct TranscriptionSettingsTab: View {
     let store: SettingsStore
-
-    // Locale list loaded async from SpeechTranscriber.supportedLocales.
-    // Seeded with the current selection so the picker is never visually blank
-    // while loading (the selected row always appears even before the full list
-    // arrives). [decision: 1.2 — seed avoids a blank-picker flash on open]
-    @State private var supportedLocales: [Locale] = []
-    @State private var installedLocaleIDs: Set<String> = []
-    @State private var localesLoaded = false
-    /// `true` when the stored locale was not in the supported list and was auto-reset.
-    /// Drives the unsupported-locale alert so the reset is visible to the user.
-    @State private var showLanguageResetAlert = false
-    /// The locale the settings were silently reset TO — named in the alert message.
-    @State private var pendingResetLocale: Locale?
+    @State private var newTerm: String = ""
 
     var body: some View {
         Form {
-            Section {
-                if !localesLoaded {
-                    // Loading state — show a spinner until the async fetch completes.
-                    // [decision: 1.2 — ProgressView placeholder; avoids blank picker]
-                    HStack {
-                        Text("Language")
-                        Spacer()
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                } else {
-                    Picker("Language", selection: Binding(
-                        get: { store.language.identifier },
-                        set: { store.language = Locale(identifier: $0) }
-                    )) {
-                        ForEach(supportedLocales, id: \.identifier) { locale in
-                            HStack(spacing: SpeakSpacing.xs) {
-                                Text(SpeechTranscriberLocaleSource.displayName(for: locale))
-                                // Indicate locales that still need a model download.
-                                // [decision: 1.2 — informational label; provisionAsset
-                                //  handles the actual download at transcription time]
-                                if !installedLocaleIDs.contains(locale.identifier) {
-                                    Text("(download)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .tag(locale.identifier)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                }
-            } header: {
-                Text("Language")
-            } footer: {
-                if localesLoaded && supportedLocales.isEmpty {
-                    // SpeechTranscriber not available on this device (e.g., Intel Mac).
-                    // The existing engine falls back gracefully; the picker just shows nothing.
-                    Text("No supported languages found — SpeechAnalyzer may not be available on this device.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .task {
-                // Fetch the locale lists concurrently; both are get async.
-                // [verified: SpeechTranscriber.supportedLocales: [Locale] { get async }
-                //  and SpeechTranscriber.installedLocales: [Locale] { get async }
-                //  from Apple developer docs, 2026-06-22]
-                async let supported = SpeechTranscriberLocaleSource.supportedLocales()
-                async let installed = SpeechTranscriberLocaleSource.installedLocales()
-                let (s, i) = await (supported, installed)
-                supportedLocales = s
-                installedLocaleIDs = Set(i.map(\.identifier))
-                localesLoaded = true
-
-                // If the stored locale is not in the supported list, reset to
-                // the first supported locale to avoid a stuck-blank picker — but
-                // surface an alert rather than resetting silently.
-                // [decision: alert on unsupported-locale reset — the user deserves
-                //  to know their language preference changed; Monaco caption below
-                //  is the secondary affordance. benchmark.md §7]
-                if !s.isEmpty && !s.contains(where: { $0.identifier == store.language.identifier }) {
-                    let fallback = s[0]
-                    store.language = fallback
-                    pendingResetLocale = fallback
-                    showLanguageResetAlert = true
-                }
-            }
-
             Section {
                 Picker("Speech Engine", selection: Binding(
                     get: { store.sttEngine },
@@ -377,30 +370,77 @@ private struct TranscriptionSettingsTab: View {
                     .foregroundStyle(.secondary)
             } header: {
                 Text("Engine")
-                    .font(.caption)
             } footer: {
                 Text("Alternative engines (WhisperKit, whisper.cpp) arrive in v0.1 and v1.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                HStack(spacing: SpeakSpacing.sm) {
+                    TextField("Add a word or name\u{2026}", text: $newTerm)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.speakMonoBody)
+                        .onSubmit(addTerm)
+                    Button("Add", action: addTerm)
+                        .disabled(newTerm.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                Text("Custom words are fed to the speech recogniser as contextual hints so speak spells your names and terms correctly.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Divider()
+
+                let terms = store.customVocabulary
+                if terms.isEmpty {
+                    VStack(spacing: SpeakSpacing.sm) {
+                        Image(systemName: "character.book.closed")
+                            .font(.system(size: 24))
+                            .foregroundStyle(.tertiary)
+                        Text("No custom words yet.")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(SpeakSpacing.md)
+                } else {
+                    ForEach(terms, id: \.self) { term in
+                        HStack {
+                            Text(term)
+                                .font(.speakMonoBody)
+                            Spacer()
+                            Button {
+                                removeTerm(term)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Remove \(term)")
+                        }
+                    }
+                }
+            } header: {
+                Text("Custom Vocabulary")
+            } footer: {
+                Text("Custom vocabulary is matched against transcriptions to improve accuracy for your specific names and terms.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
         .padding(SpeakSpacing.md)
-        .alert(
-            "Language Reset",
-            isPresented: $showLanguageResetAlert,
-            actions: {
-                Button("OK", role: .cancel) { pendingResetLocale = nil }
-            },
-            message: {
-                // Show the locale display name when available; fall back to identifier.
-                let name = pendingResetLocale.flatMap {
-                    $0.localizedString(forIdentifier: $0.identifier)
-                } ?? pendingResetLocale?.identifier ?? "the first supported language"
-                Text("Your previously selected language is no longer available. " +
-                     "Language has been reset to \(name).")
-            }
-        )
+    }
+
+    private func addTerm() {
+        let updated = CustomVocabulary.adding(newTerm, to: store.customVocabulary)
+        store.customVocabulary = updated
+        newTerm = ""
+    }
+
+    private func removeTerm(_ term: String) {
+        store.customVocabulary = CustomVocabulary.removing(term, from: store.customVocabulary)
     }
 }
 
@@ -656,89 +696,18 @@ private struct AICleanupSettingsTab: View {
     }
 }
 
-// MARK: - 5. Dictionary
+// MARK: - 5. Privacy & Data
 
-/// Dictionary: custom vocabulary for the STT recognizer.
-/// Binding pattern mirrors DictionaryPaneView to stay consistent — the store
-/// is the single source of truth for both surfaces.
-private struct DictionarySettingsTab: View {
-    let store: SettingsStore
-    @State private var newTerm: String = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.md) {
-            // Add bar
-            HStack(spacing: SpeakSpacing.sm) {
-                TextField("Add a word or name\u{2026}", text: $newTerm)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.speakMonoBody)
-                    .onSubmit(addTerm)
-                Button("Add", action: addTerm)
-                    .disabled(newTerm.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            .padding(.horizontal, SpeakSpacing.md)
-            .padding(.top, SpeakSpacing.md)
-
-            Text("Custom words are fed to the speech recogniser as contextual hints so speak spells your names and terms correctly.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, SpeakSpacing.md)
-
-            Divider()
-
-            let terms = store.customVocabulary
-            if terms.isEmpty {
-                VStack(spacing: SpeakSpacing.sm) {
-                    Image(systemName: "character.book.closed")
-                        .font(.system(size: 32))
-                        .foregroundStyle(.tertiary)
-                    Text("No custom words yet.")
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(SpeakSpacing.lg)
-            } else {
-                List {
-                    ForEach(terms, id: \.self) { term in
-                        HStack {
-                            Text(term)
-                                .font(.speakMonoBody)
-                            Spacer()
-                            Button {
-                                removeTerm(term)
-                            } label: {
-                                Image(systemName: "trash")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.borderless)
-                            .help("Remove \(term)")
-                        }
-                        .padding(.vertical, SpeakSpacing.xs)
-                    }
-                }
-                .listStyle(.inset)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .padding(SpeakSpacing.md)
-    }
-
-    private func addTerm() {
-        let updated = CustomVocabulary.adding(newTerm, to: store.customVocabulary)
-        store.customVocabulary = updated
-        newTerm = ""
-    }
-
-    private func removeTerm(_ term: String) {
-        store.customVocabulary = CustomVocabulary.removing(term, from: store.customVocabulary)
-    }
-}
-
-// MARK: - 6. Privacy (moat surface)
-
-/// Privacy: the structural moat — four concrete on-device guarantees, calm and premium.
+/// Privacy & Data: the structural moat (four on-device guarantees) + data controls.
 /// This is marketing AND trust: a local-first app's clearest differentiator.
-private struct PrivacySettingsTab: View {
+/// [decision: P11-c — add export/clear/reset buttons for P11 compliance]
+private struct PrivacyDataSettingsTab: View {
+    let store: SettingsStore
+    let controller: DictationController
+
+    @State private var showResetConfirmation = false
+    @State private var resetError: String?
+    @State private var showResetError = false
 
     var body: some View {
         ScrollView {
@@ -748,8 +717,6 @@ private struct PrivacySettingsTab: View {
                 HStack(alignment: .top, spacing: SpeakSpacing.md) {
                     Image(systemName: "lock.shield.fill")
                         .font(.system(size: 40))
-                        // Teal/green conveys "safe" without overriding the amber accent.
-                        // [decision: system green — native macOS feel, no custom color needed]
                         .foregroundStyle(.green)
                     VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                         Text("100% On-Device")
@@ -787,7 +754,7 @@ private struct PrivacySettingsTab: View {
                     )
                     Divider()
                     PrivacyGuaranteeRow(
-                        icon: "clipboard.fill",  // clipboard → icon for the clipboard topic
+                        icon: "clipboard.fill",
                         title: "Never reads your clipboard",
                         detail: "speak only writes to the clipboard to paste your dictation. It never reads what is already there."
                     )
@@ -798,26 +765,110 @@ private struct PrivacySettingsTab: View {
                         .fill(Color.speakSurface)
                 )
 
-                // W3.3 extension point — auto-delete transcript policy belongs here.
-                // [stub: W3.3 owns transcript auto-delete and audio-retention policy]
-                HStack {
-                    Image(systemName: "timer")
-                        .foregroundStyle(.secondary)
-                    Text("Transcript auto-delete policy")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("Coming in W3.3")
+                // Data controls — reset settings, clear history, export data.
+                VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+                    Text("Data Management")
+                        .font(.headline)
+
+                    Button(action: { showResetConfirmation = true }) {
+                        HStack {
+                            Image(systemName: "arrow.counterclockwise")
+                            Text("Reset All Settings to Defaults")
+                            Spacer()
+                        }
+                        .foregroundStyle(.primary)
+                    }
+                    .padding(.vertical, SpeakSpacing.sm)
+                    .padding(.horizontal, SpeakSpacing.md)
+                    .background(Color.speakSurface)
+                    .cornerRadius(6)
+
+                    Button(action: {
+                        Task {
+                            do {
+                                try await controller.historyStore.clear()
+                                SpeakLog.app.info("History cleared via Settings")
+                            } catch {
+                                resetError = error.localizedDescription
+                                showResetError = true
+                            }
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "trash")
+                            Text("Clear All History")
+                            Spacer()
+                        }
+                        .foregroundStyle(.primary)
+                    }
+                    .padding(.vertical, SpeakSpacing.sm)
+                    .padding(.horizontal, SpeakSpacing.md)
+                    .background(Color.speakSurface)
+                    .cornerRadius(6)
+
+                    Button(action: {
+                        Task {
+                            do {
+                                let exported = try await controller.historyStore.export()
+                                let pasteboard = NSPasteboard.general
+                                pasteboard.clearContents()
+                                pasteboard.setString(exported, forType: .string)
+                                SpeakLog.app.info("History exported via Settings")
+                            } catch {
+                                resetError = error.localizedDescription
+                                showResetError = true
+                            }
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "square.and.arrow.up")
+                            Text("Export History as JSON")
+                            Spacer()
+                        }
+                        .foregroundStyle(.primary)
+                    }
+                    .padding(.vertical, SpeakSpacing.sm)
+                    .padding(.horizontal, SpeakSpacing.md)
+                    .background(Color.speakSurface)
+                    .cornerRadius(6)
+
+                    Text("History is stored locally on your Mac. Export creates a JSON backup on your clipboard.")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                 }
-                .padding(SpeakSpacing.md)
+                .padding(SpeakSpacing.lg)
                 .background(
-                    RoundedRectangle(cornerRadius: 10)
+                    RoundedRectangle(cornerRadius: 12)
                         .fill(Color.speakSurface)
                 )
             }
             .padding(SpeakSpacing.lg)
         }
+        .alert(
+            "Reset Settings?",
+            isPresented: $showResetConfirmation,
+            actions: {
+                Button("Cancel", role: .cancel) { }
+                Button("Reset", role: .destructive) {
+                    store.resetToDefaults()
+                }
+            },
+            message: {
+                Text("This will reset all settings to their defaults. History is not affected.")
+            }
+        )
+        .alert(
+            "Error",
+            isPresented: $showResetError,
+            actions: {
+                Button("OK", role: .cancel) { resetError = nil }
+            },
+            message: {
+                if let error = resetError {
+                    Text(error)
+                }
+            }
+        )
     }
 }
 
@@ -844,15 +895,67 @@ private struct PrivacyGuaranteeRow: View {
     }
 }
 
-// MARK: - 7. About
+// MARK: - 6. About
 
-/// About tab — delegates to the standalone AboutView which provides
-/// the rich version, system info, and links surface. AboutView is shared
-/// across Settings and any future about-pane surfaces (W3.1).
-/// [decision: AboutView is the single source of truth for About content]
 private struct AboutSettingsTab: View {
+
+    // Static URL constants — compile-time literals guaranteed non-nil, but
+    // URL(string:) returns Optional so we store as URL? and map at the call site
+    // rather than force-unwrap. [decision: P11-c — no force-unwrap rule]
+    fileprivate static let githubURL = URL(string: "https://github.com/tamilarasanraja/speak")
+    fileprivate static let issuesURL = URL(string: "https://github.com/tamilarasanraja/speak/issues")
+
+    // Version string from the bundle — zero magic strings. [decision: P11-c]
+    private var appVersion: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
+        return [version, build.map { "(\($0))" }]
+            .compactMap { $0 }
+            .joined(separator: " ")
+    }
+
     var body: some View {
-        AboutView()
+        VStack(spacing: SpeakSpacing.lg) {
+            Spacer()
+
+            // App name + version in Monaco — content voice, not chrome.
+            VStack(spacing: SpeakSpacing.sm) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 48))
+                    .foregroundStyle(Color.speakAccent)
+                Text("speak")
+                    .font(.speakMonoTitle)
+                if !appVersion.isEmpty {
+                    Text("v\(appVersion)")
+                        .font(.speakMonoCaption)
+                        .foregroundStyle(.secondary)
+                }
+                Text("Free · Open-source · MIT")
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+                .frame(maxWidth: 200)  // [decision: short decorative divider, visual balance]
+
+            // Links — URL(string:) with compile-time literals always succeeds, but
+            // force-unwrap is banned by the hard rules. Use static lets so the
+            // compiler can prove the optionality at the call site. [decision: P11-c]
+            VStack(spacing: SpeakSpacing.sm) {
+                AboutSettingsTab.githubURL.map { url in
+                    Link("View on GitHub", destination: url)
+                        .font(.speakMonoCaption)
+                }
+                AboutSettingsTab.issuesURL.map { url in
+                    Link("Report an issue", destination: url)
+                        .font(.speakMonoCaption)
+                }
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .padding(SpeakSpacing.lg)
     }
 }
 
@@ -861,7 +964,7 @@ private struct AboutSettingsTab: View {
 #if DEBUG
 #Preview("Settings — General") {
     // Preview with a stub DictationController is not practical (it starts a
-    // CGEventTap). Use a simplified init path for the preview.
+    // CGEventTap and requires HistoryStore). Use a simplified init path for the preview.
     SettingsPreviewWrapper()
 }
 
@@ -871,14 +974,14 @@ private struct SettingsPreviewWrapper: View {
         TabView {
             GeneralSettingsTab(store: store)
                 .tabItem { Label("General", systemImage: "gearshape") }
+            TranscriptionSettingsTab(store: store)
+                .tabItem { Label("Transcription", systemImage: "mic") }
             AICleanupSettingsTab(store: store)
                 .tabItem { Label("AI Cleanup", systemImage: "wand.and.stars") }
-            PrivacySettingsTab()
-                .tabItem { Label("Privacy", systemImage: "lock.shield") }
             AboutSettingsTab()
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
-        .frame(minWidth: 560, minHeight: 480)
+        .frame(minWidth: 760, minHeight: 520)
     }
 }
 #endif

@@ -320,7 +320,10 @@ final class DebugLaunchDispatcher {
             overlayModel.partialText = ""
         }
 
-        let panel = TranscriptOverlayPanel(overlayModel: overlayModel)
+        let panel = TranscriptOverlayPanel(
+            overlayModel: overlayModel,
+            onSettingsPressed: {}  // No-op for debug overlay
+        )
         panel.show()
         keepAlive(panel)
         keepAlive(overlayModel)

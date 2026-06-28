@@ -107,6 +107,16 @@ struct SpeakApp: App {
         }
         .menuBarExtraStyle(.menu)
 
+        // AppShell window — opened on demand from the menu, not at launch.
+        // Window scene renders when presented; doesn't auto-open on app start.
+        Window("speak", id: "appshell") {
+            if let ctrl = appDelegate.controller {
+                AppShell(controller: ctrl)
+            }
+        }
+        .defaultPosition(.center)
+        .defaultSize(width: 960, height: 600)
+
         Settings {
             if let ctrl = appDelegate.controller {
                 SettingsView(controller: ctrl)
@@ -208,6 +218,8 @@ private struct MenuBarLabel: View {
 private struct SpeakMenu: View {
     let controller: DictationController
 
+    @Environment(\.openWindow) private var openWindow
+
     var body: some View {
         Text(statusLine(for: controller.icon))
             .foregroundStyle(.secondary)
@@ -238,7 +250,7 @@ private struct SpeakMenu: View {
         Divider()
 
         Button("Open speak\u{2026}") {
-            controller.showDashboard()
+            openWindow(id: "appshell")
         }
         .keyboardShortcut("o")
 

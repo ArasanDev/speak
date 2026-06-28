@@ -1,15 +1,17 @@
 // App/Dashboard/Panes/HomePaneView.swift
 //
-// The Home pane — the daily-open landing surface. Per the verified Wispr layout
-// (research/wispr-flow-ui-verified.md), Home IS the day-grouped dictation feed with a
-// stats rail on the right — NOT a status page (History is the deeper searchable archive).
+// The Home pane — the daily-open dashboard surface. Per the locked design spec
+// (speak-ui-design-final-2026-06-28.md §Dashboard Home Pane), shows:
+// 1. Hotkey Status (top) — green/red indicator + quick link to grant permissions
+// 2. [Start Dictation] button (prominent blue CTA)
+// 3. Today's Quick Stats (words, sessions, engine badge)
+// 4. Recent Dictations (last 5 entries with time, raw/cleaned preview, engine)
 //
-// Layout:
-//   [ personalized greeting + TODAY/YESTERDAY feed ]   [ stats rail: words/avg/streak ]
-//
-// Reads `SettingsStore` reactively (cleanup status) and fetches history off-main via
-// `.task`. Content is Monaco; chrome/labels use the system font.
+// Content is Monaco 13pt; chrome/labels use the system font.
+// Reads `SettingsStore` reactively (cleanup status) and fetches history via `.task`.
 
+import Foundation
+import os
 import SpeakCore
 import SwiftUI
 
@@ -18,190 +20,276 @@ import SwiftUI
 struct HomePaneView: View {
     let context: DashboardContext
 
-    let settings: SettingsStore
     @State private var entries: [HistoryEntry] = []
     @State private var loaded = false
+    @State private var micPermissionStatus: PermissionState = .notDetermined
+    @State private var accPermissionStatus: PermissionState = .notDetermined
 
     init(context: DashboardContext) {
         self.context = context
-        self.settings = context.settingsStore
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            greeting
-            Divider()
-            HStack(alignment: .top, spacing: 0) {
-                feedColumn
-                Divider()
-                statsRail
-                    // [decision: 260pt rail — fits the stat card + status without crowding the feed]
-                    .frame(width: 260)
-            }
-        }
-        .task { await loadEntries() }
-    }
-
-    // MARK: - Greeting (spans the full width at the top, Wispr-style)
-
-    private var greeting: some View {
-        HStack(spacing: SpeakSpacing.sm) {
-            Text("Hey \(firstName), get back into the flow with")
-                .font(.speakMonoTitle)
-            KeyCapView(label: "fn", isAccented: true)
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, SpeakSpacing.lg)
-        .padding(.vertical, SpeakSpacing.md)
-    }
-
-    // MARK: - Feed column (day-grouped history)
-
-    private var feedColumn: some View {
-        Group {
-            if loaded && entries.isEmpty {
-                emptyFeed
-            } else {
-                feedList
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var feedList: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: SpeakSpacing.lg) {
-                ForEach(groupedEntries, id: \.title) { group in
-                    VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-                        Text(group.title)
-                            .font(.speakMonoCaption)
+            VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
+                // Hotkey status
+                hotkeyStatusSection
+                    .padding(.horizontal, SpeakSpacing.lg)
+                    .padding(.vertical, SpeakSpacing.md)
+
+                // Start button (prominent CTA)
+                startDictationButton
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, SpeakSpacing.lg)
+
+                Divider()
+                    .padding(.vertical, SpeakSpacing.md)
+
+                // Today's stats
+                todayStatsSection
+                    .padding(.horizontal, SpeakSpacing.lg)
+
+                Divider()
+                    .padding(.vertical, SpeakSpacing.md)
+
+                // Recent dictations
+                recentDictationsSection
+                    .padding(.horizontal, SpeakSpacing.lg)
+                    .padding(.bottom, SpeakSpacing.lg)
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .task { await loadInitialData() }
+        .onAppear { updatePermissionStatus() }
+    }
+
+    // MARK: - Hotkey Status (top)
+
+    private var hotkeyStatusSection: some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+            let ready = micPermissionStatus == .granted && accPermissionStatus == .granted
+
+            HStack(alignment: .center, spacing: SpeakSpacing.sm) {
+                Image(systemName: ready ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .foregroundStyle(ready ? Color(nsColor: .systemGreen) : Color(nsColor: .systemRed))
+                    .font(.system(size: 16))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(ready ? "Ready to dictate" : "Missing permissions")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Text(ready
+                        ? "Double-tap Fn to start"
+                        : "Grant microphone & accessibility access")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+
+                if !ready {
+                    NavigationLink(destination: { /* Navigate to Settings */ }) {
+                        Text("Fix →")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color(nsColor: .systemBlue))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(SpeakSpacing.md)
+            .background(Color.speakSurface)
+            .cornerRadius(6)
+        }
+    }
+
+    // MARK: - [Start Dictation] button
+
+    private var startDictationButton: some View {
+        Button(action: { startDictation() }) {
+            HStack(spacing: SpeakSpacing.sm) {
+                Image(systemName: "mic.fill")
+                Text("Start Dictation")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 40)
+            .foregroundStyle(.white)
+            .background(Color(nsColor: .systemBlue))
+            .cornerRadius(6)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func startDictation() {
+        // [unverified: integration point, pending engine wiring in P11-c phase 3]
+        guard let engine = context.speakEngine else { return }
+        Task {
+            do {
+                _ = try await engine.beginDictation()
+            } catch {
+                os.Logger(subsystem: "speak", category: "dashboard").error("Start dictation failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    // MARK: - Today's Quick Stats
+
+    private var todayStatsSection: some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+            Text("Today's Quick Stats")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+
+            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+                let stats = InsightsStats(entries: todayEntries, now: Date(), calendar: .current)
+
+                HStack(spacing: SpeakSpacing.lg) {
+                    statCard(value: "\(stats.totalWords)", label: "Words")
+                    statCard(value: "\(todayEntries.count)", label: "Sessions")
+                    Spacer(minLength: 0)
+                }
+
+                if context.settingsStore.cleanupEnabled {
+                    HStack(spacing: SpeakSpacing.sm) {
+                        Image(systemName: "wand.and.stars")
+                            .foregroundStyle(Color.speakAccent)
+                            .font(.system(size: 11))
+                        Text("Foundation Models")
+                            .font(.system(size: 11))
                             .foregroundStyle(.secondary)
-                        ForEach(group.entries) { entry in
-                            FeedRow(entry: entry)
+                    }
+                }
+            }
+        }
+    }
+
+    private func statCard(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            Text(value)
+                .font(.speakMonoBody)
+                .foregroundStyle(Color.speakAccent)
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Recent Dictations (last 5)
+
+    private var recentDictationsSection: some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+            HStack {
+                Text("Recent Dictations")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 0)
+                // [decision: View All navigation to History pane deferred to P11-c phase 2]
+                Text("View All →")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(nsColor: .systemBlue))
+            }
+
+            if todayEntries.isEmpty {
+                emptyState
+            } else {
+                VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+                    ForEach(Array(todayEntries.prefix(5)), id: \.id) { entry in
+                        RecentEntryRow(entry: entry)
+                        if entry.id != todayEntries.prefix(5).last?.id {
+                            Divider()
+                                .padding(.vertical, SpeakSpacing.xs)
                         }
                     }
                 }
             }
-            .padding(.horizontal, SpeakSpacing.lg)
-            .padding(.bottom, SpeakSpacing.lg)
         }
     }
 
-    private var emptyFeed: some View {
-        PanePlaceholder(
-            systemImage: "waveform",
-            message: "No dictations yet. Double-tap fn anywhere and start talking —\n"
-                + "your words land here, neat-written."
-        )
-    }
-
-    // MARK: - Stats rail
-
-    private var statsRail: some View {
-        let stats = InsightsStats(entries: entries, now: Date(), calendar: .current)
-        return ScrollView {
-            VStack(alignment: .leading, spacing: SpeakSpacing.md) {
-                statRow(value: "\(stats.totalWords)", label: "total words")
-                statRow(value: "\(stats.wordsPerMinute)", label: "words / min")
-                statRow(value: "\(stats.averageWordsPerDictation)", label: "avg words / session")
-                statRow(value: "\(stats.currentStreakDays)", label: "day streak")
-                Divider().padding(.vertical, SpeakSpacing.xs)
-                cleanupStatus
-            }
-            .padding(SpeakSpacing.lg)
-        }
-    }
-
-    private func statRow(value: String, label: String) -> some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text(value)
-                .font(.speakMonoStat)
-                .foregroundStyle(Color.speakAccent)
-            Text(label)
-                .font(.speakMonoCaption)
+    private var emptyState: some View {
+        VStack(alignment: .center, spacing: SpeakSpacing.md) {
+            Image(systemName: "waveform")
+                .font(.system(size: 20))
                 .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var cleanupStatus: some View {
-        HStack(spacing: SpeakSpacing.sm) {
-            Image(systemName: settings.cleanupEnabled ? "wand.and.stars" : "text.alignleft")
-                .foregroundStyle(settings.cleanupEnabled ? Color.speakAccent : Color.secondary)
-            Text(settings.cleanupEnabled ? "AI neat-writing on" : "Raw transcript mode")
-                .font(.speakMonoCaption)
+            Text("No dictations yet. Double-tap Fn and start talking.")
+                .font(.system(size: 12))
                 .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
+                .multilineTextAlignment(.center)
         }
+        .frame(maxWidth: .infinity)
+        .padding(SpeakSpacing.lg)
     }
 
-    // MARK: - Data
+    // MARK: - Data loading
 
-    /// The current user's first name for the greeting; falls back to "there".
-    private var firstName: String {
-        let full = NSFullUserName().split(separator: " ").first.map(String.init) ?? ""
-        return full.isEmpty ? "there" : full
-    }
-
-    private func loadEntries() async {
+    private func loadInitialData() async {
         do {
-            // [decision: 200 recent entries — plenty for the Home feed + stats rail at
-            //  negligible SQLite cost; the full archive lives in the History pane.]
-            entries = try await context.historyStore.recent(limit: 200)
+            let all = try await context.historyStore.recent(limit: 100)
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: Date())
+            entries = all.filter { calendar.startOfDay(for: $0.createdAt) == today }
+                .sorted { $0.createdAt > $1.createdAt }
         } catch {
             entries = []
         }
         loaded = true
     }
 
-    /// Groups entries into day buckets labelled TODAY / YESTERDAY / a date, newest first.
-    private var groupedEntries: [DayGroup] {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let buckets = Dictionary(grouping: entries) { calendar.startOfDay(for: $0.createdAt) }
-        return buckets.keys.sorted(by: >).map { day in
-            DayGroup(day: day, title: label(for: day, today: today, calendar: calendar),
-                     entries: (buckets[day] ?? []).sorted { $0.createdAt > $1.createdAt })
-        }
+    private func updatePermissionStatus() {
+        guard let pm = context.permissionManager else { return }
+        micPermissionStatus = pm.status(.microphone)
+        accPermissionStatus = pm.status(.accessibility)
     }
 
-    private func label(for day: Date, today: Date, calendar: Calendar) -> String {
-        if day == today { return "TODAY" }
-        if let yesterday = calendar.date(byAdding: .day, value: -1, to: today), day == yesterday {
-            return "YESTERDAY"
-        }
-        return day.formatted(.dateTime.weekday(.wide).month().day()).uppercased()
+    private var todayEntries: [HistoryEntry] {
+        entries
     }
 }
 
-// MARK: - DayGroup
+// MARK: - RecentEntryRow
 
-private struct DayGroup {
-    let day: Date
-    let title: String
-    let entries: [HistoryEntry]
-}
-
-// MARK: - FeedRow
-
-/// A single dictation row: timestamp on the left, full neat-written text on the right.
-private struct FeedRow: View {
+/// A single recent dictation row: time | raw preview | cleaned preview.
+private struct RecentEntryRow: View {
     let entry: HistoryEntry
 
     var body: some View {
-        HStack(alignment: .top, spacing: SpeakSpacing.md) {
-            Text(entry.createdAt, format: .dateTime.hour().minute())
-                // [decision: 72pt timestamp gutter — aligns the text column like Wispr's feed]
-                .frame(width: 72, alignment: .leading)
-                .font(.speakMonoCaption)
-                .foregroundStyle(.secondary)
-            Text(entry.cleanedText ?? entry.rawText)
-                .font(.speakMonoBody)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            HStack(alignment: .center, spacing: SpeakSpacing.sm) {
+                Text(entry.createdAt, format: .dateTime.hour().minute())
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 48, alignment: .leading)
+
+                Text(truncatePreview(entry.rawText, maxChars: 40))
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(Color(nsColor: .systemBlue))
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+            }
+
+            if let cleaned = entry.cleanedText {
+                HStack(alignment: .center, spacing: SpeakSpacing.sm) {
+                    Spacer(minLength: 48)
+
+                    Text(truncatePreview(cleaned, maxChars: 40))
+                        .font(.speakMonoCaption)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+                }
+            }
         }
         .padding(.vertical, SpeakSpacing.xs)
+    }
+
+    private func truncatePreview(_ text: String, maxChars: Int) -> String {
+        if text.count > maxChars {
+            return String(text.prefix(maxChars - 1)) + "…"
+        }
+        return text
     }
 }
 
@@ -209,6 +297,15 @@ private struct FeedRow: View {
 
 #if DEBUG
 #Preview("Home — empty history") {
+    HomePaneView(context: DashboardContext(
+        settingsStore: SettingsStore(),
+        historyStore: PreviewNullHistoryStore(),
+        hotkeyCombo: ["Fn", "Fn"]
+    ))
+    .frame(width: 820, height: 560)
+}
+
+#Preview("Home — with dictations") {
     HomePaneView(context: DashboardContext(
         settingsStore: SettingsStore(),
         historyStore: PreviewNullHistoryStore(),
