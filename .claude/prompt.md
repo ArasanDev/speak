@@ -206,7 +206,42 @@ let result = try await withCheckedThrowingContinuation { cont in
 **`@MainActor` over `DispatchQueue.main.async`.** Any class that drives SwiftUI
 state should be `@MainActor`. Never write `DispatchQueue.main.async {}` in new code.
 
-### 5.5 `@Observable` — the current standard (macOS 14+, available now)
+### 5.5 Audio pipeline — verified stream composition patterns
+
+`AsyncSequence` has **no built-in fan-out**. A single `AsyncStream` cannot be
+consumed by two tasks simultaneously — doing so corrupts or crashes. speak's
+two-stream design (`AsyncStream<AVAudioPCMBuffer>` + parallel `AsyncStream<Double>`
+for RMS) is the correct approach: two separate streams from one tap callback.
+
+**Session orchestration with `withThrowingTaskGroup`:**
+```swift
+// The correct pattern — three concurrent consumers, one cancellation scope
+try await withThrowingTaskGroup(of: Void.self) { group in
+    group.addTask { /* feed loop: tap → broadcaster */ }
+    group.addTask { /* STT consumer: sttStream → TranscriptChunk */ }
+    group.addTask {
+        // RMS → UI, throttled — swift-async-algorithms combinator
+        for await level in rmsStream.throttle(for: .milliseconds(50), clock: .continuous, reducing: { $0 }) {
+            await MainActor.run { overlayViewModel.level = level }
+        }
+    }
+    try await group.waitForAll()
+}
+```
+
+**`throttle` from `swift-async-algorithms`** — rate-limits the RMS stream to the
+overlay. 50ms is enough for a smooth waveform meter. Install via SPM if needed:
+`apple/swift-async-algorithms`.
+
+**`AsyncChannel<T>` for backpressure** — if `SpeechAnalyzer` falls behind under
+load, swap the STT input from `AsyncStream` to `AsyncChannel`. `send(_:)` suspends
+the producer until the consumer calls `next()`, preventing buffer growth.
+
+**Fan-out actor broadcaster** — if a future seam requires N consumers of the same
+buffer stream, hand-roll an `actor AudioBroadcaster` that holds N continuations
+and yields to all of them. There is no library primitive for this.
+
+### 5.6 `@Observable` — the current standard (macOS 14+, available now)
 
 Six classes still use `ObservableObject` + `@Published`. That is the old pattern.
 The current Apple standard is `@Observable` (`import Observation`, not SwiftUI —
@@ -356,11 +391,99 @@ Filter in Console.app: `subsystem == "com.speak.app"` then narrow by category.
 
 ---
 
-## 8. Version control discipline
+## 8. CLI design — apple/swift-argument-parser patterns
+
+speak has a CLI seam (`SpeakCore/CLI/`). When a proper `speak stop` / `speak status`
+CLI is built (v0.1+), follow these patterns from `apple/container` + `swift-argument-parser`:
+
+**`AsyncParsableCommand` for async subcommands:**
+```swift
+// Entry point dispatches: async vs sync
+var command = try SpeakCLI.parseAsRoot(args)
+if var asyncCommand = command as? AsyncParsableCommand {
+    try await asyncCommand.run()
+} else {
+    try command.run()
+}
+```
+
+**`@OptionGroup` for shared flag bundles — define once, inject everywhere:**
+```swift
+struct Flags {
+    struct Output: ParsableArguments {
+        @Flag(name: .long, help: "Machine-readable output")
+        var quiet = false
+    }
+}
+// Every command:
+@OptionGroup public var outputOptions: Flags.Output
+```
+
+**Extension-per-subcommand pattern (from `apple/container`):**
+```swift
+extension SpeakCLI {
+    struct Stop: AsyncLoggableCommand {
+        static let configuration = CommandConfiguration(abstract: "Stop active dictation")
+        func run() async throws {
+            try CFMessagePortTransport().send(CLIRequest(cmd: .stop))
+        }
+    }
+}
+```
+
+**`AsyncLoggableCommand` protocol mixin** — adds `self.log` to every conforming
+command. Mirror it but use `os.Logger` (not `swift-log`) per our no-print rule.
+
+**`validate()` for pre-flight checks** — runs before `run()`, errors format with
+usage hints automatically. Use for argument conflicts, not IPC availability.
+
+**Key constraint:** add `swift-argument-parser` to the CLI binary target only —
+never to `SpeakCore`. The framework stays dep-free. The CLI binary imports both.
+
+**`ListDisplayable`** for `speak status` output — supports table/quiet/JSON modes
+with zero extra code per format. Model `CLIReply` conformance on it.
+
+---
+
+## 9. Distribution — verified paths (no Developer ID cert required)
+
+**Research findings [verified 2026-06-28]:**
+- Gatekeeper targets `.app` bundles (casks), NOT binaries built locally
+- Apple Silicon requires at minimum ad-hoc signing (`codesign -s -`) — an unsigned binary is kernel-rejected
+- Homebrew kills unsigned official casks on **September 1, 2026** (65 days from research date)
+- `apple/container` actually holds a Developer ID cert — not a "no cert" model
+
+**Two v0 distribution paths (both cert-free):**
+
+Path 1 — Homebrew formula + custom tap (recommended):
+```sh
+brew tap speak-dev/speak   # or tamilarasan/speak
+brew install speak         # builds from source on user's machine; Gatekeeper never fires
+```
+Formula runs `make dev-cert && make build && cp -r Speak.app /Applications/`.
+Requires Xcode + xcodegen — acceptable for the developer persona.
+
+Path 2 — GitHub Release + ad-hoc signing:
+```sh
+# In make github-release:
+codesign -s - --deep --force --timestamp=none Speak.app
+ditto -c -k --keepParent Speak.app Speak.zip
+# User runs once after download:
+xattr -dr com.apple.quarantine Speak.app
+```
+
+**Timeline for Developer ID cert:**
+- Enroll before **September 1, 2026** to qualify for official Homebrew Cask
+- `make release` is already fully implemented — only the credential is missing
+- P11-b in roadmap tracks this
+
+---
+
+## 10. Version control discipline
 
 One commit per completed roadmap task:
 ```
-[P11] sign + notarize: make release produces Gatekeeper-clean .dmg
+[P11-a] install: make install + Homebrew formula + GitHub release target
 [V01-0] agent mode: frontmost app detection + technical cleanup prompt
 [tooling] Adopt Apple container project style conventions
 [style] Apply sorted imports + switch case spacing across all source files
@@ -376,7 +499,7 @@ Rules:
 
 ---
 
-## 9. Migration roadmap — pending improvements
+## 11. Migration roadmap — pending improvements
 
 Known improvements from auditing against Apple's container project and current
 Swift community standards. Work through in priority order as bandwidth allows.
@@ -413,7 +536,7 @@ concurrency warnings will surface — fix them before shipping.
 
 ---
 
-## 10. If blocked
+## 12. If blocked
 
 1. Apply research-first protocol (§2) — most blocks are wrong API assumptions
 2. Re-read the relevant `docs/` section — the answer is usually there
@@ -427,7 +550,7 @@ brief / the skill), not the prompt. The problem is always context, not retries.
 
 ---
 
-## 11. Hard rules — never trade, never negotiate
+## 13. Hard rules — never trade, never negotiate
 
 - **100% local by default.** No cloud audio, no telemetry, no accounts, works offline.
 - **v0 = Apple frameworks only.** SpeechAnalyzer + Foundation Models are Apple
@@ -444,7 +567,7 @@ brief / the skill), not the prompt. The problem is always context, not retries.
 
 ---
 
-## 12. Done criteria — v0 ships when ALL pass
+## 14. Done criteria — v0 ships when ALL pass
 
 1. `make verify-moat` → 7/7 structural BEAT rows
 2. `make test` → 0 failures, all XCTSkip documented
@@ -457,7 +580,7 @@ brief / the skill), not the prompt. The problem is always context, not retries.
 
 ---
 
-## 13. Verification backbone
+## 15. Verification backbone
 
 Trust in this order:
 

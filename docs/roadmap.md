@@ -297,36 +297,49 @@ in v1).
 
 ## Phase 11-a — Build-from-source install  ← **CRITICAL PATH (unblocked)**
 
-**Task**: Ensure a clean-clone build-from-source install works end-to-end with
-no Apple Developer account required. Modelled on `apple/container`, which ships
-open-source with ad-hoc signing (`codesign --sign -`) and documents `make install`
-as the install path for developers. speak targets the same developer persona —
-they can build from source. The Developer ID cert and Gatekeeper-clean `.dmg`
-are deferred to P11-b (not a v0 blocker).
+**Research finding [verified 2026-06-28]:** Gatekeeper targets `.app` bundles
+(casks), not CLI binaries built locally. A Homebrew formula that builds from
+source on the user's machine never triggers Gatekeeper — no Developer ID cert
+required. Apple Silicon also requires at minimum ad-hoc signing (`codesign -s -`)
+for any binary; a completely unsigned `.app` is rejected by the kernel.
+`make dev-cert` (self-signed identity) already satisfies this.
+
+**Two v0 distribution paths (no cert required):**
+1. **Homebrew formula in custom tap** — `brew tap speak-dev/speak && brew install speak`
+   clones + builds on the user's machine. Gatekeeper never fires. Requires Xcode +
+   xcodegen (fine for the developer persona).
+2. **GitHub Release + ad-hoc signing + xattr** — `codesign -s - --deep --force Speak.app`,
+   zip, publish. Users run `xattr -dr com.apple.quarantine Speak.app` once.
+   Right-click → Open is the GUI alternative.
 
 **Done when**:
 - [x] `make dev-cert` creates a stable local signing identity (self-signed)
 - [x] `make build` produces a runnable `Speak.app` from a clean clone `[verified]`
 - [ ] `make install` copies `Speak.app` to `/Applications/` (add this target)
-- [ ] `README.md` install section documents the one-time `make dev-cert` flow
-      and explains why it is needed (TCC grant persistence across rebuilds)
-- [ ] A contributor on a fresh Mac can complete the install in under 5 minutes
-      following the README
+- [ ] `make github-release` ad-hoc signs, zips, and produces a release artifact
+- [ ] `dist/speak.rb` Homebrew formula (custom tap, build-from-source) created
+- [ ] `README.md` install section covers both paths with exact commands
 
 ---
 
-## Phase 11-b — Developer ID sign + notarize + Homebrew Cask  ← **DEFERRED**
+## Phase 11-b — Developer ID sign + notarize + Homebrew Cask  ← **TIME-SENSITIVE**
 
-**Depends on**: Developer ID Application certificate (Apple Developer Program,
-$99/yr). Does NOT block v0 ship — only blocks zero-friction public distribution.
+**Hard deadline: September 1, 2026** — Homebrew ends support for casks that
+fail Gatekeeper checks on that date. Official `homebrew-cask` tap requires
+notarization after that deadline. Custom taps are exempt but limit discoverability.
+This is **65 days from 2026-06-28** — enroll in Apple Developer Program promptly.
 
-**Task**: Developer ID signing, notarization, `.dmg` packaging, Homebrew Cask.
-Full implementation is already in `Makefile` (`make release`) and documented in
-`docs/release.md`. Nothing to build — only the credential is missing.
+**Depends on**: Developer ID Application certificate ($99/yr via developer.apple.com).
+Does NOT block v0 ship — blocks only official Homebrew Cask and zero-friction install
+for non-developer users.
+
+**Task**: Developer ID signing, notarization, `.dmg`, official Homebrew Cask.
+Full `make release` implementation already in `Makefile` and `docs/release.md`.
+Nothing to build — only the credential is missing.
 
 **Done when** (execute once cert is enrolled):
 - [ ] `make release` produces a signed + notarized `.dmg`
-- [ ] `brew install --cask <local-cask>` works on a clean machine
+- [ ] `brew install --cask speak` works on a clean machine (official tap)
 - [ ] Gatekeeper shows "verified" (no "unidentified developer")
 - [ ] `dist/speak.cask.rb` sha256 updated post-release
 
