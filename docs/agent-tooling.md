@@ -23,6 +23,10 @@ persistent learning) and is wired to the skills for its seam.
 ## 2. Skills (`.claude/skills/`)
 
 **Authored, doc-grounded (thick):**
+- `speak-codebase` — **START HERE for any new agent.** Complete orientation: product identity,
+  full source tree (every file annotated), all key types + signatures, state machine, full data
+  flow, hard constraints, build system, testing patterns, concurrency patterns, tagging convention,
+  current status, and the agent loop protocol. Replaces an hour of grepping. Read once per session.
 - `swift-code-review` — the `AGENTS.md` §2–3 convention gate (no print, no
   force-unwrap, no global mutable state, never-read-pasteboard, Apple-only).
 - `swift-macos-build` — build/test/lint commands + the §6 verification gate.
