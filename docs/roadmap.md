@@ -295,18 +295,40 @@ in v1).
 
 ---
 
-## Phase 11 — Build + sign + notarize + package  ← **CRITICAL PATH**
+## Phase 11-a — Build-from-source install  ← **CRITICAL PATH (unblocked)**
 
-**Task**: Developer ID code signing, notarization, `.dmg` packaging via
-`create-dmg` or similar, Homebrew Cask formula (`dist/speak.cask.rb`).
-macOS 26 (Tahoe, shipped Q3 2025) requires Gatekeeper-compliant notarization.
-`[verified]`
+**Task**: Ensure a clean-clone build-from-source install works end-to-end with
+no Apple Developer account required. Modelled on `apple/container`, which ships
+open-source with ad-hoc signing (`codesign --sign -`) and documents `make install`
+as the install path for developers. speak targets the same developer persona —
+they can build from source. The Developer ID cert and Gatekeeper-clean `.dmg`
+are deferred to P11-b (not a v0 blocker).
 
 **Done when**:
+- [x] `make dev-cert` creates a stable local signing identity (self-signed)
+- [x] `make build` produces a runnable `Speak.app` from a clean clone `[verified]`
+- [ ] `make install` copies `Speak.app` to `/Applications/` (add this target)
+- [ ] `README.md` install section documents the one-time `make dev-cert` flow
+      and explains why it is needed (TCC grant persistence across rebuilds)
+- [ ] A contributor on a fresh Mac can complete the install in under 5 minutes
+      following the README
+
+---
+
+## Phase 11-b — Developer ID sign + notarize + Homebrew Cask  ← **DEFERRED**
+
+**Depends on**: Developer ID Application certificate (Apple Developer Program,
+$99/yr). Does NOT block v0 ship — only blocks zero-friction public distribution.
+
+**Task**: Developer ID signing, notarization, `.dmg` packaging, Homebrew Cask.
+Full implementation is already in `Makefile` (`make release`) and documented in
+`docs/release.md`. Nothing to build — only the credential is missing.
+
+**Done when** (execute once cert is enrolled):
 - [ ] `make release` produces a signed + notarized `.dmg`
 - [ ] `brew install --cask <local-cask>` works on a clean machine
 - [ ] Gatekeeper shows "verified" (no "unidentified developer")
-- [ ] Cask formula follows the [Cask Cookbook](https://docs.brew.sh/Cask-Cookbook)
+- [ ] `dist/speak.cask.rb` sha256 updated post-release
 
 ---
 
@@ -362,7 +384,7 @@ the MATCH gate).
 
 ## v0 ship gate (after P14)
 
-v0 ships when **all three** of the following hold — no exceptions:
+v0 ships when **all four** of the following hold — no exceptions:
 
 1. **`benchmark.md` §4 MATCH gate**: all checkboxes pass (accuracy, neat
    writing, latency, live feedback, paste, hotkey, history).
@@ -371,8 +393,14 @@ v0 ships when **all three** of the following hold — no exceptions:
    egress).
 3. **`quality.md` §9 ship checklist**: build/sign/notarize clean, no `print`,
    no force-unwrap, paste-protection clean, etc.
+4. **P11-a done**: `make install` works from a clean clone; README install
+   section accurate.
 
-Tag `v0.0.1` and publish only when all three are verified, measured, not
+**v0 does NOT require P11-b** (Developer ID cert). v0 ships as a
+build-from-source developer preview, same model as `apple/container`.
+P11-b gates the Homebrew Cask and public tag — that is v0.1 distribution.
+
+Tag `v0.0.1` and publish only when all four are verified, measured, not
 asserted.
 
 ---
