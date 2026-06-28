@@ -135,6 +135,8 @@ final class SpeakEngineIntegrationTests: XCTestCase {
         addTeardownBlock { testDefaults.removePersistentDomain(forName: suiteName) }
         let testSettings = SettingsStore(defaults: testDefaults)
         testSettings.cleanupEnabled = true   // exercise FM-unavailable path, not toggle-off
+        testSettings.streamingMode = .off    // disable keystroke streaming for this test
+                                             // (P11-c: streaming skips final paste; we want to test final paste)
 
         // H1: locale no longer baked at init — SpeakEngine reads settings.language at
         // newSession() time. testSettings defaults to en-US (SettingsStore default),

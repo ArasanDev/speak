@@ -47,6 +47,11 @@ public actor CaptureSession {
     let transcriber: any Transcribing
     let cleaner: (any LLMCleaning)?
     let inserter: (any TextInserting)?
+    /// Optional streaming raw-text inserter for keystroke injection during listening.
+    /// When non-nil, finalized chunks are streamed character-by-character via keystroke
+    /// injection (no final cleaned paste to avoid duplication). When nil, the final
+    /// cleaned text is pasted normally. Injected from settings at session start (§5 Q5).
+    let streamingInserter: (any StreamingRawTextInserting)?
     /// Optional snippet expander applied to the raw transcript BEFORE cleanup.
     /// `nil` (default) means no expansion — behavior is identical to pre-Wave-B.
     private let expander: (any SnippetExpanding)?
@@ -86,6 +91,12 @@ public actor CaptureSession {
     ///     paste directly into the session: `insert(cleanedText ?? rawText)` is
     ///     called just before the session settles to `.done`. If `insert` throws,
     ///     the session transitions to `.error` (paste failure = delivery failure).
+    ///     When `streamingInserter` is non-nil, `inserter` is not called to avoid
+    ///     duplication (raw text is streamed, not cleaned text).
+    ///   - streamingInserter: `nil` (default) disables keystroke streaming.
+    ///     Non-nil enables streaming of finalized chunks during listening. When
+    ///     enabled, `inserter` is not called (raw is the in-document deliverable).
+    ///     Injected from `SettingsStore.streamingMode` at session start. §5 (P11-c).
     ///   - locale: Locale passed to the transcriber. Default: en-US.
     ///   - cleanupMode: `CleanupMode` passed to the cleaner. Default: `.punctuation`.
     ///   - expander: Optional snippet expander applied to the raw transcript before
@@ -93,12 +104,14 @@ public actor CaptureSession {
     public init(transcriber: any Transcribing,
                 cleaner: (any LLMCleaning)? = nil,
                 inserter: (any TextInserting)? = nil,
+                streamingInserter: (any StreamingRawTextInserting)? = nil,
                 locale: Locale = Locale(identifier: "en-US"),
                 cleanupMode: CleanupMode = .punctuation,
                 expander: (any SnippetExpanding)? = nil) {
         self.transcriber = transcriber
         self.cleaner = cleaner
         self.inserter = inserter
+        self.streamingInserter = streamingInserter
         self.locale = locale
         self.cleanupMode = cleanupMode
         self.expander = expander
@@ -384,7 +397,7 @@ public actor CaptureSession {
     /// Store a chunk from the STT stream. Actor-isolated; safe under concurrent
     /// calls from the stream task.
     ///
-    /// Two paths:
+    /// Three paths:
     /// - volatile (isFinal == false): update latestChunk for the overlay HUD
     ///   (newest-non-empty rule, matches OverlayTextAccumulator semantics).
     /// - final   (isFinal == true):  append to finalizedText so multi-window
@@ -392,6 +405,9 @@ public actor CaptureSession {
     ///   latestChunk is also updated so stop() can fall back to it when
     ///   finalizedText ends up empty (e.g. single-segment or very short speech
     ///   where only a volatile arrived before the session was stopped).
+    /// - streaming (isFinal == true AND streamingInserter != nil): stream the finalized
+    ///   chunk to the keystroke inserter. If streaming fails (e.g., AX denied),
+    ///   log and continue (raw paste fallback is still available at stop time).
     ///
     /// NOTE: `.processing` is NOT guarded here. transcriber.stop() triggers
     /// finalization and the final isFinal chunk arrives while state==.processing
@@ -417,6 +433,26 @@ public actor CaptureSession {
                 finalizedText = chunk.text
             } else {
                 finalizedText += " " + chunk.text
+            }
+
+            // Stream finalized chunk if keystroke streaming is enabled.
+            // [decision P11-c] Stream isFinal chunks only (volatile chunks are revised;
+            // once-final chunks won't change). Non-blocking: errors are logged and
+            // swallowed; streaming failure does not abort the session (raw paste at
+            // stop is the fallback). AX-denied is expected and logged; no error
+            // transition. [P11-c §4 error handling]
+            if let streamingInserter {
+                // Dispatch keystroke injection without blocking the stream task.
+                Task {
+                    do {
+                        try await streamingInserter.insertChunk(chunk.text)
+                    } catch {
+                        let speakError = (error as? SpeakError) ?? .pasteboardBusy
+                        SpeakLog.engine.warning(
+                            "CaptureSession: keystroke streaming failed (logged, continuing) — \(speakError.recoverySuggestion, privacy: .public)"
+                        )
+                    }
+                }
             }
         }
         partialsContinuation?.yield(chunk)

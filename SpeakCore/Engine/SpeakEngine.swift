@@ -125,8 +125,8 @@ public actor SpeakEngine {
 
     /// Create and return a new `CaptureSession` wired with the engine's
     /// transcriber, cleaner, and inserter — reading the cleanup toggle, the
-    /// transcription locale, and the neat-writing mode (style + level) from
-    /// `settings` at call time.
+    /// transcription locale, streaming mode, and the neat-writing mode (style + level)
+    /// from `settings` at call time.
     ///
     /// **Cleanup gating** (`settings.cleanupEnabled`):
     /// - `true` → the injected `cleaner` is passed (cleanup runs).
@@ -137,9 +137,16 @@ public actor SpeakEngine {
     /// **next** dictation without requiring an engine restart. The default in
     /// `SettingsStore` is `en-US`, preserving the prior behavior. [decision H1]
     ///
-    /// Both reads are synchronous: `SettingsStore` is `@unchecked Sendable` and
+    /// **Streaming mode** (`settings.streamingMode`):
+    /// Read once at session start (latched decision). [decision P11-c §5]
+    /// - `.off`: no keystroke streaming. Final cleaned text is pasted normally.
+    /// - `.keystrokeInjection`: finalized chunks are streamed character-by-character
+    ///   via keystroke injection (Option D). No final cleaned paste (raw is the
+    ///   in-document deliverable; cleaned text goes to history only). [P11-c]
+    ///
+    /// All reads are synchronous: `SettingsStore` is `@unchecked Sendable` and
     /// its properties are computed over `UserDefaults` (documented thread-safe),
-    /// so both reads are actor-safe with no `await`.
+    /// so all reads are actor-safe with no `await`.
     ///
     /// The engine retains the session as `currentSession`. Calling this
     /// again before the prior session is terminal replaces the reference
@@ -172,10 +179,28 @@ public actor SpeakEngine {
         // snippet edit applies on the next dictation. nil store → nil expander → no change.
         let activeExpander: (any SnippetExpanding)? = snippetStore.map { $0.makeExpander() }
 
+        // P11-c: Create streaming inserter based on streamingMode setting (read once).
+        // [decision P11-c] Settings change takes effect on the NEXT dictation; the
+        // current session locks in the streaming choice. This prevents mid-session
+        // toggle confusion (e.g., "what happens if user disables streaming mid-stream?").
+        // Pattern matches H1 (language) and Wave 2.2 (cleanup mode) — read at session
+        // start, not per-chunk. [§5 decision latching]
+        let activeStreamingInserter: (any StreamingRawTextInserting)? = {
+            switch settings.streamingMode {
+            case .off:
+                return nil
+
+            case .keystrokeInjection:
+                SpeakLog.engine.info("SpeakEngine: keystroke streaming enabled — finalizing chunks will be injected.")
+                return KeystrokeStreamingInserter()
+            }
+        }()
+
         let session = CaptureSession(
             transcriber: transcriber,
             cleaner: activeCleaner,
             inserter: inserter,
+            streamingInserter: activeStreamingInserter,
             locale: activeLocale,
             cleanupMode: activeMode,
             expander: activeExpander
