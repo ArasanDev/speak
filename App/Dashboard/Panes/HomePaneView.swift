@@ -30,7 +30,7 @@ struct HomePaneView: View {
     }
 
     var body: some View {
-        ScrollView {
+        let contentView = ScrollView {
             VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
                 // Hotkey status
                 hotkeyStatusSection
@@ -63,6 +63,17 @@ struct HomePaneView: View {
         }
         .task { await loadInitialData() }
         .onAppear { updatePermissionStatus() }
+
+        // P11-c: Subscribe to completion notifications if publisher is available,
+        // so recent dictations refresh if the dashboard is open while dictating.
+        if let publisher = context.dictationCompletedPublisher {
+            contentView
+                .onReceive(publisher) { _ in
+                    Task { await loadInitialData() }
+                }
+        } else {
+            contentView
+        }
     }
 
     // MARK: - Hotkey Status (top)

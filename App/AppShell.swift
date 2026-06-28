@@ -94,14 +94,17 @@ struct AppShell: View {
         .onAppear {
             // Build the shared dependencies once at window open.
             if dashboardContext == nil {
-                // Use ["Fn"] as default; the actual hotkey combo will match the controller's
-                // current binding, but we use the default here to avoid accessing private APIs.
-                // The combo is refreshed each time the window is shown (if needed).
+                // P11-c: Pass the controller's engine, permissionManager, and completion
+                // publisher so the dashboard Home pane can observe live state, show hotkey
+                // status, and refresh recent dictations after a new entry is saved.
                 dashboardContext = DashboardContext(
                     settingsStore: controller.settingsStore,
                     historyStore: controller.historyStore,
-                    hotkeyCombo: ["Fn"],
-                    snippetStore: controller.snippetStore
+                    hotkeyCombo: controller.currentHotkeyDisplayString.split(separator: " ").map(String.init),
+                    snippetStore: controller.snippetStore,
+                    speakEngine: controller.engine,
+                    permissionManager: controller.permissionManager,
+                    dictationCompletedPublisher: controller.dictationCompletedPublisher
                 )
             }
             if historyViewModel == nil {

@@ -111,11 +111,18 @@ final class WindowPresenter {
         if let existing = dashboardController {
             return existing
         }
+        // P11-c: Pass speakEngine + permissionManager from the controller so the
+        // dashboard Home pane can access live engine state and show hotkey status.
+        // Also pass the dictation completion publisher so the dashboard can refresh
+        // recent dictations after a new entry is saved.
         let context = DashboardContext(
             settingsStore: settingsStore,
             historyStore: historyStore,
             hotkeyCombo: hotkeyComboProvider(),
-            snippetStore: snippetStore
+            snippetStore: snippetStore,
+            speakEngine: dictationController?.engine,
+            permissionManager: permissionManager,
+            dictationCompletedPublisher: dictationController?.dictationCompletedPublisher
         )
         let controller = DashboardWindowController(context: context)
         dashboardController = controller
@@ -124,14 +131,20 @@ final class WindowPresenter {
 
     /// Show the dashboard window. The window controller is created lazily on first call.
     ///
-    /// Refreshes the hotkey combo from the live provider before each show so that a
-    /// hotkey rebind (trigger-mode change or custom key) is reflected the next time
-    /// the dashboard opens, not just at first construction.
+    /// Refreshes the hotkey combo, speakEngine, and permissionManager from the live
+    /// provider before each show so that a hotkey rebind or permission change is reflected
+    /// the next time the dashboard opens, not just at first construction.
     func showDashboard() {
         let controller = ensureDashboardController()
         // Read the provider lazily at show-time so any rebind since construction is
-        // picked up. The update is a no-op if the combo hasn't changed.
-        controller.updateHotkeyCombo(hotkeyComboProvider())
+        // picked up. Also pass live engine + permissions + publisher so recent dictations
+        // can refresh and permission status is current. The update is a no-op if unchanged.
+        controller.updateContext(
+            hotkeyCombo: hotkeyComboProvider(),
+            speakEngine: dictationController?.engine,
+            permissionManager: permissionManager,
+            dictationCompletedPublisher: dictationController?.dictationCompletedPublisher
+        )
         controller.show()
     }
 

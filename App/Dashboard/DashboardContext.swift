@@ -10,6 +10,7 @@
 // All members are reference types owned by `DictationController` (the app's brain) and
 // merely shared here — the context does NOT own their lifetimes.
 
+import Combine
 import SpeakCore
 import SwiftUI
 
@@ -30,11 +31,19 @@ struct DashboardContext {
 
     /// The speech engine (for starting dictation from the Dashboard CTA button).
     /// [unverified: injected from DictationController in P11-c phase 3]
-    let speakEngine: SpeakEngine?
+    /// `var` so that `DashboardWindowController.updateContext()` can refresh it at show-time.
+    var speakEngine: SpeakEngine?
 
     /// The permission manager (for checking microphone and accessibility status).
     /// [unverified: injected from DictationController in P11-c phase 3]
-    let permissionManager: PermissionManager?
+    /// `var` so that `DashboardWindowController.updateContext()` can refresh it at show-time.
+    var permissionManager: PermissionManager?
+
+    /// Publisher that fires when a dictation completes. Used by the Home pane to
+    /// refresh recent dictations list. [decision P11-c: allows the dashboard to
+    /// stay up-to-date when opened alongside active dictation.]
+    /// `var` so that `DashboardWindowController.updateContext()` can refresh it at show-time.
+    var dictationCompletedPublisher: AnyPublisher<Void, Never>?
 
     /// The active hotkey combo, pre-rendered as keycap labels (e.g. ["Fn", "Fn"]).
     /// Supplied by the controller from the live `HotkeyMonitor.binding`.
@@ -47,7 +56,7 @@ struct DashboardContext {
     /// update path is: mutate context before the hosting view reads it on show()]
     var hotkeyCombo: [String]
 
-    /// Explicit init with optional engine/permission manager (both deferred to P11-c).
+    /// Explicit init with optional engine/permission manager/publisher (P11-c).
     /// Previews can create a minimal context without these dependencies.
     init(
         settingsStore: SettingsStore,
@@ -55,7 +64,8 @@ struct DashboardContext {
         hotkeyCombo: [String],
         snippetStore: SnippetStore = SnippetStore(),
         speakEngine: SpeakEngine? = nil,
-        permissionManager: PermissionManager? = nil
+        permissionManager: PermissionManager? = nil,
+        dictationCompletedPublisher: AnyPublisher<Void, Never>? = nil
     ) {
         self.settingsStore = settingsStore
         self.historyStore = historyStore
@@ -63,5 +73,6 @@ struct DashboardContext {
         self.snippetStore = snippetStore
         self.speakEngine = speakEngine
         self.permissionManager = permissionManager
+        self.dictationCompletedPublisher = dictationCompletedPublisher
     }
 }

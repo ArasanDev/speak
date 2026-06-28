@@ -70,6 +70,8 @@ extension DictationController {
             try? await Task.sleep(nanoseconds: doneFlashNanoseconds)
             overlayController.stop()
             icon = .idle
+            // P11-c: Signal dashboard to refresh recent dictations after successful completion.
+            _dictationCompletedSubject.send()
         } catch SpeakError.pasteRequiresAccessibility(let text) {
             // Graceful degradation: text was written to the clipboard (the
             // clipboard-floor step in PasteboardWriter always runs), but
@@ -113,6 +115,8 @@ extension DictationController {
             SpeakLog.engine.error(
                 "DictationController: endDictation failed — \(error.localizedDescription, privacy: .public)"
             )
+            // P11-c: Signal dashboard to refresh even on error completion (may have partial history).
+            _dictationCompletedSubject.send()
         }
     }
 }

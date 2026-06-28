@@ -138,6 +138,13 @@ final class DictationController: CLICommandHandler {
     /// onboarding flow without requiring a Combine `@Published` projected value.
     private let _hotkeySubject = PassthroughSubject<Void, Never>()
 
+    /// Fires on the main thread after a dictation completes successfully (done or error state).
+    /// Used by the dashboard Home pane to refresh recent dictations list after a new entry
+    /// is saved to history. [decision P11-c: fires after completion, allowing the history
+    /// save to be processed before the refresh query runs]
+    /// Accessible to extensions (DictationController+ErrorHandling) for firing the signal.
+    let _dictationCompletedSubject = PassthroughSubject<Void, Never>()
+
     // MARK: - CLI IPC server (W2.3)
 
     /// Owns the named CFMessagePort server for the `speak` CLI tool.
@@ -460,6 +467,13 @@ final class DictationController: CLICommandHandler {
                 )
             }
         }
+    }
+
+    /// Publisher that fires when a dictation completes (success or error).
+    /// Used by the dashboard Home pane to refresh recent dictations after a new
+    /// entry is saved to history. [decision P11-c]
+    var dictationCompletedPublisher: AnyPublisher<Void, Never> {
+        _dictationCompletedSubject.eraseToAnyPublisher()
     }
 
     /// The current hotkey rendered as keycap labels for the dashboard.

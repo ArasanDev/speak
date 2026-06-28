@@ -23,6 +23,7 @@
 //   NSWindowDelegate so we can observe the close. [decision: research/wispr-flow-ui-verified.md]
 
 import AppKit
+import Combine
 import os
 import SpeakCore
 import SwiftUI
@@ -52,13 +53,34 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - Public API
 
-    /// Refresh the stored hotkey combo so the next show() call picks up the current
-    /// binding. Call this from `WindowPresenter.showDashboard()` before `show()` so
-    /// a hotkey rebind is reflected the next time the window opens.
+    /// Refresh the stored hotkey combo, engine/permissions, and publisher so the next show() call
+    /// picks up current bindings and controller state. Call this from `WindowPresenter.showDashboard()`
+    /// before `show()` so a hotkey rebind is reflected the next time the window opens.
     /// [decision: update-before-show is safe because context is consumed only inside
     ///  show(); if the window is already visible, the update takes effect on re-open.]
+    func updateContext(
+        hotkeyCombo: [String]? = nil,
+        speakEngine: SpeakEngine? = nil,
+        permissionManager: PermissionManager? = nil,
+        dictationCompletedPublisher: AnyPublisher<Void, Never>? = nil
+    ) {
+        if let hotkeyCombo {
+            context.hotkeyCombo = hotkeyCombo
+        }
+        if let speakEngine {
+            context.speakEngine = speakEngine
+        }
+        if let permissionManager {
+            context.permissionManager = permissionManager
+        }
+        if let dictationCompletedPublisher {
+            context.dictationCompletedPublisher = dictationCompletedPublisher
+        }
+    }
+
+    /// Legacy method — calls updateContext with hotkeyCombo only. Kept for compatibility.
     func updateHotkeyCombo(_ combo: [String]) {
-        context.hotkeyCombo = combo
+        updateContext(hotkeyCombo: combo)
     }
 
     /// Show the dashboard window, creating it if needed. Brings it to front and

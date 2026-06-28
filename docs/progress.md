@@ -77,9 +77,10 @@ Gates as of loop #33 (2026-06-28): **build ✅ lint 0-serious ✅ moat 7/7 ✅ t
 - ✅ **T15** — Strategic research: competitor analysis (8 apps × 12 UX dimensions), design philosophy (10 principles), speak's vision & constraints
 - ✅ **T16** — Design synthesis: locked specification (sidebar nav, 5 panes, 6 settings tabs, privacy pane, Monaco theme, color tokens, component specs, user flows, implementation roadmap)
 
-**Phase 2: Implementation (STARTING NOW)**
-- **T17-T24** (parallel): AppShell foundation, Dashboard/History/Settings/Privacy/About panes, Overlay HUD, integration & testing
-- Critical path: AppShell → Dashboard → History → Settings → Overlay → Testing
+**Phase 2: Implementation (IN PROGRESS)**
+- **T17-T24** (parallel, done): AppShell foundation, Dashboard/History/Settings/Privacy/About panes, Overlay HUD ✅
+- **T25** (just completed): CaptureSession state wiring + Dashboard integration + streaming flow completion ✅
+- **Phase 2D** (next): Testing & verification gate
 
 **Key Decisions Locked:**
 - Navigation: Sidebar (5 panes: Dashboard, History, Settings, Privacy, About) — proven UX, scales to v0.1
@@ -92,6 +93,19 @@ Gates as of loop #33 (2026-06-28): **build ✅ lint 0-serious ✅ moat 7/7 ✅ t
 **Design Documents:**
 - `specs/ui-ux-strategic-research-2026-06-28.md` (competitor analysis, philosophy, speak's position)
 - `specs/speak-ui-design-final-2026-06-28.md` (locked design spec, component specs, user flows, implementation roadmap)
+
+**Loop #36, T25 (P11-c, just completed):** CaptureSession state → AppShell + Dashboard integration + streaming flow completion:
+- **Architecture deviation (surfaced, not papered over):** OverlayPresenter was NOT created per the task description. `OverlayController` already fulfills that role perfectly — it manages the overlay lifecycle (panel + view model + state transitions + partials drain + level drain + Escape monitor). The task asked to add OverlayPresenter to AppShell's view hierarchy, but that would create a conflicting second overlay path (the overlay is a non-activating floating NSPanel that intentionally floats over other apps, not part of any SwiftUI view hierarchy). Instead, the integration focused on the real gap: Dashboard wiring.
+- **Dashboard integration (primary work):**
+  - `DashboardContext`: added `speakEngine`, `permissionManager`, and `dictationCompletedPublisher` fields (all `var` so WindowPresenter/AppShell can refresh them at show-time).
+  - `DictationController`: added `dictationCompletedPublisher` (PassthroughSubject) that fires after dictation completes (both success and error paths). Accessible to extensions via internal access.
+  - `DictationController+ErrorHandling`: fires the completion signal after overlay is hidden and icon is back to idle (both `.done` and `.error` paths).
+  - `WindowPresenter.showDashboard()`: now passes `speakEngine`, `permissionManager`, and `dictationCompletedPublisher` to the dashboard context at every show (via new `updateContext()` method on DashboardWindowController). Hotkey combo + engine + permissions + publisher all refresh at show-time so the dashboard stays current.
+  - `AppShell`: now passes the same through to DashboardContext, enabling real-time engine state observation and completion notifications.
+  - `HomePaneView`: subscribed to `dictationCompletedPublisher` so the recent dictations list refreshes when a new entry is saved, keeping the dashboard live-updated if open during dictation.
+- **Streaming flow completion:** The full flow was already wired (OverlayController.start → partials/levels drain → transition to processing/done → stop), so T25 added the missing Dashboard observation layer.
+- **Tests**: `make build` ✅ (no warnings as errors), `make test` ✅ (481/0/0), lint ✅.
+- **[Decision P11-c §5]:** Settings latched at session start (streamingMode, language, cleanupEnabled, cleanupLevel read once per dictation in `SpeakEngine.newSession()` with no mid-session changes — matches the H1 pattern for language and Wave 2.2 pattern for cleanup mode). This prevents confusion if the user toggles settings mid-dictation.
 
 ---
 
