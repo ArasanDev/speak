@@ -105,6 +105,11 @@ final class DictationController: CLICommandHandler {
     /// start) and the dashboard's Snippets pane.
     let snippetStore = SnippetStore()
 
+    /// The profile store (PE-2) — owned here, shared with the engine (profile resolution
+    /// at dictation start) and the dashboard's AI Studio pane. One instance so an edit in
+    /// AI Studio is the same set the engine reads on the next dictation.
+    let profileStore = ProfileStore()
+
     /// The paste writer — held so the engine and the "Paste Last Transcript" action
     /// share one instance (re-paste writes the clipboard + simulates Cmd+V).
     private let pasteboardWriter = PasteboardWriter()
@@ -242,7 +247,8 @@ final class DictationController: CLICommandHandler {
             inserter: pasteboardWriter,
             history: historyStore,
             settings: store,
-            snippetStore: snippetStore
+            snippetStore: snippetStore,
+            profileStore: profileStore
         )
 
         monitor = HotkeyMonitor()

@@ -120,6 +120,7 @@ final class WindowPresenter {
             historyStore: historyStore,
             hotkeyCombo: hotkeyComboProvider(),
             snippetStore: snippetStore,
+            profileStore: dictationController?.profileStore ?? ProfileStore(),
             speakEngine: dictationController?.engine,
             permissionManager: permissionManager,
             dictationCompletedPublisher: dictationController?.dictationCompletedPublisher

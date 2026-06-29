@@ -29,6 +29,10 @@ struct DashboardContext {
     /// The snippets store (Snippets pane binds to it; the engine reads it at dictation start).
     let snippetStore: SnippetStore
 
+    /// The profile store (AI Studio pane binds to it; the engine reads it at dictation
+    /// start). The SAME instance the engine resolves against, so an edit is felt next dictation.
+    let profileStore: ProfileStore
+
     /// The speech engine (for starting dictation from the Dashboard CTA button).
     /// [unverified: injected from DictationController in P11-c phase 3]
     /// `var` so that `DashboardWindowController.updateContext()` can refresh it at show-time.
@@ -63,6 +67,7 @@ struct DashboardContext {
         historyStore: any HistoryStoring,
         hotkeyCombo: [String],
         snippetStore: SnippetStore = SnippetStore(),
+        profileStore: ProfileStore = ProfileStore(),
         speakEngine: SpeakEngine? = nil,
         permissionManager: PermissionManager? = nil,
         dictationCompletedPublisher: AnyPublisher<Void, Never>? = nil
@@ -71,6 +76,7 @@ struct DashboardContext {
         self.historyStore = historyStore
         self.hotkeyCombo = hotkeyCombo
         self.snippetStore = snippetStore
+        self.profileStore = profileStore
         self.speakEngine = speakEngine
         self.permissionManager = permissionManager
         self.dictationCompletedPublisher = dictationCompletedPublisher
