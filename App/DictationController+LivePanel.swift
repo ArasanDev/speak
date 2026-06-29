@@ -50,6 +50,15 @@ extension DictationController {
         SpeakLog.engine.info("DictationController: live-panel category → '\(category.rawValue, privacy: .public)'.")
     }
 
+    /// Handle a category tap from the live-panel card: apply it and update the highlight.
+    /// Picking a category implies the Agent destination is active (the category page is only
+    /// reachable via Agent), so `overrodeToRaw` is cleared. (PE-3c-2.)
+    func selectCategoryChoice(_ category: AgentCategory) {
+        overrodeToRaw = false
+        selectCategory(category)
+        overlayController.setActiveCategory(category)
+    }
+
     /// Resolve the destination for the current/next dictation from the frontmost app and
     /// seed the per-dictation shaping state. Called at `beginDictation`. Resolution mirrors
     /// `SpeakEngine.newSession` (same `ProfileResolver` over the same profile set) so the

@@ -134,6 +134,17 @@ final class OverlayViewModel {
     /// (waveform/transcript/timer) shows when `false`.
     var isProfilePanelOpen: Bool = false
 
+    /// PE-3c-2: `true` when the card has swapped to the Agent **category** page (after the user
+    /// picks Agent). The destinations page shows when `false`. Reset whenever the card opens.
+    var isShowingAgentCategories: Bool = false
+
+    /// PE-3c-2: the active Agent category (highlighted on the category page). Default `.task`.
+    var activeCategory: AgentCategory = .task
+
+    /// PE-3c-2: invoked when the user taps a category chip. `DictationController` threads it
+    /// into the per-dictation Agent override.
+    var onSelectCategory: ((AgentCategory) -> Void)?
+
     /// Elapsed seconds since the current dictation started listening.
     var elapsedSeconds: Int = 0
 
@@ -363,15 +374,18 @@ struct TranscriptOverlayView: View {
         }
     }
 
-    /// PE-3c destination pill: shows the active destination + a chevron; tap opens the card.
+    /// PE-3c destination pill: shows the active destination (and the category when Agent) +
+    /// a chevron; tap opens the card.
     private var destinationPill: some View {
         let active = model.activeDestinationChoice ?? .write
+        let label = active == .agent ? "\(active.label) · \(model.activeCategory.displayName)" : active.label
         return Button {
+            model.isShowingAgentCategories = false   // always open on the destinations page
             model.isProfilePanelOpen = true
         } label: {
             HStack(spacing: 3) {
                 Image(systemName: active.icon)
-                Text(active.label)
+                Text(label)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 7))
             }
@@ -385,13 +399,22 @@ struct TranscriptOverlayView: View {
             .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Destination \(active.label). Tap to change for this dictation.")
+        .accessibilityLabel("Destination \(label). Tap to change for this dictation.")
     }
 
-    /// PE-3c-1 selector card: covers the HUD with the four destinations. Picking one applies
-    /// the per-dictation override and closes; Escape closes with no change (handled by the
-    /// OverlayController Escape monitor). Agent's category tier is PE-3c-2.
+    /// PE-3c selector card. Two pages: destinations (Agent/Write/Note/Raw) and — after Agent
+    /// is picked — the Agent **category** tier (PE-3c-2). Picking a leaf option applies the
+    /// per-dictation override and closes; Escape closes (handled by OverlayController).
+    @ViewBuilder
     private var profileSelectorCard: some View {
+        if model.isShowingAgentCategories {
+            agentCategoryPage
+        } else {
+            destinationPage
+        }
+    }
+
+    private var destinationPage: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
             HStack {
                 Text("Shape this dictation")
@@ -415,7 +438,13 @@ struct TranscriptOverlayView: View {
         let isActive = choice == model.activeDestinationChoice
         return Button {
             model.onSelectDestination?(choice)
-            model.isProfilePanelOpen = false
+            // Agent has a deeper tier — swap to its categories instead of closing.
+            // Every other destination is a leaf: apply + close.
+            if choice == .agent {
+                model.isShowingAgentCategories = true
+            } else {
+                model.isProfilePanelOpen = false
+            }
         } label: {
             VStack(spacing: 2) {
                 Image(systemName: choice.icon)
@@ -432,7 +461,65 @@ struct TranscriptOverlayView: View {
             .foregroundStyle(isActive ? Color.primary : Color.secondary)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Shape this dictation as \(choice.label)")
+        .accessibilityLabel(choice == .agent
+            ? "Agent — choose a category"
+            : "Shape this dictation as \(choice.label)")
+        .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
+    }
+
+    /// PE-3c-2: the Agent category tier. A back affordance returns to destinations; picking a
+    /// category threads it into the Agent override and closes the card.
+    private var agentCategoryPage: some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            HStack(spacing: SpeakSpacing.xs) {
+                Button {
+                    model.isShowingAgentCategories = false   // back to destinations
+                } label: {
+                    HStack(spacing: 2) {
+                        Image(systemName: "chevron.left").font(.system(size: 9))
+                        Text("Agent").font(.speakMonoCaption)
+                    }
+                    .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back to destinations")
+                Spacer(minLength: 0)
+                Text("esc")
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(Color.secondary.opacity(0.6))
+            }
+            // Primary categories (Code lives behind a future ⌄more, per the spec).
+            HStack(spacing: SpeakSpacing.xs) {
+                ForEach(Self.primaryCategories, id: \.self) { category in
+                    categoryButton(category)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The primary Agent categories shown in the card (Code is deferred to a `⌄more` affordance).
+    static let primaryCategories: [AgentCategory] = [.task, .fix, .ask, .commit, .shell]
+
+    private func categoryButton(_ category: AgentCategory) -> some View {
+        let isActive = category == model.activeCategory
+        return Button {
+            model.onSelectCategory?(category)
+            model.isProfilePanelOpen = false
+            model.isShowingAgentCategories = false
+        } label: {
+            Text(category.displayName)
+                .font(.speakMonoCaption)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, SpeakSpacing.xs)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(isActive ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.08))
+                )
+                .foregroundStyle(isActive ? Color.primary : Color.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Agent category \(category.displayName)")
         .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
     }
 

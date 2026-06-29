@@ -41,7 +41,9 @@ extension DictationController {
             overlayController.configureDestinationStrip(
                 choices: willCleanup ? OverlayDestinationChoice.allCases : [],
                 active: OverlayDestinationChoice(profileID: activeDestination.id),
-                onSelect: { [weak self] choice in self?.selectDestinationChoice(choice) }
+                activeCategory: activeCategory,
+                onSelect: { [weak self] choice in self?.selectDestinationChoice(choice) },
+                onSelectCategory: { [weak self] category in self?.selectCategoryChoice(category) }
             )
         } catch SpeakError.microphoneMuted {
             monitor.notifySessionEnded()

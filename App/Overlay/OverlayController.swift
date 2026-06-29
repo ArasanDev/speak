@@ -105,11 +105,20 @@ final class OverlayController {
     func configureDestinationStrip(
         choices: [OverlayDestinationChoice],
         active: OverlayDestinationChoice?,
-        onSelect: @escaping (OverlayDestinationChoice) -> Void
+        activeCategory: AgentCategory,
+        onSelect: @escaping (OverlayDestinationChoice) -> Void,
+        onSelectCategory: @escaping (AgentCategory) -> Void
     ) {
         overlayModel.destinationChoices = choices
         overlayModel.activeDestinationChoice = active
+        overlayModel.activeCategory = activeCategory
         overlayModel.onSelectDestination = onSelect
+        overlayModel.onSelectCategory = onSelectCategory
+    }
+
+    /// Update the highlighted Agent category after a tap (per-dictation override).
+    func setActiveCategory(_ category: AgentCategory) {
+        overlayModel.activeCategory = category
     }
 
     /// Update which destination chip is highlighted after a tap (per-dictation override).
@@ -121,8 +130,10 @@ final class OverlayController {
     var isProfilePanelOpen: Bool { overlayModel.isProfilePanelOpen }
 
     /// Close the profile-selector card (Escape, or after a selection). Idempotent.
+    /// Also resets the card to its destinations page so the next open starts there.
     func closeProfilePanel() {
         overlayModel.isProfilePanelOpen = false
+        overlayModel.isShowingAgentCategories = false
     }
 
     // MARK: - Lifecycle
@@ -150,6 +161,7 @@ final class OverlayController {
         overlayModel.errorReason = nil
         overlayModel.isCleaningUp = isCleaningUp
         overlayModel.isProfilePanelOpen = false   // PE-3c: always start on the calm HUD
+        overlayModel.isShowingAgentCategories = false
         partialText = ""
         panel?.show()
 
@@ -228,6 +240,7 @@ final class OverlayController {
         overlayModel.errorReason = nil
         overlayModel.isCleaningUp = false
         overlayModel.isProfilePanelOpen = false   // PE-3c: reset the selector card
+        overlayModel.isShowingAgentCategories = false
         partialText = ""
         panel?.hide()
         SpeakLog.engine.info("OverlayController: overlay hidden.")
@@ -276,6 +289,7 @@ final class OverlayController {
         overlayModel.errorReason = nil
         overlayModel.isCleaningUp = false
         overlayModel.isProfilePanelOpen = false   // PE-3c: reset the selector card
+        overlayModel.isShowingAgentCategories = false
         partialText = ""
         panel?.hide()
         SpeakLog.engine.info("OverlayController: dictation cancelled (immediate hide).")
