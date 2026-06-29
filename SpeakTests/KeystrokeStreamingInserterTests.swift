@@ -222,14 +222,22 @@ final class KeystrokeStreamingInserterTests: XCTestCase {
     /// Code-inspection test: verify that KeystrokeStreamingInserter.swift
     /// contains NO references to NSPasteboard (read-only moat compliance).
     func testNoPasteboardReadAccess() throws {
-        let relativeToProject = "/Users/tamil/Developers/deepvoice/SpeakCore/Paste/KeystrokeStreamingInserter.swift"
+        // Resolve the source path from this test file's compile-time location
+        // (#filePath) rather than a hardcoded home directory, so the audit runs on
+        // any machine/CI checkout. This file lives at <repo>/SpeakTests/…; the
+        // source under audit is at <repo>/SpeakCore/Paste/….
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // SpeakTests/
+            .deletingLastPathComponent()   // <repo root>
+        let sourceURL = repoRoot
+            .appendingPathComponent("SpeakCore/Paste/KeystrokeStreamingInserter.swift")
 
-        guard FileManager.default.fileExists(atPath: relativeToProject) else {
-            XCTFail("Could not locate KeystrokeStreamingInserter.swift at \(relativeToProject)")
+        guard FileManager.default.fileExists(atPath: sourceURL.path) else {
+            XCTFail("Could not locate KeystrokeStreamingInserter.swift at \(sourceURL.path)")
             return
         }
 
-        let content = try String(contentsOfFile: relativeToProject, encoding: .utf8)
+        let content = try String(contentsOf: sourceURL, encoding: .utf8)
 
         // Verify NO "NSPasteboard" references
         XCTAssertFalse(content.contains("NSPasteboard"),

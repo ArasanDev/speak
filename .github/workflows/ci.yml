@@ -11,23 +11,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-test-lint:
-    # NOTE [unverified]: speak targets macOS 26 (Tahoe) + Xcode 26. `macos-latest`
-    # tracks GitHub's newest available image; pin to a macos-26 label once available.
-    # Untested against a live remote until the repo has a remote + a push.
-    runs-on: macos-latest
+  # Always-reliable gate: a pure-shell source audit of the benchmark.md §3 BEAT
+  # rows (no egress / account / third-party dep / paywall / pasteboard-read /
+  # print). Needs no Xcode and no Apple SDK, so it runs on free Linux runners and
+  # gives a trustworthy green check independent of Apple-runner availability.
+  moat-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Structural moat audit (no Xcode needed)
+        run: make verify-moat
 
+  # Full build/test/lint. speak targets macOS 26 (Tahoe) + Xcode 26 and imports
+  # FoundationModels + SpeechAnalyzer, which only exist on the macOS 26 SDK.
+  # GitHub's `macos-26` image ships Xcode 26; `macos-latest`/older images fail
+  # with `no such module 'FoundationModels'`, so this job MUST pin macos-26.
+  build-test-lint:
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select latest Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app
+      - name: Select Xcode 26
+        run: sudo xcode-select -s /Applications/Xcode_26.app || sudo xcode-select -s /Applications/Xcode.app
 
       - name: Install build tooling
         run: brew install xcodegen swiftlint
-
-      - name: Structural moat audit (fast, no Xcode needed)
-        run: make verify-moat
 
       - name: Build
         run: make build
