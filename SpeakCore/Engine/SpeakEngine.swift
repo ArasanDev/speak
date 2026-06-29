@@ -149,8 +149,14 @@ public actor SpeakEngine {
     /// The engine retains the session as `currentSession`. Calling this
     /// again before the prior session is terminal replaces the reference
     /// (the prior session should have been stopped or cancelled first).
+    ///
+    /// - Parameter frontmostBundleID: the frontmost app's bundle id at dictation
+    ///   start (read on the main actor by the app layer and passed in, so the engine
+    ///   stays AppKit-free). When it matches a built-in profile's `targetApps`, that
+    ///   profile runs; otherwise the global styled() default applies. `nil` (CLI /
+    ///   tests) → default.
     @discardableResult
-    public func newSession() -> CaptureSession {
+    public func newSession(frontmostBundleID: String? = nil) -> CaptureSession {
         // Read both the cleanup toggle and the locale from settings at call time
         // (SettingsStore is @unchecked Sendable — actor read is safe).
         // W4.1: CleanupLevel.none short-circuits cleanup regardless of cleanupEnabled.
@@ -170,9 +176,36 @@ public actor SpeakEngine {
         // style/level — it rides inside the mode enum so the stateless `LLMCleaning`
         // cleaner sees it without needing its own SettingsStore reference. [decision Wave 2.2]
         let activeVocabulary: [String] = settings.customVocabulary
-        let activeMode: CleanupMode = .styled(settings.cleanupStyle,
-                                               settings.cleanupLevel,
-                                               customVocabulary: activeVocabulary)
+        // Default/global cleanup path — the user's Style + Level + dictionary. Left
+        // unchanged so general dictation behaves exactly as the verified v0 base.
+        var activeMode: CleanupMode = .styled(settings.cleanupStyle,
+                                              settings.cleanupLevel,
+                                              customVocabulary: activeVocabulary)
+
+        // PE-0 wiring: if the frontmost app matches a built-in profile's targetApps
+        // (Cursor/VSCode/Xcode/Zed → Code, Terminal/iTerm → CLI, Tower/SublimeMerge →
+        // Commit), run THAT profile instead of the global styled() default. The default
+        // path stays on .styled for now (zero regression: preserves Style/intensity/
+        // vocabulary); the full default→Clean migration lands with AI Studio.
+        // [decision: app-override increment — conscious scoping, not fragmentation; the
+        //  intensity level + custom vocabulary are threaded through to the profile path.]
+        let resolvedProfile = ProfileResolver.resolve(
+            frontmostBundleID: frontmostBundleID,
+            profiles: DefaultProfiles.all,
+            default: DefaultProfiles.defaultProfile
+        )
+        let isAppSpecificMatch = resolvedProfile.id != DefaultProfiles.defaultProfile.id
+            && resolvedProfile.model != .raw
+        // Only switch to the profile path when cleanup will actually run (cleaner non-nil
+        // ⇒ cleanupEnabled && level != .none); otherwise the mode is moot (raw passthrough).
+        if isAppSpecificMatch, settings.cleanupEnabled, !cleanupLevelIsNone {
+            activeMode = .profile(resolvedProfile,
+                                  level: settings.cleanupLevel,
+                                  customVocabulary: activeVocabulary)
+            SpeakLog.engine.info(
+                "SpeakEngine: profile '\(resolvedProfile.name, privacy: .public)' active for frontmost app \(frontmostBundleID ?? "none", privacy: .public)."
+            )
+        }
         // Wave B: build a snippet expander from the current snippets at call time, so a
         // snippet edit applies on the next dictation. nil store → nil expander → no change.
         let activeExpander: (any SnippetExpanding)? = snippetStore.map { $0.makeExpander() }
@@ -208,7 +241,10 @@ public actor SpeakEngine {
     /// **Note:** `async throws` is required because `CaptureSession.start()` is
     /// `async throws` (it initiates the STT stream). §6's non-async `throws`
     /// signature is a primary-source contradiction — surfaced, not papered over.
-    public func beginDictation() async throws {
+    /// - Parameter frontmostBundleID: the frontmost app's bundle id at dictation
+    ///   start, forwarded to `newSession()` for profile resolution. Read by the app
+    ///   layer (@MainActor) so the engine stays AppKit-free. `nil` (CLI) → default.
+    public func beginDictation(frontmostBundleID: String? = nil) async throws {
         // Hardware-mute gate (SPEC §7.4). Refuse before any session/capture is
         // created so the "no audio is read when muted" guarantee holds at the
         // only place that could start the microphone. Throws a dedicated refusal
@@ -233,7 +269,7 @@ public actor SpeakEngine {
             // a user error, not an exceptional condition worth surfacing as an error.
             return
         }
-        let session = newSession()
+        let session = newSession(frontmostBundleID: frontmostBundleID)
         SpeakLog.engine.info("SpeakEngine: beginDictation — starting new session.")
         // [Engine-L2] If session.start() throws (e.g., mic permission denied), clear
         // currentSession so the A3 re-entrancy guard doesn't permanently block the

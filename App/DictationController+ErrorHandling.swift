@@ -4,6 +4,7 @@
 // Both methods are `internal` (not `private`) so sibling extensions
 // (+CLI, the main file's `handle()`) can call them across files.
 
+import AppKit
 import Foundation
 import SpeakCore
 
@@ -13,7 +14,12 @@ extension DictationController {
 
     func beginDictation() async {
         do {
-            try await engine.beginDictation()
+            // [PE-0 wiring] Capture the frontmost app on the main actor and pass its
+            // bundle id down, so the engine can resolve an app-specific profile (e.g.
+            // Cursor → Code) without importing AppKit. Frontmost = the target app
+            // because the overlay is a non-activating panel.
+            let frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            try await engine.beginDictation(frontmostBundleID: frontmostBundleID)
             icon = .listening
             SpeakLog.engine.info("DictationController: beginDictation succeeded → .listening")
             let engineRef = engine

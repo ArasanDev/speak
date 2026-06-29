@@ -34,42 +34,66 @@ public enum PromptBuilder {
     public static func build(
         profile: Profile,
         rawTranscript: String,
-        context: [ContextInput: String] = [:]
+        context: [ContextInput: String] = [:],
+        intensity: CleanupLevel = .medium,
+        customVocabulary: [String] = []
     ) -> String {
         // Base-core bypass: the Raw profile passes the transcript through untouched.
         // No prompt is assembled — this is the immutable floor (profile-engine.md §2).
         if case .raw = profile.model {
             return rawTranscript
         }
+        // Single-prompt assembly: instructions + the dictated speech, last.
+        let instr = instructions(
+            profile: profile, intensity: intensity,
+            customVocabulary: customVocabulary, context: context
+        )
+        return instr + "\n\nDictated speech:\n" + rawTranscript
+    }
 
-        // Section 1: the system prompt (the editable heart).
-        var sections: [String] = [profile.systemPrompt]
+    /// The instruction block for `profile` — system prompt + knob clauses +
+    /// intensity + preserved-vocabulary + injected context + few-shot examples,
+    /// WITHOUT the transcript. Used by instruction/prompt-separated models: e.g.
+    /// `FoundationModelsCleaner` feeds this as the session instructions and the
+    /// transcript (XML-wrapped) as the prompt.
+    ///
+    /// - intensity: how aggressively to rewrite (the cross-profile modifier carried
+    ///   from the user's cleanup-level setting). `.medium` is the baseline and adds
+    ///   NO clause; `.none` is unreachable here (cleaner is bypassed) and also adds none.
+    /// - customVocabulary: proper nouns / specialist spellings to preserve verbatim.
+    public static func instructions(
+        profile: Profile,
+        intensity: CleanupLevel = .medium,
+        customVocabulary: [String] = [],
+        context: [ContextInput: String] = [:]
+    ) -> String {
+        var sections: [String] = []
+        if !profile.systemPrompt.isEmpty {
+            sections.append(profile.systemPrompt)
+        }
 
-        // Section 2: knob clauses (each empty for its default case → appended only
-        // when meaningful, so a small model never sees a no-op instruction).
+        // Knob clauses (each empty for its default case → appended only when
+        // meaningful, so a small model never sees a no-op instruction).
         let knobClauses = [
             formatClause(profile.format),
             toneClause(profile.tone),
-            lengthClause(profile.length)
+            lengthClause(profile.length),
+            intensityClause(intensity)
         ].compactMap { $0 }
         if !knobClauses.isEmpty {
             sections.append(knobClauses.joined(separator: "\n"))
         }
 
-        // Section 3: injected context (only inputs requested AND provided).
+        if let vocab = vocabularyClause(customVocabulary) {
+            sections.append(vocab)
+        }
         if let injected = injectedContext(profile.contextInputs, values: context) {
             sections.append(injected)
         }
-
-        // Section 4: few-shot examples (the strongest small-model lever).
         if let shots = fewShot(profile.examples) {
             sections.append(shots)
         }
 
-        // Section 5: the dictated speech, always last.
-        sections.append("Dictated speech:\n" + rawTranscript)
-
-        // Blank line between sections keeps the structure legible to the model.
         return sections.joined(separator: "\n\n")
     }
 
@@ -105,6 +129,33 @@ public enum PromptBuilder {
         case .condense: return "Be more concise than the input."
         case .expand:   return "Add helpful detail while preserving the original meaning."
         }
+    }
+
+    /// The cross-profile rewrite-intensity clause (carried from the user's cleanup
+    /// level). `.medium` is the baseline → no clause; `.none` is unreachable here
+    /// (the cleaner is bypassed when level is none) → no clause. [decision] wording
+    /// mirrors the styled() ladder so behavior is consistent across both paths.
+    static func intensityClause(_ level: CleanupLevel) -> String? {
+        switch level {
+        case .none, .medium:
+            return nil
+        case .light:
+            return "Make only light edits: fix punctuation and capitalization and remove "
+                + "obvious filler words; otherwise keep the speaker's words and structure intact."
+        case .high:
+            return "Rewrite thoroughly: tighten phrasing, remove redundancy, and restructure "
+                + "into clear paragraphs where appropriate, preserving the speaker's meaning."
+        }
+    }
+
+    /// Preserve-spellings clause for the user's custom dictionary. Empty list → nil.
+    /// [decision] 50-term cap matches FoundationModelsCleaner.styledInstructions — the
+    /// system-prompt budget for a small on-device model.
+    static func vocabularyClause(_ terms: [String]) -> String? {
+        let cleaned = terms.filter { !$0.isEmpty }
+        guard !cleaned.isEmpty else { return nil }
+        let list = cleaned.prefix(50).map { "\"\($0)\"" }.joined(separator: ", ")
+        return "Preserve these terms exactly as spelled, including capitalization: \(list)."
     }
 
     // MARK: - Context injection
