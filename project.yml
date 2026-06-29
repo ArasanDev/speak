@@ -124,3 +124,17 @@ schemes:
         - SpeakTests
     run:
       config: Debug
+
+  # Eval scheme — identical to Speak but bakes SPEAK_EVAL=1 into the test action
+  # so the env var reaches the test host process (xcodebuild shell-prefix does not
+  # propagate to the test host on macOS 26). Used by `make eval`. [decision: SM-2]
+  Eval:
+    build:
+      targets:
+        Speak: all
+        SpeakTests: [test]
+    test:
+      targets:
+        - SpeakTests
+      environmentVariables:
+        SPEAK_EVAL: "1"

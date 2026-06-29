@@ -25,6 +25,8 @@ final class EvalHarnessTests: XCTestCase {
         let spoken: String
         let expected: String
         let formatChecks: [String]?
+        /// Agent-specific sub-category. Absent or unrecognised → defaults to `.task`.
+        let category: String?
     }
 
     // MARK: - Mock cleaner
@@ -137,9 +139,16 @@ final class EvalHarnessTests: XCTestCase {
         }
 
         // Normal path: call cleaner with the profile mode.
+        // Parse optional category from fixture; default to .task when absent or unrecognised.
+        let fixtureCategory: AgentCategory
+        if let cat = fixture.category, let parsed = AgentCategory(rawValue: cat) {
+            fixtureCategory = parsed
+        } else {
+            fixtureCategory = .task
+        }
         let cleaned = try await cleaner.clean(
             fixture.spoken,
-            mode: .profile(profile, level: level, customVocabulary: [])
+            mode: .profile(profile, level: level, category: fixtureCategory, customVocabulary: [])
         )
         let elapsed = Date().timeIntervalSince(startTime)
 
@@ -408,15 +417,57 @@ final class EvalHarnessTests: XCTestCase {
             throw XCTSkip("Foundation Models not available on this device. Skip ≠ pass.")
         }
 
-        var fixtureResults: [(Fixture, Profile, FixtureResult)] = []
+        // SM-2 tuning loop: evaluate each fixture and emit per-fixture debug output to
+        // stdout + XCTAttachment for evidence-based prompt tuning. [decision: SM-2]
+        var statsInput: [(Fixture, Profile, FixtureResult)] = []
 
-        for fixture in fixtures {
+        for (idx, fixture) in fixtures.enumerated() {
             let profile = try profileForId(fixture.profileId)
-            let result = try await evaluateSingleFixture(fixture, profile: profile, cleaner: cleaner)
-            fixtureResults.append((fixture, profile, result))
+            let fixtureCategory: AgentCategory
+            if let cat = fixture.category, let parsed = AgentCategory(rawValue: cat) {
+                fixtureCategory = parsed
+            } else {
+                fixtureCategory = .task
+            }
+            let startTime = Date()
+            let isRawProfile: Bool
+            if case .raw = profile.model { isRawProfile = true } else { isRawProfile = false }
+            let cleaned: String
+            if isRawProfile {
+                cleaned = fixture.spoken
+            } else {
+                cleaned = try await cleaner.clean(
+                    fixture.spoken,
+                    mode: .profile(profile, level: .medium, category: fixtureCategory, customVocabulary: [])
+                )
+            }
+            let elapsed = Date().timeIntervalSince(startTime)
+            let checks = fixture.formatChecks ?? []
+            let threshold: Double = isRawProfile ? 1.0 : 0.80
+            let result = SpeakCore.evaluateFixture(
+                output: cleaned,
+                expected: fixture.expected,
+                formatCheckDescriptors: checks,
+                correctnessThreshold: threshold,
+                latencySeconds: elapsed
+            )
+            statsInput.append((fixture, profile, result))
+
+            let cat = fixture.category ?? "—"
+            let status = result.passed ? "PASS" : "FAIL"
+            let score = String(format: "%.2f", result.correctnessScore)
+            let line = "[\(status)] \(profile.name)/\(cat) score=\(score)\n" +
+                "  spoken:   \(fixture.spoken)\n" +
+                "  expected: \(fixture.expected)\n" +
+                "  actual:   \(cleaned)\n" +
+                "  failed:   \(result.formatChecksFailed.isEmpty ? "none" : result.formatChecksFailed.joined(separator: ", "))\n"
+            if let data = line.data(using: .utf8) { FileHandle.standardOutput.write(data) }
+            let att = XCTAttachment(string: line)
+            att.name = "fixture-\(String(format: "%02d", idx))-\(profile.name)-\(cat)"
+            add(att)
         }
 
-        let stats = computeStats(from: fixtureResults)
+        let stats = computeStats(from: statsInput)
         let allPassed = stats.allSatisfy { $0.passCount == $0.totalCount }
 
         printResultsTable(stats, allPassed: allPassed)

@@ -51,7 +51,7 @@ final class ProfileWiringTests: XCTestCase {
         let out = PromptBuilder.instructions(profile: DefaultProfiles.write)
         XCTAssertFalse(out.contains("Dictated speech:"),
                        "instructions() is the no-transcript block (the transcript is fed separately).")
-        XCTAssertTrue(out.contains("clean up dictated speech"),
+        XCTAssertTrue(out.contains("clean up spoken words"),
                       "The Write profile's system prompt must be present.")
     }
 

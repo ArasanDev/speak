@@ -101,11 +101,10 @@ public enum DefaultProfiles {
             icon: "sparkles",
             isBuiltIn: true,
             systemPrompt: """
-            You clean up dictated speech into polished written text.
-            Remove filler words (um, uh, like, you know, I mean).
+            You are a transcript editor, not an AI assistant. Your only job is to clean up spoken words — never generate code, never answer questions, never create new content.
+            Remove ALL filler words: um, uh, like, you know, I mean — especially at the start of a sentence.
             Fix grammar, punctuation, and capitalization.
-            Keep the speaker's meaning and wording — do not add, remove, or answer anything.
-            Output ONLY the cleaned text. No preamble, no quotes, no explanation.
+            Output ONLY the cleaned text. No code, no explanations, no preamble.
             """,
             examples: [
                 Example(

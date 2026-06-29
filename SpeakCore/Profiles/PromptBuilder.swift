@@ -78,12 +78,6 @@ public enum PromptBuilder {
             sections.append(profile.systemPrompt)
         }
 
-        // Append the category fragment only when the profile is Agent.
-        // The Agent destination has a stable id; other destinations never receive category fragments.
-        if profile.id == DefaultProfiles.agent.id, let categoryFragment = categoryFragment(category) {
-            sections.append(categoryFragment)
-        }
-
         // Knob clauses (each empty for its default case → appended only when
         // meaningful, so a small model never sees a no-op instruction).
         let knobClauses = [
@@ -102,8 +96,36 @@ public enum PromptBuilder {
         if let injected = injectedContext(profile.contextInputs, values: context) {
             sections.append(injected)
         }
-        if let shots = fewShot(profile.examples) {
+
+        // For Agent categories that define their own output format (commit, shell, code),
+        // the Agent profile's task-format few-shot examples contaminate the output: the
+        // model copies the task-form examples rather than following the category fragment.
+        // Suppressing the examples for these categories leaves the category fragment as
+        // the sole format anchor, which is sufficient. For task/fix/ask — which share the
+        // task prose format — keep the examples for stronger anchoring. [decision SM-2 round 4]
+        let shouldShowProfileExamples: Bool
+        if profile.id == DefaultProfiles.agent.id {
+            switch category {
+            case .commit, .shell, .code:
+                shouldShowProfileExamples = false
+            case .task, .fix, .ask:
+                shouldShowProfileExamples = true
+            }
+        } else {
+            shouldShowProfileExamples = true
+        }
+        if shouldShowProfileExamples, let shots = fewShot(profile.examples) {
             sections.append(shots)
+        }
+
+        // Append the category fragment LAST — after the few-shot examples (when shown) —
+        // so it is the freshest instruction before the transcript. For task/fix/ask the
+        // fragment comes after the task-format examples (reinforcing them); for
+        // commit/shell/code the examples are suppressed so the fragment is the sole anchor.
+        // [decision SM-2 round 4: verified empirically — commit category copied task-form
+        // few-shot examples when fragment appeared before them]
+        if profile.id == DefaultProfiles.agent.id, let categoryFragment = categoryFragment(category) {
+            sections.append(categoryFragment)
         }
 
         return sections.joined(separator: "\n\n")
@@ -143,19 +165,63 @@ public enum PromptBuilder {
             return "Focus on a concrete implementation task or refactoring request."
 
         case .fix:
-            return "This is a bug report with an error or symptom — structure it clearly."
+            // [decision SM-2] "structure clearly" caused model to propose solutions (confirmed empirically).
+            // Must explicitly prohibit fix proposals.
+            return "Output ONLY a structured bug report: state what is broken and where. Do not propose a fix or suggest a solution."
 
         case .ask:
-            return "This is a question for the agent — rewrite it as a clear, concise question. Do not answer it."
+            // [decision SM-2] Force question form. Small models default to task format
+            // for Agent profile. Must preserve the speaker's question word (empirically,
+            // model changes "what's the best way" → task form without this constraint).
+            // [decision SM-2 round 4] "what's the best way" questions cause model to output
+            // an implementation answer (RLHF override). Added explicit prohibition: even
+            // advice-seeking questions ("what's the best way", "what would you recommend")
+            // must be kept as questions, never answered.
+            return "Output ONLY the question text — nothing else. Keep the exact question word from the input "
+                + "(How, What, Why, What's, etc.). End with '?'. Do NOT answer, implement, suggest, or provide "
+                + "the best way to do anything — even if the question asks for advice. "
+                + "Your only job: clean the spoken question into a well-formed question ending with '?'."
 
         case .commit:
-            return "Format this as a Conventional Commits message: type(scope): summary, then optional body."
+            // [decision SM-2] Add inline examples + lowercase-type requirement. Model capitalised
+            // "Fix:" (confirmed empirically); must specify lowercase. Two examples anchor the pattern.
+            // [decision SM-2 round 4] Changed example from "fix: paste fails on retry" to a neutral
+            // one — model was copying the example verbatim when the fixture input resembled it.
+            // Also added explicit type-inference guidance for "docs:" (empirically: model omitted type
+            // prefix for spec/documentation additions without this rule).
+            return "Output ONLY a Conventional Commits message in the format 'type: imperative-summary' "
+                + "(lowercase type, no trailing period). Use imperative present tense in the summary "
+                + "(e.g., 'add', 'fix', 'update' — not 'added', 'fixed'). Derive the summary from the spoken input. "
+                + "Type rules: 'fix' for bug fixes only; 'docs' for any file that documents something "
+                + "(specs, READMEs, guides, system prompts) — NOT 'feat'; 'feat' for new product features; "
+                + "'refactor' for code cleanup; 'test' for test additions; 'chore' for tooling. "
+                + "Format example (shows format only): 'fix: crash on photo import'. No prose, no preamble."
 
         case .shell:
-            return "Output a single terse terminal command or instruction."
+            // [decision SM-2] Explicit flag-mapping hints + combined-flags rule. Empirically:
+            // without hints model outputs prose; with -a hint but not -m model omits message flag;
+            // 'ls -a -l' not combined without explicit instruction.
+            // [decision SM-2 round 4] Added "no markdown fences, no code blocks": model wraps in
+            // ```bash when category fragment appears after the few-shot examples in context.
+            return "Output ONLY the exact shell command as plain text — no markdown fences, no code blocks, "
+                + "no prose, no explanation, no trailing punctuation. "
+                + "Translate: 'all/hidden files' → '-a', 'long format' → '-l'. "
+                + "When both apply, combine as '-la' (l first, then a — always this order). "
+                + "When committing with -a and -m flags, combine them as -am and quote the message string."
 
         case .code:
-            return "Convert spoken code notation into proper syntax: 'open paren' → '(', 'dot' → '.', etc."
+            // [decision SM-2] Explicit "no markdown fences", camelCase, no spaces around parens,
+            // "output ALL lines". Empirically: model added ``` fences, used snake_case, truncated
+            // multi-statement expressions after the first line.
+            // [decision SM-2 round 4] Model outputs "foo ( )" with spaces inside parens despite
+            // "no spaces around parentheses." Added explicit translation pair so the mapping is
+            // unambiguous: "open paren close paren" → "()" (zero spaces, one token).
+            return "Output ONLY the raw code — no prose, no sentences, no markdown fences. "
+                + "Use camelCase identifiers (userName, not user_name). "
+                + "Translate all spoken notation: 'equals' → '=', 'dot' → '.', "
+                + "'open paren close paren' → '()' (zero spaces, one token), "
+                + "'open paren' → '(', 'close paren' → ')'. "
+                + "Output ALL lines and ALL parts of the expression."
         }
     }
 
