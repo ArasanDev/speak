@@ -51,6 +51,21 @@ import AppKit
 import SpeakCore
 import SwiftUI
 
+// MARK: - First-mouse hosting view (PE-3)
+
+/// An `NSHostingView` that accepts the FIRST mouse click even when its window is not key.
+///
+/// The overlay panel is `.nonactivatingPanel` with `canBecomeKey == false` (focus-steal
+/// prevention — load-bearing). Without `acceptsFirstMouse`, the first click on a live-panel
+/// chip would be swallowed by the window-activation machinery instead of reaching the
+/// SwiftUI `Button`. Returning `true` delivers the click straight to the control; because
+/// the panel is non-activating and the app is LSUIElement, the click still never steals
+/// focus from the app being dictated into. [decision PE-3: the documented fix for controls
+/// in a non-activating panel.]
+private final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 // MARK: - Panel subclass
 
 /// A floating, non-activating window that hosts the live recording HUD.
@@ -61,9 +76,10 @@ final class TranscriptOverlayPanel: NSPanel {
     /// Width of the overlay card. [decision: 340 pt gives ~60 chars at body size]
     private static let panelWidth: CGFloat = 340
 
-    /// Height of the overlay card. [decision: 80 pt — tall enough for ~3 lines of text
-    ///  plus the level meter row; matches original height.]
-    private static let panelHeight: CGFloat = 80
+    /// Height of the overlay card. [decision PE-3: 112 pt — the original 80 pt plus a
+    ///  ~28 pt destination-chip row (live panel). The full adaptive strip (PE-3c) finalizes
+    ///  sizing per specs/live-panel-prompt-shaper.md; this is the spike's working height.]
+    private static let panelHeight: CGFloat = 112
 
     /// Distance from the bottom of the visible frame to the bottom edge of the panel.
     /// [decision: spec §4 specifies "~24pt from minY"; clears Dock + standard margin.]
@@ -115,8 +131,9 @@ final class TranscriptOverlayPanel: NSPanel {
             .ignoresCycle      // [decision] spec §4 — Phase C addition
         ]
 
-        // Step 4: host the SwiftUI recording HUD view.
-        let hostingView = NSHostingView(
+        // Step 4: host the SwiftUI recording HUD view. FirstMouseHostingView so the
+        // PE-3 live-panel chips receive the first click without the panel becoming key.
+        let hostingView = FirstMouseHostingView(
             rootView: TranscriptOverlayView(
                 model: overlayModel
             )

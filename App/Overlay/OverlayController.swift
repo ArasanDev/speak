@@ -97,6 +97,26 @@ final class OverlayController {
         )
     }
 
+    // MARK: - PE-3 live-panel destination strip
+
+    /// Configure the destination chips shown while listening. Called by `DictationController`
+    /// at dictation start with the resolved active destination + a tap handler. Pass empty
+    /// `choices` to hide the strip (e.g. AI cleanup off). (specs/live-panel-prompt-shaper.md.)
+    func configureDestinationStrip(
+        choices: [OverlayDestinationChoice],
+        active: OverlayDestinationChoice?,
+        onSelect: @escaping (OverlayDestinationChoice) -> Void
+    ) {
+        overlayModel.destinationChoices = choices
+        overlayModel.activeDestinationChoice = active
+        overlayModel.onSelectDestination = onSelect
+    }
+
+    /// Update which destination chip is highlighted after a tap (per-dictation override).
+    func setActiveDestinationChoice(_ choice: OverlayDestinationChoice?) {
+        overlayModel.activeDestinationChoice = choice
+    }
+
     // MARK: - Lifecycle
 
     /// Show the overlay in the `.listening` state and begin draining partial

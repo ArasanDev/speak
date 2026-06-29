@@ -35,6 +35,14 @@ extension DictationController {
                 levelsProvider: { await engineRef.currentLevels() },
                 isCleaningUp: willCleanup
             )
+            // [PE-3] Configure the live-panel destination strip: the three AI destinations,
+            // highlighting the resolved one. Shown only when cleanup will run (a chip does
+            // nothing when AI is off / level=.none). Tapping reshapes THIS dictation only.
+            overlayController.configureDestinationStrip(
+                choices: willCleanup ? OverlayDestinationChoice.allCases : [],
+                active: OverlayDestinationChoice(profileID: activeDestination.id),
+                onSelect: { [weak self] choice in self?.selectDestinationChoice(choice) }
+            )
         } catch SpeakError.microphoneMuted {
             monitor.notifySessionEnded()
             icon = .idle

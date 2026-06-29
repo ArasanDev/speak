@@ -586,6 +586,15 @@ final class DictationController: CLICommandHandler {
         SpeakLog.engine.info("DictationController: live-panel destination → '\(profile.name, privacy: .public)'.")
     }
 
+    /// Handle a destination chip tap from the live panel: map the choice to the user's
+    /// (possibly AI-Studio-edited) profile, apply it as a per-dictation override, and update
+    /// the highlighted chip. (PE-3.)
+    func selectDestinationChoice(_ choice: OverlayDestinationChoice) {
+        let profile = profileStore.profiles.first { $0.id == choice.profileID } ?? choice.fallbackProfile
+        selectDestination(profile)
+        overlayController.setActiveDestinationChoice(choice)
+    }
+
     /// Switch the Agent sub-category for THIS dictation (live-panel chip tap; Agent only).
     func selectCategory(_ category: AgentCategory) {
         activeCategory = category

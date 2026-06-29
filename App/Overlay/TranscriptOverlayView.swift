@@ -37,6 +37,57 @@ public enum OverlayState: Sendable, Equatable {
     case error
 }
 
+// MARK: - OverlayDestinationChoice (PE-3 live panel)
+
+/// The destination choices shown as chips in the live panel while listening — the three
+/// AI destinations (Agent / Write / Note). Raw is the AI-off base core, never a chip.
+///
+/// A lightweight, `Sendable`, `Identifiable` value so the SwiftUI strip needn't bind to the
+/// full `Profile`/`ProfileStore`. `DictationController` maps a tapped choice back to the
+/// user's (possibly edited) profile via `profileID`. (specs/live-panel-prompt-shaper.md.)
+enum OverlayDestinationChoice: String, CaseIterable, Identifiable, Sendable {
+    case agent, write, note
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .agent: return "Agent"
+        case .write: return "Write"
+        case .note:  return "Note"
+        }
+    }
+
+    /// Stable id of the matching built-in — used to look up the live profile in `ProfileStore`.
+    var profileID: UUID {
+        switch self {
+        case .agent: return DefaultProfiles.agent.id
+        case .write: return DefaultProfiles.write.id
+        case .note:  return DefaultProfiles.note.id
+        }
+    }
+
+    /// Pristine built-in fallback when `ProfileStore` has no match for `profileID`.
+    var fallbackProfile: Profile {
+        switch self {
+        case .agent: return DefaultProfiles.agent
+        case .write: return DefaultProfiles.write
+        case .note:  return DefaultProfiles.note
+        }
+    }
+
+    /// Map a resolved profile id to a choice (nil if it isn't a destination, e.g. Raw).
+    init?(profileID id: UUID) {
+        if id == DefaultProfiles.agent.id { self = .agent } else if id == DefaultProfiles.write.id {
+            self = .write
+        } else if id == DefaultProfiles.note.id {
+            self = .note
+        } else {
+            return nil
+        }
+    }
+}
+
 // MARK: - OverlayViewModel
 
 /// Observable model bridging `DictationController` → `TranscriptOverlayView`.
@@ -46,6 +97,19 @@ public enum OverlayState: Sendable, Equatable {
 final class OverlayViewModel {
     var partialText: String = ""
     var overlayState: OverlayState = .listening
+
+    // MARK: PE-3 live-panel strip
+
+    /// Destination chips shown while listening. Empty ⇒ no strip (e.g. AI cleanup off —
+    /// profiles would do nothing). Set by `DictationController` at dictation start.
+    var destinationChoices: [OverlayDestinationChoice] = []
+
+    /// The active (highlighted) destination — the one that will run. nil ⇒ none highlighted.
+    var activeDestinationChoice: OverlayDestinationChoice?
+
+    /// Invoked when the user taps a destination chip. `DictationController` maps the choice
+    /// to a profile and applies a per-dictation override (does NOT change the saved default).
+    var onSelectDestination: ((OverlayDestinationChoice) -> Void)?
 
     /// Elapsed seconds since the current dictation started listening.
     var elapsedSeconds: Int = 0
@@ -244,17 +308,52 @@ struct TranscriptOverlayView: View {
     // MARK: - Listening state
 
     private var listeningContent: some View {
-        HStack(alignment: .center, spacing: SpeakSpacing.sm) {
-            WaveformView(level: model.level, isActive: true)
-                .frame(width: WaveformView.totalWidth)
-            textContent
-            Text(Self.durationLabel(model.elapsedSeconds))
-                .font(.speakMonoCaption)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            // [PE-3 spike] The destination row — the first interactive element this
+            // non-activating panel has ever had. Shown only when AI cleanup will run.
+            // Minimal Row 1 (Agent/Write/Note); the full adaptive strip (Agent category
+            // row + glance line + Monaco polish) is PE-3c. Purpose of the spike: prove a
+            // click registers here without stealing focus (FirstMouseHostingView).
+            if !model.destinationChoices.isEmpty {
+                destinationStrip
+            }
+            HStack(alignment: .center, spacing: SpeakSpacing.sm) {
+                WaveformView(level: model.level, isActive: true)
+                    .frame(width: WaveformView.totalWidth)
+                textContent
+                Text(Self.durationLabel(model.elapsedSeconds))
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
         }
         .padding(.horizontal, SpeakSpacing.md)
         .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)   // = 12 pt [decision]
+    }
+
+    /// PE-3 live-panel destination chips (Row 1). Tapping reshapes THIS dictation only.
+    private var destinationStrip: some View {
+        HStack(spacing: SpeakSpacing.xs) {
+            ForEach(model.destinationChoices) { choice in
+                let isActive = choice == model.activeDestinationChoice
+                Button {
+                    model.onSelectDestination?(choice)
+                } label: {
+                    Text(choice.label)
+                        .font(.speakMonoCaption)
+                        .padding(.horizontal, SpeakSpacing.sm)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(isActive ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.08))
+                        )
+                        .foregroundStyle(isActive ? Color.primary : Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Shape this dictation as \(choice.label)")
+                .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
+            }
+        }
     }
 
     /// Format elapsed seconds as `m:ss` for the HUD (e.g. 0:05, 1:23).
