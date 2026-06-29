@@ -143,7 +143,7 @@ final class DictationController: CLICommandHandler {
     /// is saved to history. [decision P11-c: fires after completion, allowing the history
     /// save to be processed before the refresh query runs]
     /// Accessible to extensions (DictationController+ErrorHandling) for firing the signal.
-    let _dictationCompletedSubject = PassthroughSubject<Void, Never>()
+    let dictationCompletedSubject = PassthroughSubject<Void, Never>()
 
     // MARK: - CLI IPC server (W2.3)
 
@@ -473,7 +473,7 @@ final class DictationController: CLICommandHandler {
     /// Used by the dashboard Home pane to refresh recent dictations after a new
     /// entry is saved to history. [decision P11-c]
     var dictationCompletedPublisher: AnyPublisher<Void, Never> {
-        _dictationCompletedSubject.eraseToAnyPublisher()
+        dictationCompletedSubject.eraseToAnyPublisher()
     }
 
     /// The current hotkey rendered as keycap labels for the dashboard.

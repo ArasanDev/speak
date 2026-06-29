@@ -441,13 +441,18 @@ public actor CaptureSession {
             // swallowed; streaming failure does not abort the session (raw paste at
             // stop is the fallback). AX-denied is expected and logged; no error
             // transition. [P11-c §4 error handling]
-            // CRITICAL: Keystroke injection must be serialized (not fire-and-forget Tasks)
-            // to prevent CGEvent.post() collisions. Skip streaming for now; will re-enable
-            // in v0.1 with proper serial queue management.
+            // Keystroke streaming is DEFERRED to v0.1 (tasks #5–#11) — NOT shipped in v0.
+            // Reason: correctness, not the permission-toggle freeze. That freeze was the
+            // HotkeyMonitor's active (.defaultTap) CGEventTap, now fixed to .listenOnly
+            // (see HotkeyMonitor.buildTap, 2026-06-29) — unrelated to this path.
+            // The streaming gap here is ordering: fire-and-forget Tasks calling
+            // CGEvent.post() for rapid finalized chunks have no cross-chunk ordering
+            // guarantee → scrambled text. v0.1 must serialize on a dedicated serial
+            // queue before re-enabling.
             // TODO: v0.1 — implement serial keystroke queue (DispatchQueue.serialQueue)
             if let streamingInserter, false {
-                // DISABLED: streaming causes system hangs due to unserialized CGEvent.post() calls.
-                // Re-enable in v0.1 with proper serial queue.
+                // DEFERRED (v0.1): see comment above — kept compiled (not deleted) so the
+                // serialization work in v0.1 has the wiring in place.
                 Task {
                     do {
                         try await streamingInserter.insertChunk(chunk.text)

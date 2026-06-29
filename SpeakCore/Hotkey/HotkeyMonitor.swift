@@ -79,10 +79,12 @@ import os
 ///     need to re-subscribe after a re-arm.
 ///
 /// Permission model:
-///   - Gate tap on Accessibility only. The CGEventTap uses .defaultTap and is
-///     sufficient for a .flagsChanged event tap with AX alone — no Input
-///     Monitoring grant is required or requested. [verified: live machine
-///     without IM grant; tap arms and fires on double-tap Right-Command, 2026-06-22]
+///   - Gate tap on Accessibility only. The CGEventTap uses .listenOnly (pure
+///     observer — see buildTap()) and is sufficient for a .flagsChanged event tap
+///     with AX alone — no Input Monitoring grant is required or requested.
+///     [verified: live machine without IM grant; tap arms and fires on double-tap
+///     Right-Command, 2026-06-22. Option changed .defaultTap → .listenOnly 2026-06-29
+///     to make a system-wide input freeze on permission-toggle structurally impossible.]
 ///
 /// Re-arm watchdog:
 ///   - A CFRunLoopTimer fires every 100ms [decision: benchmark.md §7].
@@ -417,10 +419,27 @@ public final class HotkeyMonitor: @unchecked Sendable {
         let mask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
 
+        // [verified: .listenOnly exists, swiftc -typecheck local SDK, 2026-06-29]
+        // CRITICAL — must be .listenOnly, NEVER .defaultTap. We are a pure OBSERVER:
+        // the callback (line ~502) returns the event UNCHANGED on every path
+        // (Unmanaged.passUnretained(event)), never consuming or modifying it.
+        //
+        // An active (.defaultTap) tap sits SYNCHRONOUSLY in the HID input path — the
+        // system blocks delivery of every keyboard/mouse event until our callback
+        // returns. If our run-loop thread ever stalls (TCC mid-transaction when the
+        // user toggles Accessibility off, lock contention, run-loop churn), an active
+        // tap freezes ALL system input → the whole machine hangs until force-restart.
+        // This is exactly the freeze observed on permission-toggle (2026-06-29).
+        //
+        // .listenOnly removes us from the synchronous delivery path entirely: the
+        // system no longer waits on us, so a stalled callback can NEVER freeze input —
+        // structurally impossible regardless of WHY it stalls. Detection is byte-for-
+        // byte identical (we never modified events). Worst case flips from "machine
+        // freezes" to "hotkey silently stops" — a strict improvement.
         guard let port = CGEvent.tapCreate(
             tap: .cghidEventTap,
             place: .headInsertEventTap,
-            options: .defaultTap,
+            options: .listenOnly,
             eventsOfInterest: mask,
             callback: HotkeyMonitor.tapCallback,
             userInfo: selfPtr
