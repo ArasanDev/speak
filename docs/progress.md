@@ -11,6 +11,7 @@
 **Loop #37 (2026-06-29) — DIRECTION LOCKED + v0 fix phase. The product's north star is now the Profile Engine: a local-first, voice-driven, fully customizable AI text engine. See `specs/profile-engine.md`, `specs/profile-system-prompts.md`, `product.md §6d`, and the roadmap "North star" section.**
 
 ### What changed this loop (read before doing anything)
+-2. **Group A (UI polish) + PE-0 LANDED + pushed to GitHub.** After v0-base: #32 overlay gear removed (`35d5577`), #33 sidebar switches panes — fixed the tap-capturing `NavigationLink` in both `DashboardView` + `AppShell` (`10e9205`), #34 Appearance theme wired to `NSApp.appearance` + dead auto-paste/notifications toggles removed + history live-refresh (`9b88fd1`), and **#39 PE-0 Profile Engine spine** — `Profile` type + enums + pure `PromptBuilder` + 7 built-ins (Raw/Clean/Chat/Code/CLI/Prompt/Commit) + 15 tests, **additive only, not yet wired into the dictation flow** (`2952cf7`). Git health: stale worktrees/branches removed (single clean `master`); repo published **public** at github.com/ArasanDev/speak (master + `v0-base`). All gates green throughout. **#40 (SM-0 eval harness) is now unblocked.** Worker note: the PE-0 worker stalled (idle without writing) twice → orchestrator built it directly from the locked specs (higher fidelity for a spec-transcription task).
 -1. **🎯 v0 BASE VERIFIED WORKING LIVE (2026-06-29) — tagged `v0-base`.** The user dictated through speak itself, 3 consecutive times, each pasting correctly. Core loop confirmed end-to-end: double-tap Fn → speak → single-press → SpeechAnalyzer STT → Foundation Models cleanup → **single Cmd+V paste at cursor** → history saved (stopToPaste ~1.1–2.1s incl. cleanup). **These core behaviors are LOCKED — never regress them.** `git tag v0-base` is the protected baseline to return to.
    - **Two root causes were masking the fix during dogfood** (both now resolved, both operational not code): (a) the user was running a **STALE pre-#29 binary** (old `streaming enabled — skipping final paste` path) — fixed by rebuilding/relaunching; (b) the dev build was **ad-hoc signed** (no stable identity was being applied) so the Accessibility grant broke on rebuild → Cmd+V silently skipped. Fixed by `make dev-cert` (identity `speak-local-codesign` existed but wasn't wired) + `make build` (now `Authority=speak-local-codesign`) + `make reset-permissions` + re-grant. AX now persists across rebuilds. See [[dev-codesigning-for-tcc]].
 0. **#29 + #30 LANDED** (commits `9131899` [P0.1], `03629d2` [P0.2]; gates re-run on master: build ✅ / test ✅ / lint 0-serious ✅ / moat 7/7 ✅):
@@ -26,7 +27,9 @@
 - **Extension:** the Profile Engine (north star).
 
 ### Next actions (in order)
-- **v0 fix phase** — ✅ #29 + #30 landed. **#31 next** (live-verify consecutive paste — USER-GATED: needs human to dictate twice in a row and confirm each paste lands). Then #32–#34 (overlay gear removal, nav, history/toggles).
+- **v0 fix phase COMPLETE** — ✅ #29–#34 all landed + verified (paste live-confirmed by user; #32/#33/#34 UI fixes on master, awaiting a casual relaunch glance).
+- **Profile Engine epic** — ✅ #39 PE-0 (spine). **Next: #40 SM-0** (small-models eval harness `make eval`, now unblocked) → then wire PE-0 into the dictation flow (profile resolution at `newSession()`, generalizing the `LLMCleaning`/`CleanupMode` seam) → AI Studio pane → Overlay Tier-1 chips (`specs/profile-engine.md §8`).
+- **Caret streaming (best-effort)** — #35 → #36 → #37.
 - **Profile Engine epic** — #39 PE-0 (Profile type + PromptBuilder + 6 defaults), #40 SM-0 (eval harness), #41 SM-1 (study FM limits). Blocked by the v0 fix phase.
 - **Caret streaming** — #35–#37 (best-effort; Electron/web caveat documented).
 
