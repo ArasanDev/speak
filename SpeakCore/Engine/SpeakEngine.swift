@@ -138,11 +138,9 @@ public actor SpeakEngine {
     /// `SettingsStore` is `en-US`, preserving the prior behavior. [decision H1]
     ///
     /// **Streaming mode** (`settings.streamingMode`):
-    /// Read once at session start (latched decision). [decision P11-c §5]
-    /// - `.off`: no keystroke streaming. Final cleaned text is pasted normally.
-    /// - `.keystrokeInjection`: finalized chunks are streamed character-by-character
-    ///   via keystroke injection (Option D). No final cleaned paste (raw is the
-    ///   in-document deliverable; cleaned text goes to history only). [P11-c]
+    /// [P0.1 / task #29] Keystroke-injection streaming is retired from the delivery
+    /// path in v0. The setting is read for P2 but produces no effect; final AI text is
+    /// always pasted as the single deliverable. Raw keystroke injection is not used.
     ///
     /// All reads are synchronous: `SettingsStore` is `@unchecked Sendable` and
     /// its properties are computed over `UserDefaults` (documented thread-safe),
@@ -179,22 +177,12 @@ public actor SpeakEngine {
         // snippet edit applies on the next dictation. nil store → nil expander → no change.
         let activeExpander: (any SnippetExpanding)? = snippetStore.map { $0.makeExpander() }
 
-        // P11-c: Create streaming inserter based on streamingMode setting (read once).
-        // [decision P11-c] Settings change takes effect on the NEXT dictation; the
-        // current session locks in the streaming choice. This prevents mid-session
-        // toggle confusion (e.g., "what happens if user disables streaming mid-stream?").
-        // Pattern matches H1 (language) and Wave 2.2 (cleanup mode) — read at session
-        // start, not per-chunk. [§5 decision latching]
-        let activeStreamingInserter: (any StreamingRawTextInserting)? = {
-            switch settings.streamingMode {
-            case .off:
-                return nil
-
-            case .keystrokeInjection:
-                SpeakLog.engine.info("SpeakEngine: keystroke streaming enabled — finalizing chunks will be injected.")
-                return KeystrokeStreamingInserter()
-            }
-        }()
+        // [P0.1 / task #29] Keystroke-injection raw streaming is retired as a delivery
+        // path: raw is NEVER inserted into the document — the final AI text is the single
+        // delivery (see CaptureSession+Paste.runPaste). streamingInserter is always nil.
+        // [decision P11-c] Settings.streamingMode is retained for P2 revisit; it is not
+        // wired to delivery in v0. The setting can be read but produces no effect.
+        let activeStreamingInserter: (any StreamingRawTextInserting)? = nil
 
         let session = CaptureSession(
             transcriber: transcriber,
