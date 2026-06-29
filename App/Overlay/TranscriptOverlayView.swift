@@ -145,6 +145,12 @@ final class OverlayViewModel {
     /// into the per-dictation Agent override.
     var onSelectCategory: ((AgentCategory) -> Void)?
 
+    /// PE-3c-3: `true` when the ⌄more affordance on the category page is expanded, revealing
+    /// rare categories (Code). Reset to `false` whenever the category page opens fresh so the
+    /// row is always collapsed on entry. Stored on the model (not @State) so the reset is a
+    /// single write on the open path — no onChange needed.
+    var isCategoryMoreExpanded: Bool = false
+
     /// Elapsed seconds since the current dictation started listening.
     var elapsedSeconds: Int = 0
 
@@ -441,6 +447,7 @@ struct TranscriptOverlayView: View {
             // Agent has a deeper tier — swap to its categories instead of closing.
             // Every other destination is a leaf: apply + close.
             if choice == .agent {
+                model.isCategoryMoreExpanded = false   // [PE-3c-3] collapse ⌄more on every fresh entry
                 model.isShowingAgentCategories = true
             } else {
                 model.isProfilePanelOpen = false
@@ -469,6 +476,11 @@ struct TranscriptOverlayView: View {
 
     /// PE-3c-2: the Agent category tier. A back affordance returns to destinations; picking a
     /// category threads it into the Agent override and closes the card.
+    /// PE-3c-3: rare categories (Code) live behind a `⌄more` affordance in the header.
+    /// [decision PE-3c-3: no animation on the reveal — consistent with the card's instant
+    ///  transitions; reduce-motion is moot since the baseline page is also unanimated.]
+    /// [decision PE-3c-3: expanded row fits in the 112 pt panel — estimated 87 pt total
+    ///  (3-row VStack 63 pt + 24 pt vertical padding), leaving 12 pt spare each side]
     private var agentCategoryPage: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
             HStack(spacing: SpeakSpacing.xs) {
@@ -484,14 +496,40 @@ struct TranscriptOverlayView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Back to destinations")
                 Spacer(minLength: 0)
+                // [PE-3c-3] ⌄more toggle — reveals rare categories (currently: Code).
+                Button {
+                    model.isCategoryMoreExpanded.toggle()
+                } label: {
+                    HStack(spacing: 2) {
+                        Image(systemName: model.isCategoryMoreExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9))
+                        Text("more")
+                    }
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(Color.secondary.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(model.isCategoryMoreExpanded
+                    ? "Collapse rare categories"
+                    : "Show more categories")
                 Text("esc")
                     .font(.speakMonoCaption)
                     .foregroundStyle(Color.secondary.opacity(0.6))
             }
-            // Primary categories (Code lives behind a future ⌄more, per the spec).
+            // Primary categories (Code lives behind ⌄more, per specs/profile-taxonomy.md [rare]).
             HStack(spacing: SpeakSpacing.xs) {
                 ForEach(Self.primaryCategories, id: \.self) { category in
                     categoryButton(category)
+                }
+            }
+            // [PE-3c-3] Rare categories — revealed by ⌄more. Spacer prevents a single
+            // button from stretching full-width (each button uses maxWidth: .infinity).
+            if model.isCategoryMoreExpanded {
+                HStack(spacing: SpeakSpacing.xs) {
+                    ForEach(Self.rareCategories, id: \.self) { category in
+                        categoryButton(category)
+                    }
+                    Spacer(minLength: 0)
                 }
             }
         }
@@ -500,6 +538,13 @@ struct TranscriptOverlayView: View {
 
     /// The primary Agent categories shown in the card (Code is deferred to a `⌄more` affordance).
     static let primaryCategories: [AgentCategory] = [.task, .fix, .ask, .commit, .shell]
+
+    /// Rare categories revealed by `⌄more` — derived as the complement of `primaryCategories`
+    /// over `AgentCategory.allCases` so any future category addition is automatically covered.
+    /// [decision PE-3c-3: Code is rare per specs/profile-taxonomy.md; kept behind ⌄more]
+    static let rareCategories: [AgentCategory] = AgentCategory.allCases.filter {
+        !Self.primaryCategories.contains($0)
+    }
 
     private func categoryButton(_ category: AgentCategory) -> some View {
         let isActive = category == model.activeCategory
