@@ -123,8 +123,6 @@ public final class SettingsStore: @unchecked Sendable {
         static let streamingRawTextEnabled = "speak.settings.streamingRawTextEnabled"
         static let streamingMode         = "speak.settings.streamingMode"
         static let appTheme              = "speak.settings.appTheme"
-        static let notificationsEnabled  = "speak.settings.notificationsEnabled"
-        static let autoPasteEnabled      = "speak.settings.autoPasteEnabled"
     }
 
     // MARK: - Injected defaults (the testability seam)
@@ -154,9 +152,7 @@ public final class SettingsStore: @unchecked Sendable {
             Keys.cleanupLevel: CleanupLevel.medium.rawValue,
             Keys.streamingRawTextEnabled: true,
             Keys.streamingMode: StreamingMode.keystrokeInjection.rawValue,
-            Keys.appTheme: AppTheme.system.rawValue,
-            Keys.notificationsEnabled: true,
-            Keys.autoPasteEnabled: true
+            Keys.appTheme: AppTheme.system.rawValue
         ])
         // Enum defaults are handled via `?? fallback` at the getter level because
         // Codable JSON cannot be registered as a `[String: Any]` literal.
@@ -459,36 +455,6 @@ public final class SettingsStore: @unchecked Sendable {
         }
     }
 
-    // MARK: - Notifications
-
-    /// Whether to show notifications (e.g., dictation complete, errors). Default: `true`.
-    public var notificationsEnabled: Bool {
-        get {
-            access(keyPath: \.notificationsEnabled)
-            return defaults.bool(forKey: Keys.notificationsEnabled)
-        }
-        set {
-            withMutation(keyPath: \.notificationsEnabled) {
-                defaults.set(newValue, forKey: Keys.notificationsEnabled)
-            }
-        }
-    }
-
-    // MARK: - Auto-paste
-
-    /// Whether to automatically paste cleaned text after dictation ends.
-    /// Default: `true`. When `false`, user must manually paste via Cmd+V.
-    public var autoPasteEnabled: Bool {
-        get {
-            access(keyPath: \.autoPasteEnabled)
-            return defaults.bool(forKey: Keys.autoPasteEnabled)
-        }
-        set {
-            withMutation(keyPath: \.autoPasteEnabled) {
-                defaults.set(newValue, forKey: Keys.autoPasteEnabled)
-            }
-        }
-    }
 
     // MARK: - Reset to defaults
 
@@ -507,8 +473,6 @@ public final class SettingsStore: @unchecked Sendable {
         access(keyPath: \.streamingRawTextEnabled)
         access(keyPath: \.streamingMode)
         access(keyPath: \.appTheme)
-        access(keyPath: \.notificationsEnabled)
-        access(keyPath: \.autoPasteEnabled)
 
         withMutation(keyPath: \.cleanupEnabled) {
             defaults.set(true, forKey: Keys.cleanupEnabled)
@@ -542,12 +506,6 @@ public final class SettingsStore: @unchecked Sendable {
         }
         withMutation(keyPath: \.appTheme) {
             defaults.set(AppTheme.system.rawValue, forKey: Keys.appTheme)
-        }
-        withMutation(keyPath: \.notificationsEnabled) {
-            defaults.set(true, forKey: Keys.notificationsEnabled)
-        }
-        withMutation(keyPath: \.autoPasteEnabled) {
-            defaults.set(true, forKey: Keys.autoPasteEnabled)
         }
 
         SpeakLog.storage.info("SettingsStore reset to defaults")

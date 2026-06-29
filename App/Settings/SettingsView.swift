@@ -132,18 +132,6 @@ private struct GeneralSettingsTab: View {
             }
 
             Section {
-                Toggle("Enable notifications", isOn: Binding(
-                    get: { store.notificationsEnabled },
-                    set: { store.notificationsEnabled = $0 }
-                ))
-                Text("Show notifications for dictation completion and errors.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } header: {
-                Text("Notifications")
-            }
-
-            Section {
                 if !localesLoaded {
                     HStack {
                         Text("Language")
@@ -319,18 +307,6 @@ private struct HotkeyInputSettingsTab: View {
                 Text("Record any key+modifier combo or a modifier-only key (e.g. Right-Command, Fn).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
-
-            Section {
-                Toggle("Auto-paste after dictation", isOn: Binding(
-                    get: { store.autoPasteEnabled },
-                    set: { store.autoPasteEnabled = $0 }
-                ))
-                Text("When enabled, cleaned text is automatically pasted at the cursor after dictation ends.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } header: {
-                Text("Output")
             }
         }
         .formStyle(.grouped)

@@ -206,6 +206,13 @@ final class DictationController: CLICommandHandler {
     /// `updateBinding` + UserDefaults writes.
     private var lastAppliedTrigger: HotkeyBinding.Trigger = .doubleTap
 
+    /// The last appearance theme applied to NSApplication.
+    /// Guards against redundant appearance updates.
+    private var lastAppliedAppearance: AppTheme = .system
+
+    /// The in-flight appearance observation task, cancelled when a new one replaces it.
+    private var appearanceObserverTask: Task<Void, Never>?
+
     // MARK: - Onboarding
 
     let permissionManager: PermissionManager
@@ -256,6 +263,14 @@ final class DictationController: CLICommandHandler {
         // Start observing future trigger-mode changes from SettingsView.
         // Uses withObservationTracking — fires only on triggerMode mutations.
         startObservingTriggerMode()
+
+        // Apply appearance theme on init.
+        let initialAppearance = store.appTheme
+        applyAppearance(initialAppearance)
+        lastAppliedAppearance = initialAppearance
+
+        // Start observing future appearance theme changes from SettingsView.
+        startObservingAppearance()
     }
 
     // MARK: - Trigger-mode observation
@@ -286,6 +301,52 @@ final class DictationController: CLICommandHandler {
                 self.monitor.updateBinding(newBinding)
                 SpeakLog.hotkey.info(
                     "DictationController: trigger mode changed — \(newTrigger.rawValue, privacy: .public)"
+                )
+            }
+        }
+    }
+
+    // MARK: - Appearance theme observation
+
+    /// Apply the theme to NSApplication.shared.appearance based on the AppTheme setting.
+    private func applyAppearance(_ theme: AppTheme) {
+        let appearance: NSAppearance? = {
+            switch theme {
+            case .light:
+                return NSAppearance(named: .aqua)
+            case .dark:
+                return NSAppearance(named: .darkAqua)
+            case .system:
+                return nil  // nil lets macOS follow system setting
+            }
+        }()
+        NSApplication.shared.appearance = appearance
+    }
+
+    /// Re-arming observation loop: tracks `settingsStore.appTheme` via
+    /// `withObservationTracking` and applies changes to NSApplication appearance.
+    ///
+    /// `withObservationTracking` is one-shot — the loop re-arms after each fire.
+    /// Dedupes same-value writes to avoid redundant NSApplication.appearance updates.
+    private func startObservingAppearance() {
+        appearanceObserverTask?.cancel()
+        appearanceObserverTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self else { break }
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    withObservationTracking {
+                        _ = self.settingsStore.appTheme
+                    } onChange: {
+                        continuation.resume()
+                    }
+                }
+                guard !Task.isCancelled else { break }
+                let newTheme = self.settingsStore.appTheme
+                guard newTheme != self.lastAppliedAppearance else { continue }
+                self.lastAppliedAppearance = newTheme
+                self.applyAppearance(newTheme)
+                SpeakLog.storage.info(
+                    "DictationController: appearance theme changed — \(newTheme.rawValue, privacy: .public)"
                 )
             }
         }

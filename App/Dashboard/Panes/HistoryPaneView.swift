@@ -23,6 +23,16 @@ struct HistoryPaneView: View {
     }
 
     var body: some View {
-        HistoryView(viewModel: viewModel)
+        let contentView = HistoryView(viewModel: viewModel)
+
+        // Subscribe to dictation completions and refresh the history.
+        if let publisher = context.dictationCompletedPublisher {
+            contentView
+                .onReceive(publisher) { _ in
+                    viewModel.reload()
+                }
+        } else {
+            contentView
+        }
     }
 }

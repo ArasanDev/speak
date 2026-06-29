@@ -70,6 +70,11 @@ final class HistoryViewModel {
         scheduleReload()
     }
 
+    /// Publicly accessible reload — called when new dictations are saved externally.
+    func reload() {
+        scheduleReload()
+    }
+
     // MARK: - Actions
 
     /// Permanently delete all stored entries, then refresh the (now empty) list.
