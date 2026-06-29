@@ -254,6 +254,11 @@ private struct SpeakMenu: View {
         }
         .keyboardShortcut("o")
 
+        Button("AI Studio\u{2026}") {
+            openWindow(id: "appshell")
+            // TODO(PE-2): deep-link to .aiStudio section when AppShell supports initialSection
+        }
+
         Button("History\u{2026}") {
             controller.showHistory()
         }

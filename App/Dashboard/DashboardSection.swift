@@ -16,6 +16,7 @@ import SwiftUI
 /// One destination in the dashboard sidebar. `CaseIterable` order == display order.
 enum DashboardSection: String, CaseIterable, Identifiable, Hashable {
     case home
+    case aiStudio
     case insights
     case dictionary
     case snippets
@@ -32,6 +33,7 @@ enum DashboardSection: String, CaseIterable, Identifiable, Hashable {
     var title: String {
         switch self {
         case .home:       return "Home"
+        case .aiStudio:   return "AI Studio"
         case .insights:   return "Insights"
         case .dictionary: return "Dictionary"
         case .snippets:   return "Snippets"
@@ -47,6 +49,7 @@ enum DashboardSection: String, CaseIterable, Identifiable, Hashable {
     var systemImage: String {
         switch self {
         case .home:       return "house"
+        case .aiStudio:   return "brain.head.profile"
         case .insights:   return "chart.bar"
         case .dictionary: return "character.book.closed"
         case .snippets:   return "text.append"
