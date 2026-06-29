@@ -229,6 +229,61 @@ growing into that role. SuperWhisper shipped coding-agent integration in April 2
 
 ---
 
+## 6d. The Profile Engine — what the product is *becoming* `[decision 2026-06-29]`
+
+> Full design spec: **`specs/profile-engine.md`**. Default system prompts:
+> **`specs/profile-system-prompts.md`**. This section is the WHY; those are the HOW.
+
+The destination, stated plainly: **a local-first, voice-driven, fully
+customizable AI text engine.** Cloud tools won't give you raw system-prompt
+control over your text privately; local tools don't have this UX. `speak` sits
+in that gap.
+
+### The layering — core vs. extension (this is immutable)
+
+1. **Base core (never changes):** double-press = activate, single-press = stop;
+   **raw voice → text is always available**, zero AI in the path. The floor the
+   whole product stands on. If every model is gone, `speak` still dictates.
+2. **Default layer:** on-device neat-writing (the `Clean` profile) runs on the
+   raw transcript by default. AI off ⇒ fall straight through to raw. No dead ends.
+3. **Extension layer:** **Profiles** — the same engine steered by a system
+   prompt, producing exactly the right text for where it lands (chat, code,
+   terminal, agent task, commit).
+
+### The one idea: a Profile = name + system prompt + a few rules
+
+We ship great **defaults**; **everything is customizable** — "default +
+customization version for everything." Every overlay chip is a profile; Agent
+Mode (V01-0), per-app context (V01-3), Transforms (V1-3), and code-aware mode
+(V1-4) are **instances of this one engine**, not separate features.
+
+### Two surfaces (this resolves the "where do settings live" question)
+
+- **Dashboard → AI Studio**: *author/customize* profiles (system prompts,
+  examples, app-binding). The natural place; gear bottom-left of the main window.
+- **Overlay control surface**: *pick/steer* the active profile live, per
+  dictation, without leaving your work. The icon on the overlay is **live
+  customization, not a settings duplicate.** Calm by default (Tier-1 profile
+  chips); knobs on demand.
+
+### The novel loop: stream → live AI preview → steer → commit
+
+The capture window is **interactive**, not a dumb recorder: raw streams (in our
+UI *and*, best-effort, at the cursor — never inserted), a live AI preview forms,
+you steer it (tap a chip or *say* "make it a bullet list"), and on stop only the
+final profile-shaped AI text is pasted. Nobody does this. It is the moat.
+
+### The hard constraint that shapes everything: small models
+
+The default engine is a **very small (~3B) on-device model** (Apple Foundation
+Models). Every prompt and profile is designed for that reality first — short
+imperative prompts, few-shot examples, one job per profile, explicit output
+contracts, and **always degrade to raw on failure.** A small-models eval harness
+(golden fixtures, on-device latency) makes prompt tuning measured, not guessed.
+See `specs/profile-engine.md §6` and the roadmap small-models track.
+
+---
+
 ## 7. UX principles
 
 ### 7.1 The hotkey (signature UX)

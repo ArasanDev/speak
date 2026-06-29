@@ -21,6 +21,64 @@
 
 ---
 
+## North star — the Profile Engine `[decision 2026-06-29]`
+
+> Spec: `specs/profile-engine.md` · prompts: `specs/profile-system-prompts.md` ·
+> WHY: `product.md §6d`. The product is becoming a **local-first, voice-driven,
+> fully customizable AI text engine**. The tasks below (v0 fix phase → Profile
+> Engine epic → small-models track) are the path. The existing v0.1/v1 items
+> (V01-0 Agent Mode, V01-3 per-app context, V1-3 Transforms, V1-4 code-aware)
+> are **re-framed as profiles** once the engine lands — they stop being separate
+> code paths.
+
+### Layering (immutable order — never invert)
+1. **Base core (never changes):** double-press activate / single-press stop;
+   raw voice → text ALWAYS available, no AI in the path.
+2. **Default:** `Clean` profile (on-device neat-writing); AI off ⇒ raw passthrough.
+3. **Extension:** the Profile Engine (this north star).
+
+### PE — Profile Engine epic (after the v0 fix phase: tasks #29–#34)
+
+- **PE-0 — Profile type + PromptBuilder.** `Profile` schema
+  (`profile-engine.md §2.1`) + pure `PromptBuilder` (`§2.2`) + the 6 default
+  profiles + resolution order (`§3`). Generalizes the existing
+  `LLMCleaning`/`CleanupMode` seam — not a rewrite.
+  **Done when:** profiles round-trip in `SettingsStore`; `PromptBuilder` is a
+  pure, unit-tested function; a dictation resolves and applies a profile;
+  `Raw`/`Clean` built-ins present and non-deletable; 4 gates green.
+- **PE-1 — Small-models eval harness** (see track below) green for all 6 defaults.
+- **PE-2 — AI Studio pane** (dashboard): list, per-profile editor (system prompt
+  + examples + knobs + app-binding), Reset-to-default, live test box, default
+  picker, master AI on/off.
+  **Done when:** edit/create/reset a profile persists; live test transforms a
+  sample; built-ins resettable not deletable; 4 gates green.
+- **PE-3 — Overlay Tier 1**: profile chips + target indicator + live-preview
+  toggle (non-activating; click/voice only). **Done when:** tapping a chip
+  re-shapes *this* dictation without changing the default; voice override works.
+- **PE-4 — Overlay Tier 2/3**: knobs (format/tone/length/context-attach) +
+  capture controls (pause/undo/re-clean/cancel) — wrappers over PE-0 knobs.
+
+### Small-models optimization & evaluation track `[decision 2026-06-29]`
+
+The default model is small (~3B, on-device). This track makes quality
+**measured, not guessed**, and is a prerequisite for shipping any profile.
+
+- **SM-0 — Eval harness.** Golden `spoken → expected` fixtures per profile
+  (seeded from `profile-system-prompts.md` examples). Score correctness, format
+  adherence, and on-device latency. Runnable via `make` (offline, no egress).
+  **Done when:** `make eval` runs all profiles' fixtures and prints a pass/score
+  + p50/p95 latency table; a prompt edit that regresses a fixture fails the run.
+- **SM-1 — Small-model study.** Document Foundation Models' real limits on the
+  local SDK (context window, instruction-following failure modes, latency curve
+  vs input length) in `specs/verification-ledger.md`; tag `[verified]` from
+  measured runs, never memory. Feeds prompt-design rules (`profile-engine.md §6`).
+- **SM-2 — Per-profile prompt tuning.** Iterate each default prompt against SM-0
+  until it clears its fixtures within latency budget. Tuning is the unit of work.
+- **SM-3 — Degrade-to-raw verification.** Prove every failure path (timeout,
+  unavailable, over-length) falls back to raw paste, never an error.
+
+---
+
 ## Phase 0 — Repo setup
 
 **Task**: `git init`, Xcode project (app + `SpeakCore.framework` + `SpeakTests`),

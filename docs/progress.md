@@ -8,9 +8,32 @@
 
 ## Current phase
 
-**P11-c: Streaming raw text + full-stack UI redesign — loop #36 (2026-06-28). Keystroke injection for raw-text streaming + complete sidebar-nav application (Dashboard, History, Settings, Privacy, About panes).**
+**Loop #37 (2026-06-29) — DIRECTION LOCKED + v0 fix phase. The product's north star is now the Profile Engine: a local-first, voice-driven, fully customizable AI text engine. See `specs/profile-engine.md`, `specs/profile-system-prompts.md`, `product.md §6d`, and the roadmap "North star" section.**
 
-Gates as of loop #36 (2026-06-28): **design locked ✅ streaming architecture designed ✅ app structure specified ✅** (implementation phase beginning)
+### What changed this loop (read before doing anything)
+1. **System-freeze bug FIXED** (committed): `HotkeyMonitor` CGEventTap was `.defaultTap` (active — sits synchronously in the HID input path). Toggling Accessibility off stalled the run-loop thread → froze the whole machine. Changed to **`.listenOnly`** (we are a pure observer; the callback returns events unchanged). Freeze is now structurally impossible. Also fixed a pre-existing lint error (`_dictationCompletedSubject` → `dictationCompletedSubject`).
+2. **Keystroke injection is the WRONG primitive — being removed.** The locked model (human decision): raw transcript is an **ephemeral preview** (our app UI + best-effort caret-anchored overlay), **NEVER inserted**; only the **final AI text is pasted**, once, at the cursor. The current `if streamingInserter != nil { skip final paste }` logic in `CaptureSession+Paste.swift` is the root of the "pastes once then stops" bug. Tasks #29–#31 fix this.
+3. **Three runtime audits done** (agents): @Observable reactivity is HEALTHY (no breaks). Real bugs are in app-layer wiring — paste delivery logic (#29), detector desync + undismissable error HUD on failed begin/mute (#30), sidebar nav may not switch panes (#33), History no live-refresh + 3 dead toggles auto-paste/appearance/notifications (#34).
+
+### Layering (immutable — never invert)
+- **Base core (never changes):** double-press activate / single-press stop; raw voice → text ALWAYS available, no AI in path.
+- **Default:** `Clean` profile (on-device neat-writing); AI off ⇒ raw passthrough.
+- **Extension:** the Profile Engine (north star).
+
+### Next actions (in order)
+- **v0 fix phase** — #29 (single paste path) → #30 (detector/HUD) → #31 (live-verify consecutive paste); then #32–#34 (overlay gear removal, nav, history/toggles).
+- **Profile Engine epic** — #39 PE-0 (Profile type + PromptBuilder + 6 defaults), #40 SM-0 (eval harness), #41 SM-1 (study FM limits). Blocked by the v0 fix phase.
+- **Caret streaming** — #35–#37 (best-effort; Electron/web caveat documented).
+
+### Orchestration note
+Models available: **Opus** (judgment/design/review — me) + **fast worker** (Haiku/WSL2 MiniMax — bulk code). **No Sonnet middle tier.** Design is locked in specs; route mechanical multi-file implementation to the worker with precise briefs; orchestrator reviews diffs + owns commits.
+
+---
+
+### (archived) P11-c streaming context — loop #36 (2026-06-28)
+Keystroke injection for raw-text streaming + complete sidebar-nav application (Dashboard, History, Settings, Privacy, About). **Superseded by the Profile Engine direction above; keystroke injection removed in v0 fix phase.**
+
+Gates as of loop #36 (2026-06-28): design locked ✅ streaming architecture designed ✅ app structure specified ✅
 
 **Loop #35** (P11-a: build-from-source install):
 - **`make install`** — new Makefile target: `make build` then `cp -r Speak.app /Applications/`
