@@ -1,0 +1,86 @@
+[
+  {
+    "profileId": "raw",
+    "spoken": "um so i think we should uh meet on tuesday maybe to go over the the budget",
+    "expected": "um so i think we should uh meet on tuesday maybe to go over the the budget",
+    "formatChecks": ["equalsExpected"]
+  },
+  {
+    "profileId": "raw",
+    "spoken": "yeah send her the file and like let her know it's done",
+    "expected": "yeah send her the file and like let her know it's done",
+    "formatChecks": ["equalsExpected"]
+  },
+  {
+    "profileId": "clean",
+    "spoken": "um so i think we should uh meet on tuesday maybe to go over the the budget",
+    "expected": "I think we should meet on Tuesday to go over the budget.",
+    "formatChecks": ["startsWithCapital", "noTrailingPeriod"]
+  },
+  {
+    "profileId": "clean",
+    "spoken": "yeah send her the file and like let her know it's done",
+    "expected": "Send her the file and let her know it's done.",
+    "formatChecks": ["startsWithCapital", "noTrailingPeriod"]
+  },
+  {
+    "profileId": "chat",
+    "spoken": "okay so i want you to like write me a python script that uh reads a csv and you know plots the second column",
+    "expected": "Write a Python script that reads a CSV file and plots the second column.",
+    "formatChecks": ["startsWithCapital"]
+  },
+  {
+    "profileId": "chat",
+    "spoken": "um explain how does oauth work but keep it short like for a beginner",
+    "expected": "Explain how OAuth works, briefly, for a beginner.",
+    "formatChecks": ["startsWithCapital"]
+  },
+  {
+    "profileId": "code",
+    "spoken": "set user name equals get current user open paren close paren",
+    "expected": "userName = getCurrentUser()",
+    "formatChecks": ["equalsExpected"]
+  },
+  {
+    "profileId": "code",
+    "spoken": "import the os module and then call logger dot info",
+    "expected": "import os\nlogger.info(...)",
+    "formatChecks": ["equalsExpected"]
+  },
+  {
+    "profileId": "cli",
+    "spoken": "uh list all the files including hidden ones in long format",
+    "expected": "ls -la",
+    "formatChecks": ["equalsExpected"]
+  },
+  {
+    "profileId": "cli",
+    "spoken": "git commit everything with the message fix the paste bug",
+    "expected": "git commit -am \"fix the paste bug\"",
+    "formatChecks": ["equalsExpected"]
+  },
+  {
+    "profileId": "prompt",
+    "spoken": "okay so i need you to first add a login button and then uh wire it to the auth service and also write a test for it",
+    "expected": "Add a login flow:\n1. Add a login button.\n2. Wire it to the auth service.\n3. Write a test for it.",
+    "formatChecks": []
+  },
+  {
+    "profileId": "prompt",
+    "spoken": "fix the bug in capture session where paste only works the first time",
+    "expected": "Fix the bug in CaptureSession where paste only works on the first dictation.",
+    "formatChecks": ["startsWithCapital"]
+  },
+  {
+    "profileId": "commit",
+    "spoken": "um i fixed the bug where the paste wasn't working after the first dictation",
+    "expected": "fix: paste now works on every dictation, not just the first",
+    "formatChecks": ["equalsExpected"]
+  },
+  {
+    "profileId": "commit",
+    "spoken": "added the new profile engine spec and the system prompts",
+    "expected": "docs: add profile engine spec and default system prompts",
+    "formatChecks": ["equalsExpected"]
+  }
+]
