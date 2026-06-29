@@ -102,6 +102,7 @@ struct AppShell: View {
                     historyStore: controller.historyStore,
                     hotkeyCombo: controller.currentHotkeyDisplayString.split(separator: " ").map(String.init),
                     snippetStore: controller.snippetStore,
+                    profileStore: controller.profileStore,
                     speakEngine: controller.engine,
                     permissionManager: controller.permissionManager,
                     dictationCompletedPublisher: controller.dictationCompletedPublisher

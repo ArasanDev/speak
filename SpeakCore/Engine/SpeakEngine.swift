@@ -63,6 +63,11 @@ public actor SpeakEngine {
     /// edit applies to the next dictation without an engine restart. `nil` = no snippets.
     private let snippetStore: SnippetStore?
 
+    /// Optional profile store (PE-2). Read at `newSession()` time so a profile edited in
+    /// AI Studio applies on the next dictation. `nil` → fall back to the hardcoded
+    /// `DefaultProfiles` (the PE-1 behavior), keeping every existing test green.
+    private let profileStore: ProfileStore?
+
     /// The settings store. Read at `newSession()` time so both the cleanup toggle
     /// and the transcription locale take effect on the next dictation without
     /// requiring an engine restart. `@unchecked Sendable` on `SettingsStore` makes
@@ -112,13 +117,15 @@ public actor SpeakEngine {
                 inserter: (any TextInserting)? = nil,
                 history: any HistoryStoring,
                 settings: SettingsStore,
-                snippetStore: SnippetStore? = nil) {
+                snippetStore: SnippetStore? = nil,
+                profileStore: ProfileStore? = nil) {
         self.transcriber = transcriber
         self.cleaner = cleaner
         self.inserter = inserter
         self.history = history
         self.settings = settings
         self.snippetStore = snippetStore
+        self.profileStore = profileStore
     }
 
     // MARK: - Session factory
@@ -189,9 +196,15 @@ public actor SpeakEngine {
         // vocabulary); the full default→Clean migration lands with AI Studio.
         // [decision: app-override increment — conscious scoping, not fragmentation; the
         //  intensity level + custom vocabulary are threaded through to the profile path.]
+        // PE-2: resolve against the user's edited profile set when a ProfileStore is
+        // injected; otherwise the hardcoded built-ins (PE-1 behavior). This is what makes
+        // an AI Studio edit to e.g. the Code profile actually change Xcode/Cursor dictation.
+        // The DEFAULT (no-app-match) path still runs `.styled` below — the default→Clean
+        // unification is a deliberate later stage, so the verified v0 default is untouched.
+        let candidateProfiles = profileStore?.profiles ?? DefaultProfiles.all
         let resolvedProfile = ProfileResolver.resolve(
             frontmostBundleID: frontmostBundleID,
-            profiles: DefaultProfiles.all,
+            profiles: candidateProfiles,
             default: DefaultProfiles.defaultProfile
         )
         let isAppSpecificMatch = resolvedProfile.id != DefaultProfiles.defaultProfile.id
@@ -228,6 +241,46 @@ public actor SpeakEngine {
         )
         currentSession = session
         return session
+    }
+
+    // MARK: - Profile preview (PE-2: AI Studio live-test box; reused by #40 eval harness)
+
+    /// The outcome of previewing a profile over a sample — distinguishes "the model is
+    /// unavailable" (so the caller never silently shows output == input) from a real
+    /// transform, a `.raw` passthrough, or a failure.
+    public enum ProfilePreviewResult: Sendable, Equatable {
+        /// No cleaner injected, or the engine reports `isAvailable == false` (e.g. Apple
+        /// Intelligence is off). The caller should say so, not render the unchanged input.
+        case unavailable
+        /// The profile is the base-core bypass (`model == .raw`): output equals input by design.
+        case raw
+        /// The model produced this output.
+        case transformed(String)
+        /// `clean(_:mode:)` threw. The string is a diagnostic message, not user-facing prose.
+        case failed(String)
+    }
+
+    /// Run `profile` over `sample` through the real cleaner — the same path live dictation
+    /// uses — so AI Studio (and the #40 eval harness) can show what a profile produces.
+    /// Pure read of the engine's components; does NOT touch the dictation session state.
+    ///
+    /// - Note: On a Mac with Apple Intelligence off, `isAvailable` is `false` → `.unavailable`.
+    ///   This is why the result is an enum: a preview must never present the raw input as
+    ///   though the model transformed it.
+    public func preview(profile: Profile, sample: String) async -> ProfilePreviewResult {
+        if case .raw = profile.model { return .raw }
+        guard let cleaner else { return .unavailable }
+        guard await cleaner.isAvailable else { return .unavailable }
+        // Use the user's intensity, but never `.none` for a preview (that means "no model
+        // call" in live dictation; here the user explicitly asked to see the transform).
+        let level: CleanupLevel = settings.cleanupLevel == .none ? .medium : settings.cleanupLevel
+        let mode: CleanupMode = .profile(profile, level: level, customVocabulary: settings.customVocabulary)
+        do {
+            return .transformed(try await cleaner.clean(sample, mode: mode))
+        } catch {
+            SpeakLog.engine.error("SpeakEngine.preview: clean failed — \(String(describing: error), privacy: .public)")
+            return .failed(String(describing: error))
+        }
     }
 
     // MARK: - Dictation verbs (the three the app shell drives)
