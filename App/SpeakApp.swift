@@ -81,6 +81,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ctrl.startMonitoring()
     }
 
+    /// Open the dashboard window when the user "re-opens" the already-running app —
+    /// double-clicking Speak.app in Finder/Launchpad, hitting Enter on it in Spotlight,
+    /// or clicking a Dock icon. For a menubar-only (LSUIElement) app this is the natural,
+    /// reliable "open the app" gesture, independent of the MenuBarExtra menu (which can be
+    /// unresponsive in a background .accessory app). Returns true so AppKit performs no
+    /// default reopen behaviour beyond ours.
+    /// [decision: 2026-06-29 — user could not open the window via the menubar click;
+    ///  re-launch → showDashboard() is a testable, menubar-independent entry point.]
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        controller?.showDashboard()
+        return true
+    }
+
 #if DEBUG
     private var debugDispatcherStorage: DebugLaunchDispatcher?
 #endif
@@ -172,10 +185,22 @@ private struct MenuBarLabel: View {
 
     var body: some View {
         let (symbol, tint, label) = presentation(for: controller.icon)
-        Image(systemName: symbol)
-            .symbolRenderingMode(.palette)   // [decision: P8] prevents template forcing
-            .foregroundStyle(tint)           // primary layer tint; single-arg works for all state symbols
-            .accessibilityLabel(label)
+        // Idle renders as a STANDARD template menubar icon — solid, full-contrast, and
+        // auto-inverting for the light/dark menubar exactly like Wi-Fi/battery. The old
+        // secondaryLabelColor tint made the resting icon nearly invisible, so the user
+        // could not find it to open the app. Active states keep the palette tint so the
+        // recording/processing/done/error colors still read.
+        // [decision: 2026-06-29 — user chose "make the menubar icon visible";
+        //  discoverability of the entry point outranks resting subtlety.]
+        if case .idle = controller.icon {
+            Image(systemName: symbol)
+                .accessibilityLabel(label)
+        } else {
+            Image(systemName: symbol)
+                .symbolRenderingMode(.palette)   // [decision: P8] prevents template forcing
+                .foregroundStyle(tint)           // colored state tint (listening/processing/done/error)
+                .accessibilityLabel(label)
+        }
     }
 
     /// Returns `(SF Symbol name, tint color, VoiceOver label)` for each icon state.
