@@ -11,9 +11,12 @@
 **Loop #37 (2026-06-29) — DIRECTION LOCKED + v0 fix phase. The product's north star is now the Profile Engine: a local-first, voice-driven, fully customizable AI text engine. See `specs/profile-engine.md`, `specs/profile-system-prompts.md`, `product.md §6d`, and the roadmap "North star" section.**
 
 ### What changed this loop (read before doing anything)
-1. **System-freeze bug FIXED** (committed): `HotkeyMonitor` CGEventTap was `.defaultTap` (active — sits synchronously in the HID input path). Toggling Accessibility off stalled the run-loop thread → froze the whole machine. Changed to **`.listenOnly`** (we are a pure observer; the callback returns events unchanged). Freeze is now structurally impossible. Also fixed a pre-existing lint error (`_dictationCompletedSubject` → `dictationCompletedSubject`).
-2. **Keystroke injection is the WRONG primitive — being removed.** The locked model (human decision): raw transcript is an **ephemeral preview** (our app UI + best-effort caret-anchored overlay), **NEVER inserted**; only the **final AI text is pasted**, once, at the cursor. The current `if streamingInserter != nil { skip final paste }` logic in `CaptureSession+Paste.swift` is the root of the "pastes once then stops" bug. Tasks #29–#31 fix this.
-3. **Three runtime audits done** (agents): @Observable reactivity is HEALTHY (no breaks). Real bugs are in app-layer wiring — paste delivery logic (#29), detector desync + undismissable error HUD on failed begin/mute (#30), sidebar nav may not switch panes (#33), History no live-refresh + 3 dead toggles auto-paste/appearance/notifications (#34).
+0. **#29 + #30 LANDED** (commits `9131899` [P0.1], `03629d2` [P0.2]; gates re-run on master: build ✅ / test ✅ / lint 0-serious ✅ / moat 7/7 ✅):
+   - **#29 single paste path** — removed `if streamingInserter != nil { skip final paste }` in `CaptureSession+Paste.swift`; `SpeakEngine.newSession()` now always passes `streamingInserter: nil` (the `.keystrokeInjection` wiring is retired from delivery; `settings.streamingMode` kept for P2 but inert). Final AI text (`cleanedText ?? rawText`) is now the **single** delivery, every dictation. Raw is never inserted. This fixes "pastes once then stops".
+   - **#30 detector desync + dismissable error HUD** — `monitor.notifySessionEnded()` added to begin-fail catch, `microphoneMuted` catch, and `toggleMute` muted branch (DoubleTapDetector no longer stuck `isCapturing==true`); `endDictation` got a `guard icon == .listening` re-entrancy guard (kills the Escape-vs-hotkey double-stop spurious error); `OverlayController.showError` now calls `installEscapeMonitor()` so a begin-failure HUD is dismissable.
+   - **Orchestration note:** worker (`fix-delivery-29-30`, Haiku) wrote correct edits but tangled git (committed to master, `git reset` off, left a stray worktree). Recovered the dangling commit, re-ran gates, split into two clean commits, removed the worktree. Reinforces the standing rule: workers edit the main checkout directly, never create worktrees, never `git reset` after committing. **#39 (PE-0) is now unblocked.**
+1. **System-freeze bug FIXED** (committed `182ba0c`): `HotkeyMonitor` CGEventTap was `.defaultTap` (active — sits synchronously in the HID input path). Toggling Accessibility off stalled the run-loop thread → froze the whole machine. Changed to **`.listenOnly`** (we are a pure observer; the callback returns events unchanged). Freeze is now structurally impossible.
+2. **Three runtime audits done** (agents): @Observable reactivity is HEALTHY (no breaks). Remaining app-layer bugs: overlay gear removal (#32), sidebar nav may not switch panes (#33), History no live-refresh + 3 dead toggles auto-paste/appearance/notifications (#34).
 
 ### Layering (immutable — never invert)
 - **Base core (never changes):** double-press activate / single-press stop; raw voice → text ALWAYS available, no AI in path.
@@ -21,7 +24,7 @@
 - **Extension:** the Profile Engine (north star).
 
 ### Next actions (in order)
-- **v0 fix phase** — #29 (single paste path) → #30 (detector/HUD) → #31 (live-verify consecutive paste); then #32–#34 (overlay gear removal, nav, history/toggles).
+- **v0 fix phase** — ✅ #29 + #30 landed. **#31 next** (live-verify consecutive paste — USER-GATED: needs human to dictate twice in a row and confirm each paste lands). Then #32–#34 (overlay gear removal, nav, history/toggles).
 - **Profile Engine epic** — #39 PE-0 (Profile type + PromptBuilder + 6 defaults), #40 SM-0 (eval harness), #41 SM-1 (study FM limits). Blocked by the v0 fix phase.
 - **Caret streaming** — #35–#37 (best-effort; Electron/web caveat documented).
 
