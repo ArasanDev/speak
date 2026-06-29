@@ -11,6 +11,31 @@
 **Loop #37 (2026-06-29) — DIRECTION LOCKED + v0 fix phase. The product's north star is now the Profile Engine: a local-first, voice-driven, fully customizable AI text engine. See `specs/profile-engine.md`, `specs/profile-system-prompts.md`, `product.md §6d`, and the roadmap "North star" section.**
 
 ### What changed this loop (read before doing anything)
+-7. **Loop #39 (2026-06-29) — PE-3 live panel: plumbing + click spike landed.** The adaptive
+   top strip (the prompt shaper, `specs/live-panel-prompt-shaper.md`) split into 3 stages
+   after an advisor pass flagged two pre-dispatch risks. **Verified first:** the category seam
+   is live end-to-end (`CleanupMode.profile` carries `category` → `FoundationModelsCleaner`
+   → `PromptBuilder.instructions`); `DefaultProfiles` already = Agent/Write/Note/Raw (PT-1).
+   - **PE-3a `b6a8c57` — engine+controller plumbing (zero-regression).** `CaptureSession`
+     gains additive `overrideCleanupMode` + `effectiveCleanupMode` (= override ?? latched);
+     `runCleanup` reads the effective mode. `SpeakEngine.applyProfileOverride(profile,category)`
+     rebuilds `.profile(...)` from settings + sets it on the in-flight session (no-ops when
+     cleanup won't run or for Raw). `DictationController` exposes `activeDestination`/
+     `activeCategory`/`didOverrideThisSession` + `selectDestination`/`selectCategory` +
+     `resolveActiveDestination`. **Race-free:** chip taps mutate only @MainActor display
+     state; the engine mode is rebuilt ONCE at stop, before `endDictation()` triggers cleanup
+     (one ordered actor write). **Default no-tap path stays `.styled`** — the v0-base fence.
+   - **PE-3b `5cd9840` — click spike (the load-bearing live test).** First interactive element
+     ever in the non-activating overlay panel (gear was removed at #32). `FirstMouseHostingView`
+     (acceptsFirstMouse→true) so a SwiftUI `Button` registers a click in a `.nonactivatingPanel`
+     (canBecomeKey=false) WITHOUT focus-steal. Row 1 destination chips (Agent/Write/Note) in
+     the listening state, highlight the resolved one, shown only when cleanup runs. Panel 80→112pt.
+   - Gates throughout: build ✅ / test 548,5-skip,0-fail ✅ / lint 0-serious ✅ / moat 7/7 ✅.
+   - ⚠️ **Two things need ONE live dictation (owner):** (a) tap a chip → does the click register
+     without stealing focus from the target app? (b) does AI cleanup actually RUN live (cleaned≠raw),
+     or silently fall back? Same single test. **Blocks PE-3c** (builder-app builds the full adaptive
+     strip — Agent category Row 2 + glance line + Monaco — only after the click is proven live).
+
 -6. **Loop #38 (2026-06-29) — agentic-loop hardening + SM-0.** Four things landed via the full issue→branch→worker→review→PR loop:
    - **Menubar clickable icon** (#1 → PR #2, `5b13553`): NSStatusItem replaces the unreliable SwiftUI `MenuBarExtra` (left-click opens dashboard, right-click menu). Follow-up #3 tracks Style/Language submenu port.
    - **🟢 CI FIXED — first green run ever** (PR #4): CI had failed on *every* push project-wide — not a code bug. GitHub's `macos-latest` = Xcode 16.4 / SDK 15.5 has **no `FoundationModels` module**. Pinned the build job to **`macos-26`** (Xcode 26.5) + split a Linux **`moat-audit`** job for an always-reliable gate. Surfaced + fixed a real portability bug the green-local/red-CI gap was hiding (a moat test hardcoded `/Users/tamil/…` → now `#filePath`-relative). **Authority model is now explicit: local `make` gates on this Mac are the merge gate; CI is an advisory mirror** — see `docs/agentic-workflow.md` (new, the standing operating manual for any agent here).
