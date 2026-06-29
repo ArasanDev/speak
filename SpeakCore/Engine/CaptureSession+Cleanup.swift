@@ -77,7 +77,9 @@ extension CaptureSession {
         //  4× above p95 so it only fires on genuine hangs, not slow-but-valid runs.]
         let cleanupTimeoutNanoseconds: UInt64 = 10_000_000_000  // 10 s [decision T_cleanup benchmark.md §7]
         let cleanerId = cleaner.id
-        let mode = cleanupMode
+        // PE-3: read the effective mode (live-panel override if set, else the latched
+        // mode) so a chip tap during listening reshapes THIS dictation's output.
+        let mode = effectiveCleanupMode
         let sttId = transcriber.id
 
         // t_cleanupStart: monotonic instant just before entering the continuation.

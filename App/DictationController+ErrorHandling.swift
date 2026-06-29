@@ -19,6 +19,10 @@ extension DictationController {
             // Cursor → Code) without importing AppKit. Frontmost = the target app
             // because the overlay is a non-activating panel.
             let frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            // [PE-3] Seed the live-panel shaping state from the same resolution the engine
+            // uses, so the panel highlights the destination that will actually run and a
+            // chip tap can override it for this dictation only.
+            resolveActiveDestination(frontmostBundleID: frontmostBundleID)
             try await engine.beginDictation(frontmostBundleID: frontmostBundleID)
             icon = .listening
             SpeakLog.engine.info("DictationController: beginDictation succeeded → .listening")
@@ -66,6 +70,13 @@ extension DictationController {
             // the LLM pass. The panel is hidden AFTER the done flash, not immediately on stop.
             icon = .processing
             overlayController.transition(to: .processing)
+            // [PE-3] Apply the live-panel override exactly once, here, BEFORE endDictation()
+            // triggers the cleanup pass — race-free (one ordered actor write). Only when the
+            // user actually shaped this dictation via a chip; otherwise the session keeps the
+            // mode latched at start (the default path stays `.styled`, the v0-base fence).
+            if didOverrideThisSession {
+                await engine.applyProfileOverride(activeDestination, category: activeCategory)
+            }
             let result = try await engine.endDictation()
             // Remember the finished text for "Paste Last Transcript" (Wispr's re-paste).
             lastTranscript = result.cleanedText ?? result.rawText

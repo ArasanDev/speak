@@ -59,6 +59,15 @@ public actor CaptureSession {
     // MARK: - Mutable session state (actor-isolated)
 
     var state: State = .idle
+
+    /// PE-3 (live panel): a per-dictation cleanup-mode override set AFTER the session
+    /// was created — e.g. the user tapped a destination/category chip in the live panel.
+    /// When non-nil it takes precedence over the latched `cleanupMode` at cleanup time
+    /// (see `effectiveCleanupMode`). Because `runCleanup` reads the effective mode at the
+    /// `.processing` step (after `stop()`), a chip tap during listening reshapes THIS
+    /// dictation's output. Race-free by design: set exactly once, on the actor, before
+    /// `stop()` triggers cleanup (specs/live-panel-prompt-shaper.md §"State plumbing").
+    private var overrideCleanupMode: CleanupMode?
     var streamTask: Task<Void, Never>?
     private var latestChunk: TranscriptChunk?
     /// Accumulates text from finalized (isFinal == true) chunks.
@@ -115,6 +124,22 @@ public actor CaptureSession {
         self.locale = locale
         self.cleanupMode = cleanupMode
         self.expander = expander
+    }
+
+    // MARK: - PE-3 per-dictation cleanup override (live panel)
+
+    /// The cleanup mode actually used by the cleanup pass: the live-panel override if
+    /// one was set, else the mode latched at init. Internal so unit tests can assert the
+    /// override took effect without exposing the private backing store.
+    var effectiveCleanupMode: CleanupMode { overrideCleanupMode ?? cleanupMode }
+
+    /// Override the cleanup mode for THIS session, chosen by the user in the live panel
+    /// (a destination/category chip tap). Effective only if set BEFORE the session reaches
+    /// `.processing` — `runCleanup` reads `effectiveCleanupMode` at that step. The app layer
+    /// applies this once, at stop, before `endDictation()` triggers the cleanup pass.
+    /// [decision PE-3: set-once at stop on the actor → no per-tap race.]
+    public func setOverrideCleanupMode(_ mode: CleanupMode) {
+        overrideCleanupMode = mode
     }
 
     // MARK: - State observation

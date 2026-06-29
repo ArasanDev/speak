@@ -243,6 +243,43 @@ public actor SpeakEngine {
         return session
     }
 
+    // MARK: - PE-3 live-panel override
+
+    /// Apply a per-dictation profile + category override to the in-flight session,
+    /// chosen by the user in the live panel (specs/live-panel-prompt-shaper.md). Rebuilds
+    /// the session's cleanup mode as `.profile(profile, level:, category:, vocab:)` from the
+    /// user's current cleanup level + vocabulary, then sets it on the session so the cleanup
+    /// pass uses it instead of the mode latched at session start.
+    ///
+    /// No-op when: there is no in-flight session; cleanup will not run (`cleanupEnabled`
+    /// false or level `.none` → raw passthrough, so the override is moot); or `profile` is
+    /// the `.raw` base-core bypass (an override must never silence a running cleanup).
+    ///
+    /// MUST be called BEFORE `endDictation()` so the override is in place before the
+    /// session's `.processing`/cleanup pass reads it. Race-free: a single ordered actor
+    /// write, not a per-tap call. [decision PE-3.]
+    public func applyProfileOverride(_ profile: Profile, category: AgentCategory) async {
+        guard let session = currentSession else { return }
+        guard settings.cleanupEnabled, settings.cleanupLevel != .none else {
+            SpeakLog.engine.info("SpeakEngine: live-panel override ignored — cleanup off / level=.none (raw passthrough).")
+            return
+        }
+        guard profile.model != .raw else {
+            SpeakLog.engine.info("SpeakEngine: live-panel override ignored — Raw is the AI-off base core, not an override target.")
+            return
+        }
+        let mode = CleanupMode.profile(
+            profile,
+            level: settings.cleanupLevel,
+            category: category,
+            customVocabulary: settings.customVocabulary
+        )
+        await session.setOverrideCleanupMode(mode)
+        SpeakLog.engine.info(
+            "SpeakEngine: live-panel override — profile '\(profile.name, privacy: .public)' category '\(category.rawValue, privacy: .public)'."
+        )
+    }
+
     // MARK: - Profile preview (PE-2: AI Studio live-test box; reused by #40 eval harness)
 
     /// The outcome of previewing a profile over a sample — distinguishes "the model is
