@@ -29,6 +29,9 @@ public enum PromptBuilder {
     ///   - context: values for the profile's `contextInputs` (selection, clipboard,
     ///     current file, app name). Only inputs that are BOTH in the profile's
     ///     `contextInputs` set AND present here are injected. Default: none.
+    ///   - intensity: cross-profile rewrite intensity (default: .medium).
+    ///   - category: Agent-specific sub-category (ignored for non-Agent profiles).
+    ///   - customVocabulary: proper-noun spellings to preserve verbatim.
     /// - Returns: the full prompt string, or — for the `.raw` model — the
     ///   transcript unchanged (the base-core passthrough; never an error).
     public static func build(
@@ -36,6 +39,7 @@ public enum PromptBuilder {
         rawTranscript: String,
         context: [ContextInput: String] = [:],
         intensity: CleanupLevel = .medium,
+        category: AgentCategory = .task,
         customVocabulary: [String] = []
     ) -> String {
         // Base-core bypass: the Raw profile passes the transcript through untouched.
@@ -45,14 +49,14 @@ public enum PromptBuilder {
         }
         // Single-prompt assembly: instructions + the dictated speech, last.
         let instr = instructions(
-            profile: profile, intensity: intensity,
+            profile: profile, intensity: intensity, category: category,
             customVocabulary: customVocabulary, context: context
         )
         return instr + "\n\nDictated speech:\n" + rawTranscript
     }
 
-    /// The instruction block for `profile` — system prompt + knob clauses +
-    /// intensity + preserved-vocabulary + injected context + few-shot examples,
+    /// The instruction block for `profile` — system prompt + category fragment (if Agent) +
+    /// knob clauses + intensity + preserved-vocabulary + injected context + few-shot examples,
     /// WITHOUT the transcript. Used by instruction/prompt-separated models: e.g.
     /// `FoundationModelsCleaner` feeds this as the session instructions and the
     /// transcript (XML-wrapped) as the prompt.
@@ -60,16 +64,24 @@ public enum PromptBuilder {
     /// - intensity: how aggressively to rewrite (the cross-profile modifier carried
     ///   from the user's cleanup-level setting). `.medium` is the baseline and adds
     ///   NO clause; `.none` is unreachable here (cleaner is bypassed) and also adds none.
+    /// - category: Agent-specific sub-category (only appended if profile is Agent destination).
     /// - customVocabulary: proper nouns / specialist spellings to preserve verbatim.
     public static func instructions(
         profile: Profile,
         intensity: CleanupLevel = .medium,
+        category: AgentCategory = .task,
         customVocabulary: [String] = [],
         context: [ContextInput: String] = [:]
     ) -> String {
         var sections: [String] = []
         if !profile.systemPrompt.isEmpty {
             sections.append(profile.systemPrompt)
+        }
+
+        // Append the category fragment only when the profile is Agent.
+        // The Agent destination has a stable id; other destinations never receive category fragments.
+        if profile.id == DefaultProfiles.agent.id, let categoryFragment = categoryFragment(category) {
+            sections.append(categoryFragment)
         }
 
         // Knob clauses (each empty for its default case → appended only when
@@ -123,6 +135,30 @@ public enum PromptBuilder {
         }
     }
 
+    /// The Agent-category fragment appended to the Agent system prompt.
+    /// [decision] One short imperative line per category (PT-1 spec).
+    static func categoryFragment(_ category: AgentCategory) -> String? {
+        switch category {
+        case .task:
+            return "Focus on a concrete implementation task or refactoring request."
+
+        case .fix:
+            return "This is a bug report with an error or symptom — structure it clearly."
+
+        case .ask:
+            return "This is a question for the agent — rewrite it as a clear, concise question. Do not answer it."
+
+        case .commit:
+            return "Format this as a Conventional Commits message: type(scope): summary, then optional body."
+
+        case .shell:
+            return "Output a single terse terminal command or instruction."
+
+        case .code:
+            return "Convert spoken code notation into proper syntax: 'open paren' → '(', 'dot' → '.', etc."
+        }
+    }
+
     static func lengthClause(_ length: LengthBias) -> String? {
         switch length {
         case .preserve: return nil
@@ -139,9 +175,11 @@ public enum PromptBuilder {
         switch level {
         case .none, .medium:
             return nil
+
         case .light:
             return "Make only light edits: fix punctuation and capitalization and remove "
                 + "obvious filler words; otherwise keep the speaker's words and structure intact."
+
         case .high:
             return "Rewrite thoroughly: tighten phrasing, remove redundancy, and restructure "
                 + "into clear paragraphs where appropriate, preserving the speaker's meaning."

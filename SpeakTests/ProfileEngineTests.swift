@@ -119,11 +119,11 @@ final class ProfileEngineTests: XCTestCase {
 
     // MARK: - DefaultProfiles
 
-    func testSevenBuiltInsPresent() {
-        XCTAssertEqual(DefaultProfiles.all.count, 7,
-                       "Ships Raw + Clean + Chat + Code + CLI + Prompt + Commit.")
+    func testFourBuiltInsPresent() {
+        XCTAssertEqual(DefaultProfiles.all.count, 4,
+                       "Ships Raw + Agent + Write + Note.")
         let names = Set(DefaultProfiles.all.map(\.name))
-        XCTAssertEqual(names, ["Raw", "Clean", "Chat", "Code", "CLI", "Prompt", "Commit"])
+        XCTAssertEqual(names, ["Raw", "Agent", "Write", "Note"])
     }
 
     func testAllBuiltInsAreFlaggedBuiltIn() {
@@ -138,10 +138,10 @@ final class ProfileEngineTests: XCTestCase {
         XCTAssertTrue(raw.systemPrompt.isEmpty, "Raw must have an empty system prompt.")
     }
 
-    func testCleanIsTheDefaultProfile() {
-        XCTAssertEqual(DefaultProfiles.defaultProfile.name, "Clean",
-                       "The global default profile ships as Clean (profile-engine.md §3).")
-        XCTAssertEqual(DefaultProfiles.clean.model, .foundationModels)
+    func testWriteIsTheDefaultProfile() {
+        XCTAssertEqual(DefaultProfiles.defaultProfile.name, "Write",
+                       "The global default profile ships as Write (profile-taxonomy.md §1).")
+        XCTAssertEqual(DefaultProfiles.write.model, .foundationModels)
     }
 
     func testBuiltInIdsAreStableAcrossConstruction() {
@@ -152,10 +152,57 @@ final class ProfileEngineTests: XCTestCase {
         XCTAssertEqual(Set(first).count, first.count, "Built-in ids must be unique.")
     }
 
-    func testTaskProfilesCarryTargetApps() {
-        // Spot-check the agent-aware auto-targets the spec specifies.
-        XCTAssertTrue(DefaultProfiles.code.targetApps.contains("com.apple.dt.Xcode"))
-        XCTAssertTrue(DefaultProfiles.cli.targetApps.contains("com.apple.Terminal"))
+    func testDestinationsCarryTargetApps() {
+        // Agent destination includes IDE/terminal/agent UIs.
+        XCTAssertTrue(DefaultProfiles.agent.targetApps.contains("com.apple.dt.Xcode"))
+        XCTAssertTrue(DefaultProfiles.agent.targetApps.contains("com.apple.Terminal"))
+        // Write destination includes email/messaging/browsers.
+        XCTAssertTrue(DefaultProfiles.write.targetApps.contains("com.apple.mail"))
+        // Note destination includes personal notes apps.
+        XCTAssertTrue(DefaultProfiles.note.targetApps.contains("com.apple.Notes"))
+        // Raw has no auto-targets.
         XCTAssertTrue(DefaultProfiles.raw.targetApps.isEmpty, "Raw has no auto-targets.")
+    }
+
+    // MARK: - AgentCategory
+
+    func testAgentCategoryFragmentsAppendedForAgentOnly() {
+        // Category fragment should appear in Agent profile.
+        let agentWithTask = PromptBuilder.instructions(
+            profile: DefaultProfiles.agent, category: .task
+        )
+        let agentWithFix = PromptBuilder.instructions(
+            profile: DefaultProfiles.agent, category: .fix
+        )
+        let agentWithCommit = PromptBuilder.instructions(
+            profile: DefaultProfiles.agent, category: .commit
+        )
+
+        // Task fragment is default-ish but distinguishable.
+        XCTAssertTrue(agentWithTask.contains("implementation task or refactoring"))
+        // Fix fragment is distinctive.
+        XCTAssertTrue(agentWithFix.contains("bug report"))
+        // Commit fragment is distinctive.
+        XCTAssertTrue(agentWithCommit.contains("Conventional Commits"))
+
+        // Categories should NOT appear in non-Agent profiles.
+        let writeWithCommit = PromptBuilder.instructions(
+            profile: DefaultProfiles.write, category: .commit
+        )
+        XCTAssertFalse(writeWithCommit.contains("Conventional Commits"),
+                       "Write profile must NOT include the commit category fragment.")
+
+        let noteWithCode = PromptBuilder.instructions(
+            profile: DefaultProfiles.note, category: .code
+        )
+        XCTAssertFalse(noteWithCode.contains("Convert spoken code notation"),
+                       "Note profile must NOT include the code category fragment.")
+    }
+
+    func testAllCategoryFragmentsExist() {
+        for category in AgentCategory.allCases {
+            let fragment = PromptBuilder.categoryFragment(category)
+            XCTAssertNotNil(fragment, "All AgentCategory cases must have a prompt fragment.")
+        }
     }
 }

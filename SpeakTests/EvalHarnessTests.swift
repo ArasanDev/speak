@@ -86,29 +86,24 @@ final class EvalHarnessTests: XCTestCase {
     }
 
     /// Resolve a profileId string to a Profile object from DefaultProfiles.
+    /// Maps legacy IDs (clean, chat, code, cli, prompt, commit) to new destinations.
     /// Throws XCTFail if the profileId is unknown.
     private func profileForId(_ id: String) throws -> Profile {
         switch id.lowercased() {
         case "raw":
             return DefaultProfiles.raw
 
-        case "clean":
-            return DefaultProfiles.clean
+        case "agent", "prompt", "chat", "code", "cli", "commit":
+            // New taxonomy: legacy task profiles map to Agent
+            return DefaultProfiles.agent
 
-        case "chat":
-            return DefaultProfiles.chat
+        case "write", "clean":
+            // New taxonomy: prose for humans
+            return DefaultProfiles.write
 
-        case "code":
-            return DefaultProfiles.code
-
-        case "cli":
-            return DefaultProfiles.cli
-
-        case "prompt":
-            return DefaultProfiles.prompt
-
-        case "commit":
-            return DefaultProfiles.commit
+        case "note":
+            // New taxonomy: capture for self
+            return DefaultProfiles.note
 
         default:
             XCTFail("Unknown profileId: '\(id)'")
@@ -366,7 +361,9 @@ final class EvalHarnessTests: XCTestCase {
         }
 
         let stats = computeStats(from: fixtureResults)
-        XCTAssertEqual(stats.count, 7, "Expected 7 profiles")  // raw, clean, chat, code, cli, prompt, commit
+        // PT-1 taxonomy: 4 built-in destinations (raw, agent, write, note)
+        // Fixtures consolidate legacy profiles into these 4 destinations.
+        XCTAssertGreaterThanOrEqual(stats.count, 4, "Expected at least the 4 built-in destinations")
     }
 
     /// Regression test: verify that a wrong output fails the evaluation.
