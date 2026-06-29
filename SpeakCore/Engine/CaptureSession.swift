@@ -68,6 +68,13 @@ public actor CaptureSession {
     /// dictation's output. Race-free by design: set exactly once, on the actor, before
     /// `stop()` triggers cleanup (specs/live-panel-prompt-shaper.md §"State plumbing").
     private var overrideCleanupMode: CleanupMode?
+
+    /// PE-3 (live panel): the user picked `Raw` for THIS dictation → skip cleanup and paste
+    /// the raw transcript, even though a cleaner is wired. Set once at stop, like the override
+    /// mode; `runCleanup` checks it first. Distinct from `overrideCleanupMode` because Raw means
+    /// "no AI", not "a different prompt". [decision PE-3.]
+    /// `private(set)`: read by the sibling `+Cleanup` extension; set only via the method below.
+    private(set) var forcedRaw = false
     var streamTask: Task<Void, Never>?
     private var latestChunk: TranscriptChunk?
     /// Accumulates text from finalized (isFinal == true) chunks.
@@ -140,6 +147,12 @@ public actor CaptureSession {
     /// [decision PE-3: set-once at stop on the actor → no per-tap race.]
     public func setOverrideCleanupMode(_ mode: CleanupMode) {
         overrideCleanupMode = mode
+    }
+
+    /// Force raw passthrough for THIS session (the user picked `Raw` in the live panel):
+    /// `runCleanup` skips the cleaner and the raw transcript is pasted. Set once at stop.
+    public func forceRawForThisSession() {
+        forcedRaw = true
     }
 
     // MARK: - State observation

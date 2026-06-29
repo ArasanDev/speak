@@ -5,6 +5,33 @@
 > low-friction: auto-resolved + voice carry the common case; the panel is the
 > exception path.
 
+## ⟂ REVISION 2026-06-29 — calm HUD + click-to-open overlay card (LOCKED, user decision)
+
+> Supersedes the "always-on inline strip" layout below for the interaction model. The
+> chips are NOT always visible — that clutters the calm HUD. Instead:
+>
+> - **Default = calm HUD**: waveform · transcript · timer, plus ONE click affordance —
+>   a small **pill showing the active destination** (e.g. `✎ Write`). This pill is the
+>   glance line AND the opener.
+> - **Click the pill → an overlay card covers the HUD** (anchored to the same
+>   non-activating, borderless, non-movable panel — like a Settings panel opening on
+>   top). It is modal-feeling: you can't drag or move it.
+> - **The card is hierarchical**: first it shows the **destinations** (Agent · Write ·
+>   Note · Raw). Picking **Agent** swaps the card to Agent's **categories**
+>   (Task/Fix/Ask/Commit/Shell/…). Write/Note/Raw are shallow — picking them applies + closes.
+> - **Graceful exit**: picking an option **applies + closes**; **Escape closes** the card
+>   with no change. While the card is open, Escape closes the card (it does NOT stop
+>   dictation); recording keeps running the whole time (the card only shapes the pending
+>   cleanup). `Raw` selection = AI off for THIS dictation (raw passthrough).
+> - **Build order** (user): **PE-3c-1 = the destination selector card + pill + Escape-close
+>   + Raw passthrough** first; **PE-3c-2 = the Agent categories tier** second.
+> - Proven prerequisite carried over: the card's buttons live in the same
+>   `FirstMouseHostingView`, so clicks register in the non-activating panel without focus
+>   steal (verified live in PE-3b).
+>
+> The engine plumbing (PE-3a `b6a8c57`: per-dictation override rebuilt once at stop) is
+> unchanged and reused; the card just chooses what to override with.
+
 ## Layout — adaptive top strip (one row, two only for Agent)
 
 ```

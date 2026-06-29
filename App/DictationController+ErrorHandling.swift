@@ -83,7 +83,11 @@ extension DictationController {
             // user actually shaped this dictation via a chip; otherwise the session keeps the
             // mode latched at start (the default path stays `.styled`, the v0-base fence).
             if didOverrideThisSession {
-                await engine.applyProfileOverride(activeDestination, category: activeCategory)
+                if overrodeToRaw {
+                    await engine.applyRawOverride()
+                } else {
+                    await engine.applyProfileOverride(activeDestination, category: activeCategory)
+                }
             }
             let result = try await engine.endDictation()
             // Remember the finished text for "Paste Last Transcript" (Wispr's re-paste).

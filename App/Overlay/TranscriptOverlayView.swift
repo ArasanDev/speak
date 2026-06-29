@@ -46,7 +46,7 @@ public enum OverlayState: Sendable, Equatable {
 /// full `Profile`/`ProfileStore`. `DictationController` maps a tapped choice back to the
 /// user's (possibly edited) profile via `profileID`. (specs/live-panel-prompt-shaper.md.)
 enum OverlayDestinationChoice: String, CaseIterable, Identifiable, Sendable {
-    case agent, write, note
+    case agent, write, note, raw
 
     var id: String { rawValue }
 
@@ -55,8 +55,22 @@ enum OverlayDestinationChoice: String, CaseIterable, Identifiable, Sendable {
         case .agent: return "Agent"
         case .write: return "Write"
         case .note:  return "Note"
+        case .raw:   return "Raw"
         }
     }
+
+    /// SF Symbol for the chip / pill. Mirrors the built-in profile icons.
+    var icon: String {
+        switch self {
+        case .agent: return "list.bullet.rectangle"
+        case .write: return "sparkles"
+        case .note:  return "note.text"
+        case .raw:   return "waveform"
+        }
+    }
+
+    /// `Raw` means AI off for this dictation (base-core passthrough), not a profile override.
+    var isRaw: Bool { self == .raw }
 
     /// Stable id of the matching built-in — used to look up the live profile in `ProfileStore`.
     var profileID: UUID {
@@ -64,6 +78,7 @@ enum OverlayDestinationChoice: String, CaseIterable, Identifiable, Sendable {
         case .agent: return DefaultProfiles.agent.id
         case .write: return DefaultProfiles.write.id
         case .note:  return DefaultProfiles.note.id
+        case .raw:   return DefaultProfiles.raw.id
         }
     }
 
@@ -73,15 +88,18 @@ enum OverlayDestinationChoice: String, CaseIterable, Identifiable, Sendable {
         case .agent: return DefaultProfiles.agent
         case .write: return DefaultProfiles.write
         case .note:  return DefaultProfiles.note
+        case .raw:   return DefaultProfiles.raw
         }
     }
 
-    /// Map a resolved profile id to a choice (nil if it isn't a destination, e.g. Raw).
+    /// Map a resolved profile id to a choice (nil if it isn't one of the four built-ins).
     init?(profileID id: UUID) {
         if id == DefaultProfiles.agent.id { self = .agent } else if id == DefaultProfiles.write.id {
             self = .write
         } else if id == DefaultProfiles.note.id {
             self = .note
+        } else if id == DefaultProfiles.raw.id {
+            self = .raw
         } else {
             return nil
         }
@@ -110,6 +128,11 @@ final class OverlayViewModel {
     /// Invoked when the user taps a destination chip. `DictationController` maps the choice
     /// to a profile and applies a per-dictation override (does NOT change the saved default).
     var onSelectDestination: ((OverlayDestinationChoice) -> Void)?
+
+    /// PE-3c: `true` while the anchored profile-selector card covers the HUD. Toggled open by
+    /// the destination pill; closed by picking an option or pressing Escape. The calm HUD
+    /// (waveform/transcript/timer) shows when `false`.
+    var isProfilePanelOpen: Bool = false
 
     /// Elapsed seconds since the current dictation started listening.
     var elapsedSeconds: Int = 0
@@ -307,53 +330,110 @@ struct TranscriptOverlayView: View {
 
     // MARK: - Listening state
 
+    // [PE-3c] Calm HUD by default (waveform · transcript · timer · destination pill);
+    // clicking the pill opens an anchored selector card that covers the HUD. The card's
+    // buttons live in the same FirstMouseHostingView, so clicks register in the
+    // non-activating panel without focus steal (proven live in PE-3b).
     private var listeningContent: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            // [PE-3 spike] The destination row — the first interactive element this
-            // non-activating panel has ever had. Shown only when AI cleanup will run.
-            // Minimal Row 1 (Agent/Write/Note); the full adaptive strip (Agent category
-            // row + glance line + Monaco polish) is PE-3c. Purpose of the spike: prove a
-            // click registers here without stealing focus (FirstMouseHostingView).
-            if !model.destinationChoices.isEmpty {
-                destinationStrip
-            }
-            HStack(alignment: .center, spacing: SpeakSpacing.sm) {
-                WaveformView(level: model.level, isActive: true)
-                    .frame(width: WaveformView.totalWidth)
-                textContent
-                Text(Self.durationLabel(model.elapsedSeconds))
-                    .font(.speakMonoCaption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+        Group {
+            if model.isProfilePanelOpen {
+                profileSelectorCard
+            } else {
+                calmListeningRow
             }
         }
         .padding(.horizontal, SpeakSpacing.md)
         .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)   // = 12 pt [decision]
     }
 
-    /// PE-3 live-panel destination chips (Row 1). Tapping reshapes THIS dictation only.
-    private var destinationStrip: some View {
-        HStack(spacing: SpeakSpacing.xs) {
-            ForEach(model.destinationChoices) { choice in
-                let isActive = choice == model.activeDestinationChoice
-                Button {
-                    model.onSelectDestination?(choice)
-                } label: {
-                    Text(choice.label)
-                        .font(.speakMonoCaption)
-                        .padding(.horizontal, SpeakSpacing.sm)
-                        .padding(.vertical, 3)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(isActive ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.08))
-                        )
-                        .foregroundStyle(isActive ? Color.primary : Color.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Shape this dictation as \(choice.label)")
-                .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
+    /// The calm default: live waveform, partial text, elapsed timer, and the destination
+    /// pill (the one click affordance — opens the selector card).
+    private var calmListeningRow: some View {
+        HStack(alignment: .center, spacing: SpeakSpacing.sm) {
+            WaveformView(level: model.level, isActive: true)
+                .frame(width: WaveformView.totalWidth)
+            textContent
+            Text(Self.durationLabel(model.elapsedSeconds))
+                .font(.speakMonoCaption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            if !model.destinationChoices.isEmpty {
+                destinationPill
             }
         }
+    }
+
+    /// PE-3c destination pill: shows the active destination + a chevron; tap opens the card.
+    private var destinationPill: some View {
+        let active = model.activeDestinationChoice ?? .write
+        return Button {
+            model.isProfilePanelOpen = true
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: active.icon)
+                Text(active.label)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 7))
+            }
+            .font(.speakMonoCaption)
+            .padding(.horizontal, SpeakSpacing.xs + 2)
+            .padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.primary.opacity(0.08))
+            )
+            .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Destination \(active.label). Tap to change for this dictation.")
+    }
+
+    /// PE-3c-1 selector card: covers the HUD with the four destinations. Picking one applies
+    /// the per-dictation override and closes; Escape closes with no change (handled by the
+    /// OverlayController Escape monitor). Agent's category tier is PE-3c-2.
+    private var profileSelectorCard: some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            HStack {
+                Text("Shape this dictation")
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Text("esc")
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(Color.secondary.opacity(0.6))
+            }
+            HStack(spacing: SpeakSpacing.xs) {
+                ForEach(model.destinationChoices) { choice in
+                    profileButton(choice)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func profileButton(_ choice: OverlayDestinationChoice) -> some View {
+        let isActive = choice == model.activeDestinationChoice
+        return Button {
+            model.onSelectDestination?(choice)
+            model.isProfilePanelOpen = false
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: choice.icon)
+                    .font(.system(size: 13))
+                Text(choice.label)
+                    .font(.speakMonoCaption)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, SpeakSpacing.xs)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isActive ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.08))
+            )
+            .foregroundStyle(isActive ? Color.primary : Color.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Shape this dictation as \(choice.label)")
+        .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
     }
 
     /// Format elapsed seconds as `m:ss` for the HUD (e.g. 0:05, 1:23).

@@ -117,6 +117,14 @@ final class OverlayController {
         overlayModel.activeDestinationChoice = choice
     }
 
+    /// Whether the anchored profile-selector card is currently covering the HUD.
+    var isProfilePanelOpen: Bool { overlayModel.isProfilePanelOpen }
+
+    /// Close the profile-selector card (Escape, or after a selection). Idempotent.
+    func closeProfilePanel() {
+        overlayModel.isProfilePanelOpen = false
+    }
+
     // MARK: - Lifecycle
 
     /// Show the overlay in the `.listening` state and begin draining partial
@@ -141,6 +149,7 @@ final class OverlayController {
         overlayModel.level = 0.0
         overlayModel.errorReason = nil
         overlayModel.isCleaningUp = isCleaningUp
+        overlayModel.isProfilePanelOpen = false   // PE-3c: always start on the calm HUD
         partialText = ""
         panel?.show()
 
@@ -218,6 +227,7 @@ final class OverlayController {
         overlayModel.level = 0.0
         overlayModel.errorReason = nil
         overlayModel.isCleaningUp = false
+        overlayModel.isProfilePanelOpen = false   // PE-3c: reset the selector card
         partialText = ""
         panel?.hide()
         SpeakLog.engine.info("OverlayController: overlay hidden.")
@@ -265,6 +275,7 @@ final class OverlayController {
         overlayModel.level = 0.0
         overlayModel.errorReason = nil
         overlayModel.isCleaningUp = false
+        overlayModel.isProfilePanelOpen = false   // PE-3c: reset the selector card
         partialText = ""
         panel?.hide()
         SpeakLog.engine.info("OverlayController: dictation cancelled (immediate hide).")

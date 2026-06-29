@@ -53,6 +53,13 @@ extension CaptureSession {
     ///  by a live clock read between two DispatchTime.now() calls on the no-cleanup paths.
     ///  This is the discriminator for LatencyStats population partitioning.]
     func runCleanup(rawText: String) async -> (cleanedText: String?, engineId: String, cleanupSeconds: Double) {
+        if forcedRaw {
+            // PE-3: the user picked Raw in the live panel for THIS dictation — skip cleanup
+            // and paste the raw transcript (the base-core bypass), exactly like cleaner-nil.
+            // cleanupSeconds = 0.0 (sentinel: cleanup did not run).
+            SpeakLog.engine.info("CaptureSession: live-panel Raw override — skipping cleanup for this dictation.")
+            return (nil, transcriber.id, 0.0)
+        }
         guard let cleaner = cleaner else {
             // Cleanup off — raw transcript, STT engine id only.
             // cleanupSeconds = 0.0 (sentinel: cleanup did not run).

@@ -280,6 +280,15 @@ public actor SpeakEngine {
         )
     }
 
+    /// Apply a per-dictation **Raw** override (the user picked Raw in the live panel): skip
+    /// cleanup for the in-flight session and paste the raw transcript. No-op when no session.
+    /// Like `applyProfileOverride`, called once at stop, before `endDictation()`. [decision PE-3.]
+    public func applyRawOverride() async {
+        guard let session = currentSession else { return }
+        await session.forceRawForThisSession()
+        SpeakLog.engine.info("SpeakEngine: live-panel Raw override — this dictation will paste raw.")
+    }
+
     // MARK: - Profile preview (PE-2: AI Studio live-test box; reused by #40 eval harness)
 
     /// The outcome of previewing a profile over a sample — distinguishes "the model is

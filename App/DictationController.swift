@@ -126,17 +126,23 @@ final class DictationController: CLICommandHandler {
     /// engine override applies. Resolved at `beginDictation` from the frontmost app, then
     /// mutated by a chip tap for THIS dictation ONLY — never writes `ProfileStore`, so the
     /// saved default is untouched. (PE-3, specs/live-panel-prompt-shaper.md.)
-    private(set) var activeDestination: Profile = DefaultProfiles.defaultProfile
+    /// Set by the `+LivePanel` extension; read at stop in `+ErrorHandling`. Module-internal.
+    var activeDestination: Profile = DefaultProfiles.defaultProfile
 
     /// The Agent sub-category for the current dictation — only meaningful when
     /// `activeDestination` is the Agent destination. Defaults to `.task`. (PE-3.)
-    private(set) var activeCategory: AgentCategory = .task
+    var activeCategory: AgentCategory = .task
 
     /// True once the user has shaped THIS dictation via a chip. Gates the stop-time
     /// override: when false the session keeps the mode latched at start (`.styled` for the
     /// default path), preserving the verified v0-base behavior. Reset each `beginDictation`.
-    /// Internal (not private) so the sibling extension `+ErrorHandling` reads it at stop.
-    private(set) var didOverrideThisSession = false
+    /// Set by `+LivePanel`, read by `+ErrorHandling` at stop. Module-internal.
+    var didOverrideThisSession = false
+
+    /// True when the user's per-dictation override is `Raw` (AI off for this dictation) rather
+    /// than a profile. Routes the stop-time apply to `applyRawOverride` instead of
+    /// `applyProfileOverride`. Reset each `beginDictation`. (PE-3c.) Module-internal.
+    var overrodeToRaw = false
 
     // MARK: - Collaborators (H3)
 
@@ -439,6 +445,13 @@ final class DictationController: CLICommandHandler {
         // transitioned to `.processing` or `.error` the press is a no-op.
         overlayController.onEscapeStop = { [weak self] in
             guard let self else { return }
+            // [PE-3c] If the profile-selector card is open, Escape closes IT first — a
+            // graceful exit that does NOT stop the dictation (recording keeps running).
+            if self.overlayController.isProfilePanelOpen {
+                self.overlayController.closeProfilePanel()
+                SpeakLog.engine.info("DictationController: Escape closed the profile panel (dictation continues).")
+                return
+            }
             if self.icon == .listening {
                 Task { [weak self] in await self?.endDictation() }
             } else if self.icon == .error {
@@ -571,51 +584,6 @@ final class DictationController: CLICommandHandler {
         case .doubleTap: return [keyLabel, keyLabel]
         case .hold:      return [keyLabel]
         }
-    }
-
-    // MARK: - PE-3 live-panel shaping (per-dictation, reversible)
-
-    /// Switch the active destination for THIS dictation (live-panel chip tap). Updates the
-    /// observable state the panel highlights and flags the session as overridden so the
-    /// stop-time apply runs. Does NOT mutate `ProfileStore` — the saved default is untouched.
-    /// `profile` should be one of the destination built-ins (Agent/Write/Note), resolved by
-    /// the caller against `profileStore` so a user-edited prompt is honored. (PE-3.)
-    func selectDestination(_ profile: Profile) {
-        activeDestination = profile
-        didOverrideThisSession = true
-        SpeakLog.engine.info("DictationController: live-panel destination → '\(profile.name, privacy: .public)'.")
-    }
-
-    /// Handle a destination chip tap from the live panel: map the choice to the user's
-    /// (possibly AI-Studio-edited) profile, apply it as a per-dictation override, and update
-    /// the highlighted chip. (PE-3.)
-    func selectDestinationChoice(_ choice: OverlayDestinationChoice) {
-        let profile = profileStore.profiles.first { $0.id == choice.profileID } ?? choice.fallbackProfile
-        selectDestination(profile)
-        overlayController.setActiveDestinationChoice(choice)
-    }
-
-    /// Switch the Agent sub-category for THIS dictation (live-panel chip tap; Agent only).
-    func selectCategory(_ category: AgentCategory) {
-        activeCategory = category
-        didOverrideThisSession = true
-        SpeakLog.engine.info("DictationController: live-panel category → '\(category.rawValue, privacy: .public)'.")
-    }
-
-    /// Resolve the destination for the current/next dictation from the frontmost app and
-    /// seed the per-dictation shaping state. Called at `beginDictation`. Resolution mirrors
-    /// `SpeakEngine.newSession` (same `ProfileResolver` over the same profile set) so the
-    /// panel shows exactly what the engine would apply. Pure read — no side effects beyond
-    /// the observable state. (PE-3.)
-    func resolveActiveDestination(frontmostBundleID: String?) {
-        let resolved = ProfileResolver.resolve(
-            frontmostBundleID: frontmostBundleID,
-            profiles: profileStore.profiles,
-            default: DefaultProfiles.defaultProfile
-        )
-        activeDestination = resolved
-        activeCategory = .task
-        didOverrideThisSession = false
     }
 
     // MARK: - Hardware mute (SPEC §7.4)
