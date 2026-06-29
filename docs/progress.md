@@ -11,6 +11,23 @@
 **Loop #37 (2026-06-29) — DIRECTION LOCKED + v0 fix phase. The product's north star is now the Profile Engine: a local-first, voice-driven, fully customizable AI text engine. See `specs/profile-engine.md`, `specs/profile-system-prompts.md`, `product.md §6d`, and the roadmap "North star" section.**
 
 ### What changed this loop (read before doing anything)
+-8. **Loop #39 cont. — PE-3c-1 live-panel card LANDED + UI-verified live.** User picked the
+   **overlay-card** model (over inline chips): calm HUD (waveform·transcript·timer) + a
+   **destination pill**; clicking covers the HUD with a **"Shape this dictation"** card
+   (Agent·Write·Note·Raw). Pick applies the per-dictation override + closes; **Escape closes
+   the card without stopping** dictation; **Raw = AI-off passthrough** for that dictation
+   (`CaptureSession.forcedRaw` + `SpeakEngine.applyRawOverride`). Reuses the proven
+   `FirstMouseHostingView` + PE-3a stop-time override. Methods live in new
+   `DictationController+LivePanel.swift` (kept the class under `type_body_length`). Commit
+   `4ea4129`; gates build✅/test 548,5-skip,0-fail✅/lint 0-serious✅/moat✅. **User confirmed
+   live: card embeds in overlay, opens/selects/closes, Agent mode active.** Spec revised
+   (`live-panel-prompt-shaper.md` §REVISION 2026-06-29). ⚠️ Still to confirm: an *instruction*
+   dictation in Agent (all dictations so far are narration → cleans the same in any profile,
+   so the Agent prompt's reshaping isn't yet *demonstrated*). **Next: PE-3c-2** — Agent
+   category tier (card swaps to Task/Fix/Ask/Commit/Shell when Agent is picked).
+   **Tooling:** `make run` now kills the stale instance before launch (a 2-hr stale-binary
+   detour root-caused: menubar app wasn't relaunching); added `make kill/relaunch/logs/history/
+   doctor/gates/help` (`a0a1011`); lesson saved to memory [[make-run-stale-instance]].
 -7. **Loop #39 (2026-06-29) — PE-3 live panel: plumbing + click spike landed.** The adaptive
    top strip (the prompt shaper, `specs/live-panel-prompt-shaper.md`) split into 3 stages
    after an advisor pass flagged two pre-dispatch risks. **Verified first:** the category seam
