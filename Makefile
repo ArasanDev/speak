@@ -88,6 +88,10 @@ reset-permissions:
 test: generate
 	$(XCB) test
 
+## eval: run the small-models eval harness (live Foundation Models scoring)
+eval: generate
+	SPEAK_EVAL=1 $(XCB) test -only-testing:SpeakTests/EvalHarnessTests
+
 ## lint: SwiftLint over the source tree
 lint:
 	swiftlint
