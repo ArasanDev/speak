@@ -17,8 +17,22 @@
 import Foundation
 import XCTest
 
+/// `major.minor.patch` of the running macOS, for the RAW report header.
+private func speakOSVersionString() -> String {
+    let v = ProcessInfo.processInfo.operatingSystemVersion
+    return "\(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
+}
+
 @available(macOS 26.0, *)
 final class FoundationModelsStudyTests: XCTestCase {
+
+    /// One latency-vs-length measurement row (kept a named struct, not a 4-tuple).
+    private struct LatencyRow {
+        let wordCount: Int
+        let min: TimeInterval
+        let median: TimeInterval
+        let max: TimeInterval
+    }
 
     // MARK: - Test fixtures & constants
 
@@ -99,7 +113,7 @@ final class FoundationModelsStudyTests: XCTestCase {
         // [decision] Timeout safety: if any call exceeds 15s, skip remaining trials for that size.
         let timeoutSeconds = 15.0
 
-        var latencyResults: [(wordCount: Int, min: TimeInterval, median: TimeInterval, max: TimeInterval)] = []
+        var latencyResults: [LatencyRow] = []
 
         for targetSize in targetWordSizes {
             let (input, actualWordCount) = buildInput(targetWords: targetSize)
@@ -132,7 +146,7 @@ final class FoundationModelsStudyTests: XCTestCase {
                 let min = latencies.min() ?? 0
                 let median = percentile50(latencies)
                 let max = latencies.max() ?? 0
-                latencyResults.append((wordCount: actualWordCount, min: min, median: median, max: max))
+                latencyResults.append(LatencyRow(wordCount: actualWordCount, min: min, median: median, max: max))
                 print("  ▪ \(actualWordCount) words: min=\(formatLatency(min)), p50=\(formatLatency(median)), max=\(formatLatency(max))")
             }
         }
@@ -333,11 +347,12 @@ final class FoundationModelsStudyTests: XCTestCase {
 
                 **Reason:** `isAvailable == false` (possibly: Apple Intelligence not enabled, model not downloaded, or device not eligible).
 
-                **Device:** macOS \(ProcessInfo.processInfo.operatingSystemVersion.majorVersion).\(ProcessInfo.processInfo.operatingSystemVersion.minorVersion).\(ProcessInfo.processInfo.operatingSystemVersion.patchVersion)
+                **Device:** macOS \(speakOSVersionString())
 
                 **Timestamp:** \(timestamp)
 
-                **Next steps:** SM-1 must run in the app context (not the test host). When Apple Intelligence is enabled and Foundation Models becomes available, re-run this harness for live measurements.
+                **Next steps:** re-run from the app context (not the test host)
+                once Apple Intelligence is enabled and Foundation Models is available.
                 """
 
             try writeReport(skipReport)
@@ -357,7 +372,7 @@ final class FoundationModelsStudyTests: XCTestCase {
 
             **Status:** Complete — live Foundation Models measurements.
 
-            **Device:** macOS \(ProcessInfo.processInfo.operatingSystemVersion.majorVersion).\(ProcessInfo.processInfo.operatingSystemVersion.minorVersion).\(ProcessInfo.processInfo.operatingSystemVersion.patchVersion)
+            **Device:** macOS \(speakOSVersionString())
 
             **Timestamp:** \(timestamp)
 
@@ -379,7 +394,8 @@ final class FoundationModelsStudyTests: XCTestCase {
 
             ## Notes
 
-            - **Interpretation pending.** This file contains RAW measured data only. The orchestrator owns `specs/verification-ledger.md` and will tag findings as `[verified]` or `[inferred]` after review.
+            - **Interpretation pending.** RAW measured data only. The orchestrator
+              tags findings `[verified]`/`[inferred]` in `specs/verification-ledger.md`.
             - **Latency:** min/p50/max reported in seconds. N=3 runs per size. Timeout: 15s per call.
             - **Instruction-following:** Five short inputs tested for preamble-token detection (Sure/Here/Okay/etc).
             - **Ceiling:** Stepped from 400 to max words until output empties, throws, or times out.

@@ -22,7 +22,7 @@ final class ProfileWiringTests: XCTestCase {
             profiles: DefaultProfiles.all,
             default: DefaultProfiles.defaultProfile
         )
-        XCTAssertEqual(resolved.name, "Code", "Xcode is a Code-profile target app.")
+        XCTAssertEqual(resolved.name, "Agent", "Xcode is an Agent-destination target app.")
     }
 
     func testResolverFallsBackToDefaultOnNoMatch() {
@@ -48,17 +48,17 @@ final class ProfileWiringTests: XCTestCase {
     // MARK: - PromptBuilder.instructions
 
     func testInstructionsExcludeTranscript() {
-        let out = PromptBuilder.instructions(profile: DefaultProfiles.clean)
+        let out = PromptBuilder.instructions(profile: DefaultProfiles.write)
         XCTAssertFalse(out.contains("Dictated speech:"),
                        "instructions() is the no-transcript block (the transcript is fed separately).")
         XCTAssertTrue(out.contains("clean up dictated speech"),
-                      "The Clean profile's system prompt must be present.")
+                      "The Write profile's system prompt must be present.")
     }
 
     func testIntensityClauseThreaded() {
-        let light = PromptBuilder.instructions(profile: DefaultProfiles.clean, intensity: .light)
-        let medium = PromptBuilder.instructions(profile: DefaultProfiles.clean, intensity: .medium)
-        let high = PromptBuilder.instructions(profile: DefaultProfiles.clean, intensity: .high)
+        let light = PromptBuilder.instructions(profile: DefaultProfiles.write, intensity: .light)
+        let medium = PromptBuilder.instructions(profile: DefaultProfiles.write, intensity: .medium)
+        let high = PromptBuilder.instructions(profile: DefaultProfiles.write, intensity: .high)
         XCTAssertTrue(light.contains("light edits"), "Light intensity must add its clause.")
         XCTAssertTrue(high.contains("thoroughly"), "High intensity must add its clause.")
         XCTAssertFalse(medium.contains("light edits") || medium.contains("thoroughly"),
@@ -69,7 +69,7 @@ final class ProfileWiringTests: XCTestCase {
 
     func testCustomVocabularyClauseThreaded() {
         let out = PromptBuilder.instructions(
-            profile: DefaultProfiles.clean, customVocabulary: ["SpeakCore", "CGEvent"]
+            profile: DefaultProfiles.write, customVocabulary: ["SpeakCore", "CGEvent"]
         )
         XCTAssertTrue(out.contains("SpeakCore") && out.contains("CGEvent"),
                       "Custom vocabulary terms must be preserved in the instructions.")
@@ -117,11 +117,12 @@ final class ProfileWiringTests: XCTestCase {
     func testNewSessionUsesProfileModeForMatchingApp() async throws {
         let engine = try makeEngine()
         let session = await engine.newSession(frontmostBundleID: "com.apple.dt.Xcode")
-        guard case .profile(let profile, let level, _) = session.cleanupMode else {
+        guard case .profile(let profile, let level, let category, _) = session.cleanupMode else {
             return XCTFail("A matching app must select the .profile cleanup mode.")
         }
-        XCTAssertEqual(profile.name, "Code")
+        XCTAssertEqual(profile.name, "Agent")
         XCTAssertEqual(level, .medium, "The user's cleanup level must thread through as intensity.")
+        XCTAssertEqual(category, .task, "Category defaults to .task.")
     }
 
     func testNewSessionKeepsStyledDefaultForNoMatch() async throws {

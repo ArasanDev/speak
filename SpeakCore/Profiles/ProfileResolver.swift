@@ -1,6 +1,6 @@
 // SpeakCore/Profiles/ProfileResolver.swift
 //
-// Profile resolution — which profile applies to a dictation (profile-engine.md §3).
+// Profile resolution — which profile applies to a dictation (specs/profile-taxonomy.md §3).
 // PURE function over an injected frontmost-app bundle ID, so it is fully unit-testable
 // without AppKit. The impure read (`NSWorkspace.frontmostApplication`) happens at the
 // app-layer call site (DictationController, @MainActor) and the bundle ID is passed in.
@@ -9,10 +9,11 @@
 // non-activating panel — triggering dictation never changes which app is frontmost,
 // so the app that had focus when the hotkey fired is the one the text will land in.
 //
-// PE-0 wiring scope (incremental): this resolves the AUTO-SELECT-BY-APP tier
-// (priority 2 in §3). The live overlay override (priority 1) and a user-chosen
-// global default (priority 3) arrive with the overlay control surface + AI Studio;
-// for now the `default` passed in is the shipped global default (`Clean`).
+// PT-1 (Profile Taxonomy) resolution: maps app bundle IDs to DESTINATIONS (Agent/Write/Note).
+// Each built-in profile's `targetApps` is pre-populated per the spec's resolution table.
+// The AUTO-SELECT-BY-APP tier (priority 2) works the same as before; the overlay override
+// (priority 1) and user-chosen global default (priority 3) arrive with the overlay control
+// surface + AI Studio.
 
 import Foundation
 

@@ -12,75 +12,87 @@
     "formatChecks": ["equalsExpected"]
   },
   {
-    "profileId": "clean",
+    "profileId": "write",
     "spoken": "um so i think we should uh meet on tuesday maybe to go over the the budget",
     "expected": "I think we should meet on Tuesday to go over the budget.",
     "formatChecks": ["startsWithCapital", "noTrailingPeriod"]
   },
   {
-    "profileId": "clean",
+    "profileId": "write",
     "spoken": "yeah send her the file and like let her know it's done",
     "expected": "Send her the file and let her know it's done.",
     "formatChecks": ["startsWithCapital", "noTrailingPeriod"]
   },
   {
-    "profileId": "chat",
+    "profileId": "write",
     "spoken": "okay so i want you to like write me a python script that uh reads a csv and you know plots the second column",
     "expected": "Write a Python script that reads a CSV file and plots the second column.",
     "formatChecks": ["startsWithCapital"]
   },
   {
-    "profileId": "chat",
+    "profileId": "write",
     "spoken": "um explain how does oauth work but keep it short like for a beginner",
     "expected": "Explain how OAuth works, briefly, for a beginner.",
     "formatChecks": ["startsWithCapital"]
   },
   {
-    "profileId": "code",
+    "profileId": "agent",
     "spoken": "set user name equals get current user open paren close paren",
     "expected": "userName = getCurrentUser()",
     "formatChecks": ["equalsExpected"]
   },
   {
-    "profileId": "code",
+    "profileId": "agent",
     "spoken": "import the os module and then call logger dot info",
     "expected": "import os\nlogger.info(...)",
     "formatChecks": ["equalsExpected"]
   },
   {
-    "profileId": "cli",
+    "profileId": "agent",
     "spoken": "uh list all the files including hidden ones in long format",
     "expected": "ls -la",
     "formatChecks": ["equalsExpected"]
   },
   {
-    "profileId": "cli",
+    "profileId": "agent",
     "spoken": "git commit everything with the message fix the paste bug",
     "expected": "git commit -am \"fix the paste bug\"",
     "formatChecks": ["equalsExpected"]
   },
   {
-    "profileId": "prompt",
+    "profileId": "agent",
     "spoken": "okay so i need you to first add a login button and then uh wire it to the auth service and also write a test for it",
     "expected": "Add a login flow:\n1. Add a login button.\n2. Wire it to the auth service.\n3. Write a test for it.",
     "formatChecks": []
   },
   {
-    "profileId": "prompt",
+    "profileId": "agent",
     "spoken": "fix the bug in capture session where paste only works the first time",
     "expected": "Fix the bug in CaptureSession where paste only works on the first dictation.",
     "formatChecks": ["startsWithCapital"]
   },
   {
-    "profileId": "commit",
+    "profileId": "agent",
     "spoken": "um i fixed the bug where the paste wasn't working after the first dictation",
     "expected": "fix: paste now works on every dictation, not just the first",
     "formatChecks": ["equalsExpected"]
   },
   {
-    "profileId": "commit",
+    "profileId": "agent",
     "spoken": "added the new profile engine spec and the system prompts",
     "expected": "docs: add profile engine spec and default system prompts",
     "formatChecks": ["equalsExpected"]
+  },
+  {
+    "profileId": "note",
+    "spoken": "um i need to remember to um call mom tomorrow and also uh pick up the dry cleaning",
+    "expected": "• Call mom tomorrow\n• Pick up dry cleaning",
+    "formatChecks": []
+  },
+  {
+    "profileId": "note",
+    "spoken": "the project deadline is uh friday next week and we need to have the code review done by wednesday",
+    "expected": "• Project deadline: Friday next week\n• Code review: Wednesday",
+    "formatChecks": []
   }
 ]

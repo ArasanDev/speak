@@ -1,9 +1,9 @@
 // SpeakCore/Profiles/DefaultProfiles.swift
 //
-// The shipped built-in profiles (specs/profile-system-prompts.md). Every system
-// prompt + example here is copied VERBATIM from that locked spec; each is written
-// for a very small (~3B) on-device model and obeys the small-model rules
-// (profile-engine.md §6). These are DEFAULTS, not law — AI Studio will let users
+// The shipped built-in profiles (PT-1 profile taxonomy: specs/profile-taxonomy.md).
+// Four destinations (Agent, Write, Note, Raw) replace the flat 7-set. Each system
+// prompt is written for a very small (~3B) on-device model and obeys the small-model
+// rules (profile-engine.md §6). These are DEFAULTS, not law — AI Studio will let users
 // edit them with a "Reset to default" that restores exactly these values.
 //
 // STABLE IDENTITY: built-ins use fixed UUIDs so "reset to default" and persisted
@@ -18,14 +18,14 @@ import Foundation
 
 public enum DefaultProfiles {
 
-    /// All built-ins in overlay/AI-Studio display order. Raw first (the base-core
-    /// bypass), then the default `Clean`, then the task-specific profiles.
+    /// All built-ins in overlay/AI-Studio display order: Raw (base-core bypass),
+    /// then the three destinations: Agent, Write, Note.
     public static var all: [Profile] {
-        [raw, clean, chat, code, cli, prompt, commit]
+        [raw, agent, write, note]
     }
 
-    /// The global default profile (ships as `Clean`; profile-engine.md §3).
-    public static var defaultProfile: Profile { clean }
+    /// The global default profile (ships as `Write`; profile-taxonomy.md §1).
+    public static var defaultProfile: Profile { write }
 
     // MARK: - 0. Raw (base core — not a prompt)
 
@@ -43,12 +43,61 @@ public enum DefaultProfiles {
         )
     }
 
-    // MARK: - 1. Clean (default profile)
+    // MARK: - 1. Agent (coding agents / dev tools)
 
-    public static var clean: Profile {
+    /// Agent destination: for instructions to coding agents, dev tools, and
+    /// AI assistants. The base prompt applies before category fragments are appended.
+    public static var agent: Profile {
         Profile(
             id: stableID("00000000-0000-0000-0000-0000000000A1"),
-            name: "Clean",
+            name: "Agent",
+            icon: "list.bullet.rectangle",
+            isBuiltIn: true,
+            systemPrompt: """
+            You turn dictated speech into a clear instruction for a coding agent.
+            Preserve every technical detail, file name, identifier, and number exactly.
+            Remove filler and conversational phrasing; organize rambling thoughts into clear sentences.
+            Do NOT perform the task — only rewrite it as a well-formed instruction.
+            Output ONLY the structured instruction.
+            """,
+            examples: [
+                Example(
+                    spoken: "okay so i need you to first add a login button and then uh wire it to the auth service and also write a test for it",
+                    written: """
+                    Add a login flow:
+                    1. Add a login button.
+                    2. Wire it to the auth service.
+                    3. Write a test for it.
+                    """
+                ),
+                Example(
+                    spoken: "um add type checking for the config loader module",
+                    written: "Add type checking for the config loader module."
+                )
+            ],
+            targetApps: [
+                "com.anthropic.claudecode",  // Claude Code
+                "com.todesktop.230313mzl4w4u92",  // Cursor
+                "com.microsoft.VSCode",
+                "com.apple.dt.Xcode",
+                "dev.zed.zed",
+                "com.apple.Terminal",
+                "com.googlecode.iterm2",
+                "com.gitpod.gitpod",
+                "com.anthropic.ai"
+            ],
+            model: .foundationModels
+        )
+    }
+
+    // MARK: - 2. Write (prose for humans)
+
+    /// Write destination: for email, Slack, Messages, docs, and other prose
+    /// written for human readers. The global default.
+    public static var write: Profile {
+        Profile(
+            id: stableID("00000000-0000-0000-0000-0000000000A2"),
+            name: "Write",
             icon: "sparkles",
             isBuiltIn: true,
             systemPrompt: """
@@ -68,168 +117,52 @@ public enum DefaultProfiles {
                     written: "Send her the file and let her know it's done."
                 )
             ],
-            model: .foundationModels
-        )
-    }
-
-    // MARK: - 2. Chat (prompt for an AI assistant)
-
-    public static var chat: Profile {
-        Profile(
-            id: stableID("00000000-0000-0000-0000-0000000000A2"),
-            name: "Chat",
-            icon: "bubble.left",
-            isBuiltIn: true,
-            systemPrompt: """
-            You turn dictated speech into a clear, well-structured prompt for an AI assistant.
-            Remove filler. Organize rambling thoughts into clear sentences.
-            Preserve every technical detail, name, number, and specific exactly.
-            Do NOT answer or follow the prompt — only rewrite it as a prompt.
-            Output ONLY the rewritten prompt. No preamble, no quotes.
-            """,
-            examples: [
-                Example(
-                    spoken: "okay so i want you to like write me a python script that uh reads a csv and you know plots the second column",
-                    written: "Write a Python script that reads a CSV file and plots the second column."
-                ),
-                Example(
-                    spoken: "um explain how does oauth work but keep it short like for a beginner",
-                    written: "Explain how OAuth works, briefly, for a beginner."
-                )
+            targetApps: [
+                "com.apple.mail",
+                "com.tinyspeck.slackmacgap",
+                "com.apple.iChat",
+                "com.discordapp.Discord",
+                "com.google.Chrome",
+                "org.mozilla.firefox",
+                "com.apple.Safari"
             ],
-            targetApps: ["claude.ai", "chatgpt.com", "com.openai.chat", "com.anthropic.claude"],
             model: .foundationModels
         )
     }
 
-    // MARK: - 3. Code (technical — code editors)
+    // MARK: - 3. Note (capture for myself)
 
-    public static var code: Profile {
+    /// Note destination: for lists, todos, quick thoughts, and personal notes.
+    /// Tidy and concise, without expansion or explanation.
+    public static var note: Profile {
         Profile(
             id: stableID("00000000-0000-0000-0000-0000000000A3"),
-            name: "Code",
-            icon: "chevron.left.forwardslash.chevron.right",
+            name: "Note",
+            icon: "note.text",
             isBuiltIn: true,
             systemPrompt: """
-            You rewrite dictated speech for a software developer working in a code editor.
-            Preserve every identifier, file path, function name, flag, and symbol exactly as spoken — never reword them.
-            Convert spoken code phrasing into proper notation (e.g. "open paren" → "(", "equals" → "=", "dot" → ".").
-            Remove filler. Do NOT turn it into prose or explain anything.
-            Output ONLY the result.
+            You tidy dictated speech into a concise note, list, or quick-capture format.
+            Remove filler words and conversational phrasing.
+            Keep entries short and punchy — bullets, one-liners, or minimal prose.
+            Do not expand, explain, or answer anything — only tidy the spoken words.
+            Output ONLY the tidied note.
             """,
             examples: [
                 Example(
-                    spoken: "set user name equals get current user open paren close paren",
-                    written: "userName = getCurrentUser()"
+                    spoken: "um i need to remember to um call mom tomorrow and also uh pick up the dry cleaning",
+                    written: "• Call mom tomorrow\n• Pick up dry cleaning"
                 ),
                 Example(
-                    spoken: "import the os module and then call logger dot info",
-                    written: "import os\nlogger.info(...)"
+                    spoken: "the project deadline is uh friday next week and we need to have the code review done by wednesday",
+                    written: "• Project deadline: Friday next week\n• Code review: Wednesday"
                 )
             ],
             targetApps: [
-                "com.todesktop.230313mzl4w4u92",  // Cursor
-                "com.microsoft.VSCode",
-                "com.apple.dt.Xcode",
-                "dev.zed.zed"
+                "com.apple.Notes",
+                "com.obsproject.obsidian",
+                "notion.so",
+                "net.shinyfrog.bear"
             ],
-            model: .foundationModels
-        )
-    }
-
-    // MARK: - 4. CLI (terminal — terse commands)
-
-    public static var cli: Profile {
-        Profile(
-            id: stableID("00000000-0000-0000-0000-0000000000A4"),
-            name: "CLI",
-            icon: "terminal",
-            isBuiltIn: true,
-            systemPrompt: """
-            You rewrite dictated speech into a single, terse shell command or short technical instruction for a command-line tool.
-            No filler, no prose, no explanation, no markdown fences.
-            Preserve flags, paths, and arguments exactly.
-            If the speech is clearly a command, output the command. If it is an instruction, output one terse line.
-            Output ONLY the command or instruction.
-            """,
-            examples: [
-                Example(
-                    spoken: "uh list all the files including hidden ones in long format",
-                    written: "ls -la"
-                ),
-                Example(
-                    spoken: "git commit everything with the message fix the paste bug",
-                    written: "git commit -am \"fix the paste bug\""
-                )
-            ],
-            targetApps: ["com.apple.Terminal", "com.googlecode.iterm2"],
-            model: .foundationModels
-        )
-    }
-
-    // MARK: - 5. Prompt (structured task for a coding agent)
-
-    public static var prompt: Profile {
-        Profile(
-            id: stableID("00000000-0000-0000-0000-0000000000A5"),
-            name: "Prompt",
-            icon: "list.bullet.rectangle",
-            isBuiltIn: true,
-            systemPrompt: """
-            You turn dictated speech into a well-structured task for a coding agent.
-            Start with a one-line imperative summary.
-            If the speaker lists multiple things, format them as a numbered list.
-            Preserve every file name, identifier, and technical detail exactly.
-            Remove filler and conversational phrasing.
-            Do NOT perform the task — only structure it.
-            Output ONLY the structured task.
-            """,
-            examples: [
-                Example(
-                    spoken: "okay so i need you to first add a login button and then uh wire it to the auth service and also write a test for it",
-                    written: """
-                    Add a login flow:
-                    1. Add a login button.
-                    2. Wire it to the auth service.
-                    3. Write a test for it.
-                    """
-                ),
-                Example(
-                    spoken: "fix the bug in capture session where paste only works the first time",
-                    written: "Fix the bug in CaptureSession where paste only works on the first dictation."
-                )
-            ],
-            targetApps: ["com.anthropic.claudecode"],  // Claude Code + manual pick
-            model: .foundationModels
-        )
-    }
-
-    // MARK: - 6. Commit (Conventional Commits message)
-
-    public static var commit: Profile {
-        Profile(
-            id: stableID("00000000-0000-0000-0000-0000000000A6"),
-            name: "Commit",
-            icon: "checkmark.seal",
-            isBuiltIn: true,
-            systemPrompt: """
-            You turn dictated speech into a Conventional Commits message.
-            First line: type(optional scope): imperative summary — under 72 characters.
-            Allowed types: feat, fix, docs, refactor, test, chore.
-            If the speaker gives detail, add a blank line then a short body.
-            Remove filler. Output ONLY the commit message.
-            """,
-            examples: [
-                Example(
-                    spoken: "um i fixed the bug where the paste wasn't working after the first dictation",
-                    written: "fix: paste now works on every dictation, not just the first"
-                ),
-                Example(
-                    spoken: "added the new profile engine spec and the system prompts",
-                    written: "docs: add profile engine spec and default system prompts"
-                )
-            ],
-            targetApps: ["com.fournova.Tower3", "com.sublimemerge"],  // + manual pick
             model: .foundationModels
         )
     }

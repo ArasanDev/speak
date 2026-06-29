@@ -38,13 +38,15 @@ public enum CleanupMode: Sendable {
     /// reused from the same on-device cleaner.
     case command(instruction: String)
 
-    /// Profile Engine (PE-0 wiring): run a resolved `Profile`'s system prompt over
+    /// Profile Engine (PT-1 wiring): run a resolved `Profile`'s system prompt over
     /// the transcript. `level` is the cross-profile rewrite-intensity modifier
-    /// (carried from the user's cleanup level); `customVocabulary` preserves the
-    /// user's proper-noun spellings. The cleaner renders this via `PromptBuilder`.
-    /// `SpeakEngine.newSession()` builds this when the frontmost app matches a
-    /// profile's `targetApps`; the global default stays on `.styled` for now.
-    case profile(Profile, level: CleanupLevel, customVocabulary: [String] = [])
+    /// (carried from the user's cleanup level); `category` is an optional Agent-specific
+    /// sub-category that appends a fragment (applies only to Agent destination);
+    /// `customVocabulary` preserves the user's proper-noun spellings. The cleaner
+    /// renders this via `PromptBuilder`. `SpeakEngine.newSession()` builds this when
+    /// the frontmost app matches a profile's `targetApps`; the global default stays
+    /// on `.styled` for now.
+    case profile(Profile, level: CleanupLevel, category: AgentCategory = .task, customVocabulary: [String] = [])
 }
 
 /// The neat-writing *voice* — how the cleaned text should read. User-facing in the

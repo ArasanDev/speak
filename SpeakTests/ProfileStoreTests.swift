@@ -28,26 +28,26 @@ final class ProfileStoreTests: XCTestCase {
                        "A fresh store is exactly the shipped built-ins, in order.")
     }
 
-    func testFreshStoreDefaultIsClean() throws {
+    func testFreshStoreDefaultIsWrite() throws {
         let (store, _) = try makeStore()
         XCTAssertEqual(store.defaultProfile.id, DefaultProfiles.defaultProfile.id,
-                       "The shipped default is Clean.")
+                       "The shipped default is Write.")
     }
 
     // MARK: - Editing a built-in
 
     func testEditBuiltInOverridesItButKeepsPositionAndCount() throws {
         let (store, _) = try makeStore()
-        var code = try XCTUnwrap(store.profiles.first { $0.name == "Code" })
-        code.systemPrompt = "EDITED PROMPT"
-        store.save(code)
+        var agent = try XCTUnwrap(store.profiles.first { $0.name == "Agent" })
+        agent.systemPrompt = "EDITED PROMPT"
+        store.save(agent)
 
         XCTAssertEqual(store.profiles.count, DefaultProfiles.all.count,
                        "Editing a built-in must not add a profile.")
-        XCTAssertEqual(store.profile(id: code.id)?.systemPrompt, "EDITED PROMPT")
+        XCTAssertEqual(store.profile(id: agent.id)?.systemPrompt, "EDITED PROMPT")
         XCTAssertEqual(store.profiles.map(\.id), DefaultProfiles.all.map(\.id),
                        "Order is preserved after editing a built-in.")
-        XCTAssertTrue(store.isCustomized(id: code.id), "An edited built-in reports customized.")
+        XCTAssertTrue(store.isCustomized(id: agent.id), "An edited built-in reports customized.")
     }
 
     func testEditPersistsAcrossFreshStore() throws {
@@ -56,13 +56,13 @@ final class ProfileStoreTests: XCTestCase {
         defaults.removePersistentDomain(forName: name)
 
         let store1 = ProfileStore(defaults: defaults)
-        var clean = try XCTUnwrap(store1.profiles.first { $0.name == "Clean" })
-        clean.systemPrompt = "PERSISTED EDIT"
-        store1.save(clean)
+        var write = try XCTUnwrap(store1.profiles.first { $0.name == "Write" })
+        write.systemPrompt = "PERSISTED EDIT"
+        store1.save(write)
 
         // A second store over the same suite = an app relaunch.
         let store2 = ProfileStore(defaults: defaults)
-        XCTAssertEqual(store2.profile(id: clean.id)?.systemPrompt, "PERSISTED EDIT",
+        XCTAssertEqual(store2.profile(id: write.id)?.systemPrompt, "PERSISTED EDIT",
                        "Edits survive a relaunch.")
     }
 
@@ -70,7 +70,7 @@ final class ProfileStoreTests: XCTestCase {
 
     func testResetToDefaultRevertsBuiltIn() throws {
         let (store, _) = try makeStore()
-        let original = try XCTUnwrap(store.profiles.first { $0.name == "CLI" })
+        let original = try XCTUnwrap(store.profiles.first { $0.name == "Note" })
         var edited = original
         edited.systemPrompt = "EDITED"
         store.save(edited)
@@ -100,9 +100,9 @@ final class ProfileStoreTests: XCTestCase {
 
     func testDeleteBuiltInIsRefused() throws {
         let (store, _) = try makeStore()
-        let clean = try XCTUnwrap(store.profiles.first { $0.name == "Clean" })
-        store.delete(id: clean.id)
-        XCTAssertNotNil(store.profile(id: clean.id), "Built-ins are never deletable.")
+        let write = try XCTUnwrap(store.profiles.first { $0.name == "Write" })
+        store.delete(id: write.id)
+        XCTAssertNotNil(store.profile(id: write.id), "Built-ins are never deletable.")
         XCTAssertEqual(store.profiles.count, DefaultProfiles.all.count)
     }
 
@@ -110,12 +110,12 @@ final class ProfileStoreTests: XCTestCase {
 
     func testDefaultProfileIDPersistsAndResolves() throws {
         let (store, _) = try makeStore()
-        let code = try XCTUnwrap(store.profiles.first { $0.name == "Code" })
-        store.defaultProfileID = code.id
-        XCTAssertEqual(store.defaultProfile.id, code.id, "Default selection resolves to the chosen profile.")
+        let agent = try XCTUnwrap(store.profiles.first { $0.name == "Agent" })
+        store.defaultProfileID = agent.id
+        XCTAssertEqual(store.defaultProfile.id, agent.id, "Default selection resolves to the chosen profile.")
     }
 
-    func testDeletingTheDefaultProfileFallsBackToClean() throws {
+    func testDeletingTheDefaultProfileFallsBackToWrite() throws {
         let (store, _) = try makeStore()
         let custom = Profile(name: "Temp", icon: "star", systemPrompt: "x")
         store.save(custom)
@@ -124,7 +124,7 @@ final class ProfileStoreTests: XCTestCase {
 
         store.delete(id: custom.id)
         XCTAssertEqual(store.defaultProfileID, DefaultProfiles.defaultProfile.id,
-                       "Deleting the default profile reverts the selection to Clean.")
+                       "Deleting the default profile reverts the selection to Write.")
     }
 
     func testStaleDefaultIDFallsBackToShippedDefault() throws {
