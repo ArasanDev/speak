@@ -92,6 +92,10 @@ test: generate
 eval: generate
 	SPEAK_EVAL=1 $(XCB) test -only-testing:SpeakTests/EvalHarnessTests
 
+## study: run the Foundation Models limits study (live; writes RAW measurements)
+study: generate
+	SPEAK_STUDY=1 $(XCB) test -only-testing:SpeakTests/FoundationModelsStudyTests
+
 ## lint: SwiftLint over the source tree
 lint:
 	swiftlint
