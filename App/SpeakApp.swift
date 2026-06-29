@@ -218,8 +218,6 @@ private struct MenuBarLabel: View {
 private struct SpeakMenu: View {
     let controller: DictationController
 
-    @Environment(\.openWindow) private var openWindow
-
     var body: some View {
         Text(statusLine(for: controller.icon))
             .foregroundStyle(.secondary)
@@ -250,13 +248,18 @@ private struct SpeakMenu: View {
         Divider()
 
         Button("Open speak\u{2026}") {
-            openWindow(id: "appshell")
+            // Route through the NSWindow path (WindowPresenter → DashboardWindowController),
+            // which promotes the LSUIElement app to .regular, activates it, and brings the
+            // window to front. The SwiftUI `Window(id:"appshell")` scene does NOT activate
+            // an accessory app, so `openWindow` left the window invisible. History already
+            // uses this same NSWindow path. [decision: 2026-06-29 — fixes "window won't open"]
+            controller.showDashboard()
         }
         .keyboardShortcut("o")
 
         Button("AI Studio\u{2026}") {
-            openWindow(id: "appshell")
-            // TODO(PE-2): deep-link to .aiStudio section when AppShell supports initialSection
+            controller.showDashboard()
+            // TODO(PE-2): deep-link to .aiStudio section when showDashboard() exposes initialSection
         }
 
         Button("History\u{2026}") {
