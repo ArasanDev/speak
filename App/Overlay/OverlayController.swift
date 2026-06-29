@@ -216,7 +216,10 @@ final class OverlayController {
         levelsTask = nil
         durationTask?.cancel()
         durationTask = nil
-        // Keep the escape monitor so the user can press Escape to dismiss.
+        // Ensure escape monitor is installed so the user can dismiss via Escape,
+        // even if start() never ran (begin-failure path). installEscapeMonitor() is
+        // idempotent — it removes any prior monitor before installing a new one.
+        installEscapeMonitor()
         overlayModel.level = 0.0
         overlayModel.errorReason = reason
         overlayModel.overlayState = .error

@@ -26,12 +26,14 @@ extension DictationController {
                 isCleaningUp: willCleanup
             )
         } catch SpeakError.microphoneMuted {
+            monitor.notifySessionEnded()
             icon = .idle
             SpeakLog.engine.info("DictationController: start ignored — microphone muted.")
         } catch {
-            icon = .error
+            monitor.notifySessionEnded()
             // W2.2: show an error state in the HUD instead of silently hiding.
             overlayController.showError(error.localizedDescription)
+            icon = .error
             SpeakLog.engine.error(
                 "DictationController: beginDictation failed — \(error.localizedDescription, privacy: .public)"
             )
@@ -39,6 +41,14 @@ extension DictationController {
     }
 
     func endDictation() async {
+        // [task #30] Re-entrancy guard: endDictation can arrive twice (Escape routes here
+        // AND a hotkey single-press), or after the session already ended. Only a live
+        // .listening session should be stopped; a 2nd call finds no session and would
+        // surface a spurious error HUD. Ignore unless we are actually listening.
+        guard icon == .listening else {
+            SpeakLog.engine.info("DictationController: endDictation ignored — not listening (icon=\(String(describing: self.icon), privacy: .public)).")
+            return
+        }
         // [validation-fix C1] Reset the double-tap detector — this stop may be
         // out-of-band (Escape, CLI --stop, error) where no hotkey tap reset it.
         // Idempotent after a normal hotkey-driven stop. Runs before any await so

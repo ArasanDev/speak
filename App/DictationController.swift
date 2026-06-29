@@ -497,6 +497,7 @@ final class DictationController: CLICommandHandler {
             let nowMuted = await self.engine.toggleMute()
             self.isMuted = nowMuted
             if nowMuted {
+                self.monitor.notifySessionEnded()
                 self.overlayController.stop()
                 self.icon = .idle
             }
