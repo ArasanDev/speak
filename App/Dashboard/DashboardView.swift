@@ -33,10 +33,13 @@ struct DashboardView: View {
 
     var body: some View {
         NavigationSplitView {
+            // [task #33] Selection-driven sidebar: the detail column switches on `selection`
+            // (see `detail(for: selection)`). A `NavigationLink(value:)` row here has no
+            // `.navigationDestination` and captures the tap, so `selection` never updated and
+            // panes never switched. Plain `.tag`-ged rows let `List(selection:)` drive it.
             List(DashboardSection.allCases, selection: $selection) { section in
-                NavigationLink(value: section) {
-                    Label(section.title, systemImage: section.systemImage)
-                }
+                Label(section.title, systemImage: section.systemImage)
+                    .tag(section)
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
             .listStyle(.sidebar)

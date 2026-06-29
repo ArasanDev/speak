@@ -174,12 +174,16 @@ private struct SidebarView: View {
 
             Divider()
 
-            // Navigation items
+            // Navigation items.
+            // [task #33] Do NOT wrap rows in NavigationLink: the shell is a plain HStack
+            // with no NavigationSplitView/Stack, so a NavigationLink has no destination —
+            // it captured the tap and left `activePane` unchanged (panes never switched).
+            // `List(selection:)` over Identifiable data updates the binding on row tap by
+            // itself; `.tag(pane)` makes the selection mapping explicit.
             List(AppPane.allCases, selection: $activePane) { pane in
-                NavigationLink(value: pane) {
-                    Label(pane.title, systemImage: pane.systemImage)
-                        .foregroundStyle(activePane == pane ? Color.speakAccent : .primary)
-                }
+                Label(pane.title, systemImage: pane.systemImage)
+                    .foregroundStyle(activePane == pane ? Color.speakAccent : .primary)
+                    .tag(pane)
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
