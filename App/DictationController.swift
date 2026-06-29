@@ -344,11 +344,9 @@ final class DictationController: CLICommandHandler {
         ensureWindowPresenter().showOnboardingIfNeeded()
 
         // Delegate panel creation to OverlayController — panel is expensive and
-        // must be created once, not per-dictation. Pass the settings callback so the
-        // gear icon in the overlay can open the Settings window.
-        overlayController.createPanel(onSettingsPressed: { [weak self] in
-            self?.showSettings()
-        })
+        // must be created once, not per-dictation. [task #32] The overlay no longer
+        // hosts a Settings gear; Settings is reached from the menu bar / dashboard.
+        overlayController.createPanel()
         // W2.2 (updated): wire Escape stop — when the user presses Escape while
         // actively dictating, stop the session and paste (same path as single-press stop).
         // Guard on `icon == .listening` prevents re-entrancy: if the session has already

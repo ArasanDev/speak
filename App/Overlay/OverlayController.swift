@@ -90,11 +90,10 @@ final class OverlayController {
     /// Create the overlay panel. Call exactly once from `DictationController.startMonitoring()`.
     /// Creating the panel here (not in init) matches the original timing: the NSHostingView
     /// is expensive and we defer that cost until monitoring actually starts.
-    func createPanel(onSettingsPressed: @escaping () -> Void = {}) {
+    func createPanel() {
         guard panel == nil else { return }
         panel = TranscriptOverlayPanel(
-            overlayModel: overlayModel,
-            onSettingsPressed: onSettingsPressed
+            overlayModel: overlayModel
         )
     }
 

@@ -321,8 +321,7 @@ final class DebugLaunchDispatcher {
         }
 
         let panel = TranscriptOverlayPanel(
-            overlayModel: overlayModel,
-            onSettingsPressed: {}  // No-op for debug overlay
+            overlayModel: overlayModel
         )
         panel.show()
         keepAlive(panel)
