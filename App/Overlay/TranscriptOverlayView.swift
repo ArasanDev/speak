@@ -774,4 +774,36 @@ struct TranscriptOverlayView: View {
     return TranscriptOverlayView(model: model)
         .frame(width: 340, height: 60)
 }
+
+/// PE-3c-2: Agent category page, primary row only (⌄more collapsed). Framed at the real
+/// 112 pt panel height so the canvas reflects the live fit (height is irreducibly the thing
+/// to eyeball — content layout previews can't catch a clipped row otherwise).
+#Preview("Card — Agent categories (collapsed)") {
+    let model = OverlayViewModel()
+    model.overlayState = .listening
+    model.destinationChoices = OverlayDestinationChoice.allCases
+    model.activeDestinationChoice = .agent
+    model.isProfilePanelOpen = true
+    model.isShowingAgentCategories = true
+    model.activeCategory = .task
+    model.isCategoryMoreExpanded = false
+    return TranscriptOverlayView(model: model)
+        .frame(width: 340, height: 112)
+}
+
+/// PE-3c-3: Agent category page with ⌄more expanded — the rare row (Code) is visible.
+/// This is the layout to verify against the fixed 112 pt panel: the 3-row card
+/// (header + primary + rare) must not clip the bottom row.
+#Preview("Card — Agent categories (⌄more → Code)") {
+    let model = OverlayViewModel()
+    model.overlayState = .listening
+    model.destinationChoices = OverlayDestinationChoice.allCases
+    model.activeDestinationChoice = .agent
+    model.isProfilePanelOpen = true
+    model.isShowingAgentCategories = true
+    model.activeCategory = .task
+    model.isCategoryMoreExpanded = true
+    return TranscriptOverlayView(model: model)
+        .frame(width: 340, height: 112)
+}
 #endif
