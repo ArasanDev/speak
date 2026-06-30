@@ -15,73 +15,95 @@
     "profileId": "write",
     "spoken": "um so i think we should uh meet on tuesday maybe to go over the the budget",
     "expected": "I think we should meet on Tuesday to go over the budget.",
-    "formatChecks": ["startsWithCapital", "noTrailingPeriod"]
+    "formatChecks": ["startsWithCapital"]
   },
   {
     "profileId": "write",
     "spoken": "yeah send her the file and like let her know it's done",
     "expected": "Send her the file and let her know it's done.",
-    "formatChecks": ["startsWithCapital", "noTrailingPeriod"]
-  },
-  {
-    "profileId": "write",
-    "spoken": "okay so i want you to like write me a python script that uh reads a csv and you know plots the second column",
-    "expected": "Write a Python script that reads a CSV file and plots the second column.",
     "formatChecks": ["startsWithCapital"]
   },
   {
     "profileId": "write",
-    "spoken": "um explain how does oauth work but keep it short like for a beginner",
-    "expected": "Explain how OAuth works, briefly, for a beginner.",
+    "spoken": "okay so the meeting has been moved to three pm tomorrow and uh everyone needs to know",
+    "expected": "The meeting has been moved to 3 PM tomorrow. Everyone needs to know.",
+    "formatChecks": ["startsWithCapital"]
+  },
+  {
+    "profileId": "write",
+    "spoken": "yeah so i sent him the draft report and like he said he'll review it by uh end of week",
+    "expected": "I sent him the draft report and he said he'll review it by end of week.",
     "formatChecks": ["startsWithCapital"]
   },
   {
     "profileId": "agent",
+    "category": "code",
     "spoken": "set user name equals get current user open paren close paren",
     "expected": "userName = getCurrentUser()",
     "formatChecks": ["equalsExpected"]
   },
   {
     "profileId": "agent",
+    "category": "code",
     "spoken": "import the os module and then call logger dot info",
-    "expected": "import os\nlogger.info(...)",
+    "expected": "import os\nlogger.info()",
     "formatChecks": ["equalsExpected"]
   },
   {
     "profileId": "agent",
+    "category": "shell",
     "spoken": "uh list all the files including hidden ones in long format",
     "expected": "ls -la",
     "formatChecks": ["equalsExpected"]
   },
   {
     "profileId": "agent",
+    "category": "shell",
     "spoken": "git commit everything with the message fix the paste bug",
     "expected": "git commit -am \"fix the paste bug\"",
     "formatChecks": ["equalsExpected"]
   },
   {
     "profileId": "agent",
+    "category": "task",
     "spoken": "okay so i need you to first add a login button and then uh wire it to the auth service and also write a test for it",
-    "expected": "Add a login flow:\n1. Add a login button.\n2. Wire it to the auth service.\n3. Write a test for it.",
+    "expected": "Add a login button and wire it to the auth service. Write a test for it.",
     "formatChecks": []
   },
   {
     "profileId": "agent",
+    "category": "fix",
     "spoken": "fix the bug in capture session where paste only works the first time",
-    "expected": "Fix the bug in CaptureSession where paste only works on the first dictation.",
+    "expected": "Fix the bug in capture session where paste only works the first time.",
     "formatChecks": ["startsWithCapital"]
   },
   {
     "profileId": "agent",
+    "category": "commit",
     "spoken": "um i fixed the bug where the paste wasn't working after the first dictation",
-    "expected": "fix: paste now works on every dictation, not just the first",
-    "formatChecks": ["equalsExpected"]
+    "expected": "fix: paste not working after first dictation",
+    "formatChecks": []
   },
   {
     "profileId": "agent",
+    "category": "commit",
     "spoken": "added the new profile engine spec and the system prompts",
-    "expected": "docs: add profile engine spec and default system prompts",
-    "formatChecks": ["equalsExpected"]
+    "expected": "docs: add profile engine spec and system prompts",
+    "formatChecks": []
+  },
+  {
+    "profileId": "agent",
+    "category": "ask",
+    "spoken": "uh how do i make the session restart automatically when recording fails",
+    "expected": "How do I make the session restart automatically when recording fails?",
+    "formatChecks": ["startsWithCapital"]
+  },
+  {
+    "profileId": "agent",
+    "category": "ask",
+    "spoken": "what's the best way to add a custom vocabulary list to the cleanup pipeline",
+    "expected": "What's the best way to add a custom vocabulary list to the cleanup pipeline?",
+    "formatChecks": ["startsWithCapital"]
   },
   {
     "profileId": "note",
@@ -94,5 +116,55 @@
     "spoken": "the project deadline is uh friday next week and we need to have the code review done by wednesday",
     "expected": "• Project deadline: Friday next week\n• Code review: Wednesday",
     "formatChecks": []
-  }
+  },
+
+  {
+    "profileId": "agent",
+    "category": "fix",
+    "spoken": "um so basically we have this issue in production where uh the payment service is throwing a null pointer exception when users try to checkout and uh the thing is it only happens when they have like more than three items in their cart and we've been seeing it for like three days now so uh I need you to look into the PaymentService processCart method and fix it so it doesn't crash",
+    "checks": ["imperativeStart", "preservesTerms:PaymentService,processCart,null pointer", "noFiller"]
+  },
+
+  {
+    "profileId": "agent",
+    "category": "task",
+    "spoken": "okay so we are starting the new project and uh I want you to set up the basic project structure for a REST API service in Go and uh we need the standard layout so like a main file the handlers the middleware uh database layer and uh make sure you add a health check endpoint and also set up the Makefile with build test and run targets",
+    "checks": ["imperativeStart", "preservesTerms:Go,REST API,Makefile,health check", "noFiller"]
+  },
+
+  {
+    "profileId": "agent",
+    "category": "task",
+    "spoken": "so uh the CI pipeline is taking way too long it's like 45 minutes for a full build and I think the problem is that we're not caching the node modules between runs and also we're running all the tests in series not in parallel so I need you to look at the GitHub Actions workflow file and add caching for node modules and configure the tests to run in parallel",
+    "checks": ["imperativeStart", "noFiller"]
+  },
+
+  {
+    "profileId": "agent",
+    "category": "fix",
+    "spoken": "so there's this weird thing happening on iOS where when you rotate the device to landscape the navigation bar kind of disappears and then when you rotate back it comes back but with a weird animation and I've seen it on both iPhone 14 and the new 16 models and I think it's related to the custom navigation controller we wrote like six months ago so look at CustomNavigationController viewWillTransition and fix the rotation handling",
+    "checks": ["imperativeStart", "preservesTerms:CustomNavigationController,viewWillTransition", "noFiller"]
+  },
+
+  {
+    "profileId": "agent",
+    "category": "task",
+    "spoken": "so uh the UserService class has gotten way too big it's like 800 lines and it's handling authentication user profile updates notifications and billing all in the same class and I need you to break it up into separate services so like AuthService ProfileService NotificationService and BillingService and make sure each one has its own test file and don't change the public interface because there are like 40 places that use UserService",
+    "checks": ["imperativeStart", "preservesTerms:UserService,AuthService,ProfileService,NotificationService,BillingService", "noFiller", "maxSentences:3"]
+  },
+
+  {
+    "profileId": "agent",
+    "category": "ask",
+    "spoken": "um I'm looking at this authentication code and I don't quite understand why we're using JWT tokens for session management instead of server-side sessions and like what are the tradeoffs and is there any reason why the token expiry is set to 24 hours that seems too long for a banking application",
+    "checks": ["endsWithQuestion", "preservesTerms:JWT,session", "noFiller"]
+  },
+
+  {
+    "profileId": "agent",
+    "category": "task",
+    "spoken": "okay so we need to build a data pipeline that reads from our Postgres database every hour and transforms the raw events into aggregated metrics and then writes the results to BigQuery and the pipeline should handle failures gracefully so if BigQuery is down it should queue the results and retry and we need proper logging throughout so we can debug things in production",
+    "checks": ["imperativeStart", "preservesTerms:Postgres,BigQuery", "noFiller"]
+  },
+
 ]

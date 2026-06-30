@@ -111,7 +111,12 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
         // ("do NOT answer") for small on-device LLMs. [decision 2026-06-27]
         let wrappedText = Self.wrapTranscript(text)
         do {
-            let response = try await session.respond(to: Prompt(wrappedText))  // [Cleanup-M2]
+            // Greedy decoding: same transcript always produces the same cleaned output —
+            // correct for a deterministic cleanup transform, not a conversational turn.
+            // [decision SM-2: greedy for cleanup; verified GenerationOptions.SamplingMode.greedy
+            //  in arm64e-apple-macos.swiftinterface 2026-06-30]
+            let options = GenerationOptions(sampling: .greedy)
+            let response = try await session.respond(to: Prompt(wrappedText), options: options)  // [Cleanup-M2]
             let cleaned = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
             SpeakLog.cleanup.debug(
                 "FoundationModelsCleaner: cleaned to \(cleaned.count, privacy: .public) chars"

@@ -1,2 +1,3 @@
 - [Moat Audit Implementation](project_moat_audit.md) — BEAT §3 audit tests added loop #11; 83 tests total (15 new), `make verify-moat` + MoatAuditTests
 - [Measured Latency Numbers](project_latency_numbers.md) — headless L_partial p50=42ms p95=43ms; local pipeline median=60ms; all within §7 budgets on dev Mac
+- [Concurrent worktree edits](feedback_concurrent_worktree.md) — phase0b worktrees can have ≥2 agents writing; verify a red test is yours before escalating; orchestrator integrates+dedups your diff

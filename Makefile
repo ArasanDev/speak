@@ -101,8 +101,10 @@ test: generate
 	$(XCB) test
 
 ## eval: run the small-models eval harness (live Foundation Models scoring)
+## Uses the Eval scheme which bakes SPEAK_EVAL=1 into the test-action environment
+## (xcodebuild shell-prefix does not propagate to the test host on macOS 26). [decision: SM-2]
 eval: generate
-	SPEAK_EVAL=1 $(XCB) test -only-testing:SpeakTests/EvalHarnessTests
+	xcodebuild -project $(PROJECT) -scheme Eval -configuration $(CONFIG) -derivedDataPath $(DERIVED) test -only-testing:SpeakTests/EvalHarnessTests
 
 ## study: run the Foundation Models limits study (live; writes RAW measurements)
 study: generate

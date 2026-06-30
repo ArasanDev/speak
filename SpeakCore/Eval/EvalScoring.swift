@@ -55,6 +55,11 @@ public struct FormatCheck {
 
 /// Registry of built-in format checks referenced by name in fixture definitions.
 public enum BuiltInFormatChecks {
+    private static let imperativeVerbs: Set<String> = [
+        "Fix", "Add", "Build", "Refactor", "Explore", "Create", "Update", "Remove",
+        "Write", "Set", "Break", "Optimize", "Implement", "Design", "Handle"
+    ]
+
     private static let all: [String: FormatCheck] = [
         "startsWithCapital": FormatCheck("startsWithCapital") { text in
             guard let first = text.first else { return true } // Empty → passes
@@ -64,11 +69,30 @@ public enum BuiltInFormatChecks {
             !text.hasSuffix(".")
         },
         "equalsExpected": FormatCheck("equalsExpected") { _ in
-            // This check is evaluated specially in the caller — it compares
-            // output == expected directly, not via a single-string predicate.
-            // The predicate here is a placeholder; the harness interprets
-            // "equalsExpected" as a flag to do exact comparison instead of Jaccard.
+            // Evaluated specially in the caller — placeholder predicate.
             true
+        },
+        "noFiller": FormatCheck("noFiller") { text in
+            let lower = text.lowercased()
+            let fillers = ["um", "uh", "basically", "you know", "i mean", "so i", "i think", "like"]
+            return !fillers.contains { lower.contains($0) }
+        },
+        "imperativeStart": FormatCheck("imperativeStart") { text in
+            guard let firstWord = text.split(separator: " ").first.map(String.init) else { return false }
+            let stripped = firstWord.trimmingCharacters(in: .punctuationCharacters)
+            return imperativeVerbs.contains(stripped)
+        },
+        "endsWithQuestion": FormatCheck("endsWithQuestion") { text in
+            text.hasSuffix("?")
+        },
+        "noMarkdown": FormatCheck("noMarkdown") { text in
+            !text.contains("```") && !text.contains("**") && !text.hasPrefix("#")
+        },
+        "conventionalCommitsFormat": FormatCheck("conventionalCommitsFormat") { text in
+            let pattern = "^(feat|fix|docs|refactor|test|chore|style|perf|ci|build): .+"
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
+            let range = NSRange(text.startIndex..., in: text)
+            return regex.firstMatch(in: text, range: range) != nil
         }
     ]
 
@@ -87,6 +111,40 @@ public enum BuiltInFormatChecks {
             return FormatCheck("maxWords:\(maxWords)") { text in
                 let wordCount = text.split(separator: " ").count
                 return wordCount <= maxWords
+            }
+        }
+
+        // Parameterized: "preservesTerms:X,Y,Z" — each term must appear in output (lowercased)
+        if descriptor.hasPrefix("preservesTerms:") {
+            let parts = descriptor.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2 else { return nil }
+            let terms = parts[1].split(separator: ",").map { $0.lowercased() }
+            return FormatCheck(descriptor) { text in
+                let lower = text.lowercased()
+                return terms.allSatisfy { lower.contains($0) }
+            }
+        }
+
+        // Parameterized: "maxSentences:N" — sentence count (split on ". ", ".\n", "?", "!") <= N
+        if descriptor.hasPrefix("maxSentences:") {
+            let parts = descriptor.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2, let maxSentences = Int(parts[1]) else { return nil }
+            return FormatCheck(descriptor) { text in
+                var count = 1
+                var idx = text.startIndex
+                while idx < text.endIndex {
+                    let c = text[idx]
+                    if c == "?" || c == "!" {
+                        count += 1
+                    } else if c == "." {
+                        let next = text.index(after: idx)
+                        if next < text.endIndex && (text[next] == " " || text[next] == "\n") {
+                            count += 1
+                        }
+                    }
+                    idx = text.index(after: idx)
+                }
+                return count <= maxSentences
             }
         }
 
@@ -197,6 +255,32 @@ public func evaluateFixture(
         passed: passed,
         correctnessScore: score,
         formatChecksFailed: formatsFailed,
+        latencySeconds: latencySeconds
+    )
+}
+
+/// Evaluate a single fixture using rubric scoring: score = fraction of checks passing.
+///
+/// Use this when a fixture defines a `checks[]` array instead of (or in addition to) an
+/// `expected` string. All checks must pass for `passed` to be true.
+///
+/// - Parameters:
+///   - output: The actual cleaned text from the model.
+///   - checks: Array of format check descriptors (same syntax as `BuiltInFormatChecks.parse`).
+///   - latencySeconds: Wall-clock latency. Defaults to 0.
+/// - Returns: A FixtureResult where `correctnessScore` is the fraction of checks that passed.
+public func evaluateFixtureRubric(
+    output: String,
+    checks: [String],
+    latencySeconds: Double = 0.0
+) -> FixtureResult {
+    let (passed, failed) = BuiltInFormatChecks.evaluateAll(checks, against: output)
+    let passedCount = checks.count - failed.count
+    let score = checks.isEmpty ? 1.0 : Double(passedCount) / Double(checks.count)
+    return FixtureResult(
+        passed: passed,
+        correctnessScore: score,
+        formatChecksFailed: failed,
         latencySeconds: latencySeconds
     )
 }
