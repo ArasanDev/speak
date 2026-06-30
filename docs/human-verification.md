@@ -48,8 +48,7 @@ These unblock every live test below.
 - [ ] **Grant Accessibility**: System Settings → Privacy & Security → Accessibility
       → enable `Speak`. *(Required for the global hotkey CGEventTap **and** the
       synthetic Cmd+V paste.)*
-- [ ] **Grant Input Monitoring**: System Settings → Privacy & Security → Input
-      Monitoring → enable `Speak`. *(Required for the global Fn hotkey tap.)*
+<!-- Input Monitoring removed: not required since v0.2. CGEventTap .defaultTap needs Accessibility only. [verified: dictation-flow.md §2] -->
 - [ ] **Enable Apple Intelligence**: System Settings → Apple Intelligence & Siri
       → turn on. *(Required for the Foundation Models cleanup path; it is gated
       OFF on the dev Mac, which is why P3.5's live quality is deferred.)*

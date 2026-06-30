@@ -1,353 +1,186 @@
-# AGENTS.md — Operating Manual for `speak`
-
-> **Read this FIRST. Every session. Before any other file.**
-> This is not documentation about the product — it is the **operating system**
-> for any agent (human or AI) working on `speak`. It defines the mission, the
-> hard rules, the loading protocol, and the autonomous loop.
-
-> **If you are an AI agent beginning work on this repo, the rest of this file is addressed to you.**
+# AGENTS.md
+> Operating manual for all autonomous agents on this repo. Read at session start. Authority: overrides defaults; superseded only by primary sources ([verified] claims, swiftc output, local SDK).
 
 ---
 
-## 0. The mission
+## 1. Mission
 
-You are building **`speak`**: a macOS-native, local-first, free, open-source
-voice dictation app — the private, free, open alternative to cloud dictation
-(Wispr Flow). It sits in the menubar, captures the microphone on a hotkey,
-transcribes speech **on-device**, **cleans it into finished text with a local
-model**, and pastes the result at the cursor. Speech→text *and* AI neat-writing
-are both core, both on-device, both pluggable.
+`speak` = macOS-native, local-first, free, open-source voice dictation app. Speech→text + AI neat-writing, both on-device, both pluggable. Not a chatbot. Not cloud. Not cross-platform in v0.
 
-**There is no deadline.** This is an autonomous, agent-driven build: the loop
-runs — across as many cycles as it takes, hours or days — until the **complete
-product** exists. "Done" is defined by testable criteria in `benchmark.md` and
-`quality.md`, never by dates, effort estimates, or hours. Operate
-**autonomously**: read the state, pick the next dependency-ready task, execute,
-verify, update state, repeat. Push your limit. Be opinionated. Build the whole
-thing.
-
-**What you are NOT building** (do not drift here):
-- Not an agentic coding tool. (That was abandoned `deepvoice`; see
-  `research/sample-ideation.md`.)
-- Not a chatbot, voice assistant, or meeting scribe.
-- Not cross-platform in v0. Mac + Apple Silicon only.
-- Not cloud. No accounts, login, or telemetry.
+v0 is complete when `benchmark.md` §4 MATCH gate + §3 BEAT rows + `quality.md` §9 ship checklist all pass. No deadlines. No effort estimates. Run the loop until those gates pass.
 
 ---
 
-## 1. How to navigate this repo
+## 2. Hard Rules — inviolable
 
-```
-deepvoice/
-├── AGENTS.md            ← you are here. The operating loop. Read first.
-├── README.md            # human-facing summary + status snapshot
-│
-├── docs/                # the active source of truth (read these for direction)
-│   ├── product.md       # WHAT + WHY. The destination + the full version ladder.
-│   ├── architecture.md  # HOW. Modules, types, signatures, data flow.
-│   ├── roadmap.md       # ORDER. Dependency-ordered build sequence (no dates).
-│   ├── benchmark.md     # DONE. Parity vs the frontier; the definition of done.
-│   ├── quality.md       # VERIFY. Tests, risks, ship gates.
-│   ├── progress.md      # NOW. Living state. YOU rewrite this every session.
-│   └── agent-tooling.md # BUILD HARNESS. Team, skills, MCP, verification backbone.
-│
-├── .claude/             # the autonomous build harness (how agents are equipped)
-│   ├── skills/          # on-demand skills: build, code-review, per-seam API pointers
-│   └── agents/team/     # standing specialist team (one per architecture seam) — see its README
-│
-├── .mcp.json            # project MCP servers: xcode (mcpbridge) + apple-docs
-│
-└── research/            # WHY-evidence archive. Read-only. Never the direction.
-    └── README.md        # start here if you ever touch this folder
-```
+Violating any of these requires explicit human approval. Surface conflicts; never silently bypass.
 
-### The loading protocol (every session)
-
-1. **Read `AGENTS.md`** (this file) — refresh mission, constraints, conventions.
-2. **Read `docs/progress.md`** — learn where the project is right now.
-3. **Read `docs/roadmap.md`** — find the next undone task with met dependencies.
-4. **Read the specific `docs/` file(s)** the task needs (architecture? quality?).
-5. **Execute the task.** Write code + tests. Verify against `docs/quality.md`.
-6. **Update `docs/progress.md`** — mark done, note what's next, log decisions.
-7. **Commit** if the task is verifiably complete (see §7).
-8. **Repeat from step 3** until blocked or done.
-
-Do **not** read `research/` unless a `docs/` decision seems wrong and you need
-the evidence trail. It is 4,000+ lines of historical reasoning that will
-distract you from building.
-
-### What each doc is for
-
-| Doc | Purpose | When to read | Who edits |
-|---|---|---|---|
-| `product.md` | What `speak` is + the full version ladder | Once, upfront; refer back | Human (the destination) |
-| `architecture.md` | How it's built | When implementing | Agent, with human approval on structural change |
-| `roadmap.md` | What order to build (dependency, no dates) | Every session, to find next task | Agent, with human approval on phase change |
-| `benchmark.md` | The definition of done (parity vs frontier) | To know when v0 is complete | Agent, append measured results |
-| `quality.md` | How to verify | Before declaring anything done | Agent, append test cases as discovered |
-| `progress.md` | Where we are now | Every session, first | **Agent — you rewrite this every session** |
+1. **100% local by default.** No cloud audio. No telemetry. No accounts. No login. (Cloud STT = v1 opt-in only.)
+2. **Two OS permissions only**: Microphone + Accessibility. `CGEventTap` uses `.defaultTap` → Accessibility-gated. Input Monitoring is NOT used in v0.
+3. **No third-party dependencies in v0.** Apple frameworks only. `SpeechAnalyzer` + `Foundation Models` are Apple → allowed. WhisperKit/Ollama = v0.1+.
+4. **Swift 5.9+ / SwiftUI. macOS 26.0 deployment. Apple Silicon only in v0.**
+5. **Single Swift codebase.** No Rust core. No FFI. No cross-platform abstraction. [decision: `architecture.md` §1]
+6. **Never read the pasteboard** — only write to it. macOS 26.4 paste-provenance check applies.
+7. **Hardware mute cannot be bypassed.** When muted, no audio is captured.
+8. **AI neat-writing is core, not optional.** Default engine = Apple `Foundation Models`. Fallback = raw transcript. Pluggable via `LLMCleaning`.
+9. **No `print`.** Use `os.Logger` (OSLog). Define log categories in `SpeakCore/Logging/`.
+10. **No force-unwrap, no `try!`, no `as!`** in production code. Use `guard let` / `throws`. Exceptions only in tests.
+11. **No global mutable state.** All state owned by an actor or injected via SwiftUI environment.
+12. **Never block the main thread.** Audio on background queues. UI on `@MainActor`.
+13. **No magic numbers.** Every constant traces to a measured value, platform constraint, or `[decision]` in `benchmark.md` §7.
+14. **Tag every factual claim.** See §9.
 
 ---
 
-## 2. Hard constraints (non-negotiable)
+## 3. File authority hierarchy
 
-These are the **moat**. Do not trade them away for speed, features, or
-convenience. If a constraint blocks a task, surface the conflict explicitly
-and ask — do not silently violate it.
+When two sources conflict, the higher rank wins.
 
-1. **100% local by default.** No cloud audio. No telemetry to a server. No
-   accounts. No login. (Cloud STT is a v1 *opt-in* escape hatch only.)
-2. **Two OS permissions, no more**: Microphone + Accessibility. (The global-hotkey
-   `CGEventTap` is `.defaultTap` → Accessibility-gated; Input Monitoring is NOT used
-   in v0.) Onboarding must explain *why* each is needed and deep-link to System Settings.
-3. **Swift 5.9+ / SwiftUI**, deployment target **macOS 26.0**,
-   **Apple Silicon only** in v0.
-4. **No third-party dependencies in v0.** Apple frameworks only. WhisperKit /
-   Ollama arrive in v0.1+.
-5. **Single Swift codebase.** No Rust core. No FFI. No cross-platform
-   abstraction. (This debate is settled — see `architecture.md` §1 and
-   `research/TECH_STACK_JUDGMENT.md` for why.)
-6. **Never read the pasteboard** — only write to it. (macOS 26.4 paste
-   protection.)
-7. **Hardware mute impossible to bypass** — when muted, no audio is captured,
-   period.
-8. **v0 is the complete core, not a time-box.** v0 is done when `benchmark.md`'s
-   MATCH gate and all BEAT rows pass — however many loop cycles that takes. No
-   deadlines, no effort estimates, no hours anywhere in the docs.
-9. **AI neat-writing is core, not optional.** The default cleanup engine is
-   Apple's on-device `Foundation Models` (an Apple framework — does **not**
-   violate the no-third-party-deps rule). Cleanup is pluggable (`LLMCleaning`);
-   Ollama/MLX are later alternatives, never the default dependency.
+1. `swiftc -typecheck` against local macOS 26 SDK — absolute ground truth
+2. `apple-docs` MCP (live Apple docs) — official, symbol-searchable
+3. `[verified]` skill claim with source URL — trusted; re-fetch if > 2 weeks old
+4. `AGENTS.md` (this file) — project operating rules
+5. `docs/` files — design decisions, architecture, roadmap
+6. `research/evidence/` — why-evidence archive; read-only; never the direction
+7. Training memory — starting point for searches, never a fact to ship
+
+**Never read `research/archive/`.** It contains superseded reasoning. In particular, `research/archive/SPEAK_ARCHITECTURE_VERIFICATION.md` contains a false claim (states Claude Code is Rust+WASM) — do not read or cite it.
 
 ---
 
-## 3. Coding conventions (non-negotiable)
+## 4. Loading protocol — every session
 
-- **No `print`** for logging. Use `os.Logger` (OSLog) from day one. Define log
-  categories in `SpeakCore/Logging/`.
-- **No force-unwraps, no `try!`, no `as!`** in production code. Use `guard
-  let` / `if let` / `throws`. Exceptions only in test code.
-- **No global mutable state.** All state is owned by an actor or injected via
-  SwiftUI environment.
-- **Never block the main thread.** Audio on background queues; UI on
-  `@MainActor`.
-- **No `[weak self]` omissions** in long-lived closures.
-- **Every public type has a real Swift signature**, not pseudocode.
-- **Every "done when" is testable** (binary pass/fail).
-- **Match the surrounding code**: comment density, naming, idiom. Read before
-  you write.
+Run this sequence before touching any code.
+
+1. Read `AGENTS.md` (this file) — constraints, conventions, routing.
+2. Read `docs/progress.md` — current state, blocked tasks, open questions.
+3. Read `docs/roadmap.md` — find the lowest-numbered dependency-ready undone task.
+4. Load the task-specific doc(s): `architecture.md` to implement; `quality.md` to verify; `benchmark.md` to evaluate done.
+5. Execute the task (code + tests together).
+6. Verify: build clean → tests green → done-when met → no regressions → §2 honored.
+7. Update `docs/progress.md` (done / blocked / next / decisions logged).
+8. Commit if verifiably complete (see §8).
+9. Return to step 3.
 
 ---
 
-## 4. The autonomous loop
+## 5. Codebase entry points
 
-You operate in **cycles**. Each cycle = pick → execute → verify → record.
+| What you need | Where to read |
+|---|---|
+| Product definition + version ladder | `docs/product.md` |
+| Module map, types, call sequences | `docs/architecture.md` |
+| Build order (dependency-ordered) | `docs/roadmap.md` |
+| Definition of done (v0 gate) | `docs/benchmark.md` |
+| Test gates, ship checklist | `docs/quality.md` |
+| Current session state | `docs/progress.md` |
+| Team, skills, MCP tools | `docs/agent-tooling.md` |
+| Verified API facts (ledger) | `specs/verification-ledger.md` |
+| Why a decision was made | `research/evidence/` (read-only) |
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  1. Read progress.md → identify next task               │
-│  2. Read the relevant docs/ for that task               │
-│  3. Implement (code + tests together)                   │
-│  4. Verify (compile, run tests, check done-when)        │
-│  5. Update progress.md (done / blocked / next / notes)  │
-│  6. Commit if verifiably complete                       │
-└─────────────────────────────────────────────────────────┘
-```
+Do not read `research/archive/`. Do not read `research/sample-ideation.md` for product direction (it documents the abandoned `deepvoice` idea, not `speak`).
 
-### When to ACT autonomously (no asking)
+### Key build commands
 
-- Implementing a roadmap task whose dependencies are met and whose design is
-  specified in `architecture.md`.
-- Writing tests for code you just wrote.
-- Fixing a bug you can reproduce, within the existing architecture.
-- Updating `docs/progress.md` (always).
-- Refactoring within a module without changing its public API.
+| Command | What it does |
+|---|---|
+| `make build` | `xcodegen generate` → `xcodebuild build` |
+| `make test` | Full XCTest + Swift Testing suite |
+| `make lint` | `swiftlint` (force-unwrap/cast/try are errors) |
+| `make verify-moat` | Standalone §2 hard-rule audit; no Xcode required |
+| `make run` | Build then launch the menubar app |
+| `make lsp` | Regenerate `buildServer.json` for SDK-correct Swift semantics |
 
-### When to STOP and ask the human
-
-- A `docs/` decision contradicts a primary source you can verify (surface it,
-  don't paper over it).
-- A hard constraint (§2) blocks progress.
-- You need to change a public API in `architecture.md`.
-- You need to change the roadmap (reorder phases, add/remove scope).
-- A task's "done when" criterion is ambiguous and you can't resolve it from
-  the docs.
-- You're about to do something hard to reverse (delete user data, rewrite a
-  module, change license).
-- You've been blocked on the same task for 2 failed attempts.
-
-**Rule of thumb**: act freely *within* the rails; ask before *moving* the
-rails.
+Re-run `make lsp` after a clean clone or `project.yml` change, then reload the LSP. `Speak.xcodeproj` is git-ignored; `make build` regenerates it via XcodeGen.
 
 ---
 
-## 5. Conventions for `docs/progress.md`
+## 6. Team routing
 
-This file is your working memory. Treat it as sacred — a lost `progress.md`
-means a lost session. Rules:
+Route each seam's work to its specialist. Never have one agent touch all seams.
 
-- **Update it at the end of every work cycle**, not just at session end.
-- Structure it as: `Current Phase` → `Done (this session)` → `In Progress` →
-  `Blocked` → `Next Up` → `Decisions Logged` → `Open Questions`.
-- **Be specific.** "Worked on hotkey" is useless. "`HotkeyMonitor` now detects
-  double-tap Fn within 400ms window; flaky on external keyboards — see open
-  question #3" is useful.
-- **Log decisions with rationale.** Future-you (or another agent) needs to
-  know *why*, not just *what*.
-- **Keep open questions visible.** Don't let them rot in your head.
-- **Never delete history** — append. If the file gets long, archive old
-  entries to `docs/progress-archive.md` monthly.
+| Seam | Agent | Files owned |
+|---|---|---|
+| Engine core: session lifecycle, state machine, error model, logging | `builder-engine` | `SpeakCore/` (non-audio) |
+| Audio capture + STT (`SpeechAnalyzer`, `DictationTranscriber`) | `builder-audio-stt` | `SpeakCore/Audio/`, `SpeakCore/Transcribing/` |
+| AI neat-writing (`LLMCleaning`, `Foundation Models`) | `builder-cleanup` | `SpeakCore/Cleaning/` |
+| Global hotkey (`CGEventTap`), pasteboard write, Cmd+V, permissions | `builder-input` | `SpeakCore/Input/`, `SpeakCore/Permissions/` |
+| SwiftUI app shell: MenuBarExtra, onboarding, overlay, SQLite history | `builder-app` | `Speak/` (App target), `SpeakCore/Storage/` |
+| Build system, CI, sign/notarize, Homebrew cask | `builder-release` | `project.yml`, `Makefile`, `.github/` |
+| Tests, benchmarks, dogfood | `builder-qa` | `SpeakTests/`, `SpeakUITests/` |
 
 ---
 
-## 6. Verification discipline
+## 7. The build loop
 
-**Code is not done when it's written. Code is done when it's verified.**
+1. Pick the lowest-numbered dependency-ready task from `docs/roadmap.md`.
+2. Load task-specific docs (`architecture.md` section for that task).
+3. Research before coding: identify any claim marked `[inferred]` or `[unverified]` in the relevant skill. Verify against `swiftc -typecheck` or `apple-docs` MCP before writing code. See §3 for trust hierarchy.
+4. Implement: code + tests together. No code without a test.
+5. Test: `make test` — all green, no regressions.
+6. Lint: `make lint` — zero swiftlint errors (force-unwrap/cast/try are errors).
+7. Moat check (before each commit): `make verify-moat` — standalone audit of §2 hard rules; no build required, re-runnable.
+8. Evaluate: task's "done when" criterion from `roadmap.md` — binary pass/fail.
+9. Commit: see §8.
+10. Update `docs/progress.md` — mark done, log decisions, note what's next.
+11. Return to step 1.
 
-Before marking any roadmap task complete:
-1. **Compiles clean** — `xcodebuild build` exits 0, no warnings treated as
-   errors.
-2. **Tests pass** — new code has tests; all existing tests green.
-3. **Done-when met** — the specific testable criterion from `roadmap.md` is
-   satisfied (not "basically works").
-4. **No regressions** — `progress.md` notes no new failures.
-5. **Constraints honored** — re-read §2; confirm none violated.
+**Act autonomously within the rails**: implementing a specified task, writing tests, fixing reproducible bugs, updating `progress.md`, refactoring within a module's public API, upgrading a skill's `[inferred]` tag to `[verified]` after confirming.
 
-If you can't verify (e.g., no mic access in CI), say so explicitly in
-`progress.md` and flag the verification gap. Don't claim done what you can't
-prove.
+**Stop and ask before moving the rails**: changing `architecture.md` public API, reordering roadmap phases, adding or removing v0 scope, doing anything irreversible.
 
----
+### Verification gate (before marking any task done)
 
-## 6b. Research methodology (how to find current truth)
+- `xcodebuild build` exits 0, no warnings-as-errors.
+- All existing tests green. New code has tests.
+- The task's specific "done when" criterion is satisfied — not "basically works."
+- `progress.md` notes no new regressions.
+- `make verify-moat` passes (no §2 violations detected in source).
 
-The loop runs on a model with a knowledge cutoff. Every session, assume your
-training knowledge about Apple frameworks, Swift packages, and AI APIs may be
-wrong. The right response is not to guess — it is to research.
-
-### The question to ask before every task
-
-"What does this task require me to know that was released, changed, or updated
-after mid-2025?"
-
-High-risk domains (always verify):
-- Any Apple framework mentioned in WWDC26 (Core AI, Foundation Models provider
-  API, SpeechAnalyzer DictationTranscriber, AppIntents/App Schemas)
-- Any third-party package pinned to a version (WhisperKit, MLX, FluidAudio)
-- Any external API (Sarvam, Ollama) — endpoints, request format, pricing, models
-- Any deprecation (SiriKit → AppIntents; CoreML → Core AI for LLM/generative work)
-
-### The trust hierarchy
-
-1. `swiftc -typecheck` against the local SDK — absolute ground truth
-2. `apple-docs` MCP — official Apple docs, searchable by symbol
-3. `[verified]` skill claim with source URL — trusted, but re-fetch if > 2 weeks old
-4. Official GitHub README at the current release tag
-5. WebSearch from `developer.apple.com` or official org repos
-6. `[inferred]` skill claim — a hypothesis; verify before shipping it
-7. Training memory — a starting point for searches, never a fact to ship
-
-### Web search patterns that find authoritative sources
-
-For Apple APIs:
-- `"[SymbolName]" site:developer.apple.com`
-- `WWDC26 [FrameworkName] developer.apple.com`
-- `"import [FrameworkName]" swift macos26 2026`
-
-For packages:
-- WebFetch `github.com/<org>/<repo>/releases` → find latest tag → fetch README at that tag
-- `[PackageName] swift [MethodName] site:github.com`
-
-For services:
-- WebFetch the `docs:` URL in the skill file directly (don't search; fetch)
-- `[ServiceName] API documentation [year]`
-
-### What to do with what you find
-
-- Confirms a skill claim → change tag from `[inferred]` → `[verified from: <URL>]`
-- Contradicts a skill claim → update the skill FIRST, then write the code
-- Reveals something not in any skill → create a new skill before continuing
-- Confirms nothing, all results inconclusive → tag claim `[unverified]`, log open
-  question in `progress.md`, try `swiftc -typecheck` as final check
-
-### What good research looks like (concrete example)
-
-Task: implement WhisperKit STT (V01-1).
-1. Read `whisperkitv1-stt` skill → notices `[inferred]` tags on streaming API shape
-2. WebFetch `github.com/argmaxinc/WhisperKit/blob/main/README.md` → confirms init pattern
-3. After SPM resolve: `swiftc -typecheck` with `import WhisperKit` → confirms symbol names
-4. Updates skill: `[inferred]` → `[verified via README + swiftc, 2026-06-26]`
-5. Now writes the code
-
-This takes 5–10 minutes. It eliminates 2 failed build cycles and a wrong API
-call buried in production code. The skill update means the next agent skips steps 1–4.
+If you cannot verify (e.g., no mic access), say so explicitly in `progress.md`. Do not claim done what you cannot prove.
 
 ---
 
-## 6c. Skill-creation protocol (how the loop compounds)
+## 8. Commit convention
 
-**When you solve a technical problem that required research or experimentation — a verified API shape, a workaround for a platform bug, an integration pattern that wasn't documented — encode it as a skill.**
+Format: `[P<N>] <task short name>: <what changed>`
 
-### When to create a skill
+Examples:
+- `[P2] audio capture: AVAudioEngine 16kHz mono, mic permission flow`
+- `[P3] STT: SpeechAnalyzer DictationTranscriber, streaming partial results`
 
-- You verified an API shape via `swiftc -typecheck` or `apple-docs` that wasn't documented in an existing skill
-- You found a workaround for a build/runtime issue that took more than 1 attempt
-- You integrated a new third-party package and figured out the correct SPM setup
-- You solved a problem that any future agent tackling the same seam would get wrong
-
-### How to create a skill
-
-1. Create `.claude/skills/<name>/SKILL.md` (kebab-case name matching the API/seam)
-2. Write: architectural seam, hard constraints, API shape (tagged), verification commands
-3. Tag EVERY claim: `[verified]` / `[inferred]` / `[unverified]` / `[decision]`
-4. Add the skill name to the `skills:` list in the relevant agent's `.md` file in `.claude/agents/team/`
-5. Add one line to `docs/agent-tooling.md` skill index under the appropriate section
-6. Commit with `[skill] <name>: <what it encodes>`
-
-### The compounding effect
-
-Each skill reduces future agent cycles. A skill written once saves 2–3 verification cycles every time the seam is touched. After 10 loop cycles, the accumulated skills make the next 100 cycles faster. Skills are the mechanism by which the loop gets smarter, not just faster.
+Rules: one commit per completed roadmap task. Never commit broken code. Never commit secrets or large binaries. Agent commits autonomously; human reviews via `git log`.
 
 ---
 
-## 7. Commit discipline
+## 9. Claim tagging
 
-- **Commit per completed roadmap task** (not per file, not per session).
-- **Commit message format**: `[P<N>] <task short name>: <what changed>` —
-  e.g., `[P2] audio capture: AVAudioEngine 16kHz mono, mic permission flow`.
-- **Never commit broken code.** If tests fail, fix before committing.
-- **Never commit secrets**, `.env`, credentials, or large binaries.
-- **The agent commits autonomously** per the loop; the human reviews via git
-  log, not per-commit approval.
+Tag every factual assertion about APIs, behavior, or external systems.
 
----
+| Tag | Meaning | Example |
+|---|---|---|
+| `[verified]` | Confirmed via `swiftc -typecheck`, `apple-docs`, or primary source | `SpeechAnalyzer.DictationTranscriber [verified via apple-docs, 2026-06-10]` |
+| `[inferred]` | Reasoned from context; not directly confirmed | `Buffer size 4096 [inferred from AVAudioEngine docs]` |
+| `[decision]` | Deliberate design choice with rationale logged | `No sandbox in v0 [decision: pasteboard access requires it]` |
+| `[unverified]` | Needs confirmation before shipping | `Cmd+V bypass on macOS 26.4 [unverified]` |
 
-## 8. When you're stuck
-
-In order of escalation:
-1. **Re-read the relevant `docs/` section.** The answer is usually there.
-2. **Check `research/`** for the evidence behind the decision (only if a doc
-   seems wrong).
-3. **Verify the claim against a primary source** (Apple docs, GitHub repo).
-4. **Log it as an open question in `progress.md`** and pick the next
-   unblocked task.
-5. **Ask the human** — only after 1–4 fail. Bring the question with context:
-   what you tried, what you found, what you'd do if forced to decide.
+When a `[verified]` claim contradicts a primary source: stop, surface the conflict, do not paper over it.
 
 ---
 
-## 9. The spirit of this project
+## 10. Escalation
 
-`speak` is a **small, opinionated, native** Mac app. It does one thing
-(dictate speech to text at the cursor) and does it privately, locally, and
-for free. The moat is the three-way combination of **local + free + open**,
-plus the **developer-first hotkey UX**. Wispr Flow cannot copy this without
-abandoning its cloud revenue.
+Stop and surface to the human when:
 
-Push hard. Ship fast. Be opinionated. But never lose the moat — a faster
-cloud dictation app is just another Wispr Flow. The constraints in §2 are the
-product.
+- A `docs/` decision contradicts a primary source you can verify (bring the contradiction).
+- A hard rule (§2) blocks progress with no clean path around it.
+- A public API in `architecture.md` needs changing.
+- A roadmap phase needs reordering or scope change.
+- You've failed the same task 2 times. Rewrite context, not the prompt.
+- You're about to do something irreversible (delete data, rewrite a module, change license).
+
+Bring: what you tried, what you found, what you'd do if forced to decide. Don't ask without context.
 
 ---
 
-*End of operating manual. Now go read `docs/progress.md` and continue.*
+*Read `docs/progress.md` next. Then pick your task.*

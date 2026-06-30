@@ -10,9 +10,10 @@ release. The version ladder (v0 → v3+) is defined in `docs/product.md` §9.
 
 ## [Unreleased] — v0
 
-> **Status**: Engine and UI are fully built and pass 143 tests (123 XCTest +
-> 20 Swift Testing). Live-gated verification (paste into real apps, hotkey with
-> real permissions, Developer ID notarization) is in progress. See
+> **Status**: Engine and UI are fully built and pass 574 tests (see
+> [`docs/progress.md`](docs/progress.md) for current count). Live-gated
+> verification (paste into real apps, hotkey with real permissions, Developer
+> ID notarization) is in progress. See
 > [`docs/human-verification.md`](docs/human-verification.md) for what remains
 > before v0 ships.
 

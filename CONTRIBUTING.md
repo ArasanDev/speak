@@ -1,9 +1,7 @@
 # Contributing to `speak`
 
-`speak` is a macOS-native, local-first AI voice dictation app built autonomously
-by an agent team and welcoming human contributors. This document covers how to
-build, test, and navigate the repo; what the architecture seams are; and the hard
-rules that must never be traded away.
+> **AI agent contributors**: Read `AGENTS.md` first. It is the operating manual.
+> Human contributors: this file covers the contribution workflow.
 
 ---
 
@@ -40,9 +38,6 @@ make run          # build + launch the menubar app
 
 ## Navigating the repo
 
-The repo is structured for autonomous agent operation as much as human reading.
-The loading order matters:
-
 | File | Purpose |
 |---|---|
 | `AGENTS.md` | Operating manual — the mission, hard rules, autonomous loop |
@@ -63,87 +58,13 @@ Do not treat `research/` as direction. It is historical reasoning; the
 
 ## Architecture seams
 
-`speak` has two targets:
-
-- **`SpeakCore.framework`** — the headless dictation engine. All protocol
-  definitions, pipeline logic, data types, and storage. No SwiftUI. This is the
-  portability seam: a future iOS or CLI target extracts it without touching `App`.
-- **`Speak.app`** (the `App` target) — the SwiftUI menubar shell. Owns
-  `MenuBarExtra`, the overlay panel, the settings window, onboarding, and
-  `DictationController` (the `@MainActor ObservableObject` that wires everything
-  together).
-
-### The pipeline
-
-```
-HotkeyMonitor (CGEventTap)
-    → DictationController (App, @MainActor)
-        → SpeakEngine (actor, SpeakCore)
-            → CaptureSession (actor)
-                → AppleSpeechTranscriber : Transcribing   ← swap any STT here
-                → FoundationModelsCleaner : LLMCleaning   ← swap any LLM here
-                → PasteboardWriter : TextInserting
-            → HistoryStore (SQLite3)
-```
-
-Every seam is a protocol (`Transcribing`, `LLMCleaning`, `TextInserting`,
-`HistoryStoring`). Mock conformances make every seam headless-testable.
-
-### Key source directories
-
-```
-SpeakCore/
-  Engine/       CaptureSession, SpeakEngine, SpeakError, SpeakLog
-  STT/          Transcribing protocol, AppleSpeechTranscriber
-  Cleanup/      LLMCleaning protocol, FoundationModelsCleaner
-  Hotkey/       HotkeyMonitor, DoubleTapDetector, HotkeyBinding
-  Paste/        TextInserting protocol, PasteboardWriter
-  Permissions/  PermissionManager, OnboardingState
-  Storage/      HistoryStore (SQLite), SettingsStore (UserDefaults)
-  Logging/      SpeakLog (os.Logger categories)
-
-App/
-  SpeakApp.swift          MenuBarExtra entry point
-  DictationController.swift  @MainActor ObservableObject; wires engine + hotkey
-  Overlay/               TranscriptOverlayPanel (NSPanel, non-activating)
-  Settings/              Settings window (SwiftUI)
-  Onboarding/            Three-step permission onboarding flow
-```
+Two targets: `SpeakCore.framework` (headless engine, no SwiftUI) and `Speak.app` (SwiftUI menubar shell). Every seam is a protocol (`Transcribing`, `LLMCleaning`, `TextInserting`, `HistoryStoring`) — mock conformances make every seam headless-testable. See `docs/architecture.md` for the full pipeline and module layout.
 
 ---
 
-## Hard rules (from `AGENTS.md` §2–3)
+## Coding conventions
 
-These are non-negotiable. A PR that violates any of them will not be merged.
-
-**Runtime:**
-- **100% local by default.** No cloud audio, no telemetry, no accounts. Works
-  fully offline. Every network-egress symbol is banned by `make verify-moat`.
-- **v0: Apple frameworks only.** No third-party runtime dependencies.
-  `SpeechAnalyzer` and `Foundation Models` are Apple frameworks — allowed.
-  `XcodeGen` and `xcbeautify` are build-time tools — allowed (not linked).
-- **AI neat-writing is core, not optional.** Default cleanup = on-device
-  `Foundation Models`, pluggable via `LLMCleaning`, with a raw-transcript
-  fallback. Never remove or default-off the cleanup path in v0.
-
-**Code conventions:**
-- `os.Logger` only. **No `print`.** Verified by `MoatAuditTests`.
-- **No force-unwrap** (`!`), `force-cast` (`as!`), or `force-try` (`try!`)
-  outside test files. SwiftLint enforces these as errors.
-- **No global mutable state.** Shared state lives in actors or `@MainActor`
-  types. The main thread is never blocked.
-- **Never read the pasteboard** — only write. `PasteboardWriter.insert(_:)`
-  calls `NSPasteboard.general.clearContents()` + `setString(_:forType:.string)`,
-  then simulates Cmd+V. Never calls any read API (`string(forType:)`,
-  `pasteboardItems`, etc.). Verified by `MoatAuditTests.testNoPasteboardRead`.
-- **No magic numbers.** Every constant traces to a measured value, a platform
-  constraint, or a `[decision]` with rationale in `docs/benchmark.md` §7.
-
-**Claims and tagging:**
-- Tag claims `[verified]` / `[inferred]` / `[decision]` / `[unverified]`.
-- Never tag `[verified]` from memory. Confirm with `swiftc -typecheck` against
-  the local macOS 26 SDK, or via the `apple-docs` MCP server.
-- If a `[verified]` claim contradicts a primary source, stop and surface it.
+Follow the hard rules in `AGENTS.md §2`. SwiftLint enforces the mechanical rules: `make lint`.
 
 ---
 
@@ -191,5 +112,5 @@ real run.
 - `docs/product.md` is immutable — it defines the destination and is
   human-owned. Do not propose changes to it in a PR.
 - For new platforms, new STT/cleanup engines, or anything that adds a runtime
-  dependency, read `AGENTS.md` §2 (the hard constraints) first.
+  dependency, read `AGENTS.md §2` (the hard constraints) first.
 - The `research/` directory is read-only evidence. Never turn it into direction.

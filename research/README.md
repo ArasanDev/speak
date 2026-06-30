@@ -1,46 +1,31 @@
-# research/ — Raw Research Archive (Read-Only)
+# research/
 
-> **This folder is an evidence archive, not a source of direction.**
-> All product direction lives in `../docs/`. Read these files **only** when you
-> need to understand *why* a decision was made, not *what* to build.
+> Read-only evidence layer. Never build direction from this folder alone.
+> Primary docs (`docs/`, `specs/`) supersede all content here.
 
-## What's in here
+## Access policy
 
-The 10 research/ideation documents produced during the 2026-06-18 research
-pass. They are preserved **verbatim** — do not edit them. They record the
-correction arc that produced the final architecture decision.
+Do not read `archive/`. It contains superseded pre-build specs and one false claim.
 
-## The arc (why these exist)
+Read `evidence/` only when a specific file is referenced by another doc.
 
-The research went through a self-correction loop. The documents form a
-chain where **later files override earlier ones**, and the final synthesis
-(`spec.md`) supersedes the conflicting recommendations in the middle of the
-chain:
+If anything in `docs/` contradicts something here, `docs/` wins.
 
-| # | File | What it says | Status |
-|---|---|---|---|
-| 1 | `sample-ideation.md` | Original `deepvoice` ideation (4 directions; ambient pair-programmer) | **Set aside.** A different product from `speak`. |
-| 2 | `CATEGORY_LANDSCAPE.md` | 2026 voice-coding category sweep (5 buckets) | Context. Confirms `speak`'s wedge. |
-| 3 | `SPEAK_PRODUCT_SPEC.md` | First `speak` product brief (Swift-native Mac dictation) | **Accurate** — refined into `../docs/product.md` |
-| 4 | `SPEAK_PLATFORM_MODEL.md` | "Question this — use Rust core + uniffi" | **REJECTED for v0** — wrong category |
-| 5 | `SPEAK_ARCHITECTURE_VERIFICATION.md` | "Rust confirmed — Anthropic + OpenAI both rewrote to Rust" | **Factually wrong** — Claude Code is TS+Bun |
-| 6 | `SPEAK_LANGUAGE_CORRECTION.md` | The correction: Claude Code is TS+Bun, not Rust | **The correction that settled the debate** |
-| 7 | `SPEAK_DICTATION_STACKS.md` | Verified: all 8 Mac dictation apps are Swift-native | **Definitive evidence** |
-| 8 | `TECH_STACK_JUDGMENT.md` | Meta-lesson: Rust rec was a category error | **Final verdict + process** |
-| 9 | `OPUS_BUILD_PROMPT.md` | Earlier work-order prompt (5-document deliverable) | **Superseded** by `../AGENTS.md` + `../docs/` |
-| 10 | `spec.md` | The synthesis that this restructure replaced | **Superseded** by `../docs/*.md` |
+> WARNING: `archive/SPEAK_ARCHITECTURE_VERIFICATION.md` contains a false claim
+> ("Claude Code is rewritten in Rust+WASM"). This is factually wrong. Do not read it.
 
-## When to read these
+## evidence/ — may read when referenced
 
-- **Don't read them for direction.** `../docs/` is the source of truth.
-- **Read them when:** a decision in `../docs/` seems wrong and you want the
-  evidence trail, OR you're researching a new adjacent topic (e.g., extending
-  to Windows in v1+) and want the prior research as a starting point.
-- **The two most useful for evidence:** `SPEAK_DICTATION_STACKS.md`
-  (verified competitor stacks) and `TECH_STACK_JUDGMENT.md` (the meta-process
-  lesson). The rest are historical.
+| File | What it contains | Cited by |
+|------|-----------------|----------|
+| `dictation-stacks-verified.md` | Verified Swift-native stacks for 8 Mac dictation apps | `docs/architecture.md` |
+| `agent-instruction-anatomy.md` | Anatomy of effective agent instructions and briefing patterns | `AGENTS.md` |
+| `small-model-prompting-eval.md` | Prompting eval data for small on-device models | `docs/benchmark.md` |
+| `tech-stack-judgment.md` | Meta-lesson: Rust recommendation was a category error; Swift verdict | `docs/architecture.md` |
+| `agent-mode-prompting-synthesis.md` | Synthesis of agent-mode prompting strategies | `AGENTS.md` |
 
-## Rule
+## archive/ — do not read
 
-If anything in `../docs/` contradicts something here, **`../docs/` wins.**
-These files are frozen in time; the active docs evolve.
+These are superseded pre-build specs from the 2026-06-18 research pass. Kept for provenance only.
+
+One file (`SPEAK_ARCHITECTURE_VERIFICATION.md`) contains a false claim. Treat the entire folder as off-limits.

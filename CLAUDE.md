@@ -1,115 +1,60 @@
-# CLAUDE.md — `speak` (repo dir: `deepvoice`)
+# CLAUDE.md — `speak`
+macOS-native, local-first, free, open-source AI voice dictation: speech → AI-cleaned text → pasted at cursor, 100% on-device.
 
-This repo builds **`speak`**: a macOS-native, **local-first, free, open-source AI
-voice dictation app** — speech → text, then the AI writes it neatly, pasted at
-the cursor, 100% on-device. (The directory is named `deepvoice` for historical
-reasons; the product is `speak`. The abandoned `deepvoice` coding-agent idea is
-archived in `research/sample-ideation.md` — do not build it.)
-
-This file is the entry point. The real detail lives in `AGENTS.md` + `docs/`.
-Read those; don't duplicate them here.
+This file is the CC harness entry point. Read `AGENTS.md` next — it is the operating manual.
 
 ---
 
-## Read first, every session (the loading protocol)
+## Read first — every session
+1. `AGENTS.md` — operating manual, hard rules, routing, the loop
+2. `docs/progress.md` — current state; **rewrite last**
+3. `docs/roadmap.md` — pick lowest-numbered dependency-ready task
+4. `docs/benchmark.md` — the done-condition (objective function)
 
-1. **`AGENTS.md`** — the operating manual: mission, hard constraints, the loop.
-2. **`docs/progress.md`** — current state. **Read first, rewrite last.**
-3. **`docs/roadmap.md`** — pick the lowest-numbered dependency-ready task.
-4. **`docs/benchmark.md`** — the definition of done (the loop's objective function).
-
-Load other `docs/` per the task (`architecture.md` to implement, `quality.md` to
-verify, `product.md` for the destination). Verified facts are in
-`specs/verification-ledger.md`. `research/` is read-only evidence — never build
-direction from it.
-
----
-
-## Agents, skills & tooling (the build harness)
-
-A standing specialist team + a skill library equip the autonomous loop — full map
-in **`docs/agent-tooling.md`**. In short:
-
-- **Skills** (`.claude/skills/`): `swift-macos-build`, `swift-code-review`,
-  `signing-notarization-release` (thick, doc-grounded); per-seam Apple-API
-  pointers (`speechanalyzer-stt`, `foundation-models-cleanup`, `cgeventtap-hotkey`,
-  `macos-paste-pipeline`, `permissions-onboarding`) that **defer the exact API to
-  implementation time** by design.
-- **Team** (`.claude/agents/team/`): `builder-engine` · `-audio-stt` · `-cleanup` ·
-  `-input` · `-app` · `-release` · `-qa` — route each seam's work to its specialist.
-- **MCP** (`.mcp.json`): `apple-docs` (live Apple docs) + `xcode` (`xcrun mcpbridge`;
-  needs a one-time in-Xcode authorization to serve tools).
-
-**Project orchestration principle** — never tag an Apple-API claim `[verified]`
-from memory. Confirm it first with `swiftc -typecheck` against the **local macOS 26
-SDK** (or `apple-docs`); the local SDK is the cutoff-proof source of truth. Route
-mechanical/multi-file work to the right model tier (see the global charter); the
-orchestrator reviews diffs and owns commits.
-
-## What "done" means — there is NO deadline
-
-This is an autonomous, agent-driven build. The loop runs across as many cycles as
-it takes (hours or days) until the **complete product** exists. "Done" is defined
-by testable criteria, never by dates/effort/hours:
-
-> **v0 is complete when** `benchmark.md` §4 MATCH gate + §3 BEAT rows +
-> `quality.md` §9 ship checklist all pass.
-
-v0 = the complete core (incl. AI neat-writing), not an MVP. v1/v2/v3+ make it
-attractive/friendly/creative (`product.md` §9).
-
----
-
-## Hard rules (full list: `AGENTS.md` §2–3 — never trade these away)
-
-- **100% local by default.** No cloud audio, no telemetry, no accounts, works offline.
-- **v0 = Apple frameworks only, no third-party deps.** `SpeechAnalyzer` (STT) and
-  `Foundation Models` (cleanup) are Apple frameworks → allowed. Ollama/WhisperKit
-  are v0.1+ *alternatives*, never the default dependency.
-- **AI neat-writing is core**, not optional. Default cleanup = on-device
-  `Foundation Models`, pluggable via `LLMCleaning`, with a raw-transcript fallback.
-- **Never read the pasteboard** — only write (+ simulate Cmd+V). (Test the paste
-  path empirically at P6 — the bypass is `[unverified]`; macOS 26.4 added a
-  Terminal paste-provenance check.)
-- `os.Logger` only — **no `print`**. No force-unwrap / `try!` / `as!` outside tests.
-- No global mutable state; never block the main thread.
-- **No magic numbers**: every constant traces to a measured value, a platform
-  constraint, or a `[decision]` in `benchmark.md` §7.
-- Tag claims `[verified]` / `[inferred]` / `[decision]` / `[unverified]`. If a
-  `[verified]` claim contradicts a primary source, **stop and surface it**.
+Load task-specific docs per the task: `docs/architecture.md` to implement, `docs/quality.md` to verify, `docs/product.md` for destination. `research/` is read-only evidence — never build direction from it. Verified facts: `specs/verification-ledger.md`.
 
 ---
 
 ## Commands
+```
+make build        # xcodegen generate → xcodebuild build
+make test         # full suite (XCTest + Swift Testing)
+make lint         # SwiftLint; force-unwrap/cast/try = errors
+make verify-moat  # structural BEAT audit; no Xcode needed; re-runnable in CI
+make run          # build then launch menubar app
+make lsp          # configure buildServer.json for SDK-correct Swift semantics
+make release      # sign + notarize + .dmg + Homebrew cask (stubbed until P11)
+```
 
-> The build is live (P0 done). The canonical project — `Speak.app` +
-> `SpeakCore.framework` + `SpeakTests` — is **generated by XcodeGen from
-> `project.yml`** (`Speak.xcodeproj` is git-ignored; `make` targets regenerate it,
-> so everything works from a clean clone). Tooling: Xcode 26+, `xcodegen` +
-> `swiftlint` via Homebrew. macOS 26.0 deployment, Swift 5 language mode.
+One test: `xcodebuild test -project Speak.xcodeproj -scheme Speak -derivedDataPath build/DerivedData -only-testing:SpeakTests/<Suite>/<testMethod>`
 
-- **Build**:   `make build`         — `xcodegen generate` → `xcodebuild build`
-- **Run**:     `make run`           — build then launch the menubar app
-- **Test**:    `make test`          — full suite (XCTest + Swift Testing; 5 XCTSkip are live-Foundation-Models paths)
-- **One test**: `xcodebuild test -project Speak.xcodeproj -scheme Speak -derivedDataPath build/DerivedData -only-testing:SpeakTests/<Suite>/<testMethod>`
-- **Lint**:    `make lint` (`swiftlint`) — force-unwrap/cast/try are **errors** (`.swiftlint.yml`)
-- **Moat audit**: `make verify-moat` — standalone source audit of the `benchmark.md` §3 BEAT rows (no egress / account / third-party dep / paywall / pasteboard-read / `print`); runs without Xcode, re-runnable in CI
-- **LSP**:     `make lsp`           — configure `buildServer.json` so editors/agents get SDK-correct Swift semantics; re-run after a clean clone or `project.yml` change, then reload the LSP
-- **Release**: `make release`       — Developer ID sign + notarize + `.dmg` + Homebrew cask (stubbed until roadmap P11)
+`Speak.xcodeproj` is git-ignored; `make` regenerates it via XcodeGen from `project.yml`.
 
 ---
 
-## Commit discipline (full: `AGENTS.md` §7)
-
-Commit per completed roadmap task: `[P<N>] <task>: <what changed>`. Never commit
-broken code or secrets. Keep the working tree clean.
+## Hard rules (full list: `AGENTS.md §2–3`)
+- **100% local.** No cloud audio, no telemetry, no accounts, works offline.
+- **v0 = Apple frameworks only.** No third-party deps. `SpeechAnalyzer` + `Foundation Models` are Apple → allowed.
+- **Never read the pasteboard** — only write (+ simulate Cmd+V).
+- `os.Logger` only — no `print`. No force-unwrap / `try!` / `as!` outside tests. No global mutable state. Never block main thread.
+- Tag claims `[verified]` / `[inferred]` / `[decision]` / `[unverified]`. Never tag an Apple-API claim `[verified]` from memory — confirm with `swiftc -typecheck` against local macOS 26 SDK.
 
 ---
 
-## Stack at a glance (full: `architecture.md`)
+## Stack
+Swift 5.9+ / SwiftUI · macOS 26 (Tahoe) · Apple Silicon · not sandboxed in v0.
+`SpeechAnalyzer` (STT) + `Foundation Models` (cleanup), both pluggable via `Transcribing` / `LLMCleaning`.
+`CGEventTap` hotkey (double-tap Fn) · `NSPasteboard` write + Cmd+V · SQLite history · `os.Logger`.
+Engine logic in `SpeakCore.framework`; App target is the SwiftUI shell. Full map: `docs/architecture.md`.
+Tooling: Xcode 26+ · `xcodegen` + `swiftlint` via Homebrew. Agent team + skills: `docs/agent-tooling.md`.
 
-Swift 5.9+ / SwiftUI · macOS 26 (Tahoe) · Apple Silicon. `SpeechAnalyzer` (STT) +
-`Foundation Models` (cleanup), both pluggable. `CGEventTap` hotkey (double-tap Fn,
-customizable) · `NSPasteboard` write + `Cmd+V` paste · SQLite history · `os.Logger`.
-Single Swift codebase; engine logic in `SpeakCore.framework` (the portability seam).
-MIT · Homebrew Cask + `.dmg`, not sandboxed in v0.
+---
+
+## Done condition
+v0 complete when: `benchmark.md §4` MATCH gate + `§3` BEAT rows + `quality.md §9` ship checklist all pass.
+v0 = complete core (incl. AI neat-writing), not an MVP. v1/v2/v3+ = attractive/friendly/creative (`product.md §9`).
+
+---
+
+## Commit
+`[P<N>] <task>: <what changed>` — one commit per completed roadmap task. Full rules: `AGENTS.md §7`.

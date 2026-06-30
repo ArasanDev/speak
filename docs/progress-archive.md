@@ -276,6 +276,79 @@ passes for Speech/FoundationModels/AVFoundation/SQLite3. SwiftPM-now vs Xcode de
 
 ---
 
+## Done (2026-06-21, loop run #26 — PHASE 1 base-hardening COMPLETE + paste test-hygiene fix)
+
+**Executed all of Phase 1 from `specs/acceleration-plan.md` (autonomous loop).** Five surgical, additive seam-hardening tasks. Gates: build ✅ · 199 tests / 5 XCTSkip / 0 failures · lint 0 serious · moat 7/7.
+
+- **H1 `6dbe029`** — multi-language seam. `SpeakEngine.newSession()` reads `settings.language` at call-time. +3 tests.
+- **H2 `4a3ad09`** — App-test infra `TEST_HOST`. `SpeakTests` now HOSTS the `Speak` app target. +`TranscriptOverlayPanelTests` (6 tests).
+- **H4 `9bdc20d`** — `customVocabulary` seam. SDK-verified against `arm64e-apple-macos.swiftinterface`. +7 tests.
+- **H5 `f2b1d1f`** — `StreamingTextInserting` protocol. Define-only. Additive, zero risk.
+- **H3 `9a3c8c4`** — Decompose `DictationController` (415→361 lines). Extracted `OverlayController` + `WindowPresenter`. +`OverlayControllerTests` (8) + `WindowPresenterTests` (4).
+
+**Paste test-hygiene fix `30e99f2`:** `PasteboardWriter` now has injectable `writeClipboard` + `postEvent` seams; tests inject a `PasteSideEffectRecorder`.
+
+**Orchestration lesson:** `Agent(isolation:"worktree")` did NOT isolate named/background subagents in CC 2.1.x. Verify `git worktree list` after spawning. Standing fix: each agent calls `EnterWorktree` first + never commits.
+
+---
+
+## Loop #33 (@Observable migration — COMPLETE, 2026-06-28)
+
+All 6 ObservableObject classes migrated: `SettingsStore`, `SnippetStore`, `HistoryViewModel`, `OnboardingViewModel`, `OverlayViewModel`, `DictationController`. `DictationController` replaced `objectWillChange.sink` with `withObservationTracking` re-arming loop. Gates: build ✅ lint 0-serious ✅ moat 7/7 ✅ tests pass ✅ (481 / 0 / 0).
+
+---
+
+## Loop #34 (code quality, 2026-06-28)
+
+- **`a4754f1`** — Extension-per-responsibility splits: `DictationController+CLI.swift`, `DictationController+ErrorHandling.swift`, `CaptureSession+Cleanup.swift`, `CaptureSession+Paste.swift`
+- **`41212b5`** + **`22d5619`** — `TestStorage.tempDatabaseURL()` adoption in `HistoryStoreTests` + `SpeakEngineIntegrationTests`
+- **`2b872fb`** — `MenubarIconTests`: 6 XCTest methods → 1 `@Test(arguments:)` with 5 parameterized cases
+
+Gates: build ✅ lint 0-serious ✅ moat 7/7 ✅ tests pass ✅
+
+---
+
+## Loop #35 (P11-a: build-from-source install, 2026-06-28)
+
+- **`make install`** — new target: `make build` then `cp -r Speak.app /Applications/`
+- **`make github-release`** — Release build → `codesign -s -` ad-hoc sign → `ditto` zip → sha256 printed
+- **`dist/speak.rb`** — Homebrew formula (custom tap, build-from-source); `url`+`sha256` are PLACEHOLDER until first tag
+- **`README.md`** — Install section rewritten: Path 1 (Homebrew formula), Path 2 (GitHub Release zip), Path 3 (official cask at P11-b)
+
+Gates: build ✅ lint 0-serious ✅ moat 7/7 ✅ tests pass ✅
+
+---
+
+## (archived) P11-c streaming context — loop #36 (2026-06-28)
+
+Keystroke injection for raw-text streaming + complete sidebar-nav application (Dashboard, History, Settings, Privacy, About). **Superseded by the Profile Engine direction; keystroke injection removed in v0 fix phase.** Gates as of loop #36: design locked ✅ streaming architecture designed ✅ app structure specified ✅.
+
+---
+
+## Loop #38 (agentic-loop hardening + SM-0, 2026-06-29)
+
+- **Menubar clickable icon** (#1 → PR #2, `5b13553`): NSStatusItem replaces unreliable SwiftUI `MenuBarExtra`.
+- **CI FIXED — first green run ever** (PR #4): Pinned to `macos-26` (Xcode 26.5) + split Linux `moat-audit` job. Fixed moat test that hardcoded `/Users/tamil/…` → now `#filePath`-relative. Authority model: local `make` gates are the merge gate; CI is an advisory mirror.
+- **SM-0 eval harness** (#5 → PR #6): `make eval` runs golden `spoken→expected` fixtures through each profile. `SpeakCore/Eval/EvalScoring.swift` (pure Jaccard correctness + declarative format checks + percentiles). Gates: build ✅ / test 542,1-skip,0-fail ✅.
+
+---
+
+## Loop #39 older entries (pre-PE-3 phases)
+
+-3. **PE-1: Profile Engine WIRED (`7f415c2`).** `ProfileResolver` (pure) maps frontmost app → built-in profile. Cursor/VSCode/Xcode/Zed → Code, Terminal/iTerm → CLI, Tower/SublimeMerge → Commit. Default path stays `.styled()` — ZERO regression.
+
+-2. **Group A (UI polish) + PE-0 LANDED.** #32 overlay gear removed (`35d5577`), #33 sidebar nav fixed (`10e9205`), #34 Appearance wired (`9b88fd1`), **#39 PE-0 Profile Engine spine** — 7 built-ins (Raw/Clean/Chat/Code/CLI/Prompt/Commit) + 15 tests, additive only (`2952cf7`). Repo published public at github.com/ArasanDev/speak.
+
+-1. **v0 BASE VERIFIED WORKING LIVE (2026-06-29) — tagged `v0-base`.** User dictated through speak 3 consecutive times, each pasting correctly. Core loop confirmed: double-tap Fn → SpeechAnalyzer STT → Foundation Models cleanup → single Cmd+V paste at cursor (stopToPaste ~1.1–2.1s). Two root causes resolved: stale binary + ad-hoc signing identity not wired. Fix: `make dev-cert` + `make build` (Authority=speak-local-codesign) + `make reset-permissions`. AX now persists across rebuilds.
+
+0. **#29 + #30 LANDED** (`9131899`, `03629d2`): #29 — removed `if streamingInserter != nil { skip final paste }` in `CaptureSession+Paste.swift`; single final paste on every dictation. #30 — `monitor.notifySessionEnded()` added to all fail paths; `endDictation` re-entrancy guard; dismissable error HUD.
+
+1. **System-freeze bug FIXED** (`182ba0c`): `HotkeyMonitor` CGEventTap changed from `.defaultTap` (active) to `.listenOnly` (observer). Freeze structurally impossible.
+
+2. **Three runtime audits done** (agents): @Observable reactivity HEALTHY.
+
+---
+
 ## Archived decisions
 
 | Decision | Rationale |
