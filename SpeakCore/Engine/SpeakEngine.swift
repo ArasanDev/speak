@@ -230,6 +230,48 @@ public actor SpeakEngine {
         // wired to delivery in v0. The setting can be read but produces no effect.
         let activeStreamingInserter: (any StreamingRawTextInserting)? = nil
 
+        // [PE-3.1] Build a voice-command preprocessor when cleanup will actually run.
+        // The preprocessor fires in stop(), between snippet expansion and the LLM pass,
+        // so the trigger phrase is stripped before the model sees the text. Manual
+        // overrides (chip tap / Raw pick) are set before stop() and checked inside
+        // CaptureSession — they always win over a spoken trigger.
+        let vcpAgentID = DefaultProfiles.agent.id
+        let vcpWriteID = DefaultProfiles.write.id
+        let vcpNoteID = DefaultProfiles.note.id
+        let vcpProfiles = candidateProfiles
+        let vcpLevel = settings.cleanupLevel
+        let vcpVocab = activeVocabulary
+
+        var activeVoiceCommandPreprocessor: CaptureSession.VoiceCommandPreprocessor?
+        if settings.cleanupEnabled && !cleanupLevelIsNone {
+            activeVoiceCommandPreprocessor = { rawText in
+                guard let cmd = VoiceCommandParser.detect(
+                    rawText,
+                    agentProfileID: vcpAgentID,
+                    writeProfileID: vcpWriteID,
+                    noteProfileID: vcpNoteID
+                ) else { return nil }
+
+                let modeOverride: CleanupMode?
+                if let destID = cmd.destination {
+                    if let profile = vcpProfiles.first(where: { $0.id == destID }) {
+                        modeOverride = .profile(profile, level: vcpLevel, customVocabulary: vcpVocab)
+                    } else {
+                        modeOverride = nil
+                    }
+                } else if let cat = cmd.category {
+                    if let agentProfile = vcpProfiles.first(where: { $0.id == vcpAgentID }) {
+                        modeOverride = .profile(agentProfile, level: vcpLevel, category: cat, customVocabulary: vcpVocab)
+                    } else {
+                        modeOverride = nil
+                    }
+                } else {
+                    modeOverride = nil
+                }
+                return (transcript: cmd.strippedTranscript, modeOverride: modeOverride)
+            }
+        }
+
         let session = CaptureSession(
             transcriber: transcriber,
             cleaner: activeCleaner,
@@ -237,7 +279,8 @@ public actor SpeakEngine {
             streamingInserter: activeStreamingInserter,
             locale: activeLocale,
             cleanupMode: activeMode,
-            expander: activeExpander
+            expander: activeExpander,
+            voiceCommandPreprocessor: activeVoiceCommandPreprocessor
         )
         currentSession = session
         return session
