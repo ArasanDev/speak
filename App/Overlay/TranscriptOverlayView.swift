@@ -158,6 +158,21 @@ final class OverlayViewModel {
     /// W2.2: `true` when AI cleanup will run after capture; drives "Cleaning up…" vs "Pasting…".
     /// Set at `start()` time from `DictationController.settingsStore`.
     var isCleaningUp: Bool = true
+
+    // MARK: PE-3.2 pin-to-context banner
+
+    /// `true` when the "pin this destination?" banner should appear below the waveform row.
+    /// Set via `OverlayController.showPinBanner` / `hidePinBanner`. Reset in start/stop/cancel.
+    var showPinPrompt: Bool = false
+
+    /// Short label shown in the pin banner, e.g. "Always Agent · Task here?"
+    var pinContextLabel: String = ""
+
+    /// Called when the user taps [Pin] in the banner.
+    var onPin: (() -> Void)?
+
+    /// Called when the user taps [✕] in the banner to dismiss without pinning.
+    var onDismissPin: (() -> Void)?
 }
 
 // MARK: - VisualEffectView
@@ -357,20 +372,66 @@ struct TranscriptOverlayView: View {
         .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)   // = 12 pt [decision]
     }
 
-    /// The calm default: live waveform, partial text, elapsed timer, and the destination
-    /// pill (the one click affordance — opens the selector card).
+    /// The calm default: live waveform, partial text, elapsed timer, destination pill, and
+    /// (when `showPinPrompt`) a pin-suggestion row below. [decision PE-3.2: pin row lives
+    /// outside the selector card so it survives card-close on leaf selection.]
     private var calmListeningRow: some View {
-        HStack(alignment: .center, spacing: SpeakSpacing.sm) {
-            WaveformView(level: model.level, isActive: true)
-                .frame(width: WaveformView.totalWidth)
-            textContent
-            Text(Self.durationLabel(model.elapsedSeconds))
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            HStack(alignment: .center, spacing: SpeakSpacing.sm) {
+                WaveformView(level: model.level, isActive: true)
+                    .frame(width: WaveformView.totalWidth)
+                textContent
+                Text(Self.durationLabel(model.elapsedSeconds))
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                if !model.destinationChoices.isEmpty {
+                    destinationPill
+                }
+            }
+            if model.showPinPrompt {
+                pinPromptRow
+            }
+        }
+    }
+
+    /// PE-3.2 pin suggestion row. Appears below the waveform row after the user overrides
+    /// the same app's destination twice. [Pin] commits; [✕] dismisses and resets the counter.
+    private var pinPromptRow: some View {
+        HStack(spacing: SpeakSpacing.xs) {
+            Image(systemName: "pin.fill")
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+            Text(model.pinContextLabel)
                 .font(.speakMonoCaption)
                 .foregroundStyle(.secondary)
-                .monospacedDigit()
-            if !model.destinationChoices.isEmpty {
-                destinationPill
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 0)
+            Button {
+                model.onPin?()
+            } label: {
+                Text("Pin")
+                    .font(.speakMonoCaption)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Color.accentColor.opacity(0.20))
+                    )
+                    .foregroundStyle(Color.primary)
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Pin this destination for this app")
+            Button {
+                model.onDismissPin?()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss pin suggestion")
         }
     }
 
