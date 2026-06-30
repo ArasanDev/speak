@@ -73,32 +73,37 @@ struct SettingsView: View {
                 .tabItem { Label("AI Cleanup", systemImage: "wand.and.stars") }
                 .tag(SettingsTab.aiCleanup)
 
-            // 4 — Hotkey & Input (hotkey recorder, streaming, auto-paste)
+            // 4 — AI Studio (Profile Engine — create/edit profiles, live test box)
+            AIStudioSettingsTab(controller: controller)
+                .tabItem { Label("AI Studio", systemImage: "brain.head.profile") }
+                .tag(SettingsTab.aiStudio)
+
+            // 5 — Hotkey & Input (hotkey recorder, streaming, auto-paste)
             HotkeyInputSettingsTab(store: store, controller: controller)
                 .tabItem { Label("Hotkey & Input", systemImage: "keyboard") }
                 .tag(SettingsTab.hotkeyInput)
 
-            // 5 — Privacy & Data (moat surface + clear/export history)
+            // 6 — Privacy & Data (moat surface + clear/export history)
             PrivacyDataSettingsTab(store: store, controller: controller)
                 .tabItem { Label("Privacy & Data", systemImage: "lock.shield") }
                 .tag(SettingsTab.privacyData)
 
-            // 6 — About
+            // 7 — About
             AboutSettingsTab()
                 .tabItem { Label("About", systemImage: "info.circle") }
                 .tag(SettingsTab.about)
         }
-        // [decision: P11-c — 760pt wide × 520pt tall for 6-tab layout.
-        //  SpeakSpacing.xl = 32, so 760 = 32 * ~23.75; 520 fits Privacy & Data
-        //  section with badge, four guarantee rows, and button controls.]
-        .frame(minWidth: 760, minHeight: 520)
+        // [decision: PE-2 — 900pt wide × 560pt tall for 7-tab layout.
+        //  Extra 140pt width accommodates the AI Studio split-pane (list + editor).
+        //  560pt height gives the profile editor enough vertical space.]
+        .frame(minWidth: 900, minHeight: 560)
     }
 }
 
 // MARK: - Tab identifier
 
 private enum SettingsTab: Hashable {
-    case general, transcription, aiCleanup, hotkeyInput, privacyData, about
+    case general, transcription, aiCleanup, aiStudio, hotkeyInput, privacyData, about
 }
 
 // MARK: - 1. General
@@ -669,6 +674,27 @@ private struct AICleanupSettingsTab: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+// MARK: - 4. AI Studio
+
+/// AI Studio: the Settings tab face of the Profile Engine. Wraps the full
+/// `AIStudioPaneView` (which lives in the Dashboard) via a lightweight
+/// `DashboardContext` built from the controller. All profile editing, the
+/// live-test box, and the master AI toggle are owned by that view and shared
+/// between both surfaces — no duplication. [decision PE-2]
+private struct AIStudioSettingsTab: View {
+    let controller: DictationController
+
+    var body: some View {
+        AIStudioPaneView(context: DashboardContext(
+            settingsStore: controller.settingsStore,
+            historyStore: controller.historyStore,
+            hotkeyCombo: [],
+            profileStore: controller.profileStore,
+            speakEngine: controller.engine
+        ))
     }
 }
 
