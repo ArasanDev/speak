@@ -244,6 +244,7 @@ private struct ProfileEditorPanel: View {
                 profileNameField(p)
                 profileIconField(p)
                 profilePromptField(p)
+                profileExamplesField(p)
                 profileFormatOptions(p)
                 profileToneOptions(p)
                 profileLengthOptions(p)
@@ -296,6 +297,78 @@ private struct ProfileEditorPanel: View {
             .border(Color.gray.opacity(0.3), width: 1)
             .cornerRadius(4)
         }
+    }
+
+    private func profileExamplesField(_ p: Profile) -> some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            Text("Few-shot examples").font(.speakMonoCaption).foregroundStyle(.secondary)
+            Text("Spoken → written pairs that steer the model. Strongest lever for small on-device models.")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+
+            if !p.examples.isEmpty {
+                VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+                    ForEach(Array(p.examples.enumerated()), id: \.offset) { idx, example in
+                        exampleRow(idx, example)
+                    }
+                }
+            }
+
+            Button(action: { addExample() }) {
+                Label("Add example", systemImage: "plus").font(.speakMonoCaption)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, SpeakSpacing.xs)
+        }
+    }
+
+    private func exampleRow(_ idx: Int, _ example: Example) -> some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            HStack {
+                Text("Example \(idx + 1)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Button(action: { removeExample(idx) }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .help("Remove example \(idx + 1)")
+            }
+            HStack(spacing: SpeakSpacing.sm) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Spoken").font(.system(size: 9)).foregroundStyle(.tertiary)
+                    TextField("Spoken input", text: Binding(
+                        get: { example.spoken },
+                        set: { v in updateProfile { $0.examples[idx].spoken = v } }
+                    ))
+                    .font(.speakMonoCaption)
+                    .textFieldStyle(.roundedBorder)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Written").font(.system(size: 9)).foregroundStyle(.tertiary)
+                    TextField("Written output", text: Binding(
+                        get: { example.written },
+                        set: { v in updateProfile { $0.examples[idx].written = v } }
+                    ))
+                    .font(.speakMonoCaption)
+                    .textFieldStyle(.roundedBorder)
+                }
+            }
+        }
+        .padding(SpeakSpacing.xs)
+        .background(Color.speakSurface)
+        .cornerRadius(4)
+    }
+
+    private func addExample() {
+        updateProfile { $0.examples.append(Example(spoken: "", written: "")) }
+    }
+
+    private func removeExample(_ idx: Int) {
+        updateProfile { $0.examples.remove(at: idx) }
     }
 
     private func profileFormatOptions(_ p: Profile) -> some View {
