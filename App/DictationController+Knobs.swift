@@ -18,16 +18,22 @@ extension DictationController {
     /// Re-run AI cleanup on the last raw transcript with the current knob settings and
     /// paste the result. No-op when no raw transcript is stored (before the first
     /// successful dictation, or after a cancel). [decision PE-4]
-    func recleanCurrentTranscript() async {
+    func recleanCurrentTranscript() {
         guard let raw = lastRawTranscript else {
             SpeakLog.engine.info("DictationController: reclean skipped — no raw transcript stored.")
             return
         }
-        let model = overlayController.overlayModel
+        // One-shot: nil the callback so the button disappears immediately (prevents double-tap).
+        overlayController.overlayModel.onReclean = nil
+        Task { await recleanAsync(raw: raw) }
+    }
+
+    private func recleanAsync(raw: String) async {
+        let overlayModel = overlayController.overlayModel
         var effectiveProfile = activeDestination
-        if model.perDictationFormat != .asIs { effectiveProfile.format = model.perDictationFormat }
-        if model.perDictationTone != .neutral { effectiveProfile.tone = model.perDictationTone }
-        if model.perDictationLength != .preserve { effectiveProfile.length = model.perDictationLength }
+        if overlayModel.perDictationFormat != .asIs { effectiveProfile.format = overlayModel.perDictationFormat }
+        if overlayModel.perDictationTone != .neutral { effectiveProfile.tone = overlayModel.perDictationTone }
+        if overlayModel.perDictationLength != .preserve { effectiveProfile.length = overlayModel.perDictationLength }
         do {
             try await engine.recleanAndPaste(raw, profile: effectiveProfile, category: activeCategory)
             SpeakLog.engine.info("DictationController: reclean completed successfully.")
