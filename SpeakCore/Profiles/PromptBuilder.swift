@@ -162,7 +162,7 @@ public enum PromptBuilder {
     static func categoryFragment(_ category: AgentCategory) -> String? {
         switch category {
         case .task:
-            return "Focus on a concrete implementation task or refactoring request."
+            return nil  // Base prompt covers task format — short imperative goal.
 
         case .fix:
             // [decision SM-2] "structure clearly" caused model to propose solutions (confirmed empirically).

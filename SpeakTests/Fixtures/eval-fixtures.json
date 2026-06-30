@@ -67,7 +67,7 @@
     "profileId": "agent",
     "category": "task",
     "spoken": "okay so i need you to first add a login button and then uh wire it to the auth service and also write a test for it",
-    "expected": "Add a login flow:\n1. Add a login button.\n2. Wire it to the auth service.\n3. Write a test for it.",
+    "expected": "Add a login button and wire it to the auth service. Write a test for it.",
     "formatChecks": []
   },
   {
@@ -115,6 +115,70 @@
     "profileId": "note",
     "spoken": "the project deadline is uh friday next week and we need to have the code review done by wednesday",
     "expected": "• Project deadline: Friday next week\n• Code review: Wednesday",
+    "formatChecks": []
+  },
+
+  {
+    "profileId": "agent",
+    "category": "fix",
+    "spoken": "um so basically we have this issue in production where uh the payment service is throwing a null pointer exception when users try to checkout and uh the thing is it only happens when they have like more than three items in their cart and we've been seeing it for like three days now so uh I need you to look into the PaymentService processCart method and fix it so it doesn't crash",
+    "expected": "Fix the PaymentService.processCart method to prevent null pointer exceptions when the cart contains more than three items.",
+    "formatChecks": ["startsWithCapital"]
+  },
+
+  {
+    "profileId": "agent",
+    "category": "task",
+    "spoken": "okay so we are starting the new project and uh I want you to set up the basic project structure for a REST API service in Go and uh we need the standard layout so like a main file the handlers the middleware uh database layer and uh make sure you add a health check endpoint and also set up the Makefile with build test and run targets",
+    "expected": "Set up the basic project structure for a REST API service in Go. Include a main file, handlers, middleware, a database layer, and a health check endpoint. Also, set up the Makefile with build, test, and run targets.",
+    "formatChecks": ["startsWithCapital"]
+  },
+
+  {
+    "profileId": "agent",
+    "category": "task",
+    "spoken": "so uh the CI pipeline is taking way too long it's like 45 minutes for a full build and I think the problem is that we're not caching the node modules between runs and also we're running all the tests in series not in parallel so I need you to look at the GitHub Actions workflow file and add caching for node modules and configure the tests to run in parallel",
+    "expected": "Add caching for node modules and configure tests to run in parallel.",
+    "formatChecks": ["startsWithCapital"]
+  },
+
+  {
+    "profileId": "agent",
+    "category": "fix",
+    "spoken": "so there's this weird thing happening on iOS where when you rotate the device to landscape the navigation bar kind of disappears and then when you rotate back it comes back but with a weird animation and I've seen it on both iPhone 14 and the new 16 models and I think it's related to the custom navigation controller we wrote like six months ago so look at CustomNavigationController viewWillTransition and fix the rotation handling",
+    "expected": "Fix the rotation handling in CustomNavigationController viewWillTransition.",
+    "formatChecks": ["startsWithCapital"]
+  },
+
+  {
+    "profileId": "agent",
+    "category": "task",
+    "spoken": "so uh the UserService class has gotten way too big it's like 800 lines and it's handling authentication user profile updates notifications and billing all in the same class and I need you to break it up into separate services so like AuthService ProfileService NotificationService and BillingService and make sure each one has its own test file and don't change the public interface because there are like 40 places that use UserService",
+    "expected": "Break up the UserService class into separate services: AuthService, ProfileService, NotificationService, and BillingService. Ensure each service has its own test file and maintain the public interface.",
+    "formatChecks": ["startsWithCapital"]
+  },
+
+  {
+    "profileId": "agent",
+    "category": "ask",
+    "spoken": "um I'm looking at this authentication code and I don't quite understand why we're using JWT tokens for session management instead of server-side sessions and like what are the tradeoffs and is there any reason why the token expiry is set to 24 hours that seems too long for a banking application",
+    "expected": "Why are we using JWT tokens for session management instead of server-side sessions, and what are the tradeoffs? Is there any reason why the token expiry is set to 24 hours that seems too long for a banking application?",
+    "formatChecks": ["startsWithCapital"]
+  },
+
+  {
+    "profileId": "agent",
+    "category": "task",
+    "spoken": "okay so we need to build a data pipeline that reads from our Postgres database every hour and transforms the raw events into aggregated metrics and then writes the results to BigQuery and the pipeline should handle failures gracefully so if BigQuery is down it should queue the results and retry and we need proper logging throughout so we can debug things in production",
+    "expected": "Build a data pipeline that reads from Postgres every hour, transforms raw events into aggregated metrics, and writes results to BigQuery. Handle failures gracefully by queuing results and retrying if BigQuery is down. Implement proper logging for debugging in production.",
+    "formatChecks": ["startsWithCapital"]
+  },
+
+  {
+    "profileId": "agent",
+    "category": "commit",
+    "spoken": "added rate limiting middleware to all API endpoints, 100 requests per minute per user",
+    "expected": "feat: add rate limiting middleware to all API endpoints (100 req/min per user)",
     "formatChecks": []
   }
 ]

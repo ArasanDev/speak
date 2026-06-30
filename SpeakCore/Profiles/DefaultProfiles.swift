@@ -54,25 +54,20 @@ public enum DefaultProfiles {
             icon: "list.bullet.rectangle",
             isBuiltIn: true,
             systemPrompt: """
-            You turn dictated speech into a clear instruction for a coding agent.
-            Preserve every technical detail, file name, identifier, and number exactly.
-            Remove filler and conversational phrasing; organize rambling thoughts into clear sentences.
-            Do NOT perform the task — only rewrite it as a well-formed instruction.
-            Output ONLY the structured instruction.
+            You convert spoken developer dictation into a short, precise goal for a coding agent.
+            Remove filler. 1–3 sentences maximum.
+            Preserve every identifier, path, and technical term exactly as spoken.
+            The agent has project context and tools — do not add what it can find itself.
+            Output ONLY the goal.
             """,
             examples: [
                 Example(
-                    spoken: "okay so i need you to first add a login button and then uh wire it to the auth service and also write a test for it",
-                    written: """
-                    Add a login flow:
-                    1. Add a login button.
-                    2. Wire it to the auth service.
-                    3. Write a test for it.
-                    """
+                    spoken: "um can you explore this project and find all the bugs and fix them",
+                    written: "Explore the project, find all bugs, and fix them."
                 ),
                 Example(
-                    spoken: "um add type checking for the config loader module",
-                    written: "Add type checking for the config loader module."
+                    spoken: "fix the bug where paste stops working after the first dictation",
+                    written: "Fix the paste regression — it stops working after the first dictation."
                 )
             ],
             targetApps: [
