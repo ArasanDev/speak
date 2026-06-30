@@ -161,6 +161,15 @@ extension CaptureSession {
 
         switch outcome {
         case .success(let cleaned):
+            // [SM-3] Guard against empty output: if the cleaner returns "" the paste
+            // path would deliver an empty string (cleanedText ?? rawText picks "").
+            // Treat empty output the same as a failure — fall back to raw transcript.
+            guard !cleaned.isEmpty else {
+                SpeakLog.engine.warning(
+                    "CaptureSession: cleaner returned empty string — falling back to raw transcript."
+                )
+                return (nil, sttId, cleanupSeconds)
+            }
             SpeakLog.engine.info("""
                 CaptureSession: cleanup produced \(cleaned.count, privacy: .public) chars \
                 from \(rawText.count, privacy: .public) raw chars

@@ -167,22 +167,26 @@ final class ProfileEngineTests: XCTestCase {
     // MARK: - AgentCategory
 
     func testAgentCategoryFragmentsAppendedForAgentOnly() {
-        // Category fragment should appear in Agent profile.
+        // Task fragment is nil by design — base Agent prompt covers task format.
         let agentWithTask = PromptBuilder.instructions(
             profile: DefaultProfiles.agent, category: .task
         )
+        // The base Agent system prompt is present; no extra category clause.
+        XCTAssertTrue(agentWithTask.contains("coding agent"),
+                      "Agent+task instructions must include the base system prompt.")
+        XCTAssertNil(PromptBuilder.categoryFragment(.task),
+                     "Task category fragment must be nil — base prompt is sufficient.")
+
+        // Fix fragment is distinctive.
         let agentWithFix = PromptBuilder.instructions(
             profile: DefaultProfiles.agent, category: .fix
         )
+        XCTAssertTrue(agentWithFix.contains("bug report"))
+
+        // Commit fragment is distinctive.
         let agentWithCommit = PromptBuilder.instructions(
             profile: DefaultProfiles.agent, category: .commit
         )
-
-        // Task fragment is default-ish but distinguishable.
-        XCTAssertTrue(agentWithTask.contains("implementation task or refactoring"))
-        // Fix fragment is distinctive.
-        XCTAssertTrue(agentWithFix.contains("bug report"))
-        // Commit fragment is distinctive.
         XCTAssertTrue(agentWithCommit.contains("Conventional Commits"))
 
         // Categories should NOT appear in non-Agent profiles.
@@ -195,14 +199,18 @@ final class ProfileEngineTests: XCTestCase {
         let noteWithCode = PromptBuilder.instructions(
             profile: DefaultProfiles.note, category: .code
         )
-        XCTAssertFalse(noteWithCode.contains("Convert spoken code notation"),
+        XCTAssertFalse(noteWithCode.contains("raw code"),
                        "Note profile must NOT include the code category fragment.")
     }
 
     func testAllCategoryFragmentsExist() {
-        for category in AgentCategory.allCases {
+        // .task intentionally returns nil — the base Agent prompt covers task format.
+        // All other categories must have a non-nil fragment.
+        XCTAssertNil(PromptBuilder.categoryFragment(.task),
+                     "Task fragment must be nil by design (profile-engine.md §6).")
+        for category in AgentCategory.allCases where category != .task {
             let fragment = PromptBuilder.categoryFragment(category)
-            XCTAssertNotNil(fragment, "All AgentCategory cases must have a prompt fragment.")
+            XCTAssertNotNil(fragment, "\(category) must have a prompt fragment.")
         }
     }
 }
