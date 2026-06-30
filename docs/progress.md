@@ -8,23 +8,23 @@
 
 ## Current phase
 
-**Loop #38 (2026-06-30) — P2.3 (dual raw stream + processing overlay) complete. Diff uncommitted, awaiting orchestrator review.**
+**Loop #39 (2026-06-30) — PE-4 + P2.3 + re-clean button all merged to master. PE-2 (AI Studio) + P11-a (install targets) agents in flight.**
 
 ### What changed this loop (read before doing anything)
--11. **P2.3 — Dual raw stream + replace-with-AI-paste flow (branch `pe/sm-2`, uncommitted).**
-   Added the processing-window visual: when the user stops speaking, the caret overlay
-   switches from the live partial to a "⟳ cleaning" state (shows the captured raw text + ⟳
-   suffix in tertiary color) while the AI cleanup runs (typically 0.3–1.5 s). The user sees
-   their speech was captured immediately, with no empty-moment before the paste lands.
-   - **`CaretOverlayModel`**: added `isProcessing: Bool`.
-   - **`CaretOverlayController`**: added `showProcessing(rawText:)` (sets model + keeps panel visible);
-     `hide()` now resets `isProcessing`; `model` relaxed from `private` to `internal` for test access.
-   - **`CaretOverlayView`**: `bodyText` computed property appends `Text(" ⟳").font(.system(size: 11)).foregroundStyle(.tertiary)` when `model.isProcessing`.
-   - **`DictationController`**: `onPartialTextUpdated` now also sets `lastRawTranscript = text` (guarded `!text.isEmpty`) so the most recent partial is available at stop time.
-   - **`DictationController+LivePanel`**: `resolveActiveDestination` clears `lastRawTranscript = nil` at the TOP (before the pin early-return), so no stale text survives session reset.
-   - **`DictationController+ErrorHandling`**: `endDictation()` calls `caretOverlay.showProcessing(rawText: lastRawTranscript ?? "")` immediately after `overlayController.transition(to: .processing)`.
-   - **`CaretOverlayControllerTests`**: 2 new P2.3 tests (`showProcessing` with empty string, model state + hide reset).
-   Gates: build ✅ / test 65,0-fail ✅ / lint 0-errors ✅ / swift-code-review PASS.
+-12. **PE-4 + P2.3 + re-clean button — ALL MERGED TO MASTER (`b1907d9`).**
+   Three changes landed together after parallel agent dispatch + orchestrator conflict resolution:
+   - **PE-4 — Overlay Tier 2/3 knobs + capture controls**: `perDictationFormat/Tone/Length` pickers in the selector card, cancel (xmark.circle) abandons dictation, re-clean (arrow.clockwise) re-runs cleanup on last raw transcript. `DictationController+Knobs.swift` + `KnobsTests.swift` (9 tests). Re-clean button wired in `.done` state overlay — nils itself on first tap to prevent double-fire.
+   - **P2.3 — Dual raw stream (processing preview)**: `CaretOverlayController.showProcessing(rawText:)` keeps the caret overlay visible during the 0.3–1.5s cleanup window, showing raw transcript + ⟳ suffix. `lastRawTranscript` set on every partial update, cleared on `resolveActiveDestination`.
+   - Gates: build ✅ / test 572,5-skip,0-fail ✅ / eval Agent 98.51% Note 100% Raw 100% Write 100% ✅ / verify-moat 7/7 ✅
+
+-11. **P2.2 — Floating caret-anchored overlay (`3c513a7` master).** Non-activating NSPanel positioned 8pt below text cursor (AXUIElement), flips y-axis for AppKit coords, falls back silently when CaretLocator returns nil. P2.3 extends this with processing-state preview.
+
+-10. **SM-2/SM-3/PE-3c-V/eval/rubric-scorer — ALL MERGED TO MASTER (`2a66632`).** Three agents ran in parallel and landed cleanly:
+   - **SM-2** — CC-lens Agent system prompt + 8 realistic developer voice fixtures. Agent eval 91% → 97.04%. Key decisions: output length proportional to input richness (not fixed 1-3 sentences); examples suppressed for commit/shell/code categories (contamination); greedy decoding.
+   - **SM-3** — Empty-output guard in `CaptureSession+Cleanup.swift` (was delivering `""` instead of raw fallback). 6 DegradeToRawTests all pass.
+   - **PE-3c-V** — 10 LivePanelPromptShapingTests covering all 6 Agent categories.
+   - **eval/rubric-scorer** — `RubricChecker` in `EvalScoring.swift`: noFiller, imperativeStart, endsWithQuestion, noMarkdown, conventionalCommitsFormat, preservesTerms:X, maxSentences:N. 8 realistic fixtures now use `checks[]` rubric instead of Jaccard.
+   - Gates: build ✅ / test 0-fail ✅ / eval Agent 97.04% Note 100% Raw 100% Write 89.38% (Write failures are pre-existing Jaccard artifacts).
 
 
 -10. **SM-2/SM-3/PE-3c-V/eval/rubric-scorer — ALL MERGED TO MASTER (`2a66632`).** Three agents ran in parallel and landed cleanly:
