@@ -119,6 +119,10 @@ final class DictationController: CLICommandHandler {
     /// first dictation completes. Observed reactively so the menu enables/disables.
     var lastTranscript: String = ""
 
+    /// PE-4: raw text from the last successful dictation, stored for `recleanCurrentTranscript()`.
+    /// Nil until the first successful `endDictation()`. [decision PE-4]
+    var lastRawTranscript: String?
+
     // MARK: - PE-3 live-panel shaping state (per-dictation, reversible)
 
     /// The destination profile resolved for the current/next dictation. Drives the live
@@ -170,6 +174,11 @@ final class DictationController: CLICommandHandler {
 
     /// Owns the overlay lifecycle (model + panel + partials drain).
     let overlayController = OverlayController()
+
+    /// P2.2: Caret-anchored raw-preview panel. Shown alongside the main HUD while
+    /// listening; hidden at every terminal state. Separate from the main overlay.
+    /// Internal (not private) so the +ErrorHandling extension can call show/hide.
+    let caretOverlay = CaretOverlayController()
 
     /// Owns History, Onboarding, and Dashboard window presentation.
     /// Nil until first access — constructed lazily via `ensureWindowPresenter()` so
@@ -465,6 +474,19 @@ final class DictationController: CLICommandHandler {
         // actively dictating, stop the session and paste (same path as single-press stop).
         // Guard on `icon == .listening` prevents re-entrancy: if the session has already
         // transitioned to `.processing` or `.error` the press is a no-op.
+        // P2.2: forward partial-text updates from the main overlay drain to the
+        // caret panel. Called on the main actor (onPartialTextUpdated fires inside
+        // MainActor.run in OverlayController's drain task).
+        overlayController.onPartialTextUpdated = { [weak self] text in
+            self?.caretOverlay.update(partialText: text)
+            // P2.3: track the latest non-empty partial so showProcessing() can display
+            // it during the cleanup window. Guard: don't clobber with empty partials
+            // (SpeechAnalyzer may emit an empty chunk at window boundaries).
+            if !text.isEmpty {
+                self?.lastRawTranscript = text
+            }
+        }
+
         overlayController.onEscapeStop = { [weak self] in
             guard let self else { return }
             // [PE-3c] If the profile-selector card is open, Escape closes IT first — a
@@ -561,6 +583,7 @@ final class DictationController: CLICommandHandler {
             guard let self else { return }
             await self.engine.cancelDictation()
             self.overlayController.cancelImmediate()
+            self.caretOverlay.hide()
             self.icon = .idle
             self.monitor.notifySessionEnded()  // [validation-fix C1] keep detector in sync
             SpeakLog.engine.info("DictationController: dictation cancelled by user (Escape).")
@@ -618,6 +641,7 @@ final class DictationController: CLICommandHandler {
             if nowMuted {
                 self.monitor.notifySessionEnded()
                 self.overlayController.stop()
+                self.caretOverlay.hide()
                 self.icon = .idle
             }
         }
