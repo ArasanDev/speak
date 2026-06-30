@@ -18,7 +18,11 @@ extension DictationController {
             // bundle id down, so the engine can resolve an app-specific profile (e.g.
             // Cursor → Code) without importing AppKit. Frontmost = the target app
             // because the overlay is a non-activating panel.
-            let frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            let frontmostApp    = NSWorkspace.shared.frontmostApplication
+            let frontmostBundleID = frontmostApp?.bundleIdentifier
+            // P2.2: capture PID now (before the await) so we hold one consistent
+            // frontmost-app snapshot for the caret overlay placement.
+            let frontmostPID    = frontmostApp?.processIdentifier ?? 0
             // [PE-3] Seed the live-panel shaping state from the same resolution the engine
             // uses, so the panel highlights the destination that will actually run and a
             // chip tap can override it for this dictation only.
@@ -35,6 +39,9 @@ extension DictationController {
                 levelsProvider: { await engineRef.currentLevels() },
                 isCleaningUp: willCleanup
             )
+            // P2.2: show the caret overlay near the text insertion point.
+            // Gracefully no-ops when CaretLocator returns nil (browser, Electron, etc.).
+            caretOverlay.show(partialText: "", frontmostPID: frontmostPID)
             // [PE-3] Configure the live-panel destination strip: the three AI destinations,
             // highlighting the resolved one. Shown only when cleanup will run (a chip does
             // nothing when AI is off / level=.none). Tapping reshapes THIS dictation only.
@@ -110,6 +117,7 @@ extension DictationController {
             let doneFlashNanoseconds: UInt64 = 600_000_000  // [decision] roadmap.md P8
             try? await Task.sleep(nanoseconds: doneFlashNanoseconds)
             overlayController.stop()
+            caretOverlay.hide()
             icon = .idle
             // P11-c: Signal dashboard to refresh recent dictations after successful completion.
             dictationCompletedSubject.send()
@@ -123,6 +131,7 @@ extension DictationController {
             // Also route the text to the Scratchpad so it's never lost and is
             // immediately editable (verified Wispr paste-failure behavior).
             overlayController.stop()
+            caretOverlay.hide()
             icon = .idle
             permissionsNeeded = true
             lastTranscript = text
@@ -142,6 +151,7 @@ extension DictationController {
             // [decision: do NOT set `permissionsNeeded` — no permission is missing;
             //  this is a safety refusal, not a degraded permission state.]
             overlayController.stop()
+            caretOverlay.hide()
             overlayController.showError(SpeakError.pasteIntoSecureField(text: text).recoverySuggestion)
             icon = .idle
             lastTranscript = text
@@ -151,6 +161,7 @@ extension DictationController {
             )
         } catch {
             // W2.2: show an error state in the HUD with a short reason instead of silently hiding.
+            caretOverlay.hide()
             overlayController.showError(error.localizedDescription)
             icon = .error
             SpeakLog.engine.error(

@@ -173,6 +173,26 @@ final class OverlayViewModel {
 
     /// Called when the user taps [✕] in the banner to dismiss without pinning.
     var onDismissPin: (() -> Void)?
+
+    // MARK: PE-4: per-dictation knob overrides [decision PE-4]
+
+    /// Per-dictation format override. `.asIs` = "Auto" (no override; profile default applies).
+    /// Reset at dictation start via `OverlayController.start()` and `resolveActiveDestination`.
+    var perDictationFormat: OutputFormat = .asIs
+
+    /// Per-dictation tone override. `.neutral` = "Auto" (no override).
+    var perDictationTone: Tone = .neutral
+
+    /// Per-dictation length override. `.preserve` = "Auto" (no override).
+    var perDictationLength: LengthBias = .preserve
+
+    /// Fired when the user changes any knob. `DictationController` wires this to set
+    /// `didOverrideThisSession = true` so the stop-time profile apply runs.
+    var onKnobChanged: (() -> Void)?
+
+    /// Cancel this dictation without pasting. Wired to `cancelDictation()` by
+    /// `DictationController`. Only valid during `.listening` state.
+    var onCancel: (() -> Void)?
 }
 
 // MARK: - VisualEffectView
@@ -491,6 +511,10 @@ struct TranscriptOverlayView: View {
                     profileButton(choice)
                 }
             }
+            // PE-4: per-dictation knob overrides (format / tone / length).
+            knobsSection
+                .padding(.top, SpeakSpacing.xs)
+            cancelButton
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -555,6 +579,10 @@ struct TranscriptOverlayView: View {
                     categoryButton(category)
                 }
             }
+            // PE-4: per-dictation knob overrides (format / tone / length).
+            knobsSection
+                .padding(.top, SpeakSpacing.xs)
+            cancelButton
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -582,6 +610,118 @@ struct TranscriptOverlayView: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Agent category \(category.displayName)")
         .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
+    }
+
+    // MARK: - PE-4: knob row + cancel button
+
+    /// Three rows of compact segmented-style chips — format, tone, length.
+    /// Each knob's "Auto" default selection produces a nil clause in PromptBuilder
+    /// (no extra instruction), matching the profile's own setting. [decision PE-4]
+    private var knobsSection: some View {
+        VStack(spacing: 2) {
+            HStack(spacing: 2) {
+                ForEach(OutputFormat.allCases, id: \.self) { fmt in
+                    knobChip(
+                        label: Self.formatLabel(fmt),
+                        isActive: model.perDictationFormat == fmt
+                    ) {
+                        model.perDictationFormat = fmt
+                        model.onKnobChanged?()
+                    }
+                }
+            }
+            HStack(spacing: 2) {
+                ForEach(Tone.allCases, id: \.self) { tone in
+                    knobChip(
+                        label: Self.toneLabel(tone),
+                        isActive: model.perDictationTone == tone
+                    ) {
+                        model.perDictationTone = tone
+                        model.onKnobChanged?()
+                    }
+                }
+            }
+            HStack(spacing: 2) {
+                ForEach(LengthBias.allCases, id: \.self) { len in
+                    knobChip(
+                        label: Self.lengthLabel(len),
+                        isActive: model.perDictationLength == len
+                    ) {
+                        model.perDictationLength = len
+                        model.onKnobChanged?()
+                    }
+                }
+            }
+        }
+    }
+
+    private func knobChip(label: String, isActive: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.speakMonoCaption)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 3)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(isActive ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.06))
+                )
+                .foregroundStyle(isActive ? Color.primary : Color.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
+    }
+
+    /// Abandon this dictation without pasting. Shown at the bottom of the selector card.
+    /// Wires to `DictationController.cancelDictation()` via `onCancel`. [decision PE-4]
+    private var cancelButton: some View {
+        HStack {
+            Spacer(minLength: 0)
+            Button {
+                model.isProfilePanelOpen = false
+                model.onCancel?()
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "xmark.circle")
+                        .font(.system(size: 10))
+                    Text("Cancel")
+                        .font(.speakMonoCaption)
+                }
+                .foregroundStyle(Color.secondary.opacity(0.6))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cancel this dictation without pasting")
+        }
+    }
+
+    // MARK: - PE-4: knob label maps
+
+    private static func formatLabel(_ f: OutputFormat) -> String {
+        switch f {
+        case .asIs:     return "Auto"
+        case .paragraph: return "Prose"
+        case .bullets:  return "List"
+        case .numbered: return "Num."
+        case .codeBlock: return "Code"
+        case .verbatim: return "Verb."
+        }
+    }
+
+    private static func toneLabel(_ t: Tone) -> String {
+        switch t {
+        case .neutral: return "Auto"
+        case .terse:   return "Terse"
+        case .formal:  return "Formal"
+        case .casual:  return "Casual"
+        }
+    }
+
+    private static func lengthLabel(_ l: LengthBias) -> String {
+        switch l {
+        case .preserve:  return "Auto"
+        case .condense:  return "Condense"
+        case .expand:    return "Expand"
+        }
     }
 
     /// Format elapsed seconds as `m:ss` for the HUD (e.g. 0:05, 1:23).

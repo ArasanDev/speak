@@ -81,6 +81,11 @@ final class OverlayController {
     /// prevent re-entrancy during `.processing` or `.error` (see DictationController).
     var onEscapeStop: (() -> Void)?
 
+    /// P2.2: callback invoked on the main actor each time the partial transcript
+    /// text updates. Used by `CaretOverlayController` to track the in-flight text
+    /// without creating a coupling from OverlayController to the caret overlay.
+    var onPartialTextUpdated: ((String) -> Void)?
+
     // MARK: - Init
 
     init() {}
@@ -208,6 +213,7 @@ final class OverlayController {
                     guard let self else { return }
                     self.overlayModel.partialText = displayed
                     self.partialText = displayed
+                    self.onPartialTextUpdated?(displayed)
                 }
             }
             SpeakLog.engine.info("OverlayController: partials stream finished.")
