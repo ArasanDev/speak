@@ -119,11 +119,13 @@ final class WindowPresenter {
             settingsStore: settingsStore,
             historyStore: historyStore,
             hotkeyCombo: hotkeyComboProvider(),
+            activeBinding: dictationController?.activeBinding ?? .defaultBinding,
             snippetStore: snippetStore,
             profileStore: dictationController?.profileStore ?? ProfileStore(),
             speakEngine: dictationController?.engine,
             permissionManager: permissionManager,
-            dictationCompletedPublisher: dictationController?.dictationCompletedPublisher
+            dictationCompletedPublisher: dictationController?.dictationCompletedPublisher,
+            rebindHotkey: { [weak self] binding in self?.dictationController?.rebindHotkey(binding) }
         )
         let controller = DashboardWindowController(context: context)
         dashboardController = controller
@@ -203,8 +205,16 @@ final class WindowPresenter {
         return settingsController
     }
 
-    /// Show the Settings window. The window controller is created lazily on first call.
+    /// Show the Settings pane inside the Dashboard (the single configuration surface).
+    /// Routes to .settings initial section so the user lands directly on preferences.
     func showSettings() {
-        ensureSettingsController()?.show()
+        let controller = ensureDashboardController()
+        controller.updateContext(
+            hotkeyCombo: hotkeyComboProvider(),
+            speakEngine: dictationController?.engine,
+            permissionManager: permissionManager,
+            dictationCompletedPublisher: dictationController?.dictationCompletedPublisher
+        )
+        controller.show(initialSection: .settings)
     }
 }

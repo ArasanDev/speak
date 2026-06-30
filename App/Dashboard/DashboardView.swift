@@ -66,6 +66,7 @@ struct DashboardView: View {
         case .scratchpad: ScratchpadPaneView(context: context)
         case .history:    HistoryPaneView(context: context)
         case .privacy:    PrivacyPaneView(context: context)
+        case .settings:   SettingsPaneView(context: context)
         }
     }
 }

@@ -51,14 +51,15 @@ struct DashboardContext {
 
     /// The active hotkey combo, pre-rendered as keycap labels (e.g. ["Fn", "Fn"]).
     /// Supplied by the controller from the live `HotkeyMonitor.binding`.
-    ///
-    /// `var` so that `WindowPresenter.showDashboard()` can refresh this value each
-    /// time the dashboard is shown — the provider closure is called lazily at show
-    /// time rather than at controller construction, so a hotkey rebind is reflected
-    /// the next time the window opens. [decision: refresh-at-show; DashboardContext
-    /// is a value type captured by NSHostingView at window construction, so the
-    /// update path is: mutate context before the hosting view reads it on show()]
     var hotkeyCombo: [String]
+
+    /// The live active HotkeyBinding — read by the Settings pane to show the current binding.
+    /// `var` so WindowPresenter refreshes it before each show().
+    var activeBinding: HotkeyBinding
+
+    /// Called by the Settings pane when the user saves a new hotkey. Routes to
+    /// `DictationController.rebindHotkey(_:)`. Nil in preview contexts.
+    var rebindHotkey: ((HotkeyBinding) -> Void)?
 
     /// Explicit init with optional engine/permission manager/publisher (P11-c).
     /// Previews can create a minimal context without these dependencies.
@@ -66,19 +67,23 @@ struct DashboardContext {
         settingsStore: SettingsStore,
         historyStore: any HistoryStoring,
         hotkeyCombo: [String],
+        activeBinding: HotkeyBinding = .defaultBinding,
         snippetStore: SnippetStore = SnippetStore(),
         profileStore: ProfileStore = ProfileStore(),
         speakEngine: SpeakEngine? = nil,
         permissionManager: PermissionManager? = nil,
-        dictationCompletedPublisher: AnyPublisher<Void, Never>? = nil
+        dictationCompletedPublisher: AnyPublisher<Void, Never>? = nil,
+        rebindHotkey: ((HotkeyBinding) -> Void)? = nil
     ) {
         self.settingsStore = settingsStore
         self.historyStore = historyStore
         self.hotkeyCombo = hotkeyCombo
+        self.activeBinding = activeBinding
         self.snippetStore = snippetStore
         self.profileStore = profileStore
         self.speakEngine = speakEngine
         self.permissionManager = permissionManager
         self.dictationCompletedPublisher = dictationCompletedPublisher
+        self.rebindHotkey = rebindHotkey
     }
 }

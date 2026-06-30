@@ -60,22 +60,18 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
     ///  show(); if the window is already visible, the update takes effect on re-open.]
     func updateContext(
         hotkeyCombo: [String]? = nil,
+        activeBinding: HotkeyBinding? = nil,
+        rebindHotkey: ((HotkeyBinding) -> Void)? = nil,
         speakEngine: SpeakEngine? = nil,
         permissionManager: PermissionManager? = nil,
         dictationCompletedPublisher: AnyPublisher<Void, Never>? = nil
     ) {
-        if let hotkeyCombo {
-            context.hotkeyCombo = hotkeyCombo
-        }
-        if let speakEngine {
-            context.speakEngine = speakEngine
-        }
-        if let permissionManager {
-            context.permissionManager = permissionManager
-        }
-        if let dictationCompletedPublisher {
-            context.dictationCompletedPublisher = dictationCompletedPublisher
-        }
+        if let hotkeyCombo { context.hotkeyCombo = hotkeyCombo }
+        if let activeBinding { context.activeBinding = activeBinding }
+        if let rebindHotkey { context.rebindHotkey = rebindHotkey }
+        if let speakEngine { context.speakEngine = speakEngine }
+        if let permissionManager { context.permissionManager = permissionManager }
+        if let dictationCompletedPublisher { context.dictationCompletedPublisher = dictationCompletedPublisher }
     }
 
     /// Legacy method — calls updateContext with hotkeyCombo only. Kept for compatibility.
@@ -86,7 +82,8 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
     /// Show the dashboard window, creating it if needed. Brings it to front and
     /// promotes the app to a regular Dock-present app for the window's lifetime.
     /// Calling when already visible re-orders it to front (no duplicate window).
-    func show() {
+    /// Pass `initialSection` to override the stored default when opening fresh.
+    func show(initialSection overrideSection: DashboardSection? = nil) {
         if let existing = window, existing.isVisible {
             // Already visible — bring to front without re-promoting (already .regular).
             bringToFront(existing)
@@ -98,7 +95,8 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
         // decide whether to defer the front-ordering by one runloop turn.
         let didPromote = promoteToRegularApp()
 
-        let contentView = DashboardView(context: context, initialSection: initialSection)
+        let section = overrideSection ?? self.initialSection
+        let contentView = DashboardView(context: context, initialSection: section)
         let hosting = NSHostingView(rootView: contentView)
 
         let win = NSWindow(
