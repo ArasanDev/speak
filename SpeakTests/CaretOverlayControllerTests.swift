@@ -41,4 +41,27 @@ struct CaretOverlayControllerTests {
         // Must not crash — model mutation is always safe regardless of panel state.
         controller.update(partialText: "partial text update")
     }
+
+    // MARK: - P2.3 showProcessing tests
+
+    /// showProcessing("") must not crash and must set isProcessing.
+    @Test("showProcessing() with empty string does not crash and sets isProcessing")
+    func showProcessingEmptyStringDoesNotCrash() {
+        let controller = CaretOverlayController()
+        controller.showProcessing(rawText: "")
+        #expect(controller.model.isProcessing == true)
+        controller.hide()
+    }
+
+    /// showProcessing(rawText:) sets model.partialText + isProcessing; hide() clears both.
+    @Test("showProcessing() sets model state; hide() resets it")
+    func showProcessingSetsModelStateAndHideClears() {
+        let controller = CaretOverlayController()
+        controller.showProcessing(rawText: "hello world")
+        #expect(controller.model.isProcessing == true)
+        #expect(controller.model.partialText == "hello world")
+        controller.hide()
+        #expect(controller.model.isProcessing == false)
+        #expect(controller.model.partialText == "")
+    }
 }

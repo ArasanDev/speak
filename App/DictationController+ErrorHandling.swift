@@ -52,6 +52,12 @@ extension DictationController {
                 onSelect: { [weak self] choice in self?.selectDestinationChoice(choice) },
                 onSelectCategory: { [weak self] category in self?.selectCategoryChoice(category) }
             )
+            // [PE-4] Wire cancel + knob callbacks. A knob change flags the session as
+            // overridden so the stop-time profile apply runs with the knob values applied.
+            overlayController.configureKnobs(
+                onKnobChanged: { [weak self] in self?.didOverrideThisSession = true },
+                onCancel: { [weak self] in self?.cancelDictation() }
+            )
         } catch SpeakError.microphoneMuted {
             monitor.notifySessionEnded()
             icon = .idle
@@ -87,20 +93,37 @@ extension DictationController {
             // the LLM pass. The panel is hidden AFTER the done flash, not immediately on stop.
             icon = .processing
             overlayController.transition(to: .processing)
-            // [PE-3] Apply the live-panel override exactly once, here, BEFORE endDictation()
-            // triggers the cleanup pass — race-free (one ordered actor write). Only when the
-            // user actually shaped this dictation via a chip; otherwise the session keeps the
-            // mode latched at start (the default path stays `.styled`, the v0-base fence).
-            if didOverrideThisSession {
+            // [P2.3] Show the raw partial in the caret panel during the cleanup window
+            // (typically 0.3–1.5 s). The user sees their captured speech immediately
+            // even before the AI finishes. lastRawTranscript holds the last non-empty
+            // partial from the onPartialTextUpdated drain; falls back to "" on empty
+            // sessions (no-op empty overlay is fine — panel stays visible with "…").
+            caretOverlay.showProcessing(rawText: lastRawTranscript ?? "")
+            // [PE-3 / PE-4] Apply the live-panel override exactly once, here, BEFORE
+            // endDictation() triggers the cleanup pass. Reads the per-dictation knob
+            // values from the overlay model to build the effective profile. [decision PE-4]
+            let kf = overlayController.overlayModel.perDictationFormat
+            let kt = overlayController.overlayModel.perDictationTone
+            let kl = overlayController.overlayModel.perDictationLength
+            let hasKnobOverride = kf != .asIs || kt != .neutral || kl != .preserve
+            if didOverrideThisSession || hasKnobOverride {
                 if overrodeToRaw {
                     await engine.applyRawOverride()
                 } else {
-                    await engine.applyProfileOverride(activeDestination, category: activeCategory)
+                    // Build an effective profile: start from the active destination, then
+                    // apply any non-Auto knob values on top without touching saved defaults.
+                    var effectiveProfile = activeDestination
+                    if kf != .asIs { effectiveProfile.format = kf }
+                    if kt != .neutral { effectiveProfile.tone = kt }
+                    if kl != .preserve { effectiveProfile.length = kl }
+                    await engine.applyProfileOverride(effectiveProfile, category: activeCategory)
                 }
             }
             let result = try await engine.endDictation()
             // Remember the finished text for "Paste Last Transcript" (Wispr's re-paste).
             lastTranscript = result.cleanedText ?? result.rawText
+            // [PE-4] Store the raw transcript so the user can re-run cleanup with new knobs.
+            lastRawTranscript = result.rawText
             icon = .done
             // Phase C: show done state briefly before hiding the panel.
             // W2.3: Enforce a minimum processing dwell of 200 ms so "Cleaning up…"

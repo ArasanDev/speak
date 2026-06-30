@@ -34,6 +34,7 @@ import SwiftUI
 @MainActor
 final class CaretOverlayModel {
     var partialText: String = ""
+    var isProcessing: Bool = false
 }
 
 // MARK: - CaretOverlayView
@@ -43,7 +44,7 @@ struct CaretOverlayView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Text(displayText)
+        bodyText
             .font(.system(size: 13, design: .monospaced))
             .foregroundStyle(.secondary)
             .lineLimit(1)
@@ -57,6 +58,16 @@ struct CaretOverlayView: View {
             // partialText with .updatesFrequently; double-speaking is worse.
             .accessibilityHidden(true)
             .transition(reduceMotion ? .identity : .opacity)
+    }
+
+    @ViewBuilder
+    private var bodyText: some View {
+        if model.isProcessing {
+            Text(displayText)
+            + Text(" \u{27F3}").font(.system(size: 11)).foregroundStyle(.tertiary)
+        } else {
+            Text(displayText)
+        }
     }
 
     private var displayText: String {
@@ -82,7 +93,8 @@ final class CaretOverlayController {
     // MARK: - Internals
 
     private var panel: NSPanel?
-    private let model = CaretOverlayModel()
+    // Internal (not private) for @testable access in SpeakTests — tests assert on model state.
+    let model = CaretOverlayModel()
 
     // MARK: - Public API
 
@@ -112,11 +124,22 @@ final class CaretOverlayController {
         model.partialText = partialText
     }
 
+    /// Switch the panel to the processing state: keep it visible, show rawText
+    /// truncated to the same 60-char window as partial, with a ⟳ cleaning suffix.
+    /// Does NOT re-query CaretLocator — panel stays at its current position.
+    func showProcessing(rawText: String) {
+        model.partialText = rawText
+        model.isProcessing = true
+        panel?.orderFrontRegardless()
+        SpeakLog.input.debug("CaretOverlayController: showProcessing (\(rawText.count, privacy: .public) chars).")
+    }
+
     /// Hide and release the panel.
     func hide() {
         panel?.orderOut(nil)
         panel = nil
         model.partialText = ""
+        model.isProcessing = false
         SpeakLog.input.debug("CaretOverlayController: hidden.")
     }
 

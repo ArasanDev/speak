@@ -100,6 +100,18 @@ extension DictationController {
     /// for this app (overriding the resolver result). When a pin is applied, `didOverrideThisSession`
     /// is set true so the stop-time engine override runs and delivers the pinned destination.
     func resolveActiveDestination(frontmostBundleID: String?) {
+        // [PE-4] Reset per-dictation knob overrides each new dictation.
+        // Both the early-return (pin-applied) and default paths reset here so
+        // the new dictation always starts with knobs at "Auto". The overlay model
+        // is also reset by `overlayController.start()` — this is defensive symmetry.
+        overlayController.overlayModel.perDictationFormat = .asIs
+        overlayController.overlayModel.perDictationTone = .neutral
+        overlayController.overlayModel.perDictationLength = .preserve
+        // [P2.3] Clear the partial-text preview so the processing overlay never shows
+        // stale text from a prior session. Placed above the pin early-return so it
+        // runs on ALL paths (pinned and default). Cleared here; set by onPartialTextUpdated.
+        lastRawTranscript = nil
+
         // [PE-3.2] Store for pin tracking and pin-apply this session.
         activeBundleID = frontmostBundleID ?? ""
         showPinPrompt = false

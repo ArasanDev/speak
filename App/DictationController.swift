@@ -119,6 +119,10 @@ final class DictationController: CLICommandHandler {
     /// first dictation completes. Observed reactively so the menu enables/disables.
     var lastTranscript: String = ""
 
+    /// PE-4: raw text from the last successful dictation, stored for `recleanCurrentTranscript()`.
+    /// Nil until the first successful `endDictation()`. [decision PE-4]
+    var lastRawTranscript: String?
+
     // MARK: - PE-3 live-panel shaping state (per-dictation, reversible)
 
     /// The destination profile resolved for the current/next dictation. Drives the live
@@ -475,6 +479,12 @@ final class DictationController: CLICommandHandler {
         // MainActor.run in OverlayController's drain task).
         overlayController.onPartialTextUpdated = { [weak self] text in
             self?.caretOverlay.update(partialText: text)
+            // P2.3: track the latest non-empty partial so showProcessing() can display
+            // it during the cleanup window. Guard: don't clobber with empty partials
+            // (SpeechAnalyzer may emit an empty chunk at window boundaries).
+            if !text.isEmpty {
+                self?.lastRawTranscript = text
+            }
         }
 
         overlayController.onEscapeStop = { [weak self] in

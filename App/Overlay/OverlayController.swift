@@ -121,6 +121,15 @@ final class OverlayController {
         overlayModel.onSelectCategory = onSelectCategory
     }
 
+    /// PE-4: Wire the per-dictation knob callbacks into the overlay model. Called by
+    /// `DictationController` in `beginDictation` alongside `configureDestinationStrip`.
+    /// `onKnobChanged` fires when any knob changes (signals DictationController to flag
+    /// the session as overridden). `onCancel` routes to `cancelDictation()`.
+    func configureKnobs(onKnobChanged: @escaping () -> Void, onCancel: @escaping () -> Void) {
+        overlayModel.onKnobChanged = onKnobChanged
+        overlayModel.onCancel = onCancel
+    }
+
     /// Update the highlighted Agent category after a tap (per-dictation override).
     func setActiveCategory(_ category: AgentCategory) {
         overlayModel.activeCategory = category
@@ -183,6 +192,11 @@ final class OverlayController {
         overlayModel.isProfilePanelOpen = false   // PE-3c: always start on the calm HUD
         overlayModel.isShowingAgentCategories = false
         overlayModel.showPinPrompt = false         // PE-3.2: reset pin banner
+        overlayModel.perDictationFormat = .asIs    // PE-4: reset knob overrides each dictation
+        overlayModel.perDictationTone = .neutral
+        overlayModel.perDictationLength = .preserve
+        overlayModel.onKnobChanged = nil
+        overlayModel.onCancel = nil
         partialText = ""
         panel?.show()
 
@@ -264,6 +278,11 @@ final class OverlayController {
         overlayModel.isProfilePanelOpen = false   // PE-3c: reset the selector card
         overlayModel.isShowingAgentCategories = false
         overlayModel.showPinPrompt = false         // PE-3.2: reset pin banner
+        overlayModel.perDictationFormat = .asIs    // PE-4: reset knob overrides
+        overlayModel.perDictationTone = .neutral
+        overlayModel.perDictationLength = .preserve
+        overlayModel.onKnobChanged = nil
+        overlayModel.onCancel = nil
         partialText = ""
         panel?.hide()
         SpeakLog.engine.info("OverlayController: overlay hidden.")
@@ -314,6 +333,11 @@ final class OverlayController {
         overlayModel.isProfilePanelOpen = false   // PE-3c: reset the selector card
         overlayModel.isShowingAgentCategories = false
         overlayModel.showPinPrompt = false         // PE-3.2: reset pin banner
+        overlayModel.perDictationFormat = .asIs    // PE-4: reset knob overrides
+        overlayModel.perDictationTone = .neutral
+        overlayModel.perDictationLength = .preserve
+        overlayModel.onKnobChanged = nil
+        overlayModel.onCancel = nil
         partialText = ""
         panel?.hide()
         SpeakLog.engine.info("OverlayController: dictation cancelled (immediate hide).")

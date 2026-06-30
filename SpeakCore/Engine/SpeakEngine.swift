@@ -372,6 +372,44 @@ public actor SpeakEngine {
         }
     }
 
+    // MARK: - PE-4: re-clean + paste
+
+    /// Re-run AI cleanup on `rawTranscript` with the given profile + category and paste
+    /// the result. Used by `DictationController.recleanCurrentTranscript()`. [decision PE-4]
+    ///
+    /// Silent no-ops (logged) when: the cleaner is absent or unavailable; cleanup is
+    /// disabled or level is `.none`; the profile is the `.raw` base-core bypass.
+    /// Throws only from the actual `clean()` or `insert()` calls.
+    public func recleanAndPaste(_ rawTranscript: String, profile: Profile, category: AgentCategory) async throws {
+        guard profile.model != .raw else {
+            SpeakLog.engine.info("SpeakEngine: reclean skipped — profile is Raw (no model).")
+            return
+        }
+        guard settings.cleanupEnabled, settings.cleanupLevel != .none else {
+            SpeakLog.engine.info("SpeakEngine: reclean skipped — cleanup disabled or level=.none.")
+            return
+        }
+        guard let cleaner, await cleaner.isAvailable else {
+            SpeakLog.engine.info("SpeakEngine: reclean skipped — cleaner unavailable.")
+            return
+        }
+        guard let inserter else {
+            SpeakLog.engine.info("SpeakEngine: reclean skipped — no inserter configured.")
+            return
+        }
+        let mode: CleanupMode = .profile(
+            profile,
+            level: settings.cleanupLevel,
+            category: category,
+            customVocabulary: settings.customVocabulary
+        )
+        let cleaned = try await cleaner.clean(rawTranscript, mode: mode)
+        try await inserter.insert(cleaned)
+        SpeakLog.engine.info(
+            "SpeakEngine: reclean — pasted \(cleaned.count, privacy: .public) chars."
+        )
+    }
+
     // MARK: - Dictation verbs (the three the app shell drives)
 
     /// Begin a dictation. Creates a fresh session, starts it, and tracks it
