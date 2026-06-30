@@ -51,6 +51,7 @@ RELEASE_APP    := $(DERIVED)/Build/Products/Release/Speak.app
 # `make dev-cert` once to create it. See scripts/dev-codesign-setup.sh for the why.
 DEV_CERT  := speak-local-codesign
 BUNDLE_ID := com.speak.app
+VERSION   := $(shell grep 'CFBundleShortVersionString' project.yml | awk -F'"' '{print $$2}')
 
 # The running app binary, used to find/kill the live process (a menubar LSUIElement
 # app is NOT relaunched by `open` if an instance is already running — see `run`/`kill`).
@@ -191,40 +192,37 @@ gates:
 	@echo "==> [4/4] verify-moat ..." && $(MAKE) --no-print-directory verify-moat | tail -2
 	@echo "==> gates: done (review the four results above)."
 
-## install: build Speak.app and copy it to /Applications/.
+## install: build Speak.app and install it to /Applications/ (dev/test path, no signing needed).
 ##
-## Requires the app already be built (runs make build first).
+## Kills any running instance first, copies via rsync, then clears quarantine.
 ## For TCC permission grants (Accessibility, Microphone) to survive future
 ## rebuilds, run `make dev-cert` once beforehand.
 install: build
-	@echo "==> install: copying Speak.app to /Applications/ ..."
-	@rm -rf /Applications/Speak.app
-	cp -r "$(APP)" /Applications/Speak.app
-	@echo "install: Speak.app → /Applications/. Launch from Spotlight or:"
+	@echo "==> install: stopping any running Speak instance ..."
+	@pkill -x Speak || true
+	@echo "==> install: syncing Speak.app to /Applications/ ..."
+	@rsync -a --delete "$(APP)/" /Applications/Speak.app/
+	@xattr -cr /Applications/Speak.app
+	@echo "install: Speak.app → /Applications/ (v$(VERSION)). Launch from Spotlight or:"
 	@echo "         open /Applications/Speak.app"
 
-## github-release: build Release, ad-hoc sign, and zip for a GitHub Releases artifact.
+## github-release: build, ad-hoc sign, and zip into dist/ for a GitHub Releases artifact.
 ##
-## No Developer ID cert is required. Produces build/release/Speak.zip.
+## No Developer ID cert is required. Produces dist/Speak-<version>.zip.
 ## Users must run once after download:
 ##   xattr -dr com.apple.quarantine Speak.app
-github-release: generate
-	@echo "==> github-release: building Release configuration..."
-	@mkdir -p "$(RELEASE_DIR)"
-	xcodebuild build \
-	  -project $(PROJECT) \
-	  -scheme $(SCHEME) \
-	  -configuration Release \
-	  -derivedDataPath $(DERIVED)
-	@echo "==> github-release: ad-hoc signing (overrides any existing signature)..."
-	codesign -s - --deep --force --timestamp=none "$(RELEASE_APP)"
-	@echo "==> github-release: packaging as zip..."
-	@rm -f "$(RELEASE_DIR)/Speak.zip"
-	ditto -c -k --keepParent "$(RELEASE_APP)" "$(RELEASE_DIR)/Speak.zip"
+github-release:
+	$(MAKE) build
+	@echo "==> github-release: ad-hoc signing ..."
+	codesign --force --deep --sign - "$(APP)"
+	@echo "==> github-release: packaging dist/Speak-$(VERSION).zip ..."
+	@mkdir -p dist
+	@rm -f "dist/Speak-$(VERSION).zip"
+	ditto -c -k --sequesterRsrc --keepParent "$(APP)" "dist/Speak-$(VERSION).zip"
 	@echo ""
 	@echo "==> github-release: SUCCESS"
-	@echo "    Artifact: $(RELEASE_DIR)/Speak.zip"
-	@echo "    sha256:   $$(shasum -a 256 "$(RELEASE_DIR)/Speak.zip" | awk '{print $$1}')"
+	@echo "    Artifact: dist/Speak-$(VERSION).zip"
+	@shasum -a 256 "dist/Speak-$(VERSION).zip"
 	@echo ""
 	@echo "    Upload to GitHub Releases. Users run once after download:"
 	@echo "      xattr -dr com.apple.quarantine Speak.app"
