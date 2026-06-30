@@ -187,4 +187,55 @@ final class OnboardingViewModelLifecycleTests: XCTestCase {
         XCTAssertTrue(viewModel.evaluation.isComplete,
             "evaluation.isComplete must be true when all permissions are granted and flag is set.")
     }
+
+    // MARK: - Onboarding gate (P7 done-when criteria)
+
+    /// When `hasCompletedOnboarding` is already true and both permissions are granted,
+    /// `OnboardingStateMachine.evaluate` returns `isComplete = true`. The
+    /// `WindowPresenter.showOnboardingIfNeeded()` guard (`!eval.isComplete`) means the
+    /// onboarding window is never constructed. This test verifies that the UserDefaults
+    /// flag alone (all permissions granted) produces the expected completion state.
+    func testOnboardingSkippedAfterComplete() {
+        manager.micStatus = .granted
+        manager.axStatus = .granted
+        settings.hasCompletedOnboarding = true
+
+        let eval = OnboardingStateMachine.evaluate(
+            manager: manager,
+            hasCompletedOnboarding: settings.hasCompletedOnboarding
+        )
+
+        XCTAssertTrue(eval.isComplete,
+            "UserDefaults flag + all permissions granted must produce isComplete = true, " +
+            "so showOnboardingIfNeeded() skips the window.")
+        XCTAssertEqual(eval.currentStep, .done)
+        XCTAssertTrue(eval.blockingPermissions.isEmpty)
+    }
+
+    /// Simulates the user granting microphone access during the onboarding flow:
+    /// `requestMicrophone()` updates the stub state, `refreshEvaluation()` is called
+    /// internally, and `advanceStepIfGranted(.microphone)` moves the step forward.
+    func testMicrophonePermissionStepAdvances() async {
+        // Start with mic not determined; the step should be at .welcome (initial state).
+        manager.micStatus = .notDetermined
+        XCTAssertEqual(viewModel.displayedStep, .welcome)
+
+        // Advance to the microphone step.
+        viewModel.advance()
+        XCTAssertEqual(viewModel.displayedStep, .microphone)
+
+        // Simulate the stub granting microphone access when requestMicrophone() is called.
+        // StubPermissionManager.requestMicrophone() returns micStatus directly, so
+        // setting it before the call causes OnboardingViewModel to see it as granted.
+        manager.micStatus = .granted
+
+        // Call the real async action — matches OnboardingViewModel.requestMicrophone().
+        viewModel.requestMicrophone()
+
+        // Yield the main actor to let the Task spawned by requestMicrophone() run.
+        await Task.yield()
+
+        XCTAssertEqual(viewModel.displayedStep, .accessibility,
+            "After mic is granted, displayedStep must advance to .accessibility.")
+    }
 }
