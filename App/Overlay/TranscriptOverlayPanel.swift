@@ -76,10 +76,10 @@ final class TranscriptOverlayPanel: NSPanel {
     /// Width of the overlay card. [decision: 340 pt gives ~60 chars at body size]
     private static let panelWidth: CGFloat = 340
 
-    /// Height of the overlay card. [decision PE-3: 112 pt — the original 80 pt plus a
-    ///  ~28 pt destination-chip row (live panel). The full adaptive strip (PE-3c) finalizes
-    ///  sizing per specs/live-panel-prompt-shaper.md; this is the spike's working height.]
-    private static let panelHeight: CGFloat = 112
+    /// Height of the overlay card. [decision PE-3.2: 136 pt — 112 pt (PE-3 base) plus ~24 pt
+    ///  for the pin-suggestion row (caption text + two buttons). Extra space is absorbed by the
+    ///  frosted-glass background when the pin row is hidden. benchmark.md §7]
+    private static let panelHeight: CGFloat = 136
 
     /// Distance from the bottom of the visible frame to the bottom edge of the panel.
     /// [decision: spec §4 specifies "~24pt from minY"; clears Dock + standard margin.]

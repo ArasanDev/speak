@@ -22,4 +22,5 @@ public enum SpeakLog {
     public static let cli         = Logger(subsystem: subsystem, category: "cli")
     public static let app         = Logger(subsystem: subsystem, category: "app")
     public static let overlay     = Logger(subsystem: subsystem, category: "overlay")
+    public static let input       = Logger(subsystem: subsystem, category: "input")
 }

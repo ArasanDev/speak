@@ -144,6 +144,28 @@ final class DictationController: CLICommandHandler {
     /// `applyProfileOverride`. Reset each `beginDictation`. (PE-3c.) Module-internal.
     var overrodeToRaw = false
 
+    // MARK: - PE-3.2 pin-to-context state
+
+    /// The frontmost app bundle ID captured at `beginDictation`. Empty string when no
+    /// frontmost app was available. Set in `resolveActiveDestination(frontmostBundleID:)`.
+    /// [decision PE-3.2]
+    var activeBundleID: String = ""
+
+    /// Consecutive manual-override count per bundle ID. Survives across dictation sessions
+    /// (not reset in `resolveActiveDestination`) so the prompt fires on the 2nd override
+    /// across two separate dictations to the same app. Reset to 0 after pinning or dismiss.
+    /// [decision PE-3.2]
+    var overrideCountPerApp: [String: Int] = [:]
+
+    /// Provides per-app pinned destination+category. Initialized with `.standard` at init;
+    /// injectable for tests. [decision PE-3.2]
+    var pinnedContextStore: PinnedContextStore = PinnedContextStore()
+
+    /// True when the "pin this destination?" banner should appear in the calm HUD.
+    /// Synced to `overlayController.overlayModel` via `syncPinPromptToOverlay()`.
+    /// [decision PE-3.2]
+    var showPinPrompt: Bool = false
+
     // MARK: - Collaborators (H3)
 
     /// Owns the overlay lifecycle (model + panel + partials drain).

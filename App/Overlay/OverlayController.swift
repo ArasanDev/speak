@@ -136,6 +136,21 @@ final class OverlayController {
         overlayModel.isShowingAgentCategories = false
     }
 
+    // MARK: - PE-3.2 pin-to-context banner
+
+    /// Show the pin-suggestion banner in the calm HUD below the waveform row.
+    func showPinBanner(label: String, onPin: @escaping () -> Void, onDismissPin: @escaping () -> Void) {
+        overlayModel.pinContextLabel = label
+        overlayModel.onPin = onPin
+        overlayModel.onDismissPin = onDismissPin
+        overlayModel.showPinPrompt = true
+    }
+
+    /// Hide the pin-suggestion banner. Idempotent.
+    func hidePinBanner() {
+        overlayModel.showPinPrompt = false
+    }
+
     // MARK: - Lifecycle
 
     /// Show the overlay in the `.listening` state and begin draining partial
@@ -162,6 +177,7 @@ final class OverlayController {
         overlayModel.isCleaningUp = isCleaningUp
         overlayModel.isProfilePanelOpen = false   // PE-3c: always start on the calm HUD
         overlayModel.isShowingAgentCategories = false
+        overlayModel.showPinPrompt = false         // PE-3.2: reset pin banner
         partialText = ""
         panel?.show()
 
@@ -241,6 +257,7 @@ final class OverlayController {
         overlayModel.isCleaningUp = false
         overlayModel.isProfilePanelOpen = false   // PE-3c: reset the selector card
         overlayModel.isShowingAgentCategories = false
+        overlayModel.showPinPrompt = false         // PE-3.2: reset pin banner
         partialText = ""
         panel?.hide()
         SpeakLog.engine.info("OverlayController: overlay hidden.")
@@ -290,6 +307,7 @@ final class OverlayController {
         overlayModel.isCleaningUp = false
         overlayModel.isProfilePanelOpen = false   // PE-3c: reset the selector card
         overlayModel.isShowingAgentCategories = false
+        overlayModel.showPinPrompt = false         // PE-3.2: reset pin banner
         partialText = ""
         panel?.hide()
         SpeakLog.engine.info("OverlayController: dictation cancelled (immediate hide).")
