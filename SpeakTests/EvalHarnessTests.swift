@@ -23,8 +23,12 @@ final class EvalHarnessTests: XCTestCase {
     private struct Fixture: Decodable {
         let profileId: String
         let spoken: String
-        let expected: String
+        /// Reference text for Jaccard scoring. Nil when `checks` is used instead.
+        let expected: String?
+        /// Legacy format checks run alongside Jaccard scoring.
         let formatChecks: [String]?
+        /// Rubric checks replacing Jaccard. When non-nil and non-empty, rubric path is used.
+        let checks: [String]?
         /// Agent-specific sub-category. Absent or unrecognised → defaults to `.task`.
         let category: String?
     }
@@ -127,11 +131,11 @@ final class EvalHarnessTests: XCTestCase {
         // For Raw profile, short-circuit: no cleaner call, just identity.
         if case .raw = profile.model {
             let elapsed = Date().timeIntervalSince(startTime)
-            let checks = fixture.formatChecks ?? []
+            let formatChecks = fixture.formatChecks ?? []
             let result = SpeakCore.evaluateFixture(
                 output: fixture.spoken,
-                expected: fixture.expected,
-                formatCheckDescriptors: checks,
+                expected: fixture.expected ?? "",
+                formatCheckDescriptors: formatChecks,
                 correctnessThreshold: 1.0,  // Raw must be exact identity
                 latencySeconds: elapsed
             )
@@ -152,11 +156,21 @@ final class EvalHarnessTests: XCTestCase {
         )
         let elapsed = Date().timeIntervalSince(startTime)
 
-        let checks = fixture.formatChecks ?? []
+        // Rubric path: if fixture defines checks[], score by fraction of checks passing.
+        if let rubricChecks = fixture.checks, !rubricChecks.isEmpty {
+            return SpeakCore.evaluateFixtureRubric(
+                output: cleaned,
+                checks: rubricChecks,
+                latencySeconds: elapsed
+            )
+        }
+
+        // Jaccard path: compare against expected text.
+        let formatChecks = fixture.formatChecks ?? []
         let result = SpeakCore.evaluateFixture(
             output: cleaned,
-            expected: fixture.expected,
-            formatCheckDescriptors: checks,
+            expected: fixture.expected ?? "",
+            formatCheckDescriptors: formatChecks,
             correctnessThreshold: 0.80,  // [decision] Jaccard >= 80% for prose
             latencySeconds: elapsed
         )
@@ -442,15 +456,24 @@ final class EvalHarnessTests: XCTestCase {
                 )
             }
             let elapsed = Date().timeIntervalSince(startTime)
-            let checks = fixture.formatChecks ?? []
-            let threshold: Double = isRawProfile ? 1.0 : 0.80
-            let result = SpeakCore.evaluateFixture(
-                output: cleaned,
-                expected: fixture.expected,
-                formatCheckDescriptors: checks,
-                correctnessThreshold: threshold,
-                latencySeconds: elapsed
-            )
+            let result: FixtureResult
+            if let rubricChecks = fixture.checks, !rubricChecks.isEmpty {
+                result = SpeakCore.evaluateFixtureRubric(
+                    output: cleaned,
+                    checks: rubricChecks,
+                    latencySeconds: elapsed
+                )
+            } else {
+                let formatChecks = fixture.formatChecks ?? []
+                let threshold: Double = isRawProfile ? 1.0 : 0.80
+                result = SpeakCore.evaluateFixture(
+                    output: cleaned,
+                    expected: fixture.expected ?? "",
+                    formatCheckDescriptors: formatChecks,
+                    correctnessThreshold: threshold,
+                    latencySeconds: elapsed
+                )
+            }
             statsInput.append((fixture, profile, result))
 
             let cat = fixture.category ?? "—"
@@ -458,7 +481,7 @@ final class EvalHarnessTests: XCTestCase {
             let score = String(format: "%.2f", result.correctnessScore)
             let line = "[\(status)] \(profile.name)/\(cat) score=\(score)\n" +
                 "  spoken:   \(fixture.spoken)\n" +
-                "  expected: \(fixture.expected)\n" +
+                "  expected: \(fixture.expected ?? "(rubric)")\n" +
                 "  actual:   \(cleaned)\n" +
                 "  failed:   \(result.formatChecksFailed.isEmpty ? "none" : result.formatChecksFailed.joined(separator: ", "))\n"
             if let data = line.data(using: .utf8) { FileHandle.standardOutput.write(data) }
