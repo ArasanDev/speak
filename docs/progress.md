@@ -8,9 +8,17 @@
 
 ## Current phase
 
-**Loop #37 (2026-06-29) — DIRECTION LOCKED + v0 fix phase. The product's north star is now the Profile Engine: a local-first, voice-driven, fully customizable AI text engine. See `specs/profile-engine.md`, `specs/profile-system-prompts.md`, `product.md §6d`, and the roadmap "North star" section.**
+**Loop #38 (2026-06-30) — SM-2/SM-3/rubric-eval all merged to master. Agent eval at 97.04%. Next: PE-3.1 (voice override) + P2.1 (CaretLocator) in parallel.**
 
 ### What changed this loop (read before doing anything)
+-10. **SM-2/SM-3/PE-3c-V/eval/rubric-scorer — ALL MERGED TO MASTER (`2a66632`).** Three agents ran in parallel and landed cleanly:
+   - **SM-2** — CC-lens Agent system prompt + 8 realistic developer voice fixtures. Agent eval 91% → 97.04%. Key decisions: output length proportional to input richness (not fixed 1-3 sentences); examples suppressed for commit/shell/code categories (contamination); greedy decoding.
+   - **SM-3** — Empty-output guard in `CaptureSession+Cleanup.swift` (was delivering `""` instead of raw fallback). 6 DegradeToRawTests all pass.
+   - **PE-3c-V** — 10 LivePanelPromptShapingTests covering all 6 Agent categories.
+   - **eval/rubric-scorer** — `RubricChecker` in `EvalScoring.swift`: noFiller, imperativeStart, endsWithQuestion, noMarkdown, conventionalCommitsFormat, preservesTerms:X, maxSentences:N. 8 realistic fixtures now use `checks[]` rubric instead of Jaccard.
+   - Gates: build ✅ / test 0-fail ✅ / eval Agent 97.04% Note 100% Raw 100% Write 89.38% (Write failures are pre-existing Jaccard artifacts).
+   - 4 stale spec files removed (acceleration-plan, acceleration-roadmap, next-iteration-plan, streaming-raw-text-architecture-REVIEW).
+
 -9. **SM-2 (#12) — Agent-category prompt optimization (branch `pe/sm-2`, uncommitted, awaiting orchestrator review).**
    Scope: tune Agent/Write/Note system prompts + category fragments until fixtures clear golden eval.
    Outcome: 17/18 fixtures PASS under deterministic eval (greedy decoding). One Write fixture (score=0.79)
@@ -105,11 +113,11 @@
 - **Extension:** the Profile Engine (north star).
 
 ### Next actions (in order)
-- **v0 fix phase COMPLETE** — ✅ #29–#34 all landed + verified (paste live-confirmed by user; #32/#33/#34 UI fixes on master, awaiting a casual relaunch glance).
-- **Profile Engine epic** — ✅ #39 PE-0 (spine). **Next: #40 SM-0** (small-models eval harness `make eval`, now unblocked) → then wire PE-0 into the dictation flow (profile resolution at `newSession()`, generalizing the `LLMCleaning`/`CleanupMode` seam) → AI Studio pane → Overlay Tier-1 chips (`specs/profile-engine.md §8`).
-- **Caret streaming (best-effort)** — #35 → #36 → #37.
-- **Profile Engine epic** — #39 PE-0 (Profile type + PromptBuilder + 6 defaults), #40 SM-0 (eval harness), #41 SM-1 (study FM limits). Blocked by the v0 fix phase.
-- **Caret streaming** — #35–#37 (best-effort; Electron/web caveat documented).
+- **PE-3.1 (#51)** — Voice override: spoken commands reshape the panel (detect "fix this" / "ask" / "commit" in the transcript → auto-select category).
+- **P2.1 (#35)** — CaretLocator (best-effort caret screen position) — parallel with PE-3.1 (different seam).
+- **PE-3.2 (#52)** — Pin-to-context: sticky destination/category per app (after PE-3.1 lands — shares DictationController).
+- **P2.2 (#36) → P2.3 (#37)** — Floating caret-anchored overlay → dual raw stream (after P2.1).
+- **PE-4 (#54)** — Overlay Tier 2/3 knobs + capture controls (after PE-3 complete).
 
 ### Orchestration note
 Models available: **Opus** (judgment/design/review — me) + **fast worker** (Haiku/WSL2 MiniMax — bulk code). **No Sonnet middle tier.** Design is locked in specs; route mechanical multi-file implementation to the worker with precise briefs; orchestrator reviews diffs + owns commits.
