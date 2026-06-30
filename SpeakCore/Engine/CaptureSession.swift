@@ -56,6 +56,14 @@ public actor CaptureSession {
     /// `nil` (default) means no expansion — behavior is identical to pre-Wave-B.
     private let expander: (any SnippetExpanding)?
 
+    /// [PE-3.1] Optional voice-command preprocessor applied AFTER snippet expansion
+    /// and BEFORE cleanup. Takes the raw transcript, returns a (stripped transcript,
+    /// optional mode override) pair — or nil when no trigger is present. Injected
+    /// from `SpeakEngine.newSession()` following the same pattern as `expander`.
+    /// `nil` (default) = no voice-command detection; all existing call-sites unchanged.
+    public typealias VoiceCommandPreprocessor = @Sendable (String) -> (transcript: String, modeOverride: CleanupMode?)?
+    private let voiceCommandPreprocessor: VoiceCommandPreprocessor?
+
     // MARK: - Mutable session state (actor-isolated)
 
     var state: State = .idle
@@ -123,7 +131,8 @@ public actor CaptureSession {
                 streamingInserter: (any StreamingRawTextInserting)? = nil,
                 locale: Locale = Locale(identifier: "en-US"),
                 cleanupMode: CleanupMode = .punctuation,
-                expander: (any SnippetExpanding)? = nil) {
+                expander: (any SnippetExpanding)? = nil,
+                voiceCommandPreprocessor: VoiceCommandPreprocessor? = nil) {
         self.transcriber = transcriber
         self.cleaner = cleaner
         self.inserter = inserter
@@ -131,6 +140,7 @@ public actor CaptureSession {
         self.locale = locale
         self.cleanupMode = cleanupMode
         self.expander = expander
+        self.voiceCommandPreprocessor = voiceCommandPreprocessor
     }
 
     // MARK: - PE-3 per-dictation cleanup override (live panel)
@@ -308,10 +318,30 @@ public actor CaptureSession {
         // which is what the raw-paste fallback delivers). nil expander = unchanged.
         let rawText = expander?.expand(transcribed) ?? transcribed
 
+        // [PE-3.1] Voice-command detection: if a trigger phrase is at the start of the
+        // transcript AND no manual override is already set (chip tap / Raw pick wins),
+        // strip the phrase and latch the resolved cleanup mode for this dictation.
+        // `cleanupInputText` is what the LLM receives; `rawText` (original) is preserved
+        // in the history entry and TranscriptionResult so the full utterance is recorded.
+        var cleanupInputText = rawText
+        if overrideCleanupMode == nil, !forcedRaw,
+           let vcResult = voiceCommandPreprocessor?(rawText) {
+            cleanupInputText = vcResult.transcript
+            if let mode = vcResult.modeOverride {
+                overrideCleanupMode = mode
+            }
+            SpeakLog.engine.info(
+                "CaptureSession: voice command — cleanup input trimmed to \(cleanupInputText.count, privacy: .public) chars."
+            )
+        }
+
         // [A2] Empty-transcript guard: a silent start+stop (blocked mic, silence) must
         // never call inserter.insert("") — that wipes the user's clipboard — and must
         // never save a zero-char history entry. Reach .done cleanly and return early.
         // runCleanup is also skipped: sending "" to Foundation Models wastes up to T_cleanup.
+        // Guard on rawText (original) — the stripped text may be empty when the user
+        // spoke only the trigger phrase, which is fine: a short empty paste is preferable
+        // to treating the whole utterance as silence.
         if rawText.isEmpty {
             state = .done
             partialsContinuation?.finish()
@@ -342,7 +372,9 @@ public actor CaptureSession {
         //   - > 0 when the cleaner's clean() was called (success, error, or timeout).
         // This sentinel distinction drives LatencyStats population partitioning —
         // do NOT replace with a DispatchTime.now() delta here.
-        let (cleanedText, engineId, cleanupSeconds) = await runCleanup(rawText: rawText)
+        // [PE-3.1] cleanupInputText is the snippet-expanded + voice-command-stripped text.
+        // It equals rawText when no voice command was detected.
+        let (cleanedText, engineId, cleanupSeconds) = await runCleanup(rawText: cleanupInputText)
 
         // [A1] Cancel-during-processing guard: cancel() can enter this actor during
         // any of the awaits above (transcriber.stop, task.value, runCleanup). It sets
