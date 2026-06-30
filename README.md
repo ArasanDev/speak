@@ -18,6 +18,9 @@ It is the same core experience as Wispr Flow ($15/mo, cloud-only) but **entirely
 on your device**: no audio leaves the Mac, no account, no telemetry, fully offline,
 free, and MIT-licensed.
 
+<!-- replace with actual GIF after P13 dogfood -->
+![speak overlay](docs/assets/demo.gif)
+
 ---
 
 ## Why `speak`
@@ -69,6 +72,14 @@ double-tap Fn requires no holding (RSI-kind, easy reach on every Mac keyboard).
 | Processing | yellow spinner | frozen text + cleanup spinner |
 | Done | green flash → gray | fades out, neat text pasted |
 | Error | red X | error message |
+
+---
+
+## Configuration
+
+- **Hotkey**: Settings → Hotkey. Rebind to any F-key, modifier combo, or single-key toggle.
+- **AI cleanup**: Settings → AI Studio. Toggle on/off; raw transcript used as fallback when off or unavailable.
+- **Per-app context**: Settings → Profile Engine. Assign a writing style or vocabulary to specific apps — `speak` applies the matching profile automatically when that app has focus.
 
 ---
 
