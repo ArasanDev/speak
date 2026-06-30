@@ -199,6 +199,10 @@ final class OverlayViewModel {
     /// Cancel this dictation without pasting. Wired to `cancelDictation()` by
     /// `DictationController`. Only valid during `.listening` state.
     var onCancel: (() -> Void)?
+
+    /// Re-run cleanup on the last raw transcript. Wired to `recleanCurrentTranscript()`.
+    /// Only valid after `.done` when a raw transcript is available. [decision PE-4]
+    var onReclean: (() -> Void)?
 }
 
 // MARK: - VisualEffectView
@@ -710,6 +714,19 @@ struct TranscriptOverlayView: View {
             Text("Done")
                 .font(.speakMonoBody)
                 .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            // [PE-4] Re-clean affordance: visible only when a raw transcript is available.
+            if model.onReclean != nil {
+                Button {
+                    model.onReclean?()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Re-clean with current settings")
+            }
         }
         .padding(.horizontal, SpeakSpacing.md)
         .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)

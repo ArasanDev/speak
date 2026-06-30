@@ -50,7 +50,8 @@ struct KnobsTests {
         var callbackCount = 0
         controller.configureKnobs(
             onKnobChanged: { callbackCount += 1 },
-            onCancel: {}
+            onCancel: {},
+            onReclean: {}
         )
         // Simulate the view tapping a knob chip.
         controller.overlayModel.perDictationFormat = .paragraph
@@ -66,7 +67,8 @@ struct KnobsTests {
         var cancelled = false
         controller.configureKnobs(
             onKnobChanged: {},
-            onCancel: { cancelled = true }
+            onCancel: { cancelled = true },
+            onReclean: {}
         )
         controller.overlayModel.onCancel?()
 

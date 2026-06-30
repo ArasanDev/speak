@@ -56,7 +56,8 @@ extension DictationController {
             // overridden so the stop-time profile apply runs with the knob values applied.
             overlayController.configureKnobs(
                 onKnobChanged: { [weak self] in self?.didOverrideThisSession = true },
-                onCancel: { [weak self] in self?.cancelDictation() }
+                onCancel: { [weak self] in self?.cancelDictation() },
+                onReclean: { [weak self] in self?.recleanCurrentTranscript() }
             )
         } catch SpeakError.microphoneMuted {
             monitor.notifySessionEnded()

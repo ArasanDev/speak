@@ -125,9 +125,14 @@ final class OverlayController {
     /// `DictationController` in `beginDictation` alongside `configureDestinationStrip`.
     /// `onKnobChanged` fires when any knob changes (signals DictationController to flag
     /// the session as overridden). `onCancel` routes to `cancelDictation()`.
-    func configureKnobs(onKnobChanged: @escaping () -> Void, onCancel: @escaping () -> Void) {
+    func configureKnobs(
+        onKnobChanged: @escaping () -> Void,
+        onCancel: @escaping () -> Void,
+        onReclean: @escaping () -> Void
+    ) {
         overlayModel.onKnobChanged = onKnobChanged
         overlayModel.onCancel = onCancel
+        overlayModel.onReclean = onReclean
     }
 
     /// Update the highlighted Agent category after a tap (per-dictation override).
@@ -197,6 +202,7 @@ final class OverlayController {
         overlayModel.perDictationLength = .preserve
         overlayModel.onKnobChanged = nil
         overlayModel.onCancel = nil
+        overlayModel.onReclean = nil
         partialText = ""
         panel?.show()
 
