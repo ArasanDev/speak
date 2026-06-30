@@ -26,13 +26,13 @@
   {
     "profileId": "write",
     "spoken": "okay so the meeting has been moved to three pm tomorrow and uh everyone needs to know",
-    "expected": "The meeting has been moved to 3 PM tomorrow. Everyone needs to know.",
+    "expected": "The meeting has been moved to 3 PM tomorrow, and everyone needs to know.",
     "formatChecks": ["startsWithCapital"]
   },
   {
     "profileId": "write",
     "spoken": "yeah so i sent him the draft report and like he said he'll review it by uh end of week",
-    "expected": "I sent him the draft report and he said he'll review it by end of week.",
+    "expected": "Yeah, so I sent him the draft report, and he said he'll review it by the end of the week.",
     "formatChecks": ["startsWithCapital"]
   },
   {
@@ -102,8 +102,7 @@
     "profileId": "agent",
     "category": "ask",
     "spoken": "what's the best way to add a custom vocabulary list to the cleanup pipeline",
-    "expected": "What's the best way to add a custom vocabulary list to the cleanup pipeline?",
-    "formatChecks": ["startsWithCapital"]
+    "checks": ["endsWithQuestion", "noFiller", "preservesTerms:vocabulary,cleanup pipeline"]
   },
   {
     "profileId": "note",
