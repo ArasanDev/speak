@@ -45,8 +45,13 @@ final class CodingCustomizationPanelTests: XCTestCase {
         )
     }
 
-    func testCanBecomeKey_isFalse() {
-        XCTAssertFalse(panel.canBecomeKey, "CodingCustomizationPanel.canBecomeKey must be false.")
+    func testCanBecomeKey_isTrue() {
+        XCTAssertTrue(
+            panel.canBecomeKey,
+            "CodingCustomizationPanel.canBecomeKey must be true — it hosts an editable " +
+            "TextEditor and needs key status to receive typed input. .nonactivatingPanel " +
+            "already guarantees this never activates the app or steals focus."
+        )
     }
 
     func testCanBecomeMain_isFalse() {

@@ -38,9 +38,13 @@
 //   Anchoring this panel directly ABOVE that frame (with a fixed gap) therefore never
 //   competes for the same screen region with the base HUD in ANY of its sub-states.
 //
-// FOCUS-STEAL PREVENTION: identical guards to `TranscriptOverlayPanel` — `.nonactivatingPanel`,
-// `isFloatingPanel`, `hidesOnDeactivate = false`, `canBecomeKey`/`canBecomeMain` both false,
-// shown via `orderFrontRegardless()`. See that file's header comment for the full rationale.
+// FOCUS-STEAL PREVENTION: `.nonactivatingPanel` + `isFloatingPanel` + `hidesOnDeactivate = false`
+// (as `TranscriptOverlayPanel`) so ordering this panel front never activates the app or steals
+// focus from whatever app the user is dictating into. UNLIKE the base HUD, this panel DOES
+// allow `canBecomeKey` — it hosts an editable `TextEditor` for the custom-prompt field, and a
+// panel that can never become key can never receive typed keystrokes. `.nonactivatingPanel`
+// already guarantees becoming key does not activate the app or reorder other windows, so this
+// stays safe. `canBecomeMain` stays false (this is an auxiliary panel, never a main window).
 
 import AppKit
 import SpeakCore
@@ -128,7 +132,7 @@ final class CodingCustomizationPanel: NSPanel {
 
     // MARK: - Focus-steal guards
 
-    override var canBecomeKey: Bool { false }
+    override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
     // MARK: - Show / Hide
@@ -141,6 +145,10 @@ final class CodingCustomizationPanel: NSPanel {
         anchorBaseFrame = baseFrame
         reanchor()
         orderFrontRegardless()
+        // `.nonactivatingPanel` means this is safe: taking key focus here does not activate
+        // the app or reorder the app the user is dictating into. Without this, the user would
+        // have to click the text field first before any keystroke registers.
+        makeKey()
     }
 
     /// Hide the panel.
