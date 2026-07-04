@@ -178,10 +178,12 @@ final class ProfileEngineTests: XCTestCase {
                      "Task category fragment must be nil — base prompt is sufficient.")
 
         // Fix fragment is distinctive.
+        // [decision SM-2 D1] Imperative directive, not a passive bug report — see
+        // research/fix-fragment-ab-result.md.
         let agentWithFix = PromptBuilder.instructions(
             profile: DefaultProfiles.agent, category: .fix
         )
-        XCTAssertTrue(agentWithFix.contains("bug report"))
+        XCTAssertTrue(agentWithFix.contains("imperative instruction"))
 
         // Commit fragment is distinctive.
         let agentWithCommit = PromptBuilder.instructions(

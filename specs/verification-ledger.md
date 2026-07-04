@@ -125,3 +125,37 @@
 3. **`architecture.md` §11 / §14** — note the macOS 26.4 Terminal paste-provenance check; downgrade the write+Cmd+V bypass to `[unverified]`; fix the Tsai date (04-03). Keep "write-never-read" (correct) but **test paste empirically at P6**.
 4. **Dates** — macOS 26 = Sept 15 2025 (Q3). Superwhisper $8.49. WhisperKit repo path.
 5. **Opportunity to encode**: Wispr has **no persistent dictation history** and **no offline mode** — both are speak BEAT rows.
+
+---
+
+## 5. SM-2 — live Foundation Models eval baseline (brought forward from `pe/sm-2-metric` — historical, not reproduced on this tree)
+
+> `[verified]` — a **historical** live-FM eval run recorded on the `pe/sm-2-metric` branch
+> (commit `366d01f`, 2026-06-30, loop #40) and brought forward here for the durable record.
+> **Not reproduced against this tree** — this branch does not carry the "redesigned" scorer
+> (edge-norm Jaccard tokenizer, multiReference max-Jaccard, `noUnspokenIdentifiers`
+> anti-hallucination guard) that produced these numbers; only the **`fix` fragment decision**
+> below (D1) has been re-applied to current `PromptBuilder.swift`. Treat the table as
+> provenance, not a claim about current `make eval` output.
+
+| Profile | Status | Score (mean Jaccard) | p50 | p95 |
+|---|---|---|---|---|
+| Agent | ✓ PASS | 98.03% | 0.280s | 0.467s |
+| Note  | ✓ PASS | 100.00% | 0.247s | 0.277s |
+| Raw   | ✓ PASS | 100.00% | 0.000s | 0.000s |
+| Write | ✓ PASS | 97.22% | 0.301s | 0.639s |
+
+**Agent per-category** (redesigned metric, `pe/sm-2-metric`): ask 2/2 (1.00) · code 2/2 (1.00) · commit 2/2 (0.94)
+· **fix 2/2 (1.00)** · shell 2/2 (1.00) · task 2/2 (0.94). All pass.
+
+- **`fix` fragment `[decision SM-2 D1]`** — **applied to this tree** (`PromptBuilder.categoryFragment(.fix)`
+  now ships the **imperative** form; see `research/fix-fragment-ab-result.md`, live A/B, user-approved).
+  The prior "imperative makes the 3B pre-solve" finding did **not** reproduce under greedy decoding +
+  the anti-invention guard.
+- **⚠ Caveat — small N.** The eval above used only **2 fixtures per category** (20 total) on the
+  `pe/sm-2-metric` branch's own fixture set, which differs from this tree's `eval-fixtures.json`.
+  These numbers are a historical starting baseline from that branch, not a measurement of this tree.
+- The **redesigned scorer** (multiReference Jaccard, exact-vs-Jaccard split, anti-hallucination guard)
+  was NOT brought forward in this cherry-pick pass — it required reconciling with this tree's
+  independently-evolved `EvalScoring.swift` / `EvalHarnessTests.swift` / fixture schema, which is a
+  larger, dedicated re-implementation effort flagged for a follow-up task rather than attempted here.

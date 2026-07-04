@@ -190,9 +190,14 @@ public enum PromptBuilder {
             return nil  // Base prompt covers task format — short imperative goal.
 
         case .fix:
-            // [decision SM-2] "structure clearly" caused model to propose solutions (confirmed empirically).
-            // Must explicitly prohibit fix proposals.
-            return "Output ONLY a structured bug report: state what is broken and where. Do not propose a fix or suggest a solution."
+            // [decision SM-2 D1; verified live A/B 2026-06-30] Imperative framing, NOT bug-report.
+            // The earlier "imperative makes the 3B pre-solve" finding did NOT reproduce under greedy
+            // decoding + the anti-invention guard (live A/B, research/fix-fragment-ab-result.md):
+            // imperative never wrote a fix or invented details, and produced consistent agent directives,
+            // where bug-report framing yielded inconsistent verb-less / malformed fragments.
+            return "Rewrite the spoken words as a single clear imperative instruction telling the coding agent "
+                + "what to fix and where. Do not write the fix, propose a solution, or add any file, function, "
+                + "error, or detail the speaker did not say."
 
         case .ask:
             // [decision SM-2] Force question form. Small models default to task format

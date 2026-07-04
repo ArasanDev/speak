@@ -26,8 +26,10 @@ struct LivePanelPromptShapingTests {
         let instructions = PromptBuilder.instructions(
             profile: DefaultProfiles.agent, category: .fix
         )
-        // The fix fragment explicitly instructs a structured bug report.
-        #expect(instructions.contains("bug report"))
+        // [decision SM-2 D1] The fix fragment instructs a single imperative directive
+        // for the coding agent — not a passive bug report (research/fix-fragment-ab-result.md).
+        #expect(instructions.contains("imperative instruction"))
+        #expect(instructions.contains("Do not write the fix"))
     }
 
     @Test func testAgentAskBuildsAskFragment() {
