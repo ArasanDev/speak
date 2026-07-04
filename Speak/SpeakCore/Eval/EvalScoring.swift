@@ -6,25 +6,43 @@
 
 import Foundation
 
+// MARK: - Tokenization
+
+/// Punctuation stripped from the EDGES of a token before Jaccard comparison.
+/// [decision 2026-07-04, adopted from SM-2 Phase0b live A/B research] Edge-trimming
+/// sentence punctuation and quotes makes `tomorrow,` == `tomorrow.` == `tomorrow` for
+/// prose overlap — confirmed empirically to fix false failures purely from trailing
+/// punctuation (a real fixture scored 0.75, under the 0.80 pass threshold, on a
+/// period-only mismatch before this fix). Exact matches (code/shell) bypass this via
+/// the `equalsExpected` sentinel and never tokenize, so meaning-bearing punctuation
+/// there is unaffected. We trim only the edges (internal `logger.info` stays one token).
+private let jaccardEdgePunctuation = CharacterSet(charactersIn: ".,;:!?\"'`()[]{}…")
+
+private func jaccardTokens(_ text: String) -> Set<String> {
+    var tokens = Set<String>()
+    for raw in text.lowercased().split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" || $0 == "\r" }) {
+        let trimmed = String(raw).trimmingCharacters(in: jaccardEdgePunctuation)
+        if !trimmed.isEmpty {
+            tokens.insert(trimmed)
+        }
+    }
+    return tokens
+}
+
 // MARK: - Correctness Metric
 
 /// Compute the correctness score of an output against the expected text.
 ///
-/// Metric: normalized Jaccard similarity over lowercased, whitespace-tokenized words.
-/// Jaccard(A,B) = |A ∩ B| / |A ∪ B|, where A = output tokens, B = expected tokens.
-///
-/// [decision 2026-06-29] Jaccard over tokens is simple, language-agnostic, and
-/// handles prose well. Limitations: punctuation is folded into words (e.g. "text." ≠ "text");
-/// this is acceptable for small-model quality gates. Exact matches (e.g. CLI commands)
-/// should use `equalsExpected` formatCheck instead.
+/// Metric: normalized Jaccard similarity over lowercased, edge-punctuation-normalized
+/// word tokens. Jaccard(A,B) = |A ∩ B| / |A ∪ B|, where A = output tokens, B = expected tokens.
 ///
 /// - Parameters:
 ///   - output: The actual cleaned text from the model.
 ///   - expected: The reference text to measure against.
 /// - Returns: A Double in [0, 1] where 1.0 is perfect match and 0.0 is no overlap.
 public func correctness(output: String, expected: String) -> Double {
-    let outputTokens = Set(output.lowercased().split(separator: " ").map(String.init))
-    let expectedTokens = Set(expected.lowercased().split(separator: " ").map(String.init))
+    let outputTokens = jaccardTokens(output)
+    let expectedTokens = jaccardTokens(expected)
 
     let intersection = outputTokens.intersection(expectedTokens).count
     let union = outputTokens.union(expectedTokens).count
@@ -35,6 +53,98 @@ public func correctness(output: String, expected: String) -> Double {
     }
 
     return Double(intersection) / Double(union)
+}
+
+/// Correctness against a SET of acceptable references — the max Jaccard over the set.
+/// [decision 2026-07-04, adopted from SM-2 Phase0b] A generative fixture may have
+/// several equally valid phrasings (e.g. an imperative AND a report form of a `fix`);
+/// scoring against only one reference imposes a "single-phrasing ceiling" that fails
+/// otherwise-correct paraphrases. Confirmed empirically: a valid fix-fragment output
+/// scored 0.56 (below the 0.80 threshold) against one reference phrasing, 1.0 once the
+/// accepted alternate phrasing was included.
+///
+/// - Parameters:
+///   - output: The actual cleaned text from the model.
+///   - references: One or more acceptable reference phrasings.
+/// - Returns: The maximum Jaccard score across all references, or 0.0 if `references` is empty.
+public func correctness(output: String, references: [String]) -> Double {
+    guard !references.isEmpty else { return 0.0 }
+    return references.map { correctness(output: output, expected: $0) }.max() ?? 0.0
+}
+
+// MARK: - Anti-hallucination guard
+
+/// Heuristically extract identifier-like tokens from text: file paths, dotted paths,
+/// camelCase / PascalCase symbols, snake_case, call expressions (`foo()`), and tokens
+/// with a source-file extension.
+/// [decision 2026-07-04, adopted from SM-2 Phase0b] Conservative by design — plain
+/// prose words (no internal capital hump, no `/ _ . ()`) are never identifiers, so
+/// generic English is not flagged.
+func identifierCandidates(in text: String) -> [String] {
+    let codeExtensions = ["swift", "py", "js", "ts", "md", "json", "txt", "log", "sh", "rb", "go", "rs", "c", "h", "m"]
+    var result: [String] = []
+    for raw in text.split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" || $0 == "\r" }) {
+        let token = String(raw).trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?\"'`"))
+        if token.isEmpty { continue }
+        let hasPathOrUnderscore = token.contains("/") || token.contains("_")
+        let hasCall = token.contains("(")
+        let hasCamelHump = token.range(of: "[a-z][A-Z]", options: .regularExpression) != nil
+        let hasCodeExtension = codeExtensions.contains { token.lowercased().contains(".\($0)") }
+        if hasPathOrUnderscore || hasCall || hasCamelHump || hasCodeExtension {
+            result.append(token)
+        }
+    }
+    return result
+}
+
+/// Decompose an identifier into its lowercased sub-words by splitting on path/dot/
+/// underscore/paren separators AND camelCase boundaries. `PasteboardWriter.swift`
+/// → {pasteboard, writer, swift}; `src/auth/token` → {src, auth, token}.
+/// [decision 2026-07-04, adopted from SM-2 Phase0b] Sub-word decomposition lets
+/// `noUnspokenIdentifiers` accept legitimate identifier-ization — "capture session"
+/// (spoken) → "CaptureSession" (output) — while still catching a wholly invented
+/// `AuthService.swift`.
+func identifierSubwords(_ identifier: String) -> Set<String> {
+    let separated = identifier.unicodeScalars.map { scalar -> Character in
+        CharacterSet.alphanumerics.contains(scalar) ? Character(scalar) : " "
+    }
+    let coarse = String(separated).split(separator: " ").map(String.init)
+    var subwords = Set<String>()
+    for piece in coarse {
+        let camelSplit = piece.replacingOccurrences(
+            of: "([a-z0-9])([A-Z])",
+            with: "$1 $2",
+            options: .regularExpression
+        )
+        for word in camelSplit.split(separator: " ") {
+            let lower = word.lowercased()
+            if !lower.isEmpty { subwords.insert(lower) }
+        }
+    }
+    return subwords
+}
+
+/// True iff EVERY identifier-like token in `output` is grounded in `spoken`: each of its
+/// sub-words must appear among the spoken text's words. A violation = a hallucinated
+/// path / symbol / error string the speaker never uttered — this feeds false context to
+/// a downstream coding agent if it leaks.
+/// [decision 2026-07-04, adopted from SM-2 Phase0b] Master had no anti-hallucination
+/// guard prior to this; this closes that gap.
+func noUnspokenIdentifiers(output: String, spoken: String) -> Bool {
+    var spokenWords = Set<String>()
+    for raw in spoken.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }) {
+        spokenWords.insert(String(raw))
+    }
+    for ident in identifierCandidates(in: spoken) {
+        spokenWords.formUnion(identifierSubwords(ident))
+    }
+    for ident in identifierCandidates(in: output) {
+        let subwords = identifierSubwords(ident)
+        for sub in subwords where !spokenWords.contains(sub) {
+            return false
+        }
+    }
+    return true
 }
 
 // MARK: - Format Checks

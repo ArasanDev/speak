@@ -159,3 +159,14 @@
   was NOT brought forward in this cherry-pick pass — it required reconciling with this tree's
   independently-evolved `EvalScoring.swift` / `EvalHarnessTests.swift` / fixture schema, which is a
   larger, dedicated re-implementation effort flagged for a follow-up task rather than attempted here.
+
+**Update 2026-07-04** — `[verified]` reviewed and empirically re-tested (throwaway script, deleted;
+see `research/eval-metric-redesign-review.md`). Of the redesigned scorer, three additive pieces
+were confirmed real, low-risk improvements and **adopted onto master** this loop:
+edge-punctuation-normalizing Jaccard tokenizer (fixed a live false-failure: 0.75→1.0 on a
+period-only mismatch), `correctness(output:references:)` multiReference scoring (fixed a live
+single-phrasing-ceiling failure: 0.56→1.0), and the `noUnspokenIdentifiers` anti-hallucination
+guard (master previously had none). Tests: `EvalScoringMetricRedesignTests.swift`. Gates:
+build ✅ / test 600,6-skip,0-fail ✅ / lint 0-serious ✅ / verify-moat 7/7 ✅. The genre-split
+exact/Jaccard scoring + structural per-category checks + fixture-schema rewrite remain
+deferred — see the research note for why (overlap risk with the already-shipped rubric system).
