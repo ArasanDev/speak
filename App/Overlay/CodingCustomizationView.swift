@@ -13,16 +13,39 @@
 // orthogonal per-dictation knobs, unrelated to the (now-removed) Agent-category picker,
 // so they stay useful here. Both bind the same `OverlayViewModel` instance as the base HUD.
 //
+// LAYOUT [decision, redesign pass]: shipped precedent surveyed across Apple Writing
+// Tools, Raycast, Spotlight, Superwhisper, and Wispr Flow is unanimous — exactly ONE
+// control is dominant (a free-text field), and every secondary option is deferred behind
+// progressive disclosure. This panel's core purpose is the custom-instructions text box,
+// so it is now the first, largest, auto-focused element; the read-only system-prompt box
+// and the 14 format/tone/length preset chips are both collapsed by default behind small
+// disclosure affordances the user taps to reveal.
+//
 // SIZING: this view intentionally does NOT `.frame()`-lock its own size. `.fixedSize` lets
 // it report its true ideal size to `NSHostingController.sizingOptions` (see
 // `CodingCustomizationPanel`), which is what makes the panel grow/shrink with content
-// instead of being a fixed-size clone of `TranscriptOverlayPanel`.
+// instead of being a fixed-size clone of `TranscriptOverlayPanel`. Toggling either
+// disclosure below changes SwiftUI's ideal size, which the panel already observes via
+// `NSWindow.didResizeNotification` — no changes needed there.
 
 import SpeakCore
 import SwiftUI
 
 struct CodingCustomizationView: View {
     let model: OverlayViewModel
+
+    /// Collapsed by default — the 14 format/tone/length preset chips are a secondary,
+    /// per-dictation override, not the panel's primary purpose. See LAYOUT decision above.
+    @State private var isOverridesExpanded = false
+    /// Collapsed by default — the read-only resolved system prompt is reference material,
+    /// not something most dictations need to see. See LAYOUT decision above.
+    @State private var isSystemPromptExpanded = false
+
+    /// Drives keyboard focus into the custom-instructions `TextEditor` as soon as the panel
+    /// appears. `CodingCustomizationPanel.canBecomeKey` + `makeKey()` only gets the *window*
+    /// key status — SwiftUI still needs an explicit `FocusState` binding pushed on `.onAppear`
+    /// for the very first keystroke to land in the text view instead of being dropped.
+    @FocusState private var isCustomInstructionsFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
@@ -37,6 +60,9 @@ struct CodingCustomizationView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(.regularMaterial)
         )
+        .onAppear {
+            isCustomInstructionsFocused = true
+        }
     }
 
     private var header: some View {
@@ -60,23 +86,62 @@ struct CodingCustomizationView: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-            defaultPromptSection
+            // Dominant, first element — see LAYOUT decision above.
             customInstructionsSection
-            // Reused from the base HUD (App/Overlay/TranscriptOverlayView.swift) — same
-            // per-dictation format/tone/length overrides, same OverlayViewModel instance.
-            OverlayKnobsRow(model: model)
+
+            disclosureToggle(
+                title: "View system prompt",
+                systemImage: "text.alignleft",
+                isExpanded: $isSystemPromptExpanded
+            )
+            if isSystemPromptExpanded {
+                defaultPromptSection
+            }
+
+            disclosureToggle(
+                title: "Overrides",
+                systemImage: "slider.horizontal.3",
+                isExpanded: $isOverridesExpanded
+            )
+            if isOverridesExpanded {
+                // Reused from the base HUD (App/Overlay/TranscriptOverlayView.swift) — same
+                // per-dictation format/tone/length overrides, same OverlayViewModel instance.
+                OverlayKnobsRow(model: model)
+            }
         }
+    }
+
+    /// A small, low-visual-weight affordance that expands/collapses a deferred section.
+    /// [decision, redesign pass: manual chevron+conditional-view over `DisclosureGroup` —
+    ///  no existing disclosure pattern elsewhere in App/Overlay to match, and this gives
+    ///  precise control over the compact chip-like appearance the other overlay controls use.]
+    private func disclosureToggle(title: String, systemImage: String, isExpanded: Binding<Bool>) -> some View {
+        Button {
+            isExpanded.wrappedValue.toggle()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.right")
+                    .rotationEffect(.degrees(isExpanded.wrappedValue ? 90 : 0))
+                Image(systemName: systemImage)
+                Text(title)
+                Spacer(minLength: 0)
+            }
+            .font(.speakMonoCaption)
+            .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityValue(isExpanded.wrappedValue ? "Expanded" : "Collapsed")
+        .accessibilityAddTraits(.isButton)
     }
 
     /// Read-only display of the profile system prompt that will actually run for this
     /// dictation (set by `DictationController.beginDictation()`). Empty (e.g. Raw
     /// destination, no system prompt) shows a plain-language explanation instead of a
-    /// blank box, so the panel never looks broken.
+    /// blank box, so the panel never looks broken. Deferred behind the "View system
+    /// prompt" disclosure — see LAYOUT decision above.
     private var defaultPromptSection: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("Current prompt")
-                .font(.speakMonoCaption)
-                .foregroundStyle(.secondary)
             ScrollView {
                 Text(model.defaultSystemPrompt.isEmpty
                     ? "No system prompt for this dictation (AI cleanup is off, or the active destination is Raw)."
@@ -101,6 +166,7 @@ struct CodingCustomizationView: View {
     /// Editable "append at runtime" field. Bound directly to `model.customInstructions` —
     /// `DictationController` reads it off the model at stop time (same no-callback-needed
     /// pattern as the format/tone/length knobs), so no `onChange` wiring is required here.
+    /// This is the panel's dominant, first, auto-focused control — see LAYOUT decision above.
     private var customInstructionsSection: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("Additional instructions for this dictation")
@@ -110,13 +176,14 @@ struct CodingCustomizationView: View {
                 get: { model.customInstructions },
                 set: { model.customInstructions = $0 }
             ))
-            .font(.speakMonoCaption)
+            .font(.speakMonoBody)
+            .focused($isCustomInstructionsFocused)
             .scrollContentBackground(.hidden)
-            .frame(minHeight: 44, maxHeight: 88)
-            .padding(4)
+            .frame(minHeight: 88, maxHeight: 160)
+            .padding(6)
             .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.primary.opacity(0.05))
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.primary.opacity(0.06))
             )
             .accessibilityLabel("Additional instructions appended to the prompt for this dictation")
         }
