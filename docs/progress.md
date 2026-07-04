@@ -7,9 +7,20 @@
 
 ## Current phase
 
-**Loop #39 (2026-06-30) — PE-4 + P2.3 + re-clean button all merged to master. PE-2 (AI Studio) + P11-a (install targets) agents in flight.**
+**Loop #40 (2026-07-04) — PE-2 + P11-a landed; repo reorganized under `Speak/`; coding-customization panel + settings/onboarding UX fixes merged. Gates: build ✅ / test 597,6-skip,0-fail ✅ / verify-moat 7/7 ✅.**
 
 ### What changed this loop (read before doing anything)
+-13. **Loop #40 (2026-07-04) — 9 commits, no open branches besides `eval/rubric-scorer` (stale, unmerged content already superseded on master).**
+   - **`8142bde` [repo] Reorganize source under `Speak/`**: `App/`, `SpeakCore/`, `CLI/`, `Tests/` moved under a single `Speak/` root (pure rename, no logic changes); `project.yml`/Makefile/`.swiftlint.yml` updated to match. Any doc or script referencing old top-level `App/`, `SpeakCore/`, `CLI/`, `Tests/` paths is now stale — update to `Speak/App/…` etc.
+   - **`7d84fd1` [fix] PrivacyPaneView**: replaced fake hardcoded "Verify Moat" results in the UI with a real, honest audit (wired to `MoatAuditor`).
+   - **`205fc9f`–`22c1364` [UI/UX/fix] Coding-customization panel**: split out of the base overlay into its own non-activating panel (`CodingCustomizationPanel` + `CodingCustomizationView`); fixed `canBecomeKey` so its prompt `TextEditor` accepts input; text box is now primary with presets/prompt deferred behind a disclosure; Escape degrades gracefully (closes coding panel first, then stops dictation); fixed an orphaned `AppShell` Window scene that caused a blank window on launch; Settings pinned to the bottom of the sidebar, separate from the scrollable nav list.
+   - **`c61f114`/`5444fdc` [merge] PE-2 — AI Studio settings tab**: few-shot examples editor landed on master (was "in flight" as of loop #39).
+   - **`7168ac8`/`210b713` [merge] P11-a — install targets**: `make install` (copies `Speak.app` to `/Applications/`) + `make github-release` landed on master (was "in flight" as of loop #39).
+   - **`56aacc7`/`157b63f` [merge] P12 — README + privacy section + onboarding lifecycle tests** landed.
+   - **`e4eef32` [SM-2]** — cherry-picked imperative fix-fragment prompt tweak + live A/B eval harness (`FixABTests.swift`, `research/fix-fragment-ab-result.md`) from the abandoned `pe/sm-2-metric` branch.
+   - **Roadmap correction**: `docs/roadmap.md` P2/P3 were still marked `[TODO]` despite `AudioCapture.swift`, `AppleSpeechTranscriber.swift`, `PermissionManager.swift` already existing and tested — checklist items reconciled this loop (see roadmap diff); code was ahead of the checklist, not the other way around.
+   - Gates re-verified this loop: build ✅ / `make test` 597 tests, 6 skipped, 0 failures ✅ / `make verify-moat` 7/7 ✅.
+
 -12. **PE-4 + P2.3 + re-clean button — ALL MERGED TO MASTER (`b1907d9`).**
    Three changes landed together after parallel agent dispatch + orchestrator conflict resolution:
    - **PE-4 — Overlay Tier 2/3 knobs + capture controls**: `perDictationFormat/Tone/Length` pickers in the selector card, cancel (xmark.circle) abandons dictation, re-clean (arrow.clockwise) re-runs cleanup on last raw transcript. `DictationController+Knobs.swift` + `KnobsTests.swift` (9 tests). Re-clean button wired in `.done` state overlay — nils itself on first tap to prevent double-fire.
@@ -40,11 +51,14 @@
 - **Extension:** the Profile Engine (north star).
 
 ### Next actions (in order)
-- **PE-3.1 (#51)** — Voice override: spoken commands reshape the panel.
-- **P2.1 (#35)** — CaretLocator (best-effort caret screen position) — parallel with PE-3.1.
-- **PE-3.2 (#52)** — Pin-to-context: sticky destination/category per app (after PE-3.1).
-- **P2.2 (#36) → P2.3 (#37)** — Floating caret-anchored overlay → dual raw stream.
-- **PE-4 (#54)** — Overlay Tier 2/3 knobs + capture controls (after PE-3 complete).
+- **Reconcile roadmap checklists (mechanical, do first)** — P2/P3/P5/P6/P7 sub-checkboxes in `docs/roadmap.md` under-report actual test coverage; tick verified items, keep `[deferred — needs human verification]` tags for anything not exercised live.
+- **P13 — Dogfood (critical path, not started)** — the one substantive TODO left on the critical path. Requires live human verification first:
+  - macOS 26.4 Terminal paste-provenance prompt (project's #1 `[unverified]`) — test in Terminal/iTerm.
+  - Hotkey false-trigger rate in real typing (Notes, 30 min sessions).
+  - Live paste across TextEdit/Slack/Terminal.
+  - Permission prompts + System Settings deep-links firing correctly live.
+- **P11-b — signed/notarized `.dmg`** — blocked on a Developer ID cert (open question #4).
+- **PE-3.1/#51, PE-3.2/#52** — Profile Engine voice-override + pin-to-context (post-v0 north star, not on critical path).
 
 ### Orchestration note
 Models: **Opus** (judgment/design/review) + **fast worker** (Haiku/WSL2 MiniMax). Design is locked in specs; route mechanical multi-file implementation to the worker; orchestrator reviews diffs + owns commits.

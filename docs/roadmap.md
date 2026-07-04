@@ -46,28 +46,28 @@ The v0.1 items (V01-0 Agent Mode, V01-3 per-app context, V1-3 Transforms, V1-4 c
 
 ---
 
-## P2 — Audio capture [TODO] ← CRITICAL PATH
+## P2 — Audio capture [~IN PROGRESS] ← CRITICAL PATH
 
-**Sub-tasks**: `PermissionManager` (microphone state) + `AudioCapture` (`AVAudioEngine`, 16kHz mono PCM); stream raw PCM buffers to `AsyncStream`.
+**Sub-tasks**: `PermissionManager` (microphone state) + `AudioCapture` (`AVAudioEngine`, 16kHz mono PCM); stream raw PCM buffers to `AsyncStream`. Both implemented (`SpeakCore/Audio/AudioCapture.swift`, `SpeakCore/Permissions/PermissionManager.swift`) — checklist below reconciled 2026-07-04 (code was ahead of the markers).
 
 **Done when**:
-- [ ] First run triggers the microphone permission prompt
-- [ ] Speaking into the mic logs PCM buffer stats (sample rate, length) via `os.Logger` — no `print`
-- [ ] Audio stops cleanly on session cancel (no zombie taps)
+- [~] First run triggers the microphone permission prompt — `[verified]` `PermissionManager` requests/reports mic status; `[deferred — needs human verification]` live first-run prompt
+- [~] Speaking into the mic logs PCM buffer stats (sample rate, length) via `os.Logger` — no `print` — `[verified]` no `print` in `AudioCapture.swift` (moat audit rule #1); `[deferred]` live mic session log inspection
+- [ ] Audio stops cleanly on session cancel (no zombie taps) — `[deferred — needs human verification]`, no dedicated test
 
 ---
 
-## P3 — SpeechAnalyzer [TODO] ← CRITICAL PATH
+## P3 — SpeechAnalyzer [~IN PROGRESS] ← CRITICAL PATH
 
-**[unverified]** Verify SpeechAnalyzer API surface against current Apple docs before coding (`apple-docs` MCP or `swiftc -typecheck`). Requires macOS 26+ / Apple Silicon.
+`Transcribing` protocol + `AppleSpeechTranscriber` implemented against `SpeechAnalyzer` (`SpeakCore/STT/AppleSpeechTranscriber.swift`); exercised by `LatencyAndAccuracyTests.swift` against a real audio fixture (`hello_speech.caf`). Checklist reconciled 2026-07-04.
 
 **Sub-tasks**: Define `Transcribing` protocol; implement `AppleSpeechTranscriber` against `SpeechAnalyzer` (macOS 26+, Apple Silicon); emit `TranscriptChunk` (partial + final). Read `architecture.md §10.2` first.
 
 **Done when**:
-- [ ] Spoken audio produces **partial** transcripts (streaming, live)
-- [ ] Spoken audio produces a **final** transcript at session end
-- [ ] Engine id is `"apple-speech-en-US"`
-- [ ] Verify against `architecture.md §10.2` (re-check SpeechAnalyzer API surface vs current Apple docs before coding)
+- [x] Spoken audio produces **partial** transcripts (streaming, live) — `[verified]` `LatencyAndAccuracyTests` asserts volatile chunks emitted from `hello_speech.caf`
+- [x] Spoken audio produces a **final** transcript at session end — `[verified]` same suite, final transcript assertions
+- [~] Engine id is `"apple-speech-en-US"` — `[verified]` in code/tests; not re-confirmed against latest Apple docs this loop
+- [ ] Verify against `architecture.md §10.2` (re-check SpeechAnalyzer API surface vs current Apple docs before coding) — outstanding; do before further P3 changes
 
 ---
 
