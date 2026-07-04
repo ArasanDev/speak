@@ -200,6 +200,16 @@ final class OverlayController {
         codingPanel?.hide()
     }
 
+    /// Close the coding panel via the same path as its own close button / the base HUD's
+    /// customize button — keeps `overlayModel.isCodingPanelOpen` and the panel's visibility
+    /// in sync (unlike `resetCodingPanel()`, which is a wholesale teardown, not a user action).
+    private func closeCodingPanelIfOpen() -> Bool {
+        guard overlayModel.isCodingPanelOpen else { return false }
+        overlayModel.isCodingPanelOpen = false
+        setCodingPanelOpen(false)
+        return true
+    }
+
     // MARK: - PE-3.2 pin-to-context banner
 
     /// Show the pin-suggestion banner in the calm HUD below the waveform row.
@@ -492,9 +502,15 @@ final class OverlayController {
     /// consume the event, which is acceptable: Escape reaching the target app
     /// is harmless and usually desirable.
     ///
-    /// The callback (`onEscapeStop`) is invoked unconditionally here — re-entrancy
-    /// guarding (only active-capture state triggers stop) lives in `DictationController`,
-    /// keeping OverlayController free of icon-state coupling.
+    /// [decision: graceful two-stage degrade] If the coding-customization panel is open,
+    /// the first Escape closes ONLY that panel — the base HUD (waveform/transcript/timer)
+    /// keeps dictating untouched, exactly as if the user had clicked the panel's own close
+    /// button. Only when the coding panel is already closed does Escape fall through to
+    /// stopping dictation entirely — the same second-stage exit as a single-tap Fn.
+    ///
+    /// The `onEscapeStop` callback is invoked unconditionally in that fallthrough case —
+    /// re-entrancy guarding (only active-capture state triggers stop) lives in
+    /// `DictationController`, keeping OverlayController free of icon-state coupling.
     ///
     /// [decision W2.2: global monitor; no consumption; AX/Input Monitoring already granted]
     private func installEscapeMonitor() {
@@ -504,7 +520,11 @@ final class OverlayController {
             guard event.keyCode == 53 else { return }
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                SpeakLog.engine.info("OverlayController: Escape key detected — stopping dictation.")
+                if self.closeCodingPanelIfOpen() {
+                    SpeakLog.engine.info("OverlayController: Escape key detected — closing coding panel (stage 1).")
+                    return
+                }
+                SpeakLog.engine.info("OverlayController: Escape key detected — stopping dictation (stage 2).")
                 self.onEscapeStop?()
             }
         }
