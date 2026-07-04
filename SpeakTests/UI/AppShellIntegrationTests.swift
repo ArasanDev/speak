@@ -1,17 +1,20 @@
 // SpeakTests/UI/AppShellIntegrationTests.swift
 //
-// P11-c Integration tests for AppShell, pane navigation, settings persistence,
+// P11-c Integration tests for dashboard context wiring, settings persistence,
 // and streaming mode behavior.
 //
+// [decision: the original "AppShell"/AppPane pane-navigation tests (scenario 1) were
+//  removed — App/AppShell.swift and its AppPane enum were dead code, superseded by
+//  App/Dashboard/ (DashboardWindowController + DashboardSection), and nothing in the
+//  app ever opened the AppShell SwiftUI window scene. Deleted alongside App/AppShell.swift.]
+//
 // PURPOSE:
-//   Verify that the full-stack UI (AppShell, 5 panes, sidebar navigation,
-//   DashboardContext wiring) integrates correctly with the underlying model and
-//   settings layers. These are headless integration tests (no view rendering
+//   Verify that DashboardContext wiring integrates correctly with the underlying model
+//   and settings layers. These are headless integration tests (no view rendering
 //   assertions) — they verify the model state, wiring, and behavior that would
 //   be observable in a running app.
 //
 // SCOPE:
-//   - AppPane enum: 5 cases, proper titles, system images [scenario 1]
 //   - DashboardContext wiring: built once, holds correct refs to engine/permissions [scenario 3]
 //   - Settings persistence via SettingsStore: streaming mode, language, cleanup toggle
 //     survive a "reload" (simulated restart) [scenario 2]
@@ -70,62 +73,6 @@ final class AppShellIntegrationTests: XCTestCase {
             permissionManager: nil,
             dictationCompletedPublisher: nil
         )
-    }
-
-    // MARK: - Scenario 1: Pane Navigation (AppShell)
-
-    /// Test: AppPane enum has exactly 5 cases with correct titles and system images.
-    func testAppPaneEnumHasFiveCases() {
-        let allCases = AppPane.allCases
-        XCTAssertEqual(allCases.count, 5,
-            "AppPane must have exactly 5 cases: dashboard, history, settings, privacy, about.")
-    }
-
-    /// Test: Dashboard pane has correct title and icon.
-    func testAppPaneDashboardTitleAndIcon() {
-        let pane = AppPane.dashboard
-        XCTAssertEqual(pane.title, "Dashboard",
-            "Dashboard pane title must be 'Dashboard'.")
-        XCTAssertEqual(pane.systemImage, "waveform.circle",
-            "Dashboard pane systemImage must be 'waveform.circle'.")
-        XCTAssertEqual(pane.id, pane,
-            "Dashboard pane id must be self (Identifiable contract).")
-    }
-
-    /// Test: History pane has correct title and icon.
-    func testAppPaneHistoryTitleAndIcon() {
-        let pane = AppPane.history
-        XCTAssertEqual(pane.title, "History",
-            "History pane title must be 'History'.")
-        XCTAssertEqual(pane.systemImage, "clock.fill",
-            "History pane systemImage must be 'clock.fill'.")
-    }
-
-    /// Test: Settings pane has correct title and icon.
-    func testAppPaneSettingsTitleAndIcon() {
-        let pane = AppPane.settings
-        XCTAssertEqual(pane.title, "Settings",
-            "Settings pane title must be 'Settings'.")
-        XCTAssertEqual(pane.systemImage, "gearshape",
-            "Settings pane systemImage must be 'gearshape'.")
-    }
-
-    /// Test: Privacy pane has correct title and icon.
-    func testAppPanePrivacyTitleAndIcon() {
-        let pane = AppPane.privacy
-        XCTAssertEqual(pane.title, "Privacy",
-            "Privacy pane title must be 'Privacy'.")
-        XCTAssertEqual(pane.systemImage, "lock.shield",
-            "Privacy pane systemImage must be 'lock.shield'.")
-    }
-
-    /// Test: About pane has correct title and icon.
-    func testAppPaneAboutTitleAndIcon() {
-        let pane = AppPane.about
-        XCTAssertEqual(pane.title, "About",
-            "About pane title must be 'About'.")
-        XCTAssertEqual(pane.systemImage, "info.circle",
-            "About pane systemImage must be 'info.circle'.")
     }
 
     // MARK: - Scenario 3: Dashboard Integration (Context Wiring)

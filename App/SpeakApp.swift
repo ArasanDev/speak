@@ -113,16 +113,11 @@ struct SpeakApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        // AppShell window — opened on demand from the menu, not at launch.
-        // Window scene renders when presented; doesn't auto-open on app start.
-        Window("speak", id: "appshell") {
-            if let ctrl = appDelegate.controller {
-                AppShell(controller: ctrl)
-            }
-        }
-        .defaultPosition(.center)
-        .defaultSize(width: 960, height: 600)
-
+        // [decision: removed the "appshell" Window scene — dead code superseded by
+        //  WindowPresenter.showDashboard() -> DashboardWindowController (plain AppKit).
+        //  Nothing in the app ever called openWindow(id: "appshell"); the only thing that
+        //  could resurrect it was macOS's automatic window-state restoration reopening a
+        //  stale saved window with no content wired up, producing a blank "speak" window.]
         Settings {
             if let ctrl = appDelegate.controller {
                 SettingsView(controller: ctrl)
