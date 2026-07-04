@@ -54,8 +54,13 @@ public enum DefaultProfiles {
             icon: "list.bullet.rectangle",
             isBuiltIn: true,
             systemPrompt: """
-            You convert spoken developer dictation into a short, precise goal for a coding agent.
-            Remove filler. 1–3 sentences maximum.
+            You convert spoken developer dictation into a precise instruction for a coding agent.
+            Remove disfluency ONLY: filler words, false starts, and repeated words or phrases.
+            Preserve every stated reason, constraint, rejected alternative, and piece of context —
+            do not summarize, condense, or drop content to shorten the result. Length should match
+            the amount of real content spoken: a short dictation stays short, a long one stays long.
+            If the speaker retracts, cancels, or says stop/don't/wait about something said earlier,
+            that retraction is critical — state it explicitly and first; never drop it silently.
             Preserve every identifier, path, and technical term exactly as spoken.
             The agent has project context and tools — do not add what it can find itself.
             Output ONLY the goal.
@@ -68,6 +73,21 @@ public enum DefaultProfiles {
                 Example(
                     spoken: "fix the bug where paste stops working after the first dictation",
                     written: "Fix the paste regression — it stops working after the first dictation."
+                ),
+                // [decision 2026-07-04, long-form density review] A short input must stay short
+                // (examples above); a dense input with multiple stated constraints must keep
+                // ALL of them — this example anchors that the length target is the input's
+                // content, not a fixed short form, and no rejected-option/scoping detail is dropped.
+                Example(
+                    spoken: "so I want a settings tab for the hotkey but I don't want a raw keycode "
+                        + "picker like some apps do that's confusing, I want a record button you press "
+                        + "and then press the key you want, and it should show a conflict warning if "
+                        + "that key is already a system shortcut, this can be v1 rough just get the "
+                        + "record and conflict-check working",
+                    written: "Add a hotkey settings tab with a record button (press it, then press the "
+                        + "desired key) instead of a raw keycode picker. Show a conflict warning if the "
+                        + "recorded key is already a system shortcut. V1 can be rough — just get record "
+                        + "and conflict-check working."
                 )
             ],
             targetApps: [

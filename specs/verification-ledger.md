@@ -170,3 +170,36 @@ guard (master previously had none). Tests: `EvalScoringMetricRedesignTests.swift
 build ✅ / test 600,6-skip,0-fail ✅ / lint 0-serious ✅ / verify-moat 7/7 ✅. The genre-split
 exact/Jaccard scoring + structural per-category checks + fixture-schema rewrite remain
 deferred — see the research note for why (overlap risk with the already-shipped rubric system).
+
+---
+
+## 6. Long-form agentic dictation — Agent `task`/`ask` system prompt redesign (2026-07-04)
+
+`[verified]` live Foundation Models, 5 real long-form fixtures (ideation, brownfield-context,
+multi-step-out-of-order, debugging-narrative, course-correction), 4 candidate instructions,
+greedy decoding. Full method + data table: `research/long-form-agent-dictation-review.md`.
+
+**Finding**: the prior `"Remove filler. 1–3 sentences maximum."` cap on `DefaultProfiles.agent`
+silently dropped real, decision-relevant content in 4/5 live cases (scope constraints,
+a reusable-existing-component reference, task priority order, a mid-dictation retraction).
+
+**Adopted**: replaced the cap with a density-preserving instruction ("length matches the
+input's real content") + an explicit retraction-preservation rule, plus a third few-shot
+example anchoring "dense input keeps ALL its constraints" (the two pre-existing examples
+were both short and were empirically pulling output back toward brevity even with the new
+instruction text — few-shot examples dominate instruction wording for this model).
+Re-verified on the full production path (system prompt + real few-shot examples, not the
+isolated instruction) before landing. `fix`/`shell`/`code`/`commit` categories untouched —
+they are a different, terse medium and already enforce their own strict formats.
+
+**Known open gap** (not fixed this pass): identifiers/component-names mentioned inside a long
+hedged aside get dropped by the on-device model regardless of the explicit
+"preserve every identifier" instruction (the brownfield-context fixture, `PinnedContextStore`).
+Looks like a real 3B-model limitation under hedged phrasing, not a prompt-wording gap.
+
+**Latency tradeoff**: long-form cleanup now costs ~1.5–2s live vs ~0.7–1.5s before (real,
+not noise) — acceptable for the depth this buys, but the right lever if it becomes a problem
+is investigating `LanguageModelSession` creation cost / reuse, not re-shortening the prompt.
+
+Gates: build ✅ / `make test` 603 tests (9 skipped, 3 new SPEAK_EVAL-gated) 0-fail ✅ /
+`make lint` 0-serious ✅ / `make verify-moat` 7/7 ✅.
