@@ -32,6 +32,8 @@ public enum PromptBuilder {
     ///   - intensity: cross-profile rewrite intensity (default: .medium).
     ///   - category: Agent-specific sub-category (ignored for non-Agent profiles).
     ///   - customVocabulary: proper-noun spellings to preserve verbatim.
+    ///   - customInstructions: free-form per-dictation addition from the P-Code
+    ///     prompt-customization panel (empty ⇒ no clause added).
     /// - Returns: the full prompt string, or — for the `.raw` model — the
     ///   transcript unchanged (the base-core passthrough; never an error).
     public static func build(
@@ -40,7 +42,8 @@ public enum PromptBuilder {
         context: [ContextInput: String] = [:],
         intensity: CleanupLevel = .medium,
         category: AgentCategory = .task,
-        customVocabulary: [String] = []
+        customVocabulary: [String] = [],
+        customInstructions: String = ""
     ) -> String {
         // Base-core bypass: the Raw profile passes the transcript through untouched.
         // No prompt is assembled — this is the immutable floor (profile-engine.md §2).
@@ -50,7 +53,8 @@ public enum PromptBuilder {
         // Single-prompt assembly: instructions + the dictated speech, last.
         let instr = instructions(
             profile: profile, intensity: intensity, category: category,
-            customVocabulary: customVocabulary, context: context
+            customVocabulary: customVocabulary, context: context,
+            customInstructions: customInstructions
         )
         return instr + "\n\nDictated speech:\n" + rawTranscript
     }
@@ -66,12 +70,17 @@ public enum PromptBuilder {
     ///   NO clause; `.none` is unreachable here (cleaner is bypassed) and also adds none.
     /// - category: Agent-specific sub-category (only appended if profile is Agent destination).
     /// - customVocabulary: proper nouns / specialist spellings to preserve verbatim.
+    /// - customInstructions: free-form per-dictation addition from the P-Code
+    ///   prompt-customization panel — appended LAST (after the category fragment),
+    ///   so it is the freshest instruction the model sees before the transcript.
+    ///   Empty ⇒ no clause added (byte-identical to the pre-P-Code prompt).
     public static func instructions(
         profile: Profile,
         intensity: CleanupLevel = .medium,
         category: AgentCategory = .task,
         customVocabulary: [String] = [],
-        context: [ContextInput: String] = [:]
+        context: [ContextInput: String] = [:],
+        customInstructions: String = ""
     ) -> String {
         var sections: [String] = []
         if !profile.systemPrompt.isEmpty {
@@ -128,7 +137,23 @@ public enum PromptBuilder {
             sections.append(categoryFragment)
         }
 
+        // P-Code: the user's runtime prompt addition — appended absolute last so it is
+        // the freshest instruction before the transcript (strongest steering lever for a
+        // small on-device model, per profile-engine.md §6). [decision P-Code]
+        if let custom = customInstructionsClause(customInstructions) {
+            sections.append(custom)
+        }
+
         return sections.joined(separator: "\n\n")
+    }
+
+    /// The P-Code custom-instructions clause. Trimmed; empty/whitespace-only ⇒ nil so a
+    /// dictation where the user never opened the panel produces the pre-P-Code prompt
+    /// byte-for-byte.
+    static func customInstructionsClause(_ customInstructions: String) -> String? {
+        let trimmed = customInstructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return "Additional instructions for this dictation:\n\(trimmed)"
     }
 
     // MARK: - Knob clauses

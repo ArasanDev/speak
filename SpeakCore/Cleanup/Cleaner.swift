@@ -46,7 +46,20 @@ public enum CleanupMode: Sendable {
     /// renders this via `PromptBuilder`. `SpeakEngine.newSession()` builds this when
     /// the frontmost app matches a profile's `targetApps`; the global default stays
     /// on `.styled` for now.
-    case profile(Profile, level: CleanupLevel, category: AgentCategory = .task, customVocabulary: [String] = [])
+    ///
+    /// `customInstructions` (P-Code): free-form text the user typed into the
+    /// real-time prompt-customization panel for THIS dictation only — appended as
+    /// the final, freshest instruction before the transcript (`PromptBuilder`).
+    /// Empty by default so existing call sites are byte-identical. [decision P-Code:
+    /// append-only, not a full prompt replacement — simpler to wire correctly and
+    /// matches the user's stated preference for "append some extra prompt at runtime".]
+    case profile(
+        Profile,
+        level: CleanupLevel,
+        category: AgentCategory = .task,
+        customVocabulary: [String] = [],
+        customInstructions: String = ""
+    )
 }
 
 /// The neat-writing *voice* — how the cleaned text should read. User-facing in the

@@ -27,6 +27,10 @@ extension DictationController {
             // uses, so the panel highlights the destination that will actually run and a
             // chip tap can override it for this dictation only.
             resolveActiveDestination(frontmostBundleID: frontmostBundleID)
+            // [P-Code v2] Surface the resolved profile's system prompt in the
+            // prompt-customization panel (read-only) so the user can see what actually
+            // governs cleanup for this dictation before adding to it.
+            overlayController.overlayModel.defaultSystemPrompt = activeDestination.systemPrompt
             try await engine.beginDictation(frontmostBundleID: frontmostBundleID)
             icon = .listening
             SpeakLog.engine.info("DictationController: beginDictation succeeded → .listening")
@@ -107,7 +111,14 @@ extension DictationController {
             let kt = overlayController.overlayModel.perDictationTone
             let kl = overlayController.overlayModel.perDictationLength
             let hasKnobOverride = kf != .asIs || kt != .neutral || kl != .preserve
-            if didOverrideThisSession || hasKnobOverride {
+            // [P-Code v2] The prompt-customization panel's "Additional instructions" field —
+            // read directly off the overlay model exactly like the knob values above (same
+            // per-dictation, no-callback-needed pattern). Non-empty text also triggers the
+            // override path so it reaches the cleaner even when no knob/destination changed.
+            let customInstructions = overlayController.overlayModel.customInstructions
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let hasCustomInstructions = !customInstructions.isEmpty
+            if didOverrideThisSession || hasKnobOverride || hasCustomInstructions {
                 if overrodeToRaw {
                     await engine.applyRawOverride()
                 } else {
@@ -117,7 +128,11 @@ extension DictationController {
                     if kf != .asIs { effectiveProfile.format = kf }
                     if kt != .neutral { effectiveProfile.tone = kt }
                     if kl != .preserve { effectiveProfile.length = kl }
-                    await engine.applyProfileOverride(effectiveProfile, category: activeCategory)
+                    await engine.applyProfileOverride(
+                        effectiveProfile,
+                        category: activeCategory,
+                        customInstructions: customInstructions
+                    )
                 }
             }
             let result = try await engine.endDictation()

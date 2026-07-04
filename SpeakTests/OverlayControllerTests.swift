@@ -375,4 +375,58 @@ final class OverlayControllerTests: XCTestCase {
         // Clean up: finish the stream so no continuation is leaked.
         continuation.finish()
     }
+
+    // MARK: - P-Code: coding customization panel wiring
+
+    /// `overlayModel.onCodingPanelOpenChanged` must be wired by `OverlayController.init()`
+    /// so the view layer's `isCodingPanelOpen` toggle actually drives panel visibility —
+    /// without this, tapping "Code" would flip a SwiftUI flag with no observable effect.
+    func testInit_wiresOnCodingPanelOpenChanged() {
+        XCTAssertNotNil(
+            controller.overlayModel.onCodingPanelOpenChanged,
+            "OverlayController.init() must wire overlayModel.onCodingPanelOpenChanged " +
+            "so opening/closing the coding panel from the view has an effect."
+        )
+    }
+
+    /// Invoking the callback with `true` must not crash even when the base panel was
+    /// never created (`createPanel()` not called) — `setCodingPanelOpen` falls back to
+    /// `.zero` for the anchor frame in that case.
+    func testCodingPanelOpenChanged_trueWithoutBasePanel_doesNotCrash() {
+        controller.overlayModel.onCodingPanelOpenChanged?(true)
+        // No crash is the assertion; also confirm it can be closed again cleanly.
+        controller.overlayModel.onCodingPanelOpenChanged?(false)
+    }
+
+    /// `start()` must reset `isCodingPanelOpen` to false, matching the reset of every
+    /// other transient overlay-card flag (`isProfilePanelOpen`, `isShowingAgentCategories`).
+    func testStart_resetsCodingPanelOpenFlag() {
+        controller.overlayModel.isCodingPanelOpen = true
+        controller.start(partialsProvider: { nil }, levelsProvider: { nil }, isCleaningUp: false)
+        XCTAssertFalse(
+            controller.overlayModel.isCodingPanelOpen,
+            "start() must reset isCodingPanelOpen to false, like the other transient card flags."
+        )
+    }
+
+    /// `stop()` must reset `isCodingPanelOpen` to false so a subsequent dictation starts
+    /// with the coding panel closed.
+    func testStop_resetsCodingPanelOpenFlag() {
+        controller.overlayModel.isCodingPanelOpen = true
+        controller.stop()
+        XCTAssertFalse(
+            controller.overlayModel.isCodingPanelOpen,
+            "stop() must reset isCodingPanelOpen to false."
+        )
+    }
+
+    /// `cancelImmediate()` must reset `isCodingPanelOpen` to false, matching stop()'s reset.
+    func testCancelImmediate_resetsCodingPanelOpenFlag() {
+        controller.overlayModel.isCodingPanelOpen = true
+        controller.cancelImmediate()
+        XCTAssertFalse(
+            controller.overlayModel.isCodingPanelOpen,
+            "cancelImmediate() must reset isCodingPanelOpen to false."
+        )
+    }
 }

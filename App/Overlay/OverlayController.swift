@@ -67,6 +67,12 @@ final class OverlayController {
     // MARK: - Private
 
     private var panel: TranscriptOverlayPanel?
+    /// P-Code: the second, dynamically-sized panel for the "Code" Agent category's
+    /// real-time customization surface. Created lazily on first open (see
+    /// `ensureCodingPanel()`) — mirrors `CaretOverlayController`'s lazy-panel pattern,
+    /// not `TranscriptOverlayPanel`'s create-once-at-`createPanel()` pattern, since this
+    /// panel is opened only occasionally rather than for every dictation.
+    private var codingPanel: CodingCustomizationPanel?
     private var partialsTask: Task<Void, Never>?
     /// W2.1: parallel task draining the RMS level stream into `overlayModel.level`.
     private var levelsTask: Task<Void, Never>?
@@ -88,7 +94,16 @@ final class OverlayController {
 
     // MARK: - Init
 
-    init() {}
+    init() {
+        // P-Code: pure overlay/UI concern — wired directly here rather than via
+        // `DictationController` (unlike `onSelectDestination`/`onSelectCategory`, which
+        // route per-dictation engine state). Opening/closing the second panel never
+        // touches the engine or the saved profile, so no coupling to DictationController
+        // is needed.
+        overlayModel.onCodingPanelOpenChanged = { [weak self] isOpen in
+            self?.setCodingPanelOpen(isOpen)
+        }
+    }
 
     // MARK: - Panel setup (call once from startMonitoring)
 
@@ -155,6 +170,36 @@ final class OverlayController {
         overlayModel.isShowingAgentCategories = false
     }
 
+    // MARK: - P-Code coding customization panel
+
+    /// Show or hide `CodingCustomizationPanel`, anchored above the base HUD panel's
+    /// current frame. Creating the panel lazily on first open (see `ensureCodingPanel()`).
+    private func setCodingPanelOpen(_ isOpen: Bool) {
+        if isOpen {
+            let baseFrame = panel?.frame ?? .zero
+            let codingPanel = ensureCodingPanel()
+            codingPanel.show(anchoredAbove: baseFrame)
+        } else {
+            codingPanel?.hide()
+        }
+    }
+
+    /// Lazily construct `CodingCustomizationPanel`, bound to the same `overlayModel`
+    /// instance the base HUD uses (knob state stays in sync between the two panels).
+    private func ensureCodingPanel() -> CodingCustomizationPanel {
+        if let existing = codingPanel { return existing }
+        let created = CodingCustomizationPanel(overlayModel: overlayModel)
+        codingPanel = created
+        return created
+    }
+
+    /// Force-close the coding panel without going through `overlayModel.isCodingPanelOpen`
+    /// (used when resetting overlay state wholesale in `start()`/`stop()`/`cancelImmediate()`).
+    private func resetCodingPanel() {
+        overlayModel.isCodingPanelOpen = false
+        codingPanel?.hide()
+    }
+
     // MARK: - PE-3.2 pin-to-context banner
 
     /// Show the pin-suggestion banner in the calm HUD below the waveform row.
@@ -203,6 +248,8 @@ final class OverlayController {
         overlayModel.onKnobChanged = nil
         overlayModel.onCancel = nil
         overlayModel.onReclean = nil
+        overlayModel.customInstructions = ""       // P-Code v2: reset per-dictation prompt addition
+        resetCodingPanel()                         // P-Code: always start with the panel closed
         partialText = ""
         panel?.show()
 
@@ -289,6 +336,9 @@ final class OverlayController {
         overlayModel.perDictationLength = .preserve
         overlayModel.onKnobChanged = nil
         overlayModel.onCancel = nil
+        overlayModel.customInstructions = ""       // P-Code v2: reset per-dictation prompt addition
+        overlayModel.defaultSystemPrompt = ""      // P-Code v2: reset until next beginDictation
+        resetCodingPanel()   // P-Code: close the coding panel with the rest of overlay state
         partialText = ""
         panel?.hide()
         SpeakLog.engine.info("OverlayController: overlay hidden.")
@@ -344,6 +394,9 @@ final class OverlayController {
         overlayModel.perDictationLength = .preserve
         overlayModel.onKnobChanged = nil
         overlayModel.onCancel = nil
+        overlayModel.customInstructions = ""       // P-Code v2: reset per-dictation prompt addition
+        overlayModel.defaultSystemPrompt = ""      // P-Code v2: reset until next beginDictation
+        resetCodingPanel()   // P-Code: close the coding panel with the rest of overlay state
         partialText = ""
         panel?.hide()
         SpeakLog.engine.info("OverlayController: dictation cancelled (immediate hide).")

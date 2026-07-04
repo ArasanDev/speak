@@ -301,7 +301,15 @@ public actor SpeakEngine {
     /// MUST be called BEFORE `endDictation()` so the override is in place before the
     /// session's `.processing`/cleanup pass reads it. Race-free: a single ordered actor
     /// write, not a per-tap call. [decision PE-3.]
-    public func applyProfileOverride(_ profile: Profile, category: AgentCategory) async {
+    ///
+    /// - Parameter customInstructions: (P-Code) free-form text from the coding-
+    ///   customization panel, appended as the final instruction clause. Empty by
+    ///   default — existing callers (knob-only overrides) are unaffected.
+    public func applyProfileOverride(
+        _ profile: Profile,
+        category: AgentCategory,
+        customInstructions: String = ""
+    ) async {
         guard let session = currentSession else { return }
         guard settings.cleanupEnabled, settings.cleanupLevel != .none else {
             SpeakLog.engine.info("SpeakEngine: live-panel override ignored — cleanup off / level=.none (raw passthrough).")
@@ -315,7 +323,8 @@ public actor SpeakEngine {
             profile,
             level: settings.cleanupLevel,
             category: category,
-            customVocabulary: settings.customVocabulary
+            customVocabulary: settings.customVocabulary,
+            customInstructions: customInstructions
         )
         await session.setOverrideCleanupMode(mode)
         SpeakLog.engine.info(
@@ -380,7 +389,12 @@ public actor SpeakEngine {
     /// Silent no-ops (logged) when: the cleaner is absent or unavailable; cleanup is
     /// disabled or level is `.none`; the profile is the `.raw` base-core bypass.
     /// Throws only from the actual `clean()` or `insert()` calls.
-    public func recleanAndPaste(_ rawTranscript: String, profile: Profile, category: AgentCategory) async throws {
+    public func recleanAndPaste(
+        _ rawTranscript: String,
+        profile: Profile,
+        category: AgentCategory,
+        customInstructions: String = ""
+    ) async throws {
         guard profile.model != .raw else {
             SpeakLog.engine.info("SpeakEngine: reclean skipped — profile is Raw (no model).")
             return
@@ -401,7 +415,8 @@ public actor SpeakEngine {
             profile,
             level: settings.cleanupLevel,
             category: category,
-            customVocabulary: settings.customVocabulary
+            customVocabulary: settings.customVocabulary,
+            customInstructions: customInstructions
         )
         let cleaned = try await cleaner.clean(rawTranscript, mode: mode)
         try await inserter.insert(cleaned)

@@ -149,7 +149,7 @@ final class ProfileOverrideTests: XCTestCase {
         case (.translate(let l1), .translate(let l2)): return l1.identifier == l2.identifier
         case (.styled(let s1, let l1, _), .styled(let s2, let l2, _)): return s1 == s2 && l1 == l2
         case (.command(let i1), .command(let i2)): return i1 == i2
-        case (.profile(let p1, let l1, let c1, _), .profile(let p2, let l2, let c2, _)):
+        case (.profile(let p1, let l1, let c1, _, _), .profile(let p2, let l2, let c2, _, _)):
             return p1.id == p2.id && l1 == l2 && c1 == c2
         default: return false
         }
@@ -259,7 +259,7 @@ final class ProfileOverrideTests: XCTestCase {
 
         // Assert: the session's effectiveCleanupMode is now the override.
         let effective = await session.effectiveCleanupMode
-        if case .profile(let p, let level, let c, _) = effective {
+        if case .profile(let p, let level, let c, _, _) = effective {
             XCTAssertEqual(p.name, "TestProfile", "Profile name should match the override.")
             XCTAssertEqual(level, .high, "Cleanup level should be from settings.")
             XCTAssertEqual(c, .ask, "Category should match the override.")

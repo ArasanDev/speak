@@ -203,6 +203,48 @@ final class OverlayViewModel {
     /// Re-run cleanup on the last raw transcript. Wired to `recleanCurrentTranscript()`.
     /// Only valid after `.done` when a raw transcript is available. [decision PE-4]
     var onReclean: (() -> Void)?
+
+    // MARK: Prompt-customization panel (P-Code)
+    //
+    // [decision P-Code v2] The base HUD's destination/Agent-category picker (the
+    // `profileSelectorCard` — destinations page + Agent category page) is REMOVED from
+    // the live UI per locked product direction: the base overlay shows only waveform +
+    // transcript + timer + ONE button. That button opens this same panel, now repurposed
+    // as a real-time PROMPT editor (default system prompt + an appendable custom-
+    // instructions field) rather than a category selector. `isProfilePanelOpen` /
+    // `isShowingAgentCategories` / `activeCategory` / `onSelectCategory` above are left
+    // in place (DictationController's per-app profile resolution still depends on
+    // `activeCategory`) but are no longer reachable from any View — nothing in the base
+    // HUD ever sets `isProfilePanelOpen = true` anymore.
+
+    /// `true` while the separate, dynamically-sized `CodingCustomizationPanel` is open.
+    /// Toggled open by the base HUD's single button; toggled closed by the panel's own
+    /// close affordance. Unlike `isProfilePanelOpen`, this does NOT cover the base HUD —
+    /// it drives visibility of a second, independent `NSPanel` owned by
+    /// `OverlayController`, anchored above the base HUD so the two never overlap.
+    var isCodingPanelOpen: Bool = false
+
+    /// Invoked whenever `isCodingPanelOpen` changes and the actual `NSPanel` must be
+    /// shown/hidden to match. Wired by `OverlayController` — a pure overlay/UI concern,
+    /// so it does not need to route through `DictationController` like the destination/
+    /// category callbacks above.
+    var onCodingPanelOpenChanged: ((Bool) -> Void)?
+
+    /// The resolved profile's system prompt for the CURRENT dictation, shown read-only
+    /// in the prompt-customization panel so the user can see what governs cleanup right
+    /// now. Set by `DictationController.beginDictation()` from `activeDestination
+    /// .systemPrompt` (the same per-app-resolved profile the engine will use); reset to
+    /// "" on stop/cancel. [decision P-Code v2]
+    var defaultSystemPrompt: String = ""
+
+    /// Free-form text the user typed into the prompt-customization panel's "Additional
+    /// instructions" field for THIS dictation. Read directly by `DictationController` at
+    /// stop time (mirrors how `perDictationFormat`/`perDictationTone`/`perDictationLength`
+    /// are read) and appended — via `PromptBuilder` — as the freshest instruction before
+    /// the transcript. Reset to "" at the start of every dictation. [decision P-Code v2:
+    /// append-only "custom addition" field, not full prompt replacement — the user's
+    /// stated preference for simplicity + correctness of wiring.]
+    var customInstructions: String = ""
 }
 
 // MARK: - VisualEffectView
@@ -386,278 +428,63 @@ struct TranscriptOverlayView: View {
 
     // MARK: - Listening state
 
-    // [PE-3c] Calm HUD by default (waveform · transcript · timer · destination pill);
-    // clicking the pill opens an anchored selector card that covers the HUD. The card's
-    // buttons live in the same FirstMouseHostingView, so clicks register in the
-    // non-activating panel without focus steal (proven live in PE-3b).
+    // [decision P-Code v2] The base HUD ALWAYS renders the calm row — no state swap, no
+    // covering card. Locked product direction: the base overlay shows exactly waveform +
+    // live transcript + elapsed timer + ONE button, nothing else, and never changes shape
+    // when that button is pressed. The button opens `CodingCustomizationPanel` — a
+    // SEPARATE `NSPanel` anchored above this fixed frame (see `OverlayController` /
+    // `CodingCustomizationPanel`) — so this view's own layout never transitions.
     private var listeningContent: some View {
-        Group {
-            if model.isProfilePanelOpen {
-                profileSelectorCard
-            } else {
-                calmListeningRow
-            }
-        }
-        .padding(.horizontal, SpeakSpacing.md)
-        .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)   // = 12 pt [decision]
+        calmListeningRow
+            .padding(.horizontal, SpeakSpacing.md)
+            .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)   // = 12 pt [decision]
     }
 
-    /// The calm default: live waveform, partial text, elapsed timer, destination pill, and
-    /// (when `showPinPrompt`) a pin-suggestion row below. [decision PE-3.2: pin row lives
-    /// outside the selector card so it survives card-close on leaf selection.]
+    /// The (only) listening layout: live waveform, partial text, elapsed timer, and the
+    /// single prompt-customization button. [decision P-Code v2: pixel-identical across
+    /// the entire `.listening` state — pressing the button never resizes or swaps this row.]
     private var calmListeningRow: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            HStack(alignment: .center, spacing: SpeakSpacing.sm) {
-                WaveformView(level: model.level, isActive: true)
-                    .frame(width: WaveformView.totalWidth)
-                textContent
-                Text(Self.durationLabel(model.elapsedSeconds))
-                    .font(.speakMonoCaption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                if !model.destinationChoices.isEmpty {
-                    destinationPill
-                }
-            }
-            if model.showPinPrompt {
-                pinPromptRow
-            }
-        }
-    }
-
-    /// PE-3.2 pin suggestion row. Appears below the waveform row after the user overrides
-    /// the same app's destination twice. [Pin] commits; [✕] dismisses and resets the counter.
-    private var pinPromptRow: some View {
-        HStack(spacing: SpeakSpacing.xs) {
-            Image(systemName: "pin.fill")
-                .font(.system(size: 9))
-                .foregroundStyle(.secondary)
-            Text(model.pinContextLabel)
+        HStack(alignment: .center, spacing: SpeakSpacing.sm) {
+            WaveformView(level: model.level, isActive: true)
+                .frame(width: WaveformView.totalWidth)
+            textContent
+            Text(Self.durationLabel(model.elapsedSeconds))
                 .font(.speakMonoCaption)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer(minLength: 0)
-            Button {
-                model.onPin?()
-            } label: {
-                Text("Pin")
-                    .font(.speakMonoCaption)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Color.accentColor.opacity(0.20))
-                    )
-                    .foregroundStyle(Color.primary)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Pin this destination for this app")
-            Button {
-                model.onDismissPin?()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Dismiss pin suggestion")
+                .monospacedDigit()
+            customizeButton
         }
     }
 
-    /// PE-3c destination pill: shows the active destination (and the category when Agent) +
-    /// a chevron; tap opens the card.
-    private var destinationPill: some View {
-        let active = model.activeDestinationChoice ?? .write
-        let label = active == .agent ? "\(active.label) · \(model.activeCategory.displayName)" : active.label
-        return Button {
-            model.isShowingAgentCategories = false   // always open on the destinations page
-            model.isProfilePanelOpen = true
+    /// The base HUD's single button: opens the separate `CodingCustomizationPanel`
+    /// (real-time prompt editor) anchored above this fixed frame. Does not mutate any
+    /// state that affects THIS view's layout — only `isCodingPanelOpen`, which the
+    /// second panel (not this one) reacts to. [decision P-Code v2]
+    private var customizeButton: some View {
+        Button {
+            model.isCodingPanelOpen.toggle()
+            model.onCodingPanelOpenChanged?(model.isCodingPanelOpen)
         } label: {
-            HStack(spacing: 3) {
-                Image(systemName: active.icon)
-                Text(label)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 7))
-            }
-            .font(.speakMonoCaption)
-            .padding(.horizontal, SpeakSpacing.xs + 2)
-            .padding(.vertical, 3)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.primary.opacity(0.08))
-            )
-            .foregroundStyle(.secondary)
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Destination \(label). Tap to change for this dictation.")
+        .accessibilityLabel("Customize the prompt for this dictation")
+        .accessibilityAddTraits(model.isCodingPanelOpen ? [.isSelected, .isButton] : .isButton)
     }
 
-    /// PE-3c selector card. Two pages: destinations (Agent/Write/Note/Raw) and — after Agent
-    /// is picked — the Agent **category** tier (PE-3c-2). Picking a leaf option applies the
-    /// per-dictation override and closes; Escape closes (handled by OverlayController).
-    @ViewBuilder
-    private var profileSelectorCard: some View {
-        if model.isShowingAgentCategories {
-            agentCategoryPage
-        } else {
-            destinationPage
-        }
-    }
-
-    private var destinationPage: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            HStack {
-                Text("Shape this dictation")
-                    .font(.speakMonoCaption)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                Text("esc")
-                    .font(.speakMonoCaption)
-                    .foregroundStyle(Color.secondary.opacity(0.6))
-            }
-            HStack(spacing: SpeakSpacing.xs) {
-                ForEach(model.destinationChoices) { choice in
-                    profileButton(choice)
-                }
-            }
-            // PE-4: per-dictation knob overrides + cancel (format / tone / length).
-            OverlayKnobsRow(model: model)
-                .padding(.top, SpeakSpacing.xs)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func profileButton(_ choice: OverlayDestinationChoice) -> some View {
-        let isActive = choice == model.activeDestinationChoice
-        return Button {
-            model.onSelectDestination?(choice)
-            // Agent has a deeper tier — swap to its categories instead of closing.
-            // Every other destination is a leaf: apply + close.
-            if choice == .agent {
-                model.isCategoryMoreExpanded = false   // [PE-3c-3] collapse ⌄more on every fresh entry
-                model.isShowingAgentCategories = true
-            } else {
-                model.isProfilePanelOpen = false
-            }
-        } label: {
-            VStack(spacing: 2) {
-                Image(systemName: choice.icon)
-                    .font(.system(size: 13))
-                Text(choice.label)
-                    .font(.speakMonoCaption)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, SpeakSpacing.xs)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isActive ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.08))
-            )
-            .foregroundStyle(isActive ? Color.primary : Color.secondary)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(choice == .agent
-            ? "Agent — choose a category"
-            : "Shape this dictation as \(choice.label)")
-        .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
-    }
-
-    /// PE-3c-2: the Agent category tier. A back affordance returns to destinations; picking a
-    /// category threads it into the Agent override and closes the card.
-    /// PE-3c-3: rare categories (Code) live behind a `⌄more` affordance in the header.
-    /// [decision PE-3c-3: no animation on the reveal — consistent with the card's instant
-    ///  transitions; reduce-motion is moot since the baseline page is also unanimated.]
-    /// [decision PE-3c-3: expanded row fits in the 112 pt panel — estimated 87 pt total
-    ///  (3-row VStack 63 pt + 24 pt vertical padding), leaving 12 pt spare each side]
-    private var agentCategoryPage: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            HStack(spacing: SpeakSpacing.xs) {
-                Button {
-                    model.isShowingAgentCategories = false   // back to destinations
-                } label: {
-                    HStack(spacing: 2) {
-                        Image(systemName: "chevron.left").font(.system(size: 9))
-                        Text("Agent").font(.speakMonoCaption)
-                    }
-                    .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Back to destinations")
-                Spacer(minLength: 0)
-                // [PE-3c-3] ⌄more toggle — reveals rare categories (currently: Code).
-                Button {
-                    model.isCategoryMoreExpanded.toggle()
-                } label: {
-                    HStack(spacing: 2) {
-                        Image(systemName: model.isCategoryMoreExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 9))
-                        Text("more")
-                    }
-                    .font(.speakMonoCaption)
-                    .foregroundStyle(Color.secondary.opacity(0.6))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(model.isCategoryMoreExpanded
-                    ? "Collapse rare categories"
-                    : "Show more categories")
-                Text("esc")
-                    .font(.speakMonoCaption)
-                    .foregroundStyle(Color.secondary.opacity(0.6))
-            }
-            // Primary categories (Code lives behind ⌄more, per specs/profile-taxonomy.md [rare]).
-            HStack(spacing: SpeakSpacing.xs) {
-                ForEach(Self.primaryCategories, id: \.self) { category in
-                    categoryButton(category)
-                }
-            }
-            // [PE-3c-3] Rare categories — revealed by ⌄more. Spacer prevents a single
-            // button from stretching full-width (each button uses maxWidth: .infinity).
-            if model.isCategoryMoreExpanded {
-                HStack(spacing: SpeakSpacing.xs) {
-                    ForEach(Self.rareCategories, id: \.self) { category in
-                        categoryButton(category)
-                    }
-                    Spacer(minLength: 0)
-                }
-            }
-            // PE-4: per-dictation knob overrides + cancel (format / tone / length).
-            OverlayKnobsRow(model: model)
-                .padding(.top, SpeakSpacing.xs)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// The primary Agent categories shown in the card (Code is deferred to a `⌄more` affordance).
-    static let primaryCategories: [AgentCategory] = [.task, .fix, .ask, .commit, .shell]
-
-    /// Rare categories revealed by `⌄more` — derived as the complement of `primaryCategories`
-    /// over `AgentCategory.allCases` so any future category addition is automatically covered.
-    /// [decision PE-3c-3: Code is rare per specs/profile-taxonomy.md; kept behind ⌄more]
-    static let rareCategories: [AgentCategory] = AgentCategory.allCases.filter {
-        !Self.primaryCategories.contains($0)
-    }
-
-    private func categoryButton(_ category: AgentCategory) -> some View {
-        let isActive = category == model.activeCategory
-        return Button {
-            model.onSelectCategory?(category)
-            model.isProfilePanelOpen = false
-            model.isShowingAgentCategories = false
-        } label: {
-            Text(category.displayName)
-                .font(.speakMonoCaption)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, SpeakSpacing.xs)
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(isActive ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.08))
-                )
-                .foregroundStyle(isActive ? Color.primary : Color.secondary)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Agent category \(category.displayName)")
-        .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
-    }
+    // [decision P-Code v2] The PE-3.2 pin-suggestion row (`pinPromptRow`) and the PE-3c
+    // destination/Agent-category picker (`destinationPill`, `profileSelectorCard`,
+    // `destinationPage`, `profileButton`, `agentCategoryPage`, `primaryCategories`/
+    // `rareCategories`, `categoryButton` — formerly in
+    // App/Overlay/TranscriptOverlayView+ProfileSelector.swift, now deleted) are removed:
+    // the base HUD shows exactly waveform + transcript + timer + one button, nothing
+    // else. `OverlayViewModel.showPinPrompt`/`pinContextLabel`/`onPin`/`onDismissPin` and
+    // `isProfilePanelOpen`/`isShowingAgentCategories`/`activeCategory`/`onSelectCategory`
+    // are left in place on the model (DictationController's pin-to-context and per-app
+    // category state still use them) but nothing in this View sets or renders from them
+    // anymore — the destination/category chip taps that used to drive them no longer exist.
 
     /// Format elapsed seconds as `m:ss` for the HUD (e.g. 0:05, 1:23).
     static func durationLabel(_ seconds: Int) -> String {
@@ -813,7 +640,11 @@ struct TranscriptOverlayView: View {
 /// per-dictation overrides. Extracted from `TranscriptOverlayView` to keep its
 /// type body within the linter budget. Mutates `model` directly (same @Observable
 /// reference) and fires `model.onKnobChanged?()` on each change. [decision PE-4]
-private struct OverlayKnobsRow: View {
+///
+/// Internal (not `private`) so `CodingCustomizationView` (App/Overlay/CodingCustomizationView.swift)
+/// can reuse it rather than duplicating the format/tone/length chip logic in the new
+/// coding-customization panel. [decision P-Code: reuse existing knob plumbing]
+struct OverlayKnobsRow: View {
     let model: OverlayViewModel
 
     var body: some View {
@@ -981,35 +812,15 @@ private struct OverlayKnobsRow: View {
         .frame(width: 340, height: 60)
 }
 
-/// PE-3c-2: Agent category page, primary row only (⌄more collapsed). Framed at the real
-/// 112 pt panel height so the canvas reflects the live fit (height is irreducibly the thing
-/// to eyeball — content layout previews can't catch a clipped row otherwise).
-#Preview("Card — Agent categories (collapsed)") {
+/// Listening — the single customize button, shown highlighted (as it renders while
+/// `CodingCustomizationPanel` is open). [decision P-Code v2: the base HUD's layout is
+/// identical whether the panel is open or closed — this preview documents that.]
+#Preview("Listening — customize panel open") {
     let model = OverlayViewModel()
     model.overlayState = .listening
-    model.destinationChoices = OverlayDestinationChoice.allCases
-    model.activeDestinationChoice = .agent
-    model.isProfilePanelOpen = true
-    model.isShowingAgentCategories = true
-    model.activeCategory = .task
-    model.isCategoryMoreExpanded = false
+    model.partialText = "open the customization panel"
+    model.isCodingPanelOpen = true
     return TranscriptOverlayView(model: model)
-        .frame(width: 340, height: 112)
-}
-
-/// PE-3c-3: Agent category page with ⌄more expanded — the rare row (Code) is visible.
-/// This is the layout to verify against the fixed 112 pt panel: the 3-row card
-/// (header + primary + rare) must not clip the bottom row.
-#Preview("Card — Agent categories (⌄more → Code)") {
-    let model = OverlayViewModel()
-    model.overlayState = .listening
-    model.destinationChoices = OverlayDestinationChoice.allCases
-    model.activeDestinationChoice = .agent
-    model.isProfilePanelOpen = true
-    model.isShowingAgentCategories = true
-    model.activeCategory = .task
-    model.isCategoryMoreExpanded = true
-    return TranscriptOverlayView(model: model)
-        .frame(width: 340, height: 112)
+        .frame(width: 340, height: 60)
 }
 #endif

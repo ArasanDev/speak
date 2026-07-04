@@ -117,7 +117,7 @@ final class ProfileWiringTests: XCTestCase {
     func testNewSessionUsesProfileModeForMatchingApp() async throws {
         let engine = try makeEngine()
         let session = await engine.newSession(frontmostBundleID: "com.apple.dt.Xcode")
-        guard case .profile(let profile, let level, let category, _) = session.cleanupMode else {
+        guard case .profile(let profile, let level, let category, _, _) = session.cleanupMode else {
             return XCTFail("A matching app must select the .profile cleanup mode.")
         }
         XCTAssertEqual(profile.name, "Agent")

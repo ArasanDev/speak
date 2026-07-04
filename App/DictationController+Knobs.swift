@@ -34,8 +34,13 @@ extension DictationController {
         if overlayModel.perDictationFormat != .asIs { effectiveProfile.format = overlayModel.perDictationFormat }
         if overlayModel.perDictationTone != .neutral { effectiveProfile.tone = overlayModel.perDictationTone }
         if overlayModel.perDictationLength != .preserve { effectiveProfile.length = overlayModel.perDictationLength }
+        // [P-Code v2] Include any custom prompt addition still on the model — the reclean
+        // button is only shown during `.done`, before `stop()` resets it.
+        let customInstructions = overlayModel.customInstructions.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
-            try await engine.recleanAndPaste(raw, profile: effectiveProfile, category: activeCategory)
+            try await engine.recleanAndPaste(
+                raw, profile: effectiveProfile, category: activeCategory, customInstructions: customInstructions
+            )
             SpeakLog.engine.info("DictationController: reclean completed successfully.")
         } catch {
             SpeakLog.engine.error(

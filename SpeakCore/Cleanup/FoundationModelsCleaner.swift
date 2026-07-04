@@ -251,14 +251,16 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
             // Wave D Command Mode: apply the user's spoken instruction to their selection.
             return Self.commandInstructions(instruction: instruction)
 
-        case .profile(let profile, let level, let category, let customVocabulary):
+        case .profile(let profile, let level, let category, let customVocabulary, let customInstructions):
             // Profile Engine (PT-1): the profile's system prompt + knobs + intensity +
             // category fragment (if Agent) + preserved vocabulary become the instructions.
             // The transcript is fed separately (XML-wrapped) as the prompt, exactly like
             // the other modes — so the universal transcriptGuard + <transcript> framing
-            // still applies.
+            // still applies. `customInstructions` (P-Code) is the user's runtime prompt
+            // addition typed into the coding-customization panel; empty by default.
             return PromptBuilder.instructions(
-                profile: profile, intensity: level, category: category, customVocabulary: customVocabulary
+                profile: profile, intensity: level, category: category, customVocabulary: customVocabulary,
+                customInstructions: customInstructions
             )
         }
     }
