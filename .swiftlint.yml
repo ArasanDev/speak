@@ -3,9 +3,9 @@
 # Line length matches .swift-format (lineLength: 180), sourced from Apple's container project.
 
 included:
-  - App
-  - SpeakCore
-  - SpeakTests
+  - Speak/App
+  - Speak/SpeakCore
+  - Speak/Tests/SpeakTests
 
 excluded:
   - build

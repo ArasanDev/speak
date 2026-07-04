@@ -120,7 +120,7 @@ lint:
 ## container project. Run before committing; CI will gate on this when wired.
 fmt:
 	@which swift-format > /dev/null || (echo "swift-format not installed. Run: brew install swift-format" && exit 1)
-	swift-format format --recursive --configuration .swift-format --in-place App SpeakCore SpeakTests
+	swift-format format --recursive --configuration .swift-format --in-place Speak/App Speak/SpeakCore Speak/Tests/SpeakTests
 	@echo "fmt: done."
 
 # ── Dev loop (agent-friendly) ───────────────────────────────────────────────

@@ -224,13 +224,15 @@ final class KeystrokeStreamingInserterTests: XCTestCase {
     func testNoPasteboardReadAccess() throws {
         // Resolve the source path from this test file's compile-time location
         // (#filePath) rather than a hardcoded home directory, so the audit runs on
-        // any machine/CI checkout. This file lives at <repo>/SpeakTests/…; the
-        // source under audit is at <repo>/SpeakCore/Paste/….
+        // any machine/CI checkout. This file lives at <repo>/Speak/Tests/SpeakTests/…;
+        // the source under audit is at <repo>/Speak/SpeakCore/Paste/….
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()   // SpeakTests/
+            .deletingLastPathComponent()   // Tests/
+            .deletingLastPathComponent()   // Speak/
             .deletingLastPathComponent()   // <repo root>
         let sourceURL = repoRoot
-            .appendingPathComponent("SpeakCore/Paste/KeystrokeStreamingInserter.swift")
+            .appendingPathComponent("Speak/SpeakCore/Paste/KeystrokeStreamingInserter.swift")
 
         guard FileManager.default.fileExists(atPath: sourceURL.path) else {
             XCTFail("Could not locate KeystrokeStreamingInserter.swift at \(sourceURL.path)")

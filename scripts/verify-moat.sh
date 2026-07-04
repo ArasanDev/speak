@@ -43,7 +43,7 @@ fi
 # networking-symbol check honest for the CLI binary. The CLI binary itself is
 # not a GUI app and uses FileHandle for output (not os.Logger), but it must
 # still be free of networking symbols and third-party imports. [decision: W2.3]
-SOURCE_DIRS=("$REPO_ROOT/SpeakCore" "$REPO_ROOT/App" "$REPO_ROOT/CLI")
+SOURCE_DIRS=("$REPO_ROOT/Speak/SpeakCore" "$REPO_ROOT/Speak/App" "$REPO_ROOT/Speak/CLI")
 PASS_COUNT=0
 FAIL_COUNT=0
 

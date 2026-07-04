@@ -409,11 +409,14 @@ final class FoundationModelsStudyTests: XCTestCase {
 
     /// Write the RAW report to specs/sm1-fm-measurements-RAW.md.
     private func writeReport(_ content: String) throws {
-        // Resolve path relative to the repo root.
+        // Resolve path relative to the repo root. This file lives at
+        // <repo>/Speak/Tests/SpeakTests/…, so walk up four levels.
         let testFile = URL(fileURLWithPath: #filePath)
         let repoRoot = testFile
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
+            .deletingLastPathComponent() // SpeakTests/
+            .deletingLastPathComponent() // Tests/
+            .deletingLastPathComponent() // Speak/
+            .deletingLastPathComponent() // <repo root>
         let specsDir = repoRoot.appendingPathComponent("specs")
         let reportPath = specsDir.appendingPathComponent("sm1-fm-measurements-RAW.md")
 

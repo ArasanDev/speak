@@ -44,10 +44,11 @@ final class MoatAuditTests: XCTestCase {
     private var repoRoot: URL {
         var dir = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent() // SpeakTests/
-            .deletingLastPathComponent() // repo root
-        // Verify project.yml is there; if not, walk up one more level.
-        if !FileManager.default.fileExists(atPath: dir.appendingPathComponent("project.yml").path) {
-            dir = dir.deletingLastPathComponent()
+        // Walk up until project.yml is found (or we hit the filesystem root).
+        while !FileManager.default.fileExists(atPath: dir.appendingPathComponent("project.yml").path) {
+            let parent = dir.deletingLastPathComponent()
+            if parent.path == dir.path { break } // reached filesystem root; give up
+            dir = parent
         }
         return dir
     }
@@ -56,7 +57,7 @@ final class MoatAuditTests: XCTestCase {
     /// directories: `SpeakCore/` and `App/`. Test files are excluded because
     /// they legitimately use `try!`, `as!`, etc. per the coding rules.
     private func productionSwiftFiles() throws -> [URL] {
-        let sourceDirs = ["SpeakCore", "App"].map { repoRoot.appendingPathComponent($0) }
+        let sourceDirs = ["Speak/SpeakCore", "Speak/App"].map { repoRoot.appendingPathComponent($0) }
         var result: [URL] = []
         for dir in sourceDirs {
             guard let enumerator = FileManager.default.enumerator(

@@ -36,7 +36,7 @@ targets:
     type: framework
     platform: macOS
     sources:
-      - SpeakCore
+      - Speak/SpeakCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.speak.SpeakCore
@@ -47,12 +47,12 @@ targets:
     type: application
     platform: macOS
     sources:
-      - App
+      - Speak/App
     dependencies:
       - target: SpeakCore
         embed: true
     info:
-      path: App/Info.generated.plist
+      path: Speak/App/Info.generated.plist
       properties:
         LSUIElement: true            # menubar-only, no Dock icon
         CFBundleDisplayName: speak
@@ -69,7 +69,7 @@ targets:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - SpeakTests
+      - Speak/Tests/SpeakTests
     dependencies:
       - target: SpeakCore
       - target: Speak          # H2: TEST_HOST — gives tests access to the App shell
@@ -96,7 +96,7 @@ targets:
     type: tool
     platform: macOS
     sources:
-      - CLI
+      - Speak/CLI
     dependencies:
       - target: SpeakCore
         embed: false
