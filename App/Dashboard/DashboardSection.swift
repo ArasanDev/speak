@@ -39,6 +39,14 @@ enum DashboardSection: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    /// Sidebar sections shown in the main scrollable nav list, in display order.
+    /// [decision: Settings is pinned to the bottom of the sidebar, separate from this
+    ///  list — the common macOS pattern (System Settings, Slack, VS Code) of anchoring
+    ///  the gear icon below a divider so it never scrolls away as sections are added.]
+    static var mainSections: [DashboardSection] {
+        allCases.filter { $0 != .settings }
+    }
+
     var systemImage: String {
         switch self {
         case .home:       return "house"

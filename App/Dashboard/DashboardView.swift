@@ -37,12 +37,30 @@ struct DashboardView: View {
             // (see `detail(for: selection)`). A `NavigationLink(value:)` row here has no
             // `.navigationDestination` and captures the tap, so `selection` never updated and
             // panes never switched. Plain `.tag`-ged rows let `List(selection:)` drive it.
-            List(DashboardSection.allCases, selection: $selection) { section in
-                Label(section.title, systemImage: section.systemImage)
-                    .tag(section)
+            //
+            // [decision: Settings pinned to the bottom] Two independent `List(selection:)`
+            // instances share the same `$selection` binding — either can drive it. The main
+            // list scrolls; the Settings row below the divider never does, matching the
+            // System Settings / Slack / VS Code convention of anchoring Settings at the
+            // bottom regardless of how many sections the main list grows to.
+            VStack(spacing: 0) {
+                List(DashboardSection.mainSections, selection: $selection) { section in
+                    Label(section.title, systemImage: section.systemImage)
+                        .tag(section)
+                }
+                .listStyle(.sidebar)
+
+                Divider()
+
+                List([DashboardSection.settings], selection: $selection) { section in
+                    Label(section.title, systemImage: section.systemImage)
+                        .tag(section)
+                }
+                .listStyle(.sidebar)
+                .frame(height: 40)
+                .scrollDisabled(true)
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
-            .listStyle(.sidebar)
         } detail: {
             detail(for: selection)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
