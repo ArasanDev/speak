@@ -140,12 +140,43 @@ targets:
         SWIFT_MODULE_NAME: SpeakCLI
         # Signing inherited from Signing.xcconfig (see configFiles above).
 
+  # MCP agent-bridge CLI target — produces the `speak-mcp` binary that serves
+  # the Model Context Protocol over stdio for any MCP-capable agent
+  # (specs/horizon-voice-os.md Pillar 3 / H-3 vertical slice).
+  #
+  # Links SpeakCore for the JSON-RPC/MCP protocol layer (SpeakCore/AgentBridge/)
+  # and the existing CLIContract IPC types (reused unchanged by
+  # CLIBridgeBackend to answer speak_status — no new transport in this slice).
+  # Does NOT embed the framework — command-line tool, not a bundle; rpath
+  # points to DerivedData at build time, same as SpeakCLI above.
+  #
+  # Transport: stdio only, no sockets. The XPC/socket link to the running
+  # menubar app for a live speak_say/speak_ask/speak_confirm is a later task.
+  SpeakMCP:
+    type: tool
+    platform: macOS
+    sources:
+      - Speak/MCP
+    dependencies:
+      - target: SpeakCore
+        embed: false
+    settings:
+      base:
+        PRODUCT_NAME: speak-mcp
+        PRODUCT_BUNDLE_IDENTIFIER: com.speak.mcp
+        GENERATE_INFOPLIST_FILE: "YES"
+        # Distinct Swift module name — same APFS case-insensitivity rationale
+        # as SpeakCLI's SWIFT_MODULE_NAME override above.
+        SWIFT_MODULE_NAME: SpeakMCP
+        # Signing inherited from Signing.xcconfig (see configFiles above).
+
 schemes:
   Speak:
     build:
       targets:
         Speak: all
         SpeakCLI: all      # build the CLI tool on every `make build`
+        SpeakMCP: all      # build the MCP agent-bridge shim on every `make build`
         SpeakTests: [test]
     test:
       targets:
