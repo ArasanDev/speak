@@ -123,6 +123,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let streamingRawTextEnabled = "speak.settings.streamingRawTextEnabled"
         static let streamingMode         = "speak.settings.streamingMode"
         static let appTheme              = "speak.settings.appTheme"
+        static let perAppContextEnabled  = "speak.settings.perAppContextEnabled"
     }
 
     // MARK: - Injected defaults (the testability seam)
@@ -152,7 +153,8 @@ public final class SettingsStore: @unchecked Sendable {
             Keys.cleanupLevel: CleanupLevel.medium.rawValue,
             Keys.streamingRawTextEnabled: true,
             Keys.streamingMode: StreamingMode.keystrokeInjection.rawValue,
-            Keys.appTheme: AppTheme.system.rawValue
+            Keys.appTheme: AppTheme.system.rawValue,
+            Keys.perAppContextEnabled: true
         ])
         // Enum defaults are handled via `?? fallback` at the getter level because
         // Codable JSON cannot be registered as a `[String: Any]` literal.
@@ -456,6 +458,32 @@ public final class SettingsStore: @unchecked Sendable {
     }
 
 
+    // MARK: - Per-app context awareness (V01-3, profile-native)
+
+    /// Whether the frontmost app influences which profile runs the cleanup pass
+    /// (`ProfileResolver` matching against each profile's `targetApps`).
+    ///
+    /// `true` (default): dictating in Xcode/Terminal → `Agent`, Slack/Messages →
+    /// `Chat`, Mail/browsers → `Write`, unmatched apps → the global default.
+    /// `false`: `SpeakEngine.newSession()` ignores the frontmost app entirely and
+    /// always resolves to the global default profile — reproducing the
+    /// no-app-context baseline exactly, regardless of which app is frontmost.
+    ///
+    /// [decision V01-3] A toggle, not a removal: per-app matching is the shipped
+    /// default (it has been live since PE-1), but users who find it surprising
+    /// (e.g. dictating a code snippet's prose description in Xcode) can turn it off.
+    public var perAppContextEnabled: Bool {
+        get {
+            access(keyPath: \.perAppContextEnabled)
+            return defaults.bool(forKey: Keys.perAppContextEnabled)
+        }
+        set {
+            withMutation(keyPath: \.perAppContextEnabled) {
+                defaults.set(newValue, forKey: Keys.perAppContextEnabled)
+            }
+        }
+    }
+
     // MARK: - Reset to defaults
 
     /// Resets all user settings to their default values. All preferences are wiped;
@@ -473,6 +501,7 @@ public final class SettingsStore: @unchecked Sendable {
         access(keyPath: \.streamingRawTextEnabled)
         access(keyPath: \.streamingMode)
         access(keyPath: \.appTheme)
+        access(keyPath: \.perAppContextEnabled)
 
         withMutation(keyPath: \.cleanupEnabled) {
             defaults.set(true, forKey: Keys.cleanupEnabled)
@@ -506,6 +535,9 @@ public final class SettingsStore: @unchecked Sendable {
         }
         withMutation(keyPath: \.appTheme) {
             defaults.set(AppTheme.system.rawValue, forKey: Keys.appTheme)
+        }
+        withMutation(keyPath: \.perAppContextEnabled) {
+            defaults.set(true, forKey: Keys.perAppContextEnabled)
         }
 
         SpeakLog.storage.info("SettingsStore reset to defaults")

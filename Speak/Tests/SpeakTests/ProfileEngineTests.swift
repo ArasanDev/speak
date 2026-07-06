@@ -119,11 +119,14 @@ final class ProfileEngineTests: XCTestCase {
 
     // MARK: - DefaultProfiles
 
-    func testFourBuiltInsPresent() {
-        XCTAssertEqual(DefaultProfiles.all.count, 4,
-                       "Ships Raw + Agent + Write + Note.")
+    func testFiveBuiltInsPresent() {
+        // V01-3 (per-app context, profile-native): `Chat` was split out of `Write`
+        // so messaging apps (Slack, Messages, WhatsApp, Telegram) get a casual tone
+        // distinct from Mail/browsers. Same mechanism (targetApps), one more profile.
+        XCTAssertEqual(DefaultProfiles.all.count, 5,
+                       "Ships Raw + Agent + Chat + Write + Note.")
         let names = Set(DefaultProfiles.all.map(\.name))
-        XCTAssertEqual(names, ["Raw", "Agent", "Write", "Note"])
+        XCTAssertEqual(names, ["Raw", "Agent", "Chat", "Write", "Note"])
     }
 
     func testAllBuiltInsAreFlaggedBuiltIn() {

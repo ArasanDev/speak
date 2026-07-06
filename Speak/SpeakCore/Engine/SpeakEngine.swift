@@ -201,9 +201,16 @@ public actor SpeakEngine {
         // an AI Studio edit to e.g. the Code profile actually change Xcode/Cursor dictation.
         // The DEFAULT (no-app-match) path still runs `.styled` below — the default→Clean
         // unification is a deliberate later stage, so the verified v0 default is untouched.
+        //
+        // V01-3 (per-app context, profile-native): `settings.perAppContextEnabled` gates
+        // the frontmost-app read itself, not a separate detector — when the user turns it
+        // off, `frontmostBundleID` is discarded here so `ProfileResolver.resolve` always
+        // falls through to `nil` → the global default, reproducing the no-app-context
+        // baseline exactly regardless of which app was frontmost. [decision V01-3]
+        let effectiveFrontmostBundleID = settings.perAppContextEnabled ? frontmostBundleID : nil
         let candidateProfiles = profileStore?.profiles ?? DefaultProfiles.all
         let resolvedProfile = ProfileResolver.resolve(
-            frontmostBundleID: frontmostBundleID,
+            frontmostBundleID: effectiveFrontmostBundleID,
             profiles: candidateProfiles,
             default: DefaultProfiles.defaultProfile
         )
@@ -216,7 +223,7 @@ public actor SpeakEngine {
                                   level: settings.cleanupLevel,
                                   customVocabulary: activeVocabulary)
             SpeakLog.engine.info(
-                "SpeakEngine: profile '\(resolvedProfile.name, privacy: .public)' active for frontmost app \(frontmostBundleID ?? "none", privacy: .public)."
+                "SpeakEngine: profile '\(resolvedProfile.name, privacy: .public)' active for frontmost app \(effectiveFrontmostBundleID ?? "none", privacy: .public)."
             )
         }
         // Wave B: build a snippet expander from the current snippets at call time, so a

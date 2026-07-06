@@ -134,4 +134,83 @@ final class ProfileWiringTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - V01-3 (per-app context, profile-native): Chat/Write split
+
+    func testResolverMatchesSlackToChat() {
+        let resolved = ProfileResolver.resolve(
+            frontmostBundleID: "com.tinyspeck.slackmacgap",
+            profiles: DefaultProfiles.all,
+            default: DefaultProfiles.defaultProfile
+        )
+        XCTAssertEqual(resolved.name, "Chat", "Slack is a Chat-destination target app.")
+        XCTAssertEqual(resolved.tone, .casual, "Chat must carry the casual tone knob.")
+    }
+
+    func testResolverMatchesMailToWrite() {
+        let resolved = ProfileResolver.resolve(
+            frontmostBundleID: "com.apple.mail",
+            profiles: DefaultProfiles.all,
+            default: DefaultProfiles.defaultProfile
+        )
+        XCTAssertEqual(resolved.name, "Write", "Mail stays on the formal-ish Write destination.")
+        XCTAssertNotEqual(resolved.tone, .casual, "Write must not carry Chat's casual tone.")
+    }
+
+    func testResolverFallsBackToDefaultForUnknownBundle() {
+        let resolved = ProfileResolver.resolve(
+            frontmostBundleID: "com.totally.unknown.app",
+            profiles: DefaultProfiles.all,
+            default: DefaultProfiles.defaultProfile
+        )
+        XCTAssertEqual(resolved.id, DefaultProfiles.defaultProfile.id,
+                       "An unrecognized bundle id must fall back to the global default.")
+    }
+
+    /// The bundle-ID map lives in exactly one place (`targetApps`) — no app should
+    /// resolve to both Chat and Write.
+    func testChatAndWriteTargetAppsDoNotOverlap() {
+        let overlap = Set(DefaultProfiles.chat.targetApps).intersection(DefaultProfiles.write.targetApps)
+        XCTAssertTrue(overlap.isEmpty,
+                      "Chat and Write targetApps must not overlap: \(overlap)")
+    }
+
+    // MARK: - V01-3: perAppContextEnabled toggle
+
+    private func makeEngine(perAppContextEnabled: Bool) throws -> SpeakEngine {
+        let name = "ProfileWiringTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        addTeardownBlock { defaults.removePersistentDomain(forName: name) }
+        let settings = SettingsStore(defaults: defaults)
+        settings.perAppContextEnabled = perAppContextEnabled
+        return SpeakEngine(
+            transcriber: NullTranscriber(),
+            cleaner: NullCleaner(),
+            inserter: nil,
+            history: NullHistory(),
+            settings: settings
+        )
+    }
+
+    func testTogglingPerAppContextOffIgnoresFrontmostAppEvenWhenMatching() async throws {
+        let engine = try makeEngine(perAppContextEnabled: false)
+        // Xcode would normally resolve to the Agent profile (see
+        // testNewSessionUsesProfileModeForMatchingApp) — with the toggle off it must not.
+        let session = await engine.newSession(frontmostBundleID: "com.apple.dt.Xcode")
+        guard case .styled = session.cleanupMode else {
+            return XCTFail(
+                "perAppContextEnabled == false must reproduce the no-app-context baseline "
+                + "(.styled default) regardless of a matching frontmost app."
+            )
+        }
+    }
+
+    func testTogglingPerAppContextOnRestoresMatching() async throws {
+        let engine = try makeEngine(perAppContextEnabled: true)
+        let session = await engine.newSession(frontmostBundleID: "com.apple.dt.Xcode")
+        guard case .profile(let profile, _, _, _, _) = session.cleanupMode else {
+            return XCTFail("perAppContextEnabled == true must restore app-matched profile selection.")
+        }
+        XCTAssertEqual(profile.name, "Agent")
+    }
 }

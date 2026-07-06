@@ -200,9 +200,22 @@ private struct AICleanupSection: View {
                     Text("Off = raw transcript pastes untouched. Full profile configuration: AI Studio.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+
+                Section {
+                    Toggle("Per-app context", isOn: Binding(
+                        get: { store.perAppContextEnabled },
+                        set: { store.perAppContextEnabled = $0 }
+                    ))
+                    .font(.speakMonoBody)
+                } footer: {
+                    Text("On = the frontmost app picks the profile (Xcode/Terminal → Agent, "
+                        + "Slack/Messages → Chat, Mail/browsers → Write). Off = every dictation "
+                        + "uses your global default profile, regardless of app.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             .formStyle(.grouped)
-            .frame(minHeight: 70)
+            .frame(minHeight: 140)
         }
     }
 }

@@ -11,6 +11,15 @@
 // a constant UUID string; the `?? allZero` fallback (the non-failable
 // `UUID(uuid:)` initializer) keeps us lint-clean (no force-unwrap) while the valid
 // literals below always parse, so the fallback never actually triggers.
+//
+// V01-3 (per-app context awareness, profile-native — [decision]): the roadmap's
+// north star folds "per-app context" into the Profile Engine rather than a
+// separate `AppContext` detector (docs/roadmap.md "North star"; docs/progress.md
+// PE-1). The one remaining gap after PE-1 landed was that messaging apps (Slack,
+// Discord, Messages, WhatsApp, Telegram) and Mail both resolved to the `Write`
+// profile with an identical tone. `Chat` (below) closes that gap: same
+// bundle-ID → profile mapping mechanism (`targetApps` / `ProfileResolver`), no
+// new code path, just a fifth built-in with `tone: .casual`.
 
 import Foundation
 
@@ -19,9 +28,9 @@ import Foundation
 public enum DefaultProfiles {
 
     /// All built-ins in overlay/AI-Studio display order: Raw (base-core bypass),
-    /// then the three destinations: Agent, Write, Note.
+    /// then the four destinations: Agent, Chat, Write, Note.
     public static var all: [Profile] {
-        [raw, agent, write, note]
+        [raw, agent, chat, write, note]
     }
 
     /// The global default profile (ships as `Write`; profile-taxonomy.md §1).
@@ -105,10 +114,54 @@ public enum DefaultProfiles {
         )
     }
 
-    // MARK: - 2. Write (prose for humans)
+    // MARK: - 2. Chat (casual messaging)
 
-    /// Write destination: for email, Slack, Messages, docs, and other prose
-    /// written for human readers. The global default.
+    /// Chat destination: casual, conversational tone for messaging apps. Split out
+    /// from `Write` (V01-3, profile-native) because Slack/Messages/WhatsApp warrant a
+    /// looser register than Mail/browsers, which stay on `Write`'s formal-ish default.
+    /// Same resolution mechanism as every other profile — `targetApps` + `ProfileResolver`,
+    /// no separate context layer. [decision V01-3]
+    public static var chat: Profile {
+        Profile(
+            id: stableID("00000000-0000-0000-0000-0000000000A4"),
+            name: "Chat",
+            icon: "bubble.left.and.bubble.right",
+            isBuiltIn: true,
+            systemPrompt: """
+            You are a transcript editor, not an AI assistant. Your only job is to clean up spoken words \
+            into a casual chat message — never generate code, never answer questions, never create new content.
+            Remove ALL filler words: um, uh, like, you know, I mean.
+            Keep it short, conversational, and natural — contractions are welcome. Fix only the punctuation \
+            and capitalization needed for readability; do not make it sound formal or stiff.
+            Output ONLY the cleaned message. No code, no explanations, no preamble.
+            """,
+            examples: [
+                Example(
+                    spoken: "hey um are we still on for lunch tomorrow",
+                    written: "hey, are we still on for lunch tomorrow?"
+                ),
+                Example(
+                    spoken: "yeah that works for me just let me know the time",
+                    written: "yeah that works for me, just let me know the time"
+                )
+            ],
+            tone: .casual,
+            targetApps: [
+                "com.tinyspeck.slackmacgap",
+                "com.apple.iChat",
+                "com.discordapp.Discord",
+                "net.whatsapp.WhatsApp",
+                "ru.keepcoder.Telegram"
+            ],
+            model: .foundationModels
+        )
+    }
+
+    // MARK: - 3. Write (prose for humans)
+
+    /// Write destination: for email, docs, and browser text fields — other prose
+    /// written for human readers. The global default. Messaging apps moved to
+    /// `Chat` (V01-3) — Mail and browsers stay here, formal-ish by default.
     public static var write: Profile {
         Profile(
             id: stableID("00000000-0000-0000-0000-0000000000A2"),
@@ -133,9 +186,6 @@ public enum DefaultProfiles {
             ],
             targetApps: [
                 "com.apple.mail",
-                "com.tinyspeck.slackmacgap",
-                "com.apple.iChat",
-                "com.discordapp.Discord",
                 "com.google.Chrome",
                 "org.mozilla.firefox",
                 "com.apple.Safari"
@@ -144,7 +194,7 @@ public enum DefaultProfiles {
         )
     }
 
-    // MARK: - 3. Note (capture for myself)
+    // MARK: - 4. Note (capture for myself)
 
     /// Note destination: for lists, todos, quick thoughts, and personal notes.
     /// Tidy and concise, without expansion or explanation.

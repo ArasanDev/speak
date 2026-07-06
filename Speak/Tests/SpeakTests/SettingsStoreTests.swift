@@ -399,4 +399,22 @@ final class SettingsStoreTests: XCTestCase {
             "streamingMode=.off must survive a SettingsStore reload on the same defaults.")
     }
 
+    // MARK: - perAppContextEnabled (V01-3, profile-native)
+
+    func testPerAppContextEnabledDefaultIsTrue() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertTrue(store.perAppContextEnabled,
+            "perAppContextEnabled default must be true — per-app profile matching has shipped since PE-1.")
+    }
+
+    func testPerAppContextEnabledRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.perAppContextEnabled = false
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertFalse(reloaded.perAppContextEnabled,
+            "perAppContextEnabled=false must survive a SettingsStore reload on the same defaults.")
+    }
+
 }
