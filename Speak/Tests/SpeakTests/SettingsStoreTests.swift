@@ -454,4 +454,37 @@ final class SettingsStoreTests: XCTestCase {
             "perAppContextEnabled=false must survive a SettingsStore reload on the same defaults.")
     }
 
+    // MARK: - Voice Actions (H-1, specs/horizon-voice-os.md Pillar 1)
+
+    func testVoiceActionsEnabledDefaultIsFalse() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertFalse(store.voiceActionsEnabled,
+            "voiceActionsEnabled default must be false — H-1 is an opt-in extension, existing users see no change.")
+    }
+
+    func testVoiceActionsEnabledRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.voiceActionsEnabled = true
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertTrue(reloaded.voiceActionsEnabled,
+            "voiceActionsEnabled=true must survive a SettingsStore reload on the same defaults.")
+    }
+
+    func testVoiceActionsPrefixDefaultIsHeySpeak() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertEqual(store.voiceActionsPrefix, "hey speak")
+    }
+
+    func testVoiceActionsPrefixRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.voiceActionsPrefix = "computer"
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.voiceActionsPrefix, "computer",
+            "voiceActionsPrefix must survive a SettingsStore reload on the same defaults.")
+    }
+
 }

@@ -142,6 +142,8 @@ public final class SettingsStore: @unchecked Sendable {
         static let perAppContextEnabled  = "speak.settings.perAppContextEnabled"
         static let extraBindings         = "speak.settings.extraHotkeyBindings"
         static let hudStyle              = "speak.settings.hudStyle"
+        static let voiceActionsEnabled   = "speak.settings.voiceActionsEnabled"
+        static let voiceActionsPrefix    = "speak.settings.voiceActionsPrefix"
     }
 
     // MARK: - Injected defaults (the testability seam)
@@ -173,7 +175,8 @@ public final class SettingsStore: @unchecked Sendable {
             Keys.streamingMode: StreamingMode.keystrokeInjection.rawValue,
             Keys.appTheme: AppTheme.system.rawValue,
             Keys.perAppContextEnabled: true,
-            Keys.hudStyle: HUDStyle.classic.rawValue
+            Keys.hudStyle: HUDStyle.classic.rawValue,
+            Keys.voiceActionsPrefix: "hey speak"
         ])
         // Enum defaults are handled via `?? fallback` at the getter level because
         // Codable JSON cannot be registered as a `[String: Any]` literal.
@@ -555,6 +558,47 @@ public final class SettingsStore: @unchecked Sendable {
         }
     }
 
+    // MARK: - Voice Actions (H-1, specs/horizon-voice-os.md Pillar 1)
+
+    /// Master toggle for Voice Actions (the intent router: dictation vs command
+    /// vs action, `SpeakCore/VoiceActions/`).
+    ///
+    /// `false` (default): the router is never consulted and `shortcuts run` is
+    /// never invoked — behavior is byte-identical to `VoiceActions/` not existing.
+    /// `true`: a spoken `voiceActionsPrefix` at the start of an utterance gates
+    /// routing to `CommandModeService` (command) or `ShortcutsCLIExecutor`
+    /// (action); everything else remains plain dictation.
+    ///
+    /// [decision H-1] Default `false` — this is a v-next opt-in extension
+    /// (spec Sequencing #1, "no new perms"), not a v0 behavior change, so
+    /// existing users see nothing different until they opt in.
+    public var voiceActionsEnabled: Bool {
+        get {
+            access(keyPath: \.voiceActionsEnabled)
+            return defaults.bool(forKey: Keys.voiceActionsEnabled)
+        }
+        set {
+            withMutation(keyPath: \.voiceActionsEnabled) {
+                defaults.set(newValue, forKey: Keys.voiceActionsEnabled)
+            }
+        }
+    }
+
+    /// The spoken trigger prefix that gates Voice Actions routing when
+    /// `voiceActionsEnabled == true`. Matched case-insensitively against the
+    /// start of the transcript by `PrefixActionRouter`. Default: `"hey speak"`.
+    public var voiceActionsPrefix: String {
+        get {
+            access(keyPath: \.voiceActionsPrefix)
+            return defaults.string(forKey: Keys.voiceActionsPrefix) ?? "hey speak"
+        }
+        set {
+            withMutation(keyPath: \.voiceActionsPrefix) {
+                defaults.set(newValue, forKey: Keys.voiceActionsPrefix)
+            }
+        }
+    }
+
     // MARK: - Reset to defaults
 
     /// Resets all user settings to their default values. All preferences are wiped;
@@ -574,6 +618,8 @@ public final class SettingsStore: @unchecked Sendable {
         access(keyPath: \.appTheme)
         access(keyPath: \.perAppContextEnabled)
         access(keyPath: \.hudStyle)
+        access(keyPath: \.voiceActionsEnabled)
+        access(keyPath: \.voiceActionsPrefix)
 
         withMutation(keyPath: \.cleanupEnabled) {
             defaults.set(true, forKey: Keys.cleanupEnabled)
@@ -613,6 +659,12 @@ public final class SettingsStore: @unchecked Sendable {
         }
         withMutation(keyPath: \.hudStyle) {
             defaults.set(HUDStyle.classic.rawValue, forKey: Keys.hudStyle)
+        }
+        withMutation(keyPath: \.voiceActionsEnabled) {
+            defaults.set(false, forKey: Keys.voiceActionsEnabled)
+        }
+        withMutation(keyPath: \.voiceActionsPrefix) {
+            defaults.set("hey speak", forKey: Keys.voiceActionsPrefix)
         }
 
         SpeakLog.storage.info("SettingsStore reset to defaults")
