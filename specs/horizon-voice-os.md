@@ -23,9 +23,14 @@ From "clean my words" to "do the thing I said."
   chord) + 3B classification. Mis-route ALWAYS degrades to dictation —
   never lose the user's words. (CS-2 two-pass finding applies: gate
   deterministically first, extract second.)
-- **Action surface v1**: App Intents / Shortcuts invocation — the OS
-  already exposes a typed, permissioned action catalog; we speak into it.
+- **Action surface v1**: Shortcuts invocation via the system `shortcuts`
+  CLI (`shortcuts list` / `shortcuts run`) — user-created shortcuts wrap
+  other apps' App Intents, so the user curates an explicit, revocable
+  action catalog. Direct cross-app App Intents invocation has **no public
+  API** (expose-only framework) `[verified 2026-07-06, validator]`.
   No AppleScript soup, no accessibility scraping for v1.
+  `[unverified — dogfood H-4]`: headless `shortcuts run` behavior for
+  input-requesting shortcuts.
 - Ships as: `VoiceActions/` in SpeakCore behind `ActionRouting` protocol.
 
 ## Pillar 2 — The conversational loop (speak ↔ Mac)
@@ -74,9 +79,18 @@ interface — and they are voiceless. `speak` becomes their voice channel:
 stdio + JSON, no dep needed) · mis-detection degrades to plain dictation ·
 every pillar has an off switch · pasteboard is still write-only.
 
-## Open validation items (dispatch before building)
-- [ ] App Intents invocation *of other apps' intents* from a non-sandboxed
-  menubar app on macOS 26 — API surface + permission story `[unverified]`
-- [ ] AVSpeechSynthesizer voice quality/latency on macOS 26; Personal Voice
-  authorization on Mac `[unverified]`
-- [ ] MCP stdio server minimal handshake in pure Foundation `[unverified]`
+## Validation results (2026-07-06, validator agent — all three closed)
+- [x] Cross-app App Intents: no public API; v1 = `shortcuts` CLI wrapping
+  (spec corrected above) `[verified]`
+- [x] AVSpeechSynthesizer: feasible as specced. Personal Voice authorized
+  via `requestPersonalVoiceAuthorization` (macos 14+, handle `.unsupported`);
+  voice fallback chain personal → premium → enhanced → default (premium
+  voices are user-downloaded); `stopSpeaking(at: .immediate)` for
+  interruption. Typecheck-confirmed against local macOS 26 SDK. Start
+  latency `[inferred]` <~300ms — measure in H-2 benchmark.
+- [x] MCP stdio server in pure Foundation: `[verified]` — working ~70-line
+  prototype ran full handshake (initialize → initialized → tools/list →
+  tools/call). Current protocol 2025-11-25; serving an older version the
+  client accepts (e.g. 2025-06-18 for Claude Code) is spec-legal.
+  Implement `ping`; -32601 only for unknown requests, never notifications.
+  Transport: newline-delimited JSON; shutdown on stdin close.
