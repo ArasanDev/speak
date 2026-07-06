@@ -173,7 +173,13 @@ final class DictationController: CLICommandHandler {
     // MARK: - Collaborators (H3)
 
     /// Owns the overlay lifecycle (model + panel + partials drain).
-    let overlayController = OverlayController()
+    /// H-UI: constructed in `init()` (not at property-declaration time) so it
+    /// can share the same `SettingsStore` instance as `self.settingsStore` —
+    /// required for `OverlayRootView`'s live `hudStyle` switch to observe
+    /// changes made from `SettingsView` (a second, separate `SettingsStore`
+    /// instance would read the same `UserDefaults` but never fire `@Observable`
+    /// change notifications to this one).
+    let overlayController: OverlayController
 
     /// P2.2: Caret-anchored raw-preview panel. Shown alongside the main HUD while
     /// listening; hidden at every terminal state. Separate from the main overlay.
@@ -311,6 +317,7 @@ final class DictationController: CLICommandHandler {
     init() {
         let store = SettingsStore()
         self.settingsStore = store
+        self.overlayController = OverlayController(settingsStore: store)
         self.permissionManager = PermissionManager()
 
         let historyStore: any HistoryStoring
@@ -411,21 +418,7 @@ final class DictationController: CLICommandHandler {
 
 
     // MARK: - Appearance theme observation
-
-    /// Apply the theme to NSApplication.shared.appearance based on the AppTheme setting.
-    private func applyAppearance(_ theme: AppTheme) {
-        let appearance: NSAppearance? = {
-            switch theme {
-            case .light:
-                return NSAppearance(named: .aqua)
-            case .dark:
-                return NSAppearance(named: .darkAqua)
-            case .system:
-                return nil  // nil lets macOS follow system setting
-            }
-        }()
-        NSApplication.shared.appearance = appearance
-    }
+    // `applyAppearance(_:)` lives in the extension below ([lint] type_body_length).
 
     /// Re-arming observation loop: tracks `settingsStore.appTheme` via
     /// `withObservationTracking` and applies changes to NSApplication appearance.
@@ -805,6 +798,22 @@ final class DictationController: CLICommandHandler {
 // (Swift's file-scoped access rule): `extraBindingsObserverTask`,
 // `settingsStore`, `lastAppliedExtraBindings`, `monitor`, `activeExtraBindings`.
 extension DictationController {
+
+    /// Apply the theme to NSApplication.shared.appearance based on the AppTheme
+    /// setting. Moved here for [lint] type_body_length — pure code motion.
+    func applyAppearance(_ theme: AppTheme) {
+        let appearance: NSAppearance? = {
+            switch theme {
+            case .light:
+                return NSAppearance(named: .aqua)
+            case .dark:
+                return NSAppearance(named: .darkAqua)
+            case .system:
+                return nil  // nil lets macOS follow system setting
+            }
+        }()
+        NSApplication.shared.appearance = appearance
+    }
 
     /// Apply a new extra-bindings set from the Shortcuts settings editor (V01-5).
     /// See the declaration note in the class body; moved here for

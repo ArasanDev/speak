@@ -250,7 +250,9 @@ final class OverlayViewModel {
 // MARK: - VisualEffectView
 
 /// Thin AppKit-backed SwiftUI wrapper that applies NSVisualEffectView material.
-private struct VisualEffectView: NSViewRepresentable {
+/// Internal (not `private`) so `AuroraOverlayView` (H-UI) can reuse it — the
+/// glassy background material is shared chrome, not style-specific behavior.
+struct VisualEffectView: NSViewRepresentable {
     let material: NSVisualEffectView.Material
     let blendingMode: NSVisualEffectView.BlendingMode
 

@@ -213,6 +213,43 @@ final class SettingsStoreTests: XCTestCase {
             ".accessibility must round-trip (v1 placeholder value).")
     }
 
+    // MARK: - hudStyle (H-UI)
+
+    func testHUDStyleDefaultIsClassic() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertEqual(store.hudStyle, .classic,
+            "hudStyle default must be .classic — zero regression risk for existing users.")
+    }
+
+    func testHUDStyleAuroraRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.hudStyle = .aurora
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.hudStyle, .aurora,
+            ".aurora must round-trip across a fresh SettingsStore over the same defaults.")
+    }
+
+    func testHUDStyleClassicRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.hudStyle = .aurora
+        store.hudStyle = .classic
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.hudStyle, .classic,
+            ".classic must round-trip after being explicitly re-set.")
+    }
+
+    func testResetToDefaultsRestoresHUDStyleToClassic() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        store.hudStyle = .aurora
+        store.resetToDefaults()
+        XCTAssertEqual(store.hudStyle, .classic,
+            "resetToDefaults() must restore hudStyle to .classic.")
+    }
+
     // MARK: - defaultCleaner(for:) factory
 
     func testDefaultCleanerReturnsNilWhenCleanupDisabled() throws {

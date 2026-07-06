@@ -23,6 +23,7 @@
 
 import AppKit
 @testable import Speak   // H2: requires TEST_HOST=Speak so the App module is importable
+import SpeakCore
 import XCTest
 
 @MainActor
@@ -181,5 +182,28 @@ final class TranscriptOverlayPanelTests: XCTestCase {
         let result = TranscriptOverlayPanel.indexOfScreen(containing: point, frames: syntheticFrames)
         XCTAssertEqual(result, 1,
             "A point at x=1920 is the origin of screen 1 and must map to index 1.")
+    }
+
+    // MARK: - H-UI: hudStyle wiring does not disturb focus-steal guards
+
+    /// Constructing with an explicit `settingsStore` (aurora style) must keep every
+    /// focus-steal guard identical to the default-style construction above — the
+    /// HUD style only changes hosted SwiftUI content, never panel-level AppKit flags.
+    func testConstructedWithAuroraStyle_focusStealFlagsUnchanged() {
+        let suiteName = "TranscriptOverlayPanelTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("UserDefaults(suiteName:) returned nil for a UUID-based name.")
+            return
+        }
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        let store = SettingsStore(defaults: defaults)
+        store.hudStyle = .aurora
+
+        let auroraPanel = TranscriptOverlayPanel(overlayModel: OverlayViewModel(), settingsStore: store)
+
+        XCTAssertTrue(auroraPanel.styleMask.contains(.nonactivatingPanel))
+        XCTAssertFalse(auroraPanel.canBecomeKey)
+        XCTAssertFalse(auroraPanel.canBecomeMain)
+        XCTAssertTrue(auroraPanel.collectionBehavior.contains(.canJoinAllSpaces))
     }
 }

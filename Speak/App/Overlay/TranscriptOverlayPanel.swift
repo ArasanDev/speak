@@ -94,8 +94,13 @@ final class TranscriptOverlayPanel: NSPanel {
 
     // MARK: - Init
 
+    /// - Parameter settingsStore: Drives `OverlayRootView`'s HUD-style switch
+    ///   (H-UI). Defaults to a fresh `SettingsStore()` (same default as
+    ///   `SettingsStore.init` itself) so existing call sites/tests that only
+    ///   pass `overlayModel:` keep compiling unchanged.
     init(
-        overlayModel: OverlayViewModel
+        overlayModel: OverlayViewModel,
+        settingsStore: SettingsStore = SettingsStore()
     ) {
         // Step 1: style mask — .nonactivatingPanel is the primary focus-steal guard.
         let mask: NSWindow.StyleMask = [
@@ -131,11 +136,16 @@ final class TranscriptOverlayPanel: NSPanel {
             .ignoresCycle      // [decision] spec §4 — Phase C addition
         ]
 
-        // Step 4: host the SwiftUI recording HUD view. FirstMouseHostingView so the
-        // PE-3 live-panel chips receive the first click without the panel becoming key.
+        // Step 4: host the SwiftUI recording HUD view. `OverlayRootView` (H-UI)
+        // switches between the classic and Aurora HUD styles based on
+        // `settingsStore.hudStyle` — the panel/hosting view are created once
+        // regardless of style. FirstMouseHostingView (NOT plain NSHostingView) so
+        // the PE-3 live-panel chips receive the first click without the panel
+        // becoming key — required for both styles. [integration decision H-UI]
         let hostingView = FirstMouseHostingView(
-            rootView: TranscriptOverlayView(
-                model: overlayModel
+            rootView: OverlayRootView(
+                model: overlayModel,
+                settingsStore: settingsStore
             )
         )
         hostingView.frame = CGRect(origin: .zero, size: frame.size)

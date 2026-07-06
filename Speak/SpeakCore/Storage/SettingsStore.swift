@@ -97,6 +97,16 @@ public enum AppTheme: String, Codable, Sendable, Equatable {
     case system
 }
 
+/// Visual style for the floating recording HUD (overlay). v0 default = `.classic`
+/// — **zero regression risk**: existing behavior is unchanged unless the user
+/// opts in via Settings. [decision H-UI]
+public enum HUDStyle: String, Codable, Sendable, Equatable {
+    /// The original 15-bar waveform HUD (W2.2). **v0 default.**
+    case classic
+    /// The ambient orb + materializing-words HUD (H-UI "Aurora"). Opt-in.
+    case aurora
+}
+
 // MARK: - SettingsStore
 
 /// The single source of truth for all persisted user preferences in `speak`.
@@ -125,6 +135,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let appTheme              = "speak.settings.appTheme"
         static let perAppContextEnabled  = "speak.settings.perAppContextEnabled"
         static let extraBindings         = "speak.settings.extraHotkeyBindings"
+        static let hudStyle              = "speak.settings.hudStyle"
     }
 
     // MARK: - Injected defaults (the testability seam)
@@ -155,7 +166,8 @@ public final class SettingsStore: @unchecked Sendable {
             Keys.streamingRawTextEnabled: true,
             Keys.streamingMode: StreamingMode.keystrokeInjection.rawValue,
             Keys.appTheme: AppTheme.system.rawValue,
-            Keys.perAppContextEnabled: true
+            Keys.perAppContextEnabled: true,
+            Keys.hudStyle: HUDStyle.classic.rawValue
         ])
         // Enum defaults are handled via `?? fallback` at the getter level because
         // Codable JSON cannot be registered as a `[String: Any]` literal.
@@ -491,6 +503,25 @@ public final class SettingsStore: @unchecked Sendable {
         }
     }
 
+    // MARK: - HUD style (overlay visual style, H-UI)
+
+    /// Visual style for the floating recording HUD. Default: `.classic`.
+    ///
+    /// Read live by `OverlayRootView` (via `@Observable` tracking) so toggling
+    /// this in Settings swaps the HUD content immediately — no relaunch and no
+    /// panel recreation. [decision H-UI: opt-in, classic stays the default]
+    public var hudStyle: HUDStyle {
+        get {
+            access(keyPath: \.hudStyle)
+            let raw = defaults.string(forKey: Keys.hudStyle) ?? HUDStyle.classic.rawValue
+            return HUDStyle(rawValue: raw) ?? .classic
+        }
+        set {
+            withMutation(keyPath: \.hudStyle) {
+                defaults.set(newValue.rawValue, forKey: Keys.hudStyle)
+            }
+        }
+    }
 
     // MARK: - Per-app context awareness (V01-3, profile-native)
 
@@ -536,6 +567,7 @@ public final class SettingsStore: @unchecked Sendable {
         access(keyPath: \.streamingMode)
         access(keyPath: \.appTheme)
         access(keyPath: \.perAppContextEnabled)
+        access(keyPath: \.hudStyle)
 
         withMutation(keyPath: \.cleanupEnabled) {
             defaults.set(true, forKey: Keys.cleanupEnabled)
@@ -572,6 +604,9 @@ public final class SettingsStore: @unchecked Sendable {
         }
         withMutation(keyPath: \.perAppContextEnabled) {
             defaults.set(true, forKey: Keys.perAppContextEnabled)
+        }
+        withMutation(keyPath: \.hudStyle) {
+            defaults.set(HUDStyle.classic.rawValue, forKey: Keys.hudStyle)
         }
 
         SpeakLog.storage.info("SettingsStore reset to defaults")

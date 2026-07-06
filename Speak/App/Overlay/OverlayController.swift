@@ -66,6 +66,14 @@ final class OverlayController {
 
     // MARK: - Private
 
+    /// H-UI: the shared settings store, forwarded to `TranscriptOverlayPanel`
+    /// so `OverlayRootView` can read `hudStyle`. Defaults to a fresh
+    /// `SettingsStore()` so existing bare `OverlayController()` call sites
+    /// (tests) keep compiling unchanged — production always passes the
+    /// same instance `DictationController` owns, so a live Settings change
+    /// is observed (a separate default instance would not see it).
+    private let settingsStore: SettingsStore
+
     private var panel: TranscriptOverlayPanel?
     /// P-Code: the second, dynamically-sized panel for the "Code" Agent category's
     /// real-time customization surface. Created lazily on first open (see
@@ -94,7 +102,8 @@ final class OverlayController {
 
     // MARK: - Init
 
-    init() {
+    init(settingsStore: SettingsStore = SettingsStore()) {
+        self.settingsStore = settingsStore
         // P-Code: pure overlay/UI concern — wired directly here rather than via
         // `DictationController` (unlike `onSelectDestination`/`onSelectCategory`, which
         // route per-dictation engine state). Opening/closing the second panel never
@@ -113,7 +122,8 @@ final class OverlayController {
     func createPanel() {
         guard panel == nil else { return }
         panel = TranscriptOverlayPanel(
-            overlayModel: overlayModel
+            overlayModel: overlayModel,
+            settingsStore: settingsStore
         )
     }
 
