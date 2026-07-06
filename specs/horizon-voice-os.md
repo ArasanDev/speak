@@ -40,10 +40,24 @@ Voice out closes the loop: hands-free, eyes-free.
 ## Pillar 3 — Agent Bridge (the era bet)
 Terminal agents (Claude Code etc.) are becoming the developer's main
 interface — and they are voiceless. `speak` becomes their voice channel:
-- **speak-as-MCP-server** (stdio, local-only): tools `dictate()` (agent
-  requests a voice input from the human), `notify_spoken(text)` (agent
-  speaks a status aloud via Pillar 2), `confirm(question)` (yes/no by
-  voice). The human talks to their agent fleet through `speak`.
+- **speak-as-MCP-server** (stdio, local-only). Tool contract `[decision 2026-07-06]`:
+  - `speak_say(text, interrupt?)` — Mac speaks the agent's message aloud
+    (VoiceOut/Pillar 2). Fire-and-forget status channel.
+  - `speak_ask(question, timeout?)` — speaks the question, opens the mic,
+    runs the normal STT→cleanup pipeline, returns the human's spoken
+    answer as the tool result. The agent blocks on the human's *voice*.
+  - `speak_confirm(question)` — constrained yes/no variant; deterministic
+    yes/no/cancel extraction on-device, returns a boolean.
+  - `speak_status()` — mic/permission/engine availability so agents can
+    degrade gracefully.
+  Architecture: the MCP process is a thin stdio shim (`speak-mcp`,
+  second CLI target) that talks to the running menubar app over a local
+  XPC/UNIX-socket seam (`AgentBridgeService` in SpeakCore) — the app owns
+  mic, permissions, TTS; the shim owns JSON-RPC. Every agent-initiated
+  mic open is visually surfaced in the HUD (never silent listening).
+  Distribution: `brew install speak` + one `.mcp.json` line gives any
+  MCP-capable agent ears and a voice, 100% local.
+  The human talks to their agent fleet through `speak`.
 - Builds directly on V01-0 Agent Mode (frontmost-terminal detection) and
   V01-3 per-app context — those become the *passive* tier; MCP is the
   *active* tier.
