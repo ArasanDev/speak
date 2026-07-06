@@ -252,6 +252,24 @@ final class DictationController: CLICommandHandler {
         )
     }
 
+    /// [V01-5] The current set of extra (additive) hotkey bindings, up to 4 per
+    /// action. Observed reactively so the Shortcuts settings tab refreshes its
+    /// list without a relaunch. Updated atomically by `rebindExtraBindings(_:)`.
+    private(set) var activeExtraBindings: ExtraBindingSet = .empty
+
+    /// Apply a new extra-bindings set from the Shortcuts settings editor (V01-5).
+    ///
+    /// Single point of truth, mirroring `rebindHotkey(_:)`:
+    ///   1. `monitor.updateExtraBindings` — swaps the live set, rebuilds the tap's
+    ///      mask only if mouse-binding presence flipped, persists via the
+    ///      monitor's own `BindingStoring`.
+    ///   2. Updates `settingsStore.extraBindings` (the user-facing mirror) so the
+    ///      next-launch reconcile in `init` converges on the saved value.
+    ///   3. Publishes `activeExtraBindings` so the Settings UI refreshes.
+    ///
+    /// Must be called on the main actor (this class is `@MainActor`).
+    /// Implementation in the extra-bindings extension below ([lint] type_body_length).
+
     // MARK: - Trigger-mode wiring (Phase B)
 
     /// Task that re-arms observation tracking each time `settingsStore.triggerMode`
@@ -266,6 +284,16 @@ final class DictationController: CLICommandHandler {
     /// Guards against same-value `withMutation` fires that would produce spurious
     /// `updateBinding` + UserDefaults writes.
     private var lastAppliedTrigger: HotkeyBinding.Trigger = .doubleTap
+
+    /// [V01-5] Task that re-arms observation tracking each time
+    /// `settingsStore.extraBindings` changes, applying the new set to the live
+    /// monitor without relaunch. Same `withObservationTracking` pattern as
+    /// `triggerModeObserverTask`.
+    private var extraBindingsObserverTask: Task<Void, Never>?
+
+    /// [V01-5] The last extra-bindings set applied to the live monitor — dedupe
+    /// guard against same-value `withMutation` fires, mirroring `lastAppliedTrigger`.
+    private var lastAppliedExtraBindings: ExtraBindingSet = .empty
 
     /// The last appearance theme applied to NSApplication.
     /// Guards against redundant appearance updates.
@@ -326,6 +354,19 @@ final class DictationController: CLICommandHandler {
         // Uses withObservationTracking — fires only on triggerMode mutations.
         startObservingTriggerMode()
 
+        // [V01-5] Reconcile extra bindings the same way as trigger mode:
+        // `settingsStore.extraBindings` (own key) is the user-facing authoritative
+        // value; `monitor`'s own `BindingStoring`-backed copy may be stale/absent
+        // (e.g. after an install that predates V01-5). Apply the settings value now.
+        let initialExtraBindings = store.extraBindings
+        monitor.updateExtraBindings(initialExtraBindings)
+        activeExtraBindings = initialExtraBindings
+        lastAppliedExtraBindings = initialExtraBindings
+        SpeakLog.hotkey.info(
+            "DictationController: extra bindings applied at init — count=\(initialExtraBindings.bindings.count, privacy: .public)"
+        )
+        startObservingExtraBindings()
+
         // Apply appearance theme on init.
         let initialAppearance = store.appTheme
         applyAppearance(initialAppearance)
@@ -367,6 +408,7 @@ final class DictationController: CLICommandHandler {
             }
         }
     }
+
 
     // MARK: - Appearance theme observation
 
@@ -752,4 +794,56 @@ final class DictationController: CLICommandHandler {
         )
     }
 #endif
+}
+
+// MARK: - Extra-bindings observation (V01-5)
+//
+// [lint] Moved out of the main class body into a `private extension` to keep
+// `DictationController`'s type body under SwiftLint's `type_body_length` cap —
+// pure code motion, no behavior change. `private` members declared in the class
+// remain reachable from an extension of the same type in the same file
+// (Swift's file-scoped access rule): `extraBindingsObserverTask`,
+// `settingsStore`, `lastAppliedExtraBindings`, `monitor`, `activeExtraBindings`.
+extension DictationController {
+
+    /// Apply a new extra-bindings set from the Shortcuts settings editor (V01-5).
+    /// See the declaration note in the class body; moved here for
+    /// [lint] type_body_length. Same file, so private members stay reachable.
+    func rebindExtraBindings(_ newSet: ExtraBindingSet) {
+        monitor.updateExtraBindings(newSet)
+        lastAppliedExtraBindings = newSet
+        settingsStore.extraBindings = newSet
+        activeExtraBindings = newSet
+        SpeakLog.hotkey.info(
+            "DictationController: extra bindings rebound — count=\(newSet.bindings.count, privacy: .public)"
+        )
+    }
+
+    /// [V01-5] Re-arming observation loop: tracks `settingsStore.extraBindings`
+    /// via `withObservationTracking` and applies changes to the live monitor.
+    /// Same shape as `startObservingTriggerMode()`.
+    func startObservingExtraBindings() {
+        extraBindingsObserverTask?.cancel()
+        extraBindingsObserverTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self else { break }
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    withObservationTracking {
+                        _ = self.settingsStore.extraBindings
+                    } onChange: {
+                        continuation.resume()
+                    }
+                }
+                guard !Task.isCancelled else { break }
+                let newSet = self.settingsStore.extraBindings
+                guard newSet != self.lastAppliedExtraBindings else { continue }
+                self.lastAppliedExtraBindings = newSet
+                self.monitor.updateExtraBindings(newSet)
+                self.activeExtraBindings = newSet
+                SpeakLog.hotkey.info(
+                    "DictationController: extra bindings changed — count=\(newSet.bindings.count, privacy: .public)"
+                )
+            }
+        }
+    }
 }

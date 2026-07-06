@@ -112,6 +112,13 @@ public final class HotkeyMonitor: @unchecked Sendable {
     private var _binding: HotkeyBinding
     public var binding: HotkeyBinding { lock.withLock { _binding } }
 
+    /// [V01-5] The additive extra-bindings set (up to 4 per action). Independent
+    /// of `_binding` — see `ExtraBinding.swift`. Lock-guarded for the same reason
+    /// as `_binding`: read on the run-loop thread in `handle()`, written on the
+    /// main thread via `updateExtraBindings(_:)`.
+    private var _extraBindings: ExtraBindingSet
+    public var extraBindings: ExtraBindingSet { lock.withLock { _extraBindings } }
+
     /// The stream of hotkey events. Stable for the monitor's lifetime.
     /// Consumers iterate this once and receive events across all arm/re-arm cycles.
     public let events: AsyncStream<HotkeyEvent>
@@ -179,6 +186,12 @@ public final class HotkeyMonitor: @unchecked Sendable {
     /// when the bound key is Right-Command (keyCode 54).
     private var lastBoundKeyDown: Bool = false
 
+    /// [V01-5] Per-keyCode down-state for extra keyboard bindings, keyed by
+    /// `ExtraBindingSource.modifierKey`'s keyCode. Mutated only on the run-loop
+    /// (tap callback) thread — same ownership rule as `lastBoundKeyDown`.
+    /// Reset in `buildTap()` so a re-arm cannot leave stale "down" state.
+    private var extraKeyDownState: [Int: Bool] = [:]
+
     /// Debouncer for Fn `flagsChanged` bursts — active only when binding.keyCode == kVK_Function.
     /// VoiceInk 40 ms pattern [decision: benchmark.md §7].
     private var fnDebouncer = FnDebouncer()
@@ -201,6 +214,9 @@ public final class HotkeyMonitor: @unchecked Sendable {
     public init(binding: HotkeyBinding = .defaultBinding, store: any BindingStoring = UserDefaultsBindingStore()) {
         let persisted = store.load() ?? binding
         self._binding = persisted
+        // [V01-5] Old payloads / fresh installs decode to nil → fall back to
+        // .empty, mirroring the primary binding's `store.load() ?? binding` pattern.
+        self._extraBindings = store.loadExtraBindings() ?? .empty
         self.store = store
 
         // Build the AsyncStream once — consumers keep the same reference for
@@ -297,6 +313,44 @@ public final class HotkeyMonitor: @unchecked Sendable {
         lock.withLock { _binding = newBinding }
         store.save(newBinding)
         SpeakLog.hotkey.info("Hotkey binding updated: keyCode=\(newBinding.keyCode, privacy: .public)")
+    }
+
+    /// [V01-5] Update the extra-bindings set and persist it. Applies live —
+    /// no restart, no re-grant of any permission.
+    ///
+    /// Rebuilding the tap is only necessary when the mouse-binding *presence*
+    /// flips (0 mouse bindings ↔ ≥1), since that is the only thing that changes
+    /// the tap's event mask (`otherMouseDown` bit). A pure keyboard-binding edit
+    /// just swaps the lock-guarded set — `handle()` reads it fresh on every
+    /// `flagsChanged` event, so the very next keypress sees the new bindings.
+    /// [decision: advisor guidance — avoid an unconditional rebuild, which would
+    /// otherwise tear down/reinstall the tap on every keystroke-binding edit.]
+    ///
+    /// The rebuild itself is scheduled on the run-loop thread via
+    /// `CFRunLoopPerformBlock` + `CFRunLoopWakeUp` — the same pattern
+    /// `notifySessionEnded()` uses — because `eventTap`/`runLoopSource` must only
+    /// be touched from that thread. If the tap is not currently armed (AX not
+    /// granted yet), the new mask is picked up naturally the next time the
+    /// watchdog calls `buildTap()`.
+    public func updateExtraBindings(_ newSet: ExtraBindingSet) {
+        let mouseBitFlipped = lock.withLock { () -> Bool in
+            let hadMouse = _extraBindings.hasMouseBinding
+            _extraBindings = newSet
+            return hadMouse != newSet.hasMouseBinding
+        }
+        store.saveExtraBindings(newSet)
+        SpeakLog.hotkey.info("HotkeyMonitor: extra bindings updated — count=\(newSet.bindings.count, privacy: .public).")
+
+        guard mouseBitFlipped else { return }
+        guard let rl = lock.withLock({ tapRunLoop }) else { return }
+        CFRunLoopPerformBlock(rl, CFRunLoopMode.commonModes.rawValue) { [weak self] in
+            guard let self else { return }
+            let isCurrentlyArmed = self.lock.withLock { self.isArmed }
+            guard isCurrentlyArmed else { return }
+            SpeakLog.hotkey.info("HotkeyMonitor: rebuilding tap — mouse-binding presence changed.")
+            self.buildTap()
+        }
+        CFRunLoopWakeUp(rl)
     }
 
     /// Reset the gesture detectors after a dictation session ends OUTSIDE the
@@ -414,9 +468,17 @@ public final class HotkeyMonitor: @unchecked Sendable {
         commandChord.reset()
         lastFnDown = false
         lastBoundKeyDown = false
+        extraKeyDownState = [:]  // [V01-5]
         fnDebouncer.reset()
 
-        let mask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
+        // [V01-5] otherMouseDown only enters the mask when an extra binding
+        // targets a mouse button — keeps the tap's observed surface minimal
+        // when the feature is unused (same "gate by need" spirit as the
+        // Accessibility-only permission model).
+        var mask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
+        if lock.withLock({ _extraBindings.hasMouseBinding }) {
+            mask |= CGEventMask(1 << CGEventType.otherMouseDown.rawValue)
+        }
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
 
         // [verified: .listenOnly exists, swiftc -typecheck local SDK, 2026-06-29]
@@ -544,6 +606,26 @@ public final class HotkeyMonitor: @unchecked Sendable {
             return
         }
 
+        // [V01-5] Extra mouse-button bindings (buttons 4-10). Only ever delivered
+        // when `buildTap()` added `otherMouseDown` to the mask (i.e. at least one
+        // mouse extra binding exists) — see comment there. `.listenOnly` means we
+        // never consume this event: the button's normal system action (e.g.
+        // browser Back on button 4) fires unchanged alongside dictation
+        // [decision: advisor guidance — inherent tradeoff of staying observe-only,
+        // never switch to .defaultTap to suppress it].
+        if eventType == .otherMouseDown {
+            let buttonNumber = Int(event.getIntegerValueField(.mouseEventButtonNumber))
+            let extraSet = lock.withLock { _extraBindings }
+            if let action = extraSet.action(for: .mouseButton(buttonNumber)) {
+                let hotkeyEvent: HotkeyEvent = (action == .activate) ? .startCapture : .stopCapture
+                SpeakLog.hotkey.info(
+                    "ExtraBinding fired (mouse button \(buttonNumber, privacy: .public)): \(String(describing: hotkeyEvent), privacy: .public)"
+                )
+                continuation.yield(hotkeyEvent)
+            }
+            return
+        }
+
         guard eventType == .flagsChanged else { return }
 
         // Read modifier state from the event flags. flags ALWAYS reflect the CURRENT
@@ -567,6 +649,29 @@ public final class HotkeyMonitor: @unchecked Sendable {
         // Update lastFnDown HERE (after chord update, before binding guard) so the
         // chord detector gets accurate Fn state even when the bound key is not Fn.
         lastFnDown = isFnDown
+
+        // [V01-5] Extra keyboard bindings — evaluated for EVERY flagsChanged event,
+        // independent of the primary binding's keyCode (unlike the primary path
+        // below, which `return`s early on a keyCode mismatch). Direct-fire: press
+        // leading edge → the mapped action, no double-tap window. Not gated by
+        // `chordActive` — extra bindings are an independent feature from Command
+        // Mode's Fn+Ctrl chord [decision: keep the two features orthogonal].
+        let eventKeyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
+        let extraSet = lock.withLock { _extraBindings }
+        if !extraSet.bindings.isEmpty,
+           let action = extraSet.action(for: .modifierKey(eventKeyCode)) {
+            let extraMask = modifierMask(forKeyCode: eventKeyCode)
+            let isExtraKeyDown = flags.contains(extraMask)
+            let wasExtraKeyDown = extraKeyDownState[eventKeyCode] ?? false
+            if isExtraKeyDown && !wasExtraKeyDown {
+                let hotkeyEvent: HotkeyEvent = (action == .activate) ? .startCapture : .stopCapture
+                SpeakLog.hotkey.info(
+                    "ExtraBinding fired (key \(eventKeyCode, privacy: .public)): \(String(describing: hotkeyEvent), privacy: .public)"
+                )
+                continuation.yield(hotkeyEvent)
+            }
+            extraKeyDownState[eventKeyCode] = isExtraKeyDown
+        }
 
         // Snapshot the binding once (lock-guarded getter) so a concurrent
         // updateBinding() on the main thread can't tear this multi-field read.
@@ -628,12 +733,23 @@ public final class HotkeyMonitor: @unchecked Sendable {
         }
     }
 
-    // MARK: - Tap-disabled recovery (spec §3, run-loop thread)
+}
+
+// MARK: - Tap-disabled recovery + wake handling (spec §3, run-loop thread)
+//
+// [V01-5 lint] Moved out of the main class body into a `private extension` to
+// keep `HotkeyMonitor`'s type body under SwiftLint's `type_body_length` cap —
+// pure code motion, no behavior change. `private` members declared anywhere in
+// this file remain accessible from an extension of the same type in the same
+// file (Swift's file-scoped access rule), so `lock`, `eventTap`,
+// `restartRateLimiter`, `tearDownTap()`, `wasTrusted`, `wakeRearmTimer`,
+// `tapRunLoop`, `buildTap()`, and `armingDesired` are all still reachable here.
+private extension HotkeyMonitor {
 
     /// Handle tapDisabledByTimeout / tapDisabledByUserInput.
     /// Re-enables the tap if within the rate limit; tears down and flags for
     /// re-arm (via watchdog) if the cap is exceeded.
-    private func handleTapDisabled() {
+    func handleTapDisabled() {
         guard let port = lock.withLock({ eventTap }) else { return }  // [validation-fix NEW-4]
 
         let now = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000.0
@@ -653,14 +769,12 @@ public final class HotkeyMonitor: @unchecked Sendable {
         }
     }
 
-    // MARK: - Wake handling (spec §3, run-loop thread)
-
     /// Called on NSWorkspace.didWakeNotification.
     /// Schedules a re-arm ~3 s after wake (AltTab pattern; 3 s allows the OS
     /// to settle post-sleep before reinstalling the tap).
     /// [decision: AltTab uses a two-pass strategy; we do a single 3 s pass
     ///  since re-arm is idempotent — benchmark.md §7].
-    private func handleWakeNotification() {
+    func handleWakeNotification() {
         SpeakLog.hotkey.info("HotkeyMonitor: wake notification — scheduling re-arm in 3 s.")
 
         // [validation-fix NEW-5] Invalidate any pending wake timer under the lock —

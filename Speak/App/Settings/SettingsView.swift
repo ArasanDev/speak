@@ -313,11 +313,18 @@ private struct HotkeyInputSettingsTab: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            ExtraBindingsSection(store: store, controller: controller)
         }
         .formStyle(.grouped)
         .padding(SpeakSpacing.md)
     }
 }
+
+// MARK: - 4b. Additional Shortcuts (V01-5 — multiple bindings per action)
+//
+// `ExtraBindingsSection` lives in `ExtraBindingsSection.swift` (split out to
+// keep this file under SwiftLint's file_length cap).
 
 // MARK: - 2. Transcription
 

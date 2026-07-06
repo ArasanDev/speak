@@ -339,9 +339,13 @@ final class UserDefaultsBindingStoreTests: XCTestCase {
 /// Used by other tests that need a HotkeyMonitor without touching UserDefaults.
 final class InMemoryBindingStore: BindingStoring, @unchecked Sendable {
     private var stored: HotkeyBinding?
+    private var storedExtra: ExtraBindingSet?
 
     func load() -> HotkeyBinding? { stored }
     func save(_ binding: HotkeyBinding) { stored = binding }
+
+    func loadExtraBindings() -> ExtraBindingSet? { storedExtra }
+    func saveExtraBindings(_ set: ExtraBindingSet) { storedExtra = set }
 }
 
 // MARK: - modifierMask(forKeyCode:) Tests (W1.1 landmine guard)

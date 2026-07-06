@@ -124,6 +124,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let streamingMode         = "speak.settings.streamingMode"
         static let appTheme              = "speak.settings.appTheme"
         static let perAppContextEnabled  = "speak.settings.perAppContextEnabled"
+        static let extraBindings         = "speak.settings.extraHotkeyBindings"
     }
 
     // MARK: - Injected defaults (the testability seam)
@@ -309,6 +310,39 @@ public final class SettingsStore: @unchecked Sendable {
         set {
             withMutation(keyPath: \.triggerMode) {
                 defaults.set(newValue.rawValue, forKey: Keys.triggerMode)
+            }
+        }
+    }
+
+    // MARK: - Extra hotkey bindings (V01-5 — multiple bindings per action)
+
+    /// Up to `ExtraBindingSet.maxPerAction` (4) additional bindings per action
+    /// (`.activate` / `.stop`), independent of the primary double-tap/hold toggle
+    /// binding above. This is the user-facing setting the Shortcuts pane binds to.
+    ///
+    /// Same duplication pattern as `triggerMode`: `HotkeyMonitor` also persists
+    /// its own runtime copy via the injected `BindingStoring`
+    /// (`loadExtraBindings()`/`saveExtraBindings(_:)`). `DictationController`
+    /// reconciles the two at launch and applies live changes via
+    /// `monitor.updateExtraBindings(_:)` — same wiring as `triggerMode`.
+    /// Default: `.empty` — a fresh install (or an old payload predating V01-5)
+    /// has no extra bindings.
+    public var extraBindings: ExtraBindingSet {
+        get {
+            access(keyPath: \.extraBindings)
+            guard let data = defaults.data(forKey: Keys.extraBindings),
+                  let decoded = try? JSONDecoder().decode(ExtraBindingSet.self, from: data) else {
+                return .empty
+            }
+            return decoded
+        }
+        set {
+            withMutation(keyPath: \.extraBindings) {
+                if let data = try? JSONEncoder().encode(newValue) {
+                    defaults.set(data, forKey: Keys.extraBindings)
+                } else {
+                    SpeakLog.storage.error("SettingsStore: failed to encode extraBindings — value not persisted.")
+                }
             }
         }
     }
