@@ -1,0 +1,68 @@
+# Horizon: `speak` → the Voice Layer for the Mac `[decision 2026-07-06, Fable loop #42]`
+
+> Status: DIRECTION SPEC. Builds strictly on top of the immutable layering
+> (base core → Clean profile → Profile Engine). Nothing here inverts it.
+> Each pillar ships as an opt-in extension; the dictation core stays untouched.
+
+## Thesis
+Dictation is the wedge, not the product. Every competitor stops at
+"speech → text in a box." The structural opening: the Mac now has an
+on-device LLM, an on-device streaming STT, App Intents, and an exploding
+population of terminal AI agents — and **no one owns the voice channel that
+connects a human to all of it, locally**. `speak` already holds the four
+hard primitives: global hotkey, streaming STT, on-device LLM, and
+paste/selection I/O. The horizon is composing them into three pillars.
+
+## Pillar 1 — Voice Actions (Command Mode → OS layer)
+From "clean my words" to "do the thing I said."
+- **Intent router**: first stage after final transcript classifies the
+  utterance on-device: `dictation` (default, unchanged) vs `command`
+  ("make this more formal", exists today via CommandModeService) vs
+  `action` ("open my downloads", "reply to this saying yes").
+  Router = deterministic prefix gate ("hey speak…" / explicit hotkey
+  chord) + 3B classification. Mis-route ALWAYS degrades to dictation —
+  never lose the user's words. (CS-2 two-pass finding applies: gate
+  deterministically first, extract second.)
+- **Action surface v1**: App Intents / Shortcuts invocation — the OS
+  already exposes a typed, permissioned action catalog; we speak into it.
+  No AppleScript soup, no accessibility scraping for v1.
+- Ships as: `VoiceActions/` in SpeakCore behind `ActionRouting` protocol.
+
+## Pillar 2 — The conversational loop (speak ↔ Mac)
+Voice out closes the loop: hands-free, eyes-free.
+- On-device TTS readback (`AVSpeechSynthesizer`, Personal Voice where
+  granted): read back the cleaned text on request ("read that back"),
+  speak short answers from the on-device model ("what's a synonym for…").
+- Interruptible: mic stays primary; any hotkey press cuts TTS instantly.
+- Ships as: `VoiceOut/` behind `SpeechSynthesizing` protocol; zero
+  network, consistent with the privacy contract.
+
+## Pillar 3 — Agent Bridge (the era bet)
+Terminal agents (Claude Code etc.) are becoming the developer's main
+interface — and they are voiceless. `speak` becomes their voice channel:
+- **speak-as-MCP-server** (stdio, local-only): tools `dictate()` (agent
+  requests a voice input from the human), `notify_spoken(text)` (agent
+  speaks a status aloud via Pillar 2), `confirm(question)` (yes/no by
+  voice). The human talks to their agent fleet through `speak`.
+- Builds directly on V01-0 Agent Mode (frontmost-terminal detection) and
+  V01-3 per-app context — those become the *passive* tier; MCP is the
+  *active* tier.
+- 100% local: stdio transport, no sockets exposed, no cloud.
+
+## Sequencing (value order, additive)
+1. H-1 Intent router skeleton + deterministic gate (no new perms) — after V01-3 lands.
+2. H-2 VoiceOut readback ("read that back") — independent, small, huge demo value.
+3. H-3 MCP server vertical slice: `confirm()` end-to-end with Claude Code.
+4. H-4 App Intents action surface.
+
+## Hard constraints carried forward
+100% local by default · Apple frameworks first (MCP server is plain
+stdio + JSON, no dep needed) · mis-detection degrades to plain dictation ·
+every pillar has an off switch · pasteboard is still write-only.
+
+## Open validation items (dispatch before building)
+- [ ] App Intents invocation *of other apps' intents* from a non-sandboxed
+  menubar app on macOS 26 — API surface + permission story `[unverified]`
+- [ ] AVSpeechSynthesizer voice quality/latency on macOS 26; Personal Voice
+  authorization on Mac `[unverified]`
+- [ ] MCP stdio server minimal handshake in pure Foundation `[unverified]`
