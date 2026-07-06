@@ -5,6 +5,7 @@
 included:
   - Speak/App
   - Speak/SpeakCore
+  - Speak/SpeakLLM
   - Speak/Tests/SpeakTests
 
 excluded:

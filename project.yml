@@ -32,11 +32,35 @@ settings:
 
 targets:
 
+  # SpeakLLM is the ONE sanctioned exception to "no networking symbols in
+  # production source": the opt-in OpenAI-compatible cleanup engine (V01-2)
+  # needs URLSession + Keychain (SecItem*) — both of which
+  # scripts/verify-moat.sh and SpeakTests/MoatAuditTests.swift grep for in
+  # SpeakCore/App/CLI to keep "100% local + offline, no account" a structural
+  # guarantee. Isolating that code in its own target — outside those three
+  # audited directories — keeps the audit's assertion honest (SpeakCore itself
+  # has zero networking/Keychain symbols) while still allowing a real,
+  # explicitly user-configured local-server/cloud cleanup engine to exist.
+  # [decision V01-2 — see SpeakCore/Cleanup/OpenAICompatibleCleaner.swift]
+  SpeakLLM:
+    type: framework
+    platform: macOS
+    sources:
+      - Speak/SpeakLLM
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.speak.SpeakLLM
+        GENERATE_INFOPLIST_FILE: "YES"
+        # Signing inherited from Signing.xcconfig (see configFiles above).
+
   SpeakCore:
     type: framework
     platform: macOS
     sources:
       - Speak/SpeakCore
+    dependencies:
+      - target: SpeakLLM
+        embed: false   # Speak (the app) embeds SpeakLLM directly; SpeakCore only links it.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.speak.SpeakCore
@@ -50,6 +74,8 @@ targets:
       - Speak/App
     dependencies:
       - target: SpeakCore
+        embed: true
+      - target: SpeakLLM
         embed: true
     info:
       path: Speak/App/Info.generated.plist
@@ -72,6 +98,8 @@ targets:
       - Speak/Tests/SpeakTests
     dependencies:
       - target: SpeakCore
+      - target: SpeakLLM       # V01-2: OpenAICompatibleClient/LLMKeychainStore tests import this directly
+        embed: false
       - target: Speak          # H2: TEST_HOST — gives tests access to the App shell
         embed: false           # test bundle embeds nothing; the host app carries it
     settings:

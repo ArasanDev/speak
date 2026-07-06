@@ -270,20 +270,20 @@ final class SettingsStoreTests: XCTestCase {
             "defaultCleaner must return a FoundationModelsCleaner for .foundationModels.")
     }
 
-    func testDefaultCleanerFallsBackWhenOllamaRequested() throws {
-        // Wave 2.1: OllamaCleaner is now a real stub type (not a silent FM fallback).
-        // defaultCleaner returns OllamaCleaner, whose isAvailable==false causes
-        // CaptureSession.runCleanup to gracefully fall back to raw transcript.
-        // The test verifies the type identity after the Wave 2.1 change. [decision Wave 2.1]
+    func testDefaultCleanerReturnsOpenAICompatibleClenerWhenOllamaRequested() throws {
+        // V01-2: .ollama now routes to the real OpenAICompatibleCleaner (preset: .ollama),
+        // backed by the SpeakLLM module, superseding the Wave 2.1 OllamaCleaner stub.
+        // Its `isAvailable` pings http://127.0.0.1:11434/api/tags — false when Ollama is
+        // not running — so CaptureSession.runCleanup still falls back to raw transcript
+        // gracefully in that case, exactly as the Wave 2.1 stub did. [decision V01-2]
         let store = freshStore(on: try makeIsolatedDefaults())
         store.cleanupEnabled = true
         store.cleanupEngine = .ollama(model: "qwen2.5")
         let cleaner = defaultCleaner(for: store)
         XCTAssertNotNil(cleaner,
-            "defaultCleaner must return a non-nil OllamaCleaner when .ollama is selected.")
-        XCTAssertTrue(cleaner is OllamaCleaner,
-            "defaultCleaner must return OllamaCleaner (not FM fallback) when .ollama is selected. " +
-            "The OllamaCleaner stub returns isAvailable==false; CaptureSession falls back gracefully.")
+            "defaultCleaner must return a non-nil OpenAICompatibleCleaner when .ollama is selected.")
+        XCTAssertTrue(cleaner is OpenAICompatibleCleaner,
+            "defaultCleaner must return OpenAICompatibleCleaner when .ollama is selected (V01-2).")
     }
 
     // MARK: - defaultTranscriber(for:) factory

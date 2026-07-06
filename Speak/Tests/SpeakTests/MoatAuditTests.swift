@@ -134,6 +134,11 @@ final class MoatAuditTests: XCTestCase {
         "UniformTypeIdentifiers",  // Apple framework; UTType.json for history export save-panel
         "SQLite3",
         "SpeakCore",
+        "SpeakLLM",         // V01-2: opt-in networking/Keychain module, deliberately outside
+                            // `productionSwiftFiles()`'s scanned dirs (SpeakCore/App only) —
+                            // this permits the *import statement* in SpeakCore/App; it does
+                            // NOT exempt any networking/auth symbol from testNoNetworkEgress
+                            // or testNoAccountOrAuthCode, which still scan every SpeakCore/App line.
         "CoreFoundation"   // CFRunLoop, CFRunLoopTimer — used in HotkeyMonitor for the tap thread
     ]
 

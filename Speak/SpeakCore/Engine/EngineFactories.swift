@@ -52,11 +52,15 @@ public func defaultTranscriber(for settings: SettingsStore) -> any Transcribing 
 ///
 /// - `cleanupEnabled == false` → `nil` (raw transcript; fast path — no LLM pass)
 /// - `cleanupEnabled == true` and `.foundationModels` → `FoundationModelsCleaner()`
-/// - `cleanupEnabled == true` and `.ollama` → v0.1 stub: log + fall back to
-///   `FoundationModelsCleaner()` so cleanup still runs with the available engine.
+/// - `cleanupEnabled == true` and `.ollama` → `OpenAICompatibleCleaner(preset: .ollama)`
+///   (V01-2 — real implementation, backed by the `SpeakLLM` module)
+/// - `cleanupEnabled == true` and `.openAICompatible` → `OpenAICompatibleCleaner`
+///   for the chosen cloud/custom preset (V01-2)
 ///
-/// If `FoundationModelsCleaner.isAvailable` is `false` at runtime, `CaptureSession`
-/// gracefully falls back to raw transcript (never `.error`) — see §10a.3.
+/// If the returned cleaner's `isAvailable` is `false` at runtime, `CaptureSession`
+/// gracefully falls back to raw transcript (never `.error`) — see §10a.3. This is
+/// true for Ollama-not-running and for a cloud preset with no API key configured,
+/// exactly as it is for Foundation Models being unavailable.
 public func defaultCleaner(for settings: SettingsStore) -> (any LLMCleaning)? {
     guard settings.cleanupEnabled else {
         // Toggle is off — caller receives nil; CaptureSession delivers raw transcript.
@@ -67,15 +71,15 @@ public func defaultCleaner(for settings: SettingsStore) -> (any LLMCleaning)? {
         return FoundationModelsCleaner()
 
     case .ollama(let model):
-        // Wave 2.1: OllamaCleaner stub exists now. Returns `isAvailable == false` always —
-        // networking code that would do the real localhost check cannot live in SpeakCore/
-        // (moat audit greps for it). CaptureSession.runCleanup sees `false` and falls
-        // back to raw transcript gracefully, without error.
-        // Replace with a real impl in the SpeakLLM module (v0.1).
-        SpeakLog.cleanup.warning(
-            "defaultCleaner: .ollama(model: \(model, privacy: .public)) — using v0.1 stub (isAvailable=false)."
-        )
-        return OllamaCleaner(model: model)
+        // V01-2: real implementation. Loopback-only base URL, no API key —
+        // `isAvailable` pings http://127.0.0.1:11434/api/tags (1s timeout).
+        return OpenAICompatibleCleaner(preset: .ollama, model: model)
+
+    case .openAICompatible(let preset, let model):
+        // V01-2: cloud/custom presets. Strictly opt-in — only reachable when the
+        // user has picked this case in Settings. `isAvailable` checks Keychain for
+        // a stored API key (no live network probe for cloud presets).
+        return OpenAICompatibleCleaner(preset: preset, model: model)
 
     case .mlx(let model):
         // Wave 2.1: MLXCleaner stub. MLX requires third-party Swift packages — forbidden

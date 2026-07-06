@@ -88,6 +88,11 @@ ALLOWED_IMPORTS=(
     "UniformTypeIdentifiers"  # Apple; UTType.json for history export save-panel
     "SQLite3"
     "SpeakCore"
+    "SpeakLLM"          # V01-2: opt-in networking/Keychain module, deliberately NOT in
+                        # SOURCE_DIRS (see below) — this only allows the *import
+                        # statement* in SpeakCore/App; it does not exempt any
+                        # networking/auth symbol from the greps below, which still
+                        # scan every line of SpeakCore/App/CLI source.
     "Combine"           # Apple; ObservableObject in SpeakCore
 )
 

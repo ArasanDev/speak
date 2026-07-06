@@ -50,20 +50,26 @@ public enum STTEngine: Codable, Sendable, Equatable, Hashable {
 /// **Fallback:** `EngineFactories.defaultCleaner(for:)` always falls back to
 /// `FoundationModelsCleaner` when an opt-in engine's stub returns `isAvailable == false`.
 ///
-/// Wave 2.1 additions: `.ollama` and `.mlx` are now registered cases (not just code
-/// comments). Their `LLMCleaning` conformers (`OllamaCleaner`, `MLXCleaner`) exist in
-/// `SpeakCore/Cleanup/` as stubs that always return `isAvailable == false`. Real
-/// implementations land when the `SpeakLLM` module (v0.1) or MLX dep (v0.1+) is added.
-/// Registering them now lets the picker UI and `EngineFactories` be exhaustive without
-/// a rebuild when the real cleaners land. [decision Wave 2.1]
+/// Wave 2.1 registered `.ollama`/`.mlx` as stub placeholders (`isAvailable == false`
+/// always). V01-2 makes `.ollama` real: `EngineFactories.defaultCleaner` now routes it
+/// to `OpenAICompatibleCleaner(preset: .ollama, model:)`, backed by the `SpeakLLM`
+/// module. `.openAICompatible` is the general form covering the remaining five
+/// presets (Sarvam/OpenAI/Groq/OpenRouter/custom) from `ProviderPreset`
+/// (`SpeakCore/Cleanup/OpenAICompatibleCleaner.swift`). `.mlx` remains a stub —
+/// MLX is a third-party dep, forbidden until its own v0.1+ approval. [decision V01-2]
 public enum CleanupEngine: Codable, Sendable, Equatable, Hashable {
     /// Apple Foundation Models (macOS 26+, Apple Silicon + Neural Engine). **v0 default.**
     /// Runs entirely on-device; no network, no account, no server required.
     case foundationModels
-    /// Ollama local server (Qwen2.5-3B / Gemma3-4B / Phi-4-mini…).
-    /// The user installs Ollama (ollama.ai) and pulls a model; `speak` talks to the
-    /// localhost HTTP API at port 11434. **v0.1 — stub in v0 (`isAvailable == false`).**
+    /// Ollama local server (Qwen2.5-3B / Gemma3-4B / Phi-4-mini…), talked to via the
+    /// universal `OpenAICompatibleCleaner` with `ProviderPreset.ollama`. Loopback-only,
+    /// no API key. **v0.1 — real implementation as of V01-2.**
     case ollama(model: String)
+    /// The universal OpenAI-compatible engine for a specific non-Ollama preset
+    /// (Sarvam LLM / OpenAI / Groq / OpenRouter / a fully custom endpoint). Cloud
+    /// presets are strictly opt-in: nothing here runs unless the user picks this
+    /// case AND supplies an API key via Settings → AI Cleanup. **v0.1 (V01-2).**
+    case openAICompatible(preset: ProviderPreset, model: String)
     /// MLX on-device inference (Apple Silicon, github.com/ml-explore/mlx).
     /// Requires MLX Swift packages (third-party dep — forbidden in v0). **v0.1+ stub.**
     case mlx(model: String)

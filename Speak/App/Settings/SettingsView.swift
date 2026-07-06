@@ -604,9 +604,19 @@ private struct AICleanupSettingsTab: View {
                 Picker("Cleanup Engine", selection: engineBinding) {
                     // v0 default — always available (requires Apple Intelligence on device).
                     Text("Foundation Models").tag(CleanupEngine.foundationModels)
-                    // v0.1 opt-in — localhost Ollama server; stub in v0 (isAvailable=false).
+                    // v0.1 opt-in — localhost Ollama server, real implementation as of V01-2.
                     // Canonical default model: Qwen2.5 3B — small, fast, quality.
                     Text("Ollama (local server)").tag(CleanupEngine.ollama(model: "qwen2.5:3b"))
+                    // v0.1 opt-in — cloud OpenAI-compatible presets (V01-2). Each is strictly
+                    // opt-in: nothing runs until the user also stores an API key via
+                    // `LLMKeychainStore` (Settings → AI Cleanup → API key, TODO full
+                    // `CleanupEngineSheet` — see roadmap V01-2 file list). [decision V01-2:
+                    // picker exposes the presets now so the setting round-trips; the
+                    // SecureField key-entry sheet is tracked as app-shell follow-up work.]
+                    ForEach([ProviderPreset.sarvamLLM, .openAI, .groq, .openRouter], id: \.self) { preset in
+                        Text(preset.displayName)
+                            .tag(CleanupEngine.openAICompatible(preset: preset, model: preset.defaultModel))
+                    }
                     // v0.1+ opt-in — MLX on-device; stub in v0 (third-party dep forbidden).
                     Text("MLX (v0.1+, coming soon)")
                         .tag(CleanupEngine.mlx(model: "Qwen2.5-3B-Instruct-4bit"))
@@ -657,6 +667,15 @@ private struct AICleanupSettingsTab: View {
                     .buttonStyle(.borderless)
             }
 
+        case .openAICompatible(let preset, _):
+            HStack(spacing: SpeakSpacing.xs) {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+                Text("\(preset.displayName) requires an API key, stored in Keychain — not yet editable here.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
         case .mlx:
             Text("MLX support arrives in v0.1 — currently falling back to raw transcript.")
                 .font(.caption)
@@ -674,7 +693,14 @@ private struct AICleanupSettingsTab: View {
                 .foregroundStyle(.secondary)
 
         case .ollama:
-            Text("Ollama support arrives in v0.1. In v0, speak falls back to raw transcript when this engine is selected.")
+            Text("Runs a local Ollama server at 127.0.0.1:11434 — never a remote host. " +
+                 "Falls back to raw transcript when Ollama is not running.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+        case .openAICompatible:
+            Text("Cloud cleanup is strictly opt-in: your transcript text (never audio) is sent " +
+                 "only after you configure an API key. Falls back to raw transcript on any failure.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -907,68 +933,7 @@ private struct PrivacyGuaranteeRow: View {
 }
 
 // MARK: - 6. About
-
-private struct AboutSettingsTab: View {
-
-    // Static URL constants — compile-time literals guaranteed non-nil, but
-    // URL(string:) returns Optional so we store as URL? and map at the call site
-    // rather than force-unwrap. [decision: P11-c — no force-unwrap rule]
-    fileprivate static let githubURL = URL(string: "https://github.com/tamilarasanraja/speak")
-    fileprivate static let issuesURL = URL(string: "https://github.com/tamilarasanraja/speak/issues")
-
-    // Version string from the bundle — zero magic strings. [decision: P11-c]
-    private var appVersion: String {
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
-        return [version, build.map { "(\($0))" }]
-            .compactMap { $0 }
-            .joined(separator: " ")
-    }
-
-    var body: some View {
-        VStack(spacing: SpeakSpacing.lg) {
-            Spacer()
-
-            // App name + version in Monaco — content voice, not chrome.
-            VStack(spacing: SpeakSpacing.sm) {
-                Image(systemName: "waveform")
-                    .font(.system(size: 48))
-                    .foregroundStyle(Color.speakAccent)
-                Text("speak")
-                    .font(.speakMonoTitle)
-                if !appVersion.isEmpty {
-                    Text("v\(appVersion)")
-                        .font(.speakMonoCaption)
-                        .foregroundStyle(.secondary)
-                }
-                Text("Free · Open-source · MIT")
-                    .font(.speakMonoCaption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Divider()
-                .frame(maxWidth: 200)  // [decision: short decorative divider, visual balance]
-
-            // Links — URL(string:) with compile-time literals always succeeds, but
-            // force-unwrap is banned by the hard rules. Use static lets so the
-            // compiler can prove the optionality at the call site. [decision: P11-c]
-            VStack(spacing: SpeakSpacing.sm) {
-                AboutSettingsTab.githubURL.map { url in
-                    Link("View on GitHub", destination: url)
-                        .font(.speakMonoCaption)
-                }
-                AboutSettingsTab.issuesURL.map { url in
-                    Link("Report an issue", destination: url)
-                        .font(.speakMonoCaption)
-                }
-            }
-
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-        .padding(SpeakSpacing.lg)
-    }
-}
+// AboutSettingsTab lives in AboutSettingsTab.swift ([lint] file_length split).
 
 // MARK: - Preview
 
