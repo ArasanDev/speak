@@ -10,6 +10,11 @@
 **Loop #40 (2026-07-04) — PE-2 + P11-a landed; repo reorganized under `Speak/`; coding-customization panel + settings/onboarding UX fixes merged. Gates: build ✅ / test 597,6-skip,0-fail ✅ / verify-moat 7/7 ✅.**
 
 ### What changed this loop (read before doing anything)
+-14. **Loop #41 (2026-07-06) — Constraint-split exploration: CS-1 rejected, CS-2 architecture validated + parked (`82bb24c`).** Fable-driven (diverge→converge, 3 passes) next-iteration design for the coding-agent input path: surface spoken hedges ("don't touch the tests") as a trailing `Constraints:` block. Measured **live** against the on-device 3B (Apple Intelligence is enabled now — the "gated off" note was stale):
+   - **CS-1** (single-prompt `PromptBuilder` fragment on `.task`/`.fix`): over-triggers, 97.39%→85.71%. **Reverted.**
+   - **CS-2** (two-pass inside `FoundationModelsCleaner`: deterministic prohibition pre-gate → one-job extraction session → Swift-formatted block): over-trigger **solved**, Pareto-safe on recall (cleanup body untouched → original 17 fixtures non-regress), latency unchanged. Blocked only by **3B extraction fidelity** (~50% recall, unstable, one fabrication). **Parked** (user decision) — wiring reverted; validated design + eval acceptance gate preserved in `specs/constraint-split-cs1-finding.md`. Revisit via WWDC26 provider API (V1-13).
+   - Baseline protected: `make test` 603,9-skip,0-fail ✅ / `make verify-moat` 7/7 ✅. Live eval Agent baseline re-confirmed at 97.39% (one pre-existing `ask` fixture fails — separate, unrelated).
+
 -13. **Loop #40 (2026-07-04) — 9 commits, no open branches besides `eval/rubric-scorer` (stale, unmerged content already superseded on master).**
    - **`8142bde` [repo] Reorganize source under `Speak/`**: `App/`, `SpeakCore/`, `CLI/`, `Tests/` moved under a single `Speak/` root (pure rename, no logic changes); `project.yml`/Makefile/`.swiftlint.yml` updated to match. Any doc or script referencing old top-level `App/`, `SpeakCore/`, `CLI/`, `Tests/` paths is now stale — update to `Speak/App/…` etc.
    - **`7d84fd1` [fix] PrivacyPaneView**: replaced fake hardcoded "Verify Moat" results in the UI with a real, honest audit (wired to `MoatAuditor`).
