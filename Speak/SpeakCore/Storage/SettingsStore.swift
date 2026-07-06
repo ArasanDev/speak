@@ -123,6 +123,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let streamingRawTextEnabled = "speak.settings.streamingRawTextEnabled"
         static let streamingMode         = "speak.settings.streamingMode"
         static let appTheme              = "speak.settings.appTheme"
+        static let readbackEnabled       = "speak.settings.readbackEnabled"
     }
 
     // MARK: - Injected defaults (the testability seam)
@@ -152,7 +153,12 @@ public final class SettingsStore: @unchecked Sendable {
             Keys.cleanupLevel: CleanupLevel.medium.rawValue,
             Keys.streamingRawTextEnabled: true,
             Keys.streamingMode: StreamingMode.keystrokeInjection.rawValue,
-            Keys.appTheme: AppTheme.system.rawValue
+            Keys.appTheme: AppTheme.system.rawValue,
+            // [decision H-2] Default true: the readback affordance is inert until the
+            // user presses it (no audio plays unprompted), so there is no privacy/
+            // surprise cost to shipping it on by default — the toggle exists purely
+            // to let a user hide the button, not to gate a background behavior.
+            Keys.readbackEnabled: true
         ])
         // Enum defaults are handled via `?? fallback` at the getter level because
         // Codable JSON cannot be registered as a `[String: Any]` literal.
@@ -455,6 +461,23 @@ public final class SettingsStore: @unchecked Sendable {
         }
     }
 
+    // MARK: - VoiceOut readback (H-2)
+
+    /// Whether the "Read back" (speaker.wave.2) affordance appears in the `.done`
+    /// overlay state. Default `true`. The button itself is inert until pressed —
+    /// this toggle only controls whether it's shown, not a background behavior.
+    /// `false` hides the button entirely (no `SpeechSynthesizing` call is ever made).
+    public var readbackEnabled: Bool {
+        get {
+            access(keyPath: \.readbackEnabled)
+            return defaults.bool(forKey: Keys.readbackEnabled)
+        }
+        set {
+            withMutation(keyPath: \.readbackEnabled) {
+                defaults.set(newValue, forKey: Keys.readbackEnabled)
+            }
+        }
+    }
 
     // MARK: - Reset to defaults
 
@@ -473,6 +496,7 @@ public final class SettingsStore: @unchecked Sendable {
         access(keyPath: \.streamingRawTextEnabled)
         access(keyPath: \.streamingMode)
         access(keyPath: \.appTheme)
+        access(keyPath: \.readbackEnabled)
 
         withMutation(keyPath: \.cleanupEnabled) {
             defaults.set(true, forKey: Keys.cleanupEnabled)
@@ -506,6 +530,9 @@ public final class SettingsStore: @unchecked Sendable {
         }
         withMutation(keyPath: \.appTheme) {
             defaults.set(AppTheme.system.rawValue, forKey: Keys.appTheme)
+        }
+        withMutation(keyPath: \.readbackEnabled) {
+            defaults.set(true, forKey: Keys.readbackEnabled)
         }
 
         SpeakLog.storage.info("SettingsStore reset to defaults")

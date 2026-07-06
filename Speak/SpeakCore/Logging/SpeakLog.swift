@@ -23,4 +23,6 @@ public enum SpeakLog {
     public static let app         = Logger(subsystem: subsystem, category: "app")
     public static let overlay     = Logger(subsystem: subsystem, category: "overlay")
     public static let input       = Logger(subsystem: subsystem, category: "input")
+    /// H-2: VoiceOut readback (`SpeechSynthesizing` / `AppleSpeechSynthesizer`).
+    public static let voiceOut    = Logger(subsystem: subsystem, category: "voiceOut")
 }

@@ -114,6 +114,13 @@ final class DictationController: CLICommandHandler {
     /// share one instance (re-paste writes the clipboard + simulates Cmd+V).
     private let pasteboardWriter = PasteboardWriter()
 
+    /// H-2: on-device TTS readback (specs/horizon-voice-os.md Pillar 2). One instance
+    /// for the app's lifetime — `toggleReadback()` (DictationController+VoiceOut.swift)
+    /// speaks `lastTranscript` or interrupts an in-flight readback. Internal (not
+    /// `private`) so the `+VoiceOut` extension can reach it, matching `lastTranscript`/
+    /// `lastRawTranscript`'s visibility below.
+    let voiceOut: any SpeechSynthesizing = AppleSpeechSynthesizer()
+
     /// The most recent finished transcript (cleaned if available, else raw). Drives the
     /// "Paste Last Transcript" menu item (Wispr's Ctrl+Cmd+V re-paste); empty until the
     /// first dictation completes. Observed reactively so the menu enables/disables.

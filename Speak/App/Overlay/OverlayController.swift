@@ -140,14 +140,21 @@ final class OverlayController {
     /// `DictationController` in `beginDictation` alongside `configureDestinationStrip`.
     /// `onKnobChanged` fires when any knob changes (signals DictationController to flag
     /// the session as overridden). `onCancel` routes to `cancelDictation()`.
+    ///
+    /// - Parameter onReadback: (H-2) Toggle VoiceOut readback of the last transcript.
+    ///   `nil` when `SettingsStore.readbackEnabled == false` — the `.done` overlay hides
+    ///   the button entirely rather than wiring a callback that never fires anything
+    ///   useful. Defaults to `nil` so existing callers (tests) are unaffected.
     func configureKnobs(
         onKnobChanged: @escaping () -> Void,
         onCancel: @escaping () -> Void,
-        onReclean: @escaping () -> Void
+        onReclean: @escaping () -> Void,
+        onReadback: (() -> Void)? = nil
     ) {
         overlayModel.onKnobChanged = onKnobChanged
         overlayModel.onCancel = onCancel
         overlayModel.onReclean = onReclean
+        overlayModel.onReadback = onReadback
     }
 
     /// Update the highlighted Agent category after a tap (per-dictation override).
@@ -258,6 +265,7 @@ final class OverlayController {
         overlayModel.onKnobChanged = nil
         overlayModel.onCancel = nil
         overlayModel.onReclean = nil
+        overlayModel.onReadback = nil              // [H-2] reset alongside onReclean — same lifetime
         overlayModel.customInstructions = ""       // P-Code v2: reset per-dictation prompt addition
         resetCodingPanel()                         // P-Code: always start with the panel closed
         partialText = ""
