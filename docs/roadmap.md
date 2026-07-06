@@ -21,6 +21,8 @@ Spec: `specs/profile-engine.md` · prompts: `specs/profile-system-prompts.md` ·
 
 The v0.1 items (V01-0 Agent Mode, V01-3 per-app context, V1-3 Transforms, V1-4 code-aware) are re-framed as profiles once the engine lands.
 
+**Landed 2026-07-06 (loop #42, ahead of critical path — see progress.md):** V01-3 `[x]` (profile-native: Chat profile + toggle), V01-5 `[x]` (ExtraBinding, live-apply), V01-2 `[x]` (SpeakLLM target; key-entry UI still open), Aurora HUD `[x]` (opt-in), H-3 MCP bridge slice `[x]` (`speak-mcp`; say/ask pending VoiceOut+transport). Horizon direction: `specs/horizon-voice-os.md` (H-1…H-4).
+
 ---
 
 ## P0 — Repo setup [~PARTIAL]
