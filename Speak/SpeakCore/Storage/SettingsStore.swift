@@ -144,6 +144,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let hudStyle              = "speak.settings.hudStyle"
         static let voiceActionsEnabled   = "speak.settings.voiceActionsEnabled"
         static let voiceActionsPrefix    = "speak.settings.voiceActionsPrefix"
+        static let readbackEnabled       = "speak.settings.readbackEnabled"
     }
 
     // MARK: - Injected defaults (the testability seam)
@@ -176,7 +177,12 @@ public final class SettingsStore: @unchecked Sendable {
             Keys.appTheme: AppTheme.system.rawValue,
             Keys.perAppContextEnabled: true,
             Keys.hudStyle: HUDStyle.classic.rawValue,
-            Keys.voiceActionsPrefix: "hey speak"
+            Keys.voiceActionsPrefix: "hey speak",
+            // [decision H-2] Default true: the readback affordance is inert until the
+            // user presses it (no audio plays unprompted), so there is no privacy/
+            // surprise cost to shipping it on by default — the toggle exists purely
+            // to let a user hide the button, not to gate a background behavior.
+            Keys.readbackEnabled: true
         ])
         // Enum defaults are handled via `?? fallback` at the getter level because
         // Codable JSON cannot be registered as a `[String: Any]` literal.
@@ -558,46 +564,7 @@ public final class SettingsStore: @unchecked Sendable {
         }
     }
 
-    // MARK: - Voice Actions (H-1, specs/horizon-voice-os.md Pillar 1)
-
-    /// Master toggle for Voice Actions (the intent router: dictation vs command
-    /// vs action, `SpeakCore/VoiceActions/`).
-    ///
-    /// `false` (default): the router is never consulted and `shortcuts run` is
-    /// never invoked — behavior is byte-identical to `VoiceActions/` not existing.
-    /// `true`: a spoken `voiceActionsPrefix` at the start of an utterance gates
-    /// routing to `CommandModeService` (command) or `ShortcutsCLIExecutor`
-    /// (action); everything else remains plain dictation.
-    ///
-    /// [decision H-1] Default `false` — this is a v-next opt-in extension
-    /// (spec Sequencing #1, "no new perms"), not a v0 behavior change, so
-    /// existing users see nothing different until they opt in.
-    public var voiceActionsEnabled: Bool {
-        get {
-            access(keyPath: \.voiceActionsEnabled)
-            return defaults.bool(forKey: Keys.voiceActionsEnabled)
-        }
-        set {
-            withMutation(keyPath: \.voiceActionsEnabled) {
-                defaults.set(newValue, forKey: Keys.voiceActionsEnabled)
-            }
-        }
-    }
-
-    /// The spoken trigger prefix that gates Voice Actions routing when
-    /// `voiceActionsEnabled == true`. Matched case-insensitively against the
-    /// start of the transcript by `PrefixActionRouter`. Default: `"hey speak"`.
-    public var voiceActionsPrefix: String {
-        get {
-            access(keyPath: \.voiceActionsPrefix)
-            return defaults.string(forKey: Keys.voiceActionsPrefix) ?? "hey speak"
-        }
-        set {
-            withMutation(keyPath: \.voiceActionsPrefix) {
-                defaults.set(newValue, forKey: Keys.voiceActionsPrefix)
-            }
-        }
-    }
+    // MARK: - Voice Actions (H-1) & VoiceOut (H-2) — see extension below ([lint] type_body_length)
 
     // MARK: - Reset to defaults
 
@@ -620,6 +587,7 @@ public final class SettingsStore: @unchecked Sendable {
         access(keyPath: \.hudStyle)
         access(keyPath: \.voiceActionsEnabled)
         access(keyPath: \.voiceActionsPrefix)
+        access(keyPath: \.readbackEnabled)
 
         withMutation(keyPath: \.cleanupEnabled) {
             defaults.set(true, forKey: Keys.cleanupEnabled)
@@ -666,7 +634,75 @@ public final class SettingsStore: @unchecked Sendable {
         withMutation(keyPath: \.voiceActionsPrefix) {
             defaults.set("hey speak", forKey: Keys.voiceActionsPrefix)
         }
+        withMutation(keyPath: \.readbackEnabled) {
+            defaults.set(true, forKey: Keys.readbackEnabled)
+        }
 
         SpeakLog.storage.info("SettingsStore reset to defaults")
+    }
+}
+
+// MARK: - Voice Actions (H-1) + VoiceOut readback (H-2)
+// Computed properties moved out of the class body to hold SwiftLint's
+// type_body_length cap — pure code motion, same file so the @Observable
+// macro's access/withMutation members remain reachable.
+extension SettingsStore {
+    // MARK: - Voice Actions (H-1, specs/horizon-voice-os.md Pillar 1)
+
+    /// Master toggle for Voice Actions (the intent router: dictation vs command
+    /// vs action, `SpeakCore/VoiceActions/`).
+    ///
+    /// `false` (default): the router is never consulted and `shortcuts run` is
+    /// never invoked — behavior is byte-identical to `VoiceActions/` not existing.
+    /// `true`: a spoken `voiceActionsPrefix` at the start of an utterance gates
+    /// routing to `CommandModeService` (command) or `ShortcutsCLIExecutor`
+    /// (action); everything else remains plain dictation.
+    ///
+    /// [decision H-1] Default `false` — this is a v-next opt-in extension
+    /// (spec Sequencing #1, "no new perms"), not a v0 behavior change, so
+    /// existing users see nothing different until they opt in.
+    public var voiceActionsEnabled: Bool {
+        get {
+            access(keyPath: \.voiceActionsEnabled)
+            return defaults.bool(forKey: Keys.voiceActionsEnabled)
+        }
+        set {
+            withMutation(keyPath: \.voiceActionsEnabled) {
+                defaults.set(newValue, forKey: Keys.voiceActionsEnabled)
+            }
+        }
+    }
+
+    /// The spoken trigger prefix that gates Voice Actions routing when
+    /// `voiceActionsEnabled == true`. Matched case-insensitively against the
+    /// start of the transcript by `PrefixActionRouter`. Default: `"hey speak"`.
+    public var voiceActionsPrefix: String {
+        get {
+            access(keyPath: \.voiceActionsPrefix)
+            return defaults.string(forKey: Keys.voiceActionsPrefix) ?? "hey speak"
+        }
+        set {
+            withMutation(keyPath: \.voiceActionsPrefix) {
+                defaults.set(newValue, forKey: Keys.voiceActionsPrefix)
+            }
+        }
+    }
+
+    // MARK: - VoiceOut readback (H-2)
+
+    /// Whether the "Read back" (speaker.wave.2) affordance appears in the `.done`
+    /// overlay state. Default `true`. The button itself is inert until pressed —
+    /// this toggle only controls whether it's shown, not a background behavior.
+    /// `false` hides the button entirely (no `SpeechSynthesizing` call is ever made).
+    public var readbackEnabled: Bool {
+        get {
+            access(keyPath: \.readbackEnabled)
+            return defaults.bool(forKey: Keys.readbackEnabled)
+        }
+        set {
+            withMutation(keyPath: \.readbackEnabled) {
+                defaults.set(newValue, forKey: Keys.readbackEnabled)
+            }
+        }
     }
 }

@@ -204,6 +204,14 @@ final class OverlayViewModel {
     /// Only valid after `.done` when a raw transcript is available. [decision PE-4]
     var onReclean: (() -> Void)?
 
+    /// Speak the last finished transcript aloud (H-2 — VoiceOut readback), or stop if
+    /// already speaking. Wired to `DictationController.toggleReadback()`. `nil` when
+    /// `SettingsStore.readbackEnabled == false` — the button is hidden entirely in that
+    /// case, exactly like `onReclean`'s "only shown when meaningful" contract.
+    /// [decision H-2: reuses the re-clean button's `.done`-window visibility pattern —
+    /// set at dictation start, nil'd by `OverlayController.stop()`/`cancelImmediate()`.]
+    var onReadback: (() -> Void)?
+
     // MARK: Prompt-customization panel (P-Code)
     //
     // [decision P-Code v2] The base HUD's destination/Agent-category picker (the
@@ -544,6 +552,20 @@ struct TranscriptOverlayView: View {
                 .font(.speakMonoBody)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
+            // [H-2] Read-back affordance: visible only when readbackEnabled is on.
+            // Same pattern as re-clean below — tapping toggles speak/stop, never queues.
+            if model.onReadback != nil {
+                Button {
+                    model.onReadback?()
+                } label: {
+                    Image(systemName: "speaker.wave.2")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Read this back aloud")
+                .accessibilityLabel("Read the transcript back aloud")
+            }
             // [PE-4] Re-clean affordance: visible only when a raw transcript is available.
             if model.onReclean != nil {
                 Button {
@@ -792,6 +814,17 @@ struct OverlayKnobsRow: View {
 #Preview("Done") {
     let model = OverlayViewModel()
     model.overlayState = .done
+    return TranscriptOverlayView(model: model)
+        .frame(width: 340, height: 60)
+}
+
+/// Done — with readback + re-clean affordances (both callbacks wired).
+/// [H-2] Documents the read-back button's placement alongside re-clean.
+#Preview("Done — readback + re-clean") {
+    let model = OverlayViewModel()
+    model.overlayState = .done
+    model.onReadback = {}
+    model.onReclean = {}
     return TranscriptOverlayView(model: model)
         .frame(width: 340, height: 60)
 }

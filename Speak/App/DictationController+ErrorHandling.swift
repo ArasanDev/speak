@@ -13,6 +13,12 @@ extension DictationController {
     // MARK: - Begin / end dictation
 
     func beginDictation() async {
+        // [H-2] "Any hotkey press cuts TTS instantly": a new dictation is the
+        // primary interruption path for VoiceOut readback (specs/horizon-voice-os.md
+        // Pillar 2). Stop unconditionally, before the mute/session guards below, so
+        // readback audio never bleeds into a fresh capture regardless of how this
+        // attempt turns out. `voiceOut.stop()` is a no-op when nothing is speaking.
+        await voiceOut.stop()
         do {
             // [PE-0 wiring] Capture the frontmost app on the main actor and pass its
             // bundle id down, so the engine can resolve an app-specific profile (e.g.
@@ -58,10 +64,14 @@ extension DictationController {
             )
             // [PE-4] Wire cancel + knob callbacks. A knob change flags the session as
             // overridden so the stop-time profile apply runs with the knob values applied.
+            // [H-2] onReadback is nil (hides the button) when the user has turned the
+            // affordance off in Settings — `readbackEnabled` is read here, not cached,
+            // so a Settings change takes effect on the very next dictation.
             overlayController.configureKnobs(
                 onKnobChanged: { [weak self] in self?.didOverrideThisSession = true },
                 onCancel: { [weak self] in self?.cancelDictation() },
-                onReclean: { [weak self] in self?.recleanCurrentTranscript() }
+                onReclean: { [weak self] in self?.recleanCurrentTranscript() },
+                onReadback: settingsStore.readbackEnabled ? { [weak self] in self?.toggleReadback() } : nil
             )
         } catch SpeakError.microphoneMuted {
             monitor.notifySessionEnded()

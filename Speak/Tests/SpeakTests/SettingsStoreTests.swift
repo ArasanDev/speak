@@ -488,3 +488,51 @@ final class SettingsStoreTests: XCTestCase {
     }
 
 }
+
+
+// MARK: - Voice settings tests (H-2) — separate class to hold SwiftLint's
+// type_body_length cap on SettingsStoreTests; identical isolated-defaults pattern.
+final class SettingsStoreVoiceTests: XCTestCase {
+
+    private func makeIsolatedDefaults() throws -> UserDefaults {
+        let name = "SettingsStoreVoiceTests-\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: name) else {
+            throw XCTSkip("Could not create isolated UserDefaults suite")
+        }
+        defaults.removePersistentDomain(forName: name)
+        return defaults
+    }
+
+    private func freshStore(on defaults: UserDefaults) -> SettingsStore {
+        SettingsStore(defaults: defaults)
+    }
+
+    // MARK: - readbackEnabled (H-2 VoiceOut)
+
+    func testReadbackEnabledDefaultIsTrue() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertTrue(store.readbackEnabled,
+            "readbackEnabled default must be true — the button is inert until pressed, so on-by-default has no surprise cost.")
+    }
+
+    func testReadbackEnabledFalseRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.readbackEnabled = false
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertFalse(reloaded.readbackEnabled,
+            "readbackEnabled=false must survive a SettingsStore reload on the same defaults.")
+    }
+
+    func testReadbackEnabledTrueRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.readbackEnabled = false   // flip to false first
+        store.readbackEnabled = true    // then back to true
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertTrue(reloaded.readbackEnabled,
+            "readbackEnabled=true must survive a SettingsStore reload on the same defaults.")
+    }
+}

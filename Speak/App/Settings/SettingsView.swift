@@ -211,6 +211,18 @@ private struct GeneralSettingsTab: View {
             } header: {
                 Text("Text Insertion")
             }
+
+            Section {
+                Toggle("Read back finished transcripts", isOn: Binding(
+                    get: { store.readbackEnabled },
+                    set: { store.readbackEnabled = $0 }
+                ))
+                Text("Shows a speaker button after each dictation to hear it read aloud on-device. The button does nothing until you press it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Voice Out")
+            }
         }
         .formStyle(.grouped)
         .padding(SpeakSpacing.md)
