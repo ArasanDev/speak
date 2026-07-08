@@ -350,11 +350,23 @@ final class DictationController: CLICommandHandler {
             // [H-1] Voice Actions live executor (specs/horizon-voice-os.md, Pillar 1).
             // ShortcutsCLIExecutor is all-SpeakCore (wraps `/usr/bin/shortcuts`), so the
             // engine stays AppKit-free. Consulted only when `settings.voiceActionsEnabled`
-            // is on (default false → zero behavior change). The `.command` route's
-            // CommandModeService is intentionally NOT wired here: it needs an App-layer AX
-            // SelectionAccessing conformer that is still [deferred — human verification],
-            // so `.command` degrades to dictation until that lands.
-            voiceActionsExecutor: ShortcutsCLIExecutor()
+            // is on (default false → zero behavior change).
+            voiceActionsExecutor: ShortcutsCLIExecutor(),
+            // [H-1] Voice Actions `.command` route: wired to the same App-layer AX
+            // conformer (`AccessibilitySelection`) already used in production by the
+            // pre-H-1 Command Mode feature (`CommandModeController`, line ~584 below).
+            // `defaultCleaner(for: store)` is the same stateless factory used for the
+            // `cleaner:` param above — called again here (matching the established
+            // pattern at `commandModeController`'s construction) rather than caching an
+            // instance. `nil` only when cleanup is disabled (`defaultCleaner` returns
+            // `nil`), in which case `.command` degrades to dictation, same as the
+            // `voiceActionsExecutor == nil` case. The live AX read/replace I/O itself
+            // remains [deferred — human verification]: grant Accessibility, select text
+            // in TextEdit/Slack, confirm read + replace — only the wiring is verified
+            // here (see CommandModeServiceTests for the unit-tested orchestration).
+            voiceActionsCommandService: defaultCleaner(for: store).map {
+                CommandModeService(selection: AccessibilitySelection(), cleaner: $0)
+            }
         )
 
         monitor = HotkeyMonitor()

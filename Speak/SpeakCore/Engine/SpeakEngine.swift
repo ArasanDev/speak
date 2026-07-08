@@ -83,10 +83,13 @@ public actor SpeakEngine {
     private let voiceActionsExecutor: (any ActionExecuting)?
 
     /// [H-1] Optional Voice Actions command service — routes a `.command` utterance
-    /// through the on-device selection transform. `nil` in production for now: it
-    /// requires an App-layer AX `SelectionAccessing` conformer that is still
-    /// `[deferred — human verification]`, so the `.command` route degrades to
-    /// dictation until that lands. Injectable (non-nil) so tests exercise the route.
+    /// through the on-device selection transform. Wired in production
+    /// (`DictationController.init`) with the App-layer `AccessibilitySelection` AX
+    /// conformer, the same one the pre-H-1 Command Mode feature already uses. `nil`
+    /// only when cleanup is disabled (no cleaner to inject), in which case `.command`
+    /// degrades to dictation, same as `voiceActionsExecutor == nil`. The live AX
+    /// read/replace I/O remains `[deferred — human verification]`; the DI wiring and
+    /// routing logic are unit-tested. Injectable so tests exercise the route directly.
     private let voiceActionsCommandService: CommandModeService?
 
     // MARK: - Session state (actor-isolated)

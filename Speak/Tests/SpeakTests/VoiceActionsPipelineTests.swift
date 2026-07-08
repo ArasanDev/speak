@@ -209,6 +209,99 @@ final class VoiceActionsPipelineTests: XCTestCase {
         XCTAssertEqual(result.rawText, "hey speak good morning")
     }
 
+    // MARK: - SpeakEngine-level wiring (H-1 gap closure)
+    //
+    // The tests above drive `CaptureSession` with a hand-assembled handler closure
+    // that mirrors what `SpeakEngine.newSession()` builds. This section instead
+    // drives `SpeakEngine` itself — proving `SpeakEngine.init(voiceActionsCommandService:)`
+    // is actually threaded into the `VoiceActionsCoordinator` it constructs internally
+    // (SpeakEngine.swift ~line 321), the same DI seam `DictationController.init()` now
+    // wires with `AccessibilitySelection()` in production. No AX/Process here — a mock
+    // `SelectionAccessing` stands in, same pattern as VoiceActionsCoordinatorTests.
+
+    /// A no-op history store so the engine can be constructed headlessly.
+    private final class NullHistory: HistoryStoring, @unchecked Sendable {
+        func save(_ entry: HistoryEntry) async throws {}
+        func recent(limit: Int) async throws -> [HistoryEntry] { [] }
+        func search(_ substring: String) async throws -> [HistoryEntry] { [] }
+        func clear() async throws {}
+        func export() async throws -> String { "[]" }
+    }
+
+    /// Isolated `SettingsStore` (never touches `.standard`), with Voice Actions on.
+    private func makeSettings(voiceActionsEnabled: Bool = true) throws -> SettingsStore {
+        let suiteName = "VoiceActionsPipelineTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = SettingsStore(defaults: defaults)
+        settings.voiceActionsEnabled = voiceActionsEnabled
+        settings.voiceActionsPrefix = "hey speak"
+        return settings
+    }
+
+    /// Transcript matches the command prefix but not the (empty) action catalog ⇒
+    /// SpeakEngine must route it through the injected `voiceActionsCommandService`,
+    /// not through dictation delivery.
+    func testSpeakEngine_commandRoute_routesThroughInjectedCommandService() async throws {
+        let selection = MockSelection(selected: "hello there")
+        let commandService = CommandModeService(selection: selection, cleaner: MockCleaner())
+        let inserter = RecordingInserter()
+        let settings = try makeSettings()
+
+        let engine = SpeakEngine(
+            transcriber: ScriptedTranscriber(finalText: "hey speak make it formal"),
+            cleaner: nil,
+            inserter: inserter,
+            history: NullHistory(),
+            settings: settings,
+            voiceActionsExecutor: nil,
+            voiceActionsCommandService: commandService
+        )
+
+        // `newSession()` builds the real `CaptureSession` (and the internal
+        // `VoiceActionsCoordinator` wired to `voiceActionsCommandService`) without the
+        // `beginDictation()` microphone-authorization gate, which this sandbox cannot
+        // grant. This still exercises SpeakEngine's own session-assembly code.
+        let session = await engine.newSession()
+        try await session.start()
+        try await Task.sleep(nanoseconds: 30_000_000)
+        let result = try await session.stop()
+
+        XCTAssertEqual(selection.replacedWith, "hello there [cleaned]",
+                       "SpeakEngine must route a matched, non-catalog command through the injected CommandModeService.")
+        let pasted = await inserter.snapshot()
+        XCTAssertTrue(pasted.isEmpty, "A routed command must suppress the dictation paste.")
+        XCTAssertEqual(result.rawText, "hey speak make it formal")
+    }
+
+    /// With `voiceActionsCommandService == nil` (e.g. cleanup disabled at launch, per
+    /// `DictationController.init`'s `defaultCleaner(for:).map { ... }`), the same
+    /// transcript must degrade to plain dictation — never silently drop the utterance.
+    func testSpeakEngine_commandRoute_nilCommandService_degradesToDictation() async throws {
+        let inserter = RecordingInserter()
+        let settings = try makeSettings()
+
+        let engine = SpeakEngine(
+            transcriber: ScriptedTranscriber(finalText: "hey speak make it formal"),
+            cleaner: nil,
+            inserter: inserter,
+            history: NullHistory(),
+            settings: settings,
+            voiceActionsExecutor: nil,
+            voiceActionsCommandService: nil
+        )
+
+        let session = await engine.newSession()
+        try await session.start()
+        try await Task.sleep(nanoseconds: 30_000_000)
+        let result = try await session.stop()
+
+        let pasted = await inserter.snapshot()
+        XCTAssertEqual(pasted, ["hey speak make it formal"],
+                       "Without a command service, the route must degrade to dictation and paste the original transcript.")
+        XCTAssertEqual(result.rawText, "hey speak make it formal")
+    }
+
     // MARK: - Feature ON, no prefix ⇒ plain dictation (paste runs)
 
     func testNoPrefix_plainDictation_pastesTranscript() async throws {

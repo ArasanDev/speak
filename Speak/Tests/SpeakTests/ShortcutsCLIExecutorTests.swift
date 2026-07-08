@@ -45,6 +45,15 @@ final class ShortcutsCLIExecutorTests: XCTestCase {
                 sleep 5
                 exit 0
                 ;;
+              "Ignores Sigterm")
+                trap '' TERM
+                sleep 30
+                exit 0
+                ;;
+              "Huge Output")
+                yes "x" | head -c 5000000
+                exit 0
+                ;;
               *)
                 echo "no shortcut named $2" 1>&2
                 exit 1
@@ -149,6 +158,43 @@ final class ShortcutsCLIExecutorTests: XCTestCase {
             guard case .failed = result else {
                 return XCTFail("Expected .failed (terminated process exits nonzero), got \(result)")
             }
+        }
+    }
+
+    /// H-4 hardening: a process that traps and ignores SIGTERM (as a
+    /// dialog-holding child conceivably could — the unverified H-4 risk) must
+    /// still resolve, via the SIGKILL escalation, rather than hanging forever.
+    func testRun_processIgnoringSigterm_resolvesViaSigkillEscalation() async throws {
+        try await TestStorage.withTempDir { dir in
+            let path = try self.makeFixtureScript(in: dir)
+            // timeout: SIGTERM fires at 0.2s (ignored by fixture); killGrace: 0.2s
+            // more before SIGKILL. Bounded well under the fixture's 30s sleep.
+            let executor = ShortcutsCLIExecutor(executablePath: path, timeout: 0.2, killGrace: 0.2)
+
+            let start = Date()
+            let result = await executor.run(named: "Ignores Sigterm")
+            let elapsed = Date().timeIntervalSince(start)
+
+            XCTAssertLessThan(elapsed, 3.0, "SIGKILL escalation should resolve the call well before the fixture's 30s sleep completes.")
+            guard case .failed = result else {
+                return XCTFail("Expected .failed (SIGKILL-terminated process exits nonzero), got \(result)")
+            }
+        }
+    }
+
+    // MARK: - Large stdout
+
+    func testRun_largeStdout_doesNotDeadlockAndCapturesFullOutput() async throws {
+        try await TestStorage.withTempDir { dir in
+            let path = try self.makeFixtureScript(in: dir)
+            let executor = ShortcutsCLIExecutor(executablePath: path)
+
+            let result = await executor.run(named: "Huge Output")
+
+            guard case .success(let output) = result else {
+                return XCTFail("Expected .success, got \(result)")
+            }
+            XCTAssertEqual(output?.utf8.count, 5_000_000, "Full stdout should be captured without truncation or deadlock.")
         }
     }
 }
