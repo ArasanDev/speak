@@ -46,6 +46,45 @@ public protocol CLICommandHandler: AnyObject {
     func cliBeginDictation()
     /// End the current dictation session. No-op if not listening.
     func cliEndDictation()
+
+    // MARK: - H-3 (specs/horizon-voice-os.md Pillar 3)
+
+    /// Speak `text` aloud. Fire-and-forget from the port server's point of view —
+    /// the port replies with an accept-ack before speech finishes, mirroring
+    /// start/stop. [decision: H-3]
+    func cliSay(text: String, interrupt: Bool)
+
+    /// Speak `question`, then run a full dictation round-trip (reusing the same
+    /// `beginDictation()`/`endDictation()` session the hotkey uses) and return the
+    /// transcript. Returns `.timedOut` if no answer arrives within `timeoutSeconds`.
+    /// [decision: H-3]
+    func cliAsk(question: String, timeoutSeconds: TimeInterval) async -> CLIAskOutcome
+
+    /// Speak `question`, then run a full dictation round-trip and extract a
+    /// deterministic yes/no/cancel/unclear from the answer via `YesNoCancelExtractor`.
+    /// Returns `.timedOut` if no answer arrives within `timeoutSeconds`. [decision: H-3]
+    func cliConfirm(question: String, timeoutSeconds: TimeInterval) async -> CLIConfirmOutcome
+}
+
+// MARK: - H-3 async command outcomes
+
+/// Outcome of `CLICommandHandler.cliAsk`. A distinct type (not `String?`) so
+/// "no answer" (timeout) is never confused with the empty string being a valid
+/// (if unusual) spoken answer. [decision: H-3]
+public enum CLIAskOutcome: Sendable, Equatable {
+    case answered(String)
+    case timedOut
+}
+
+/// Outcome of `CLICommandHandler.cliConfirm`. Mirrors `YesNoCancelResult` plus a
+/// `timedOut` case for "no answer arrived in time" — distinct from `.unclear`
+/// ("an answer arrived but didn't match any phrase list"). [decision: H-3]
+public enum CLIConfirmOutcome: Sendable, Equatable {
+    case yes
+    case no
+    case unclear
+    case cancelled
+    case timedOut
 }
 
 // MARK: - CLIPortServer
@@ -194,8 +233,19 @@ public final class CLIPortServer {
             return CLIPortServer.encodeReply(.failure("internal: handler unavailable"))
         }
 
+        // ask/confirm need to pump a nested run loop while an async round-trip
+        // completes — see `pumpUntilResult(timeoutSeconds:poll:)` below. That pump
+        // must happen OUTSIDE `MainActor.assumeIsolated`'s synchronous closure (a
+        // nested run-loop turn can re-enter this very callback, e.g. for a `status`
+        // poll from another CLI invocation, and `assumeIsolated` closures must not
+        // recursively re-enter). We special-case ask/confirm before the closure.
+        // [decision: H-3]
+        if request.cmd == .ask || request.cmd == .confirm {
+            return CLIPortServer.encodeReply(handleAskOrConfirm(request, handler: cmdHandler))
+        }
+
         // We are on the main thread; the MainActor is available.
-        // Read handler state synchronously for status; dispatch Tasks for start/stop.
+        // Read handler state synchronously for status; dispatch Tasks for start/stop/say.
         let reply: CLIReply = MainActor.assumeIsolated {
             switch request.cmd {
 
@@ -237,10 +287,116 @@ public final class CLIPortServer {
                 cmdHandler.cliEndDictation()
                 SpeakLog.cli.info("CLIPortServer: --stop dispatched.")
                 return .accepted()
+
+            case .say:
+                // Accept-ack, mirrors start/stop: the port replies immediately;
+                // `cliSay` dispatches a Task internally and does not block this
+                // callback on full speech playback. `interrupt` (handled inside
+                // `cliSay`) is how the caller avoids overlap rather than the port
+                // waiting for the previous utterance to finish. [decision: H-3]
+                guard let text = request.text, !text.isEmpty else {
+                    SpeakLog.cli.error("CLIPortServer: say ignored — empty/missing text.")
+                    return .failure("say requires non-empty text")
+                }
+                cmdHandler.cliSay(text: text, interrupt: request.interrupt ?? false)
+                SpeakLog.cli.info("CLIPortServer: say dispatched.")
+                return .accepted()
+
+            case .ask, .confirm:
+                // Handled above, before this closure — unreachable here.
+                return .failure("internal: ask/confirm routed incorrectly")
             }
         }
 
         return CLIPortServer.encodeReply(reply)
+    }
+
+    // MARK: - H-3 ask/confirm dispatch (blocking-avoidance pump)
+
+    /// Handle `ask`/`confirm` on the main thread without literally blocking it.
+    ///
+    /// [decision: H-3] The CFMessagePort callback is synchronous — it must return a
+    /// `CFData` reply before returning control to the run loop, but `ask`/`confirm`
+    /// need to speak a question and then run a full mic+STT dictation round-trip,
+    /// which can take tens of seconds and is inherently asynchronous (`beginDictation`/
+    /// `endDictation` are `async` MainActor methods driven by the engine's own
+    /// AsyncStream event loop). A literal `Thread.sleep`/semaphore-wait here would
+    /// freeze the whole app — no HUD updates, no timers, no other run-loop sources —
+    /// violating this project's "never block main thread" rule and defeating the
+    /// entire point of showing the HUD during an agent-initiated mic open.
+    ///
+    /// Instead: kick off the async round-trip as a `Task { @MainActor in ... }` (it
+    /// will actually run once we yield back to the run loop below), then repeatedly
+    /// call `RunLoop.current.run(mode: .default, before:)` in short slices. Each
+    /// slice pumps the main run loop — which also drains the GCD main queue that
+    /// backs the `@MainActor` executor on Apple platforms — so the `Task` makes
+    /// progress, timers fire, the HUD panel animates, and (critically) the engine's
+    /// own event streams keep flowing, all while this call stack never returns to
+    /// the CFMessagePort machinery until a result is ready. This is a *pump*, not a
+    /// block: the thread is still doing real run-loop work between slices, just not
+    /// returning to its caller. The tradeoff is a small poll granularity (20 ms) and
+    /// a nested run-loop frame held open for the duration of the round-trip — an
+    /// accepted cost for a same-user, low-frequency IPC path where a real callback-
+    /// based CFMessagePort reply mechanism does not exist (only synchronous
+    /// send/reply, per `CFMessagePortSendRequest`'s design).
+    private func handleAskOrConfirm(_ request: CLIRequest, handler: any CLICommandHandler) -> CLIReply {
+        guard let question = request.question, !question.isEmpty else {
+            return .failure("\(request.cmd.rawValue) requires a non-empty question")
+        }
+        let timeout = request.timeout ?? CLIContract.askConfirmDefaultTimeoutSeconds
+        // A small buffer beyond the caller's timeout so the handler's own internal
+        // timeout (if any) has a chance to resolve and set the box before we give up.
+        let pumpCeiling = timeout + 2.0
+
+        switch request.cmd {
+        case .ask:
+            let box = CLIPendingResultBox<CLIAskOutcome>()
+            Task { @MainActor in
+                let outcome = await handler.cliAsk(question: question, timeoutSeconds: timeout)
+                box.set(outcome)
+            }
+            guard let outcome = CLIPortServer.pumpUntilResult(timeoutSeconds: pumpCeiling, poll: box.get) else {
+                SpeakLog.cli.error("CLIPortServer: ask pump exhausted without a result.")
+                return .failure("speak_ask timed out waiting for a spoken answer")
+            }
+            switch outcome {
+            case .answered(let text): return .asked(text)
+            case .timedOut: return .failure("speak_ask timed out waiting for a spoken answer")
+            }
+
+        case .confirm:
+            let box = CLIPendingResultBox<CLIConfirmOutcome>()
+            Task { @MainActor in
+                let outcome = await handler.cliConfirm(question: question, timeoutSeconds: timeout)
+                box.set(outcome)
+            }
+            guard let outcome = CLIPortServer.pumpUntilResult(timeoutSeconds: pumpCeiling, poll: box.get) else {
+                SpeakLog.cli.error("CLIPortServer: confirm pump exhausted without a result.")
+                return .failure("speak_confirm timed out waiting for a spoken answer")
+            }
+            switch outcome {
+            case .yes: return .confirmed(true)
+            case .no: return .confirmed(false)
+            case .unclear, .cancelled: return .confirmed(nil)
+            case .timedOut: return .failure("speak_confirm timed out waiting for a spoken answer")
+            }
+
+        default:
+            return .failure("internal: handleAskOrConfirm called with \(request.cmd.rawValue)")
+        }
+    }
+
+    /// Pump the current (main) run loop in short slices until `poll()` returns a
+    /// non-nil result or `timeoutSeconds` elapses. See `handleAskOrConfirm` for the
+    /// full rationale. [decision: H-3]
+    private static func pumpUntilResult<T>(timeoutSeconds: TimeInterval, poll: () -> T?) -> T? {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        let pollSlice: TimeInterval = 0.02  // 20 ms — short enough to stay responsive
+        while Date() < deadline {
+            if let result = poll() { return result }
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(pollSlice))
+        }
+        return poll()
     }
 
     // MARK: - Encode reply to CFData
@@ -262,5 +418,32 @@ public final class CLIPortServer {
             data = Data(fallback.utf8)
         }
         return Unmanaged.passRetained(data as CFData)
+    }
+}
+
+// MARK: - CLIPendingResultBox
+
+/// A tiny lock-protected box used to hand a result from a `@MainActor` `Task` back
+/// to the synchronous run-loop pump in `CLIPortServer.pumpUntilResult`. Both sides
+/// run on the main thread (the `Task` is `@MainActor`; the pump runs inline in the
+/// port callback), but the pump reads `value` from *inside* `RunLoop.current.run`
+/// re-entrancy, so a lock is cheap insurance against any future caller that isn't
+/// strictly main-thread-only. `@unchecked Sendable` matches this file's existing
+/// pattern (`CLIPortServer` itself) for a type whose thread-safety is manually
+/// reasoned about rather than compiler-enforced. [decision: H-3]
+private final class CLIPendingResultBox<T>: @unchecked Sendable {
+    private var value: T?
+    private let lock = NSLock()
+
+    func set(_ newValue: T) {
+        lock.lock()
+        value = newValue
+        lock.unlock()
+    }
+
+    func get() -> T? {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
     }
 }

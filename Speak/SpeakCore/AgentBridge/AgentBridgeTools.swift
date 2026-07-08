@@ -54,20 +54,21 @@ public enum AgentBridgeTools {
         MCPTool(
             name: "speak_say",
             description: "Speak text aloud on the human's Mac (fire-and-forget status channel). " +
-                "Not yet wired to a synthesizer in this build — returns an execution error until " +
-                "VoiceOut (Pillar 2) ships.",
+                "Requires speak.app to be running.",
             inputSchema: sayInputSchema
         ),
         MCPTool(
             name: "speak_ask",
             description: "Speak a question, then listen for the human's spoken answer and return it as " +
-                "text. Not implemented yet — needs the menubar-app link (XPC/socket transport).",
+                "text. Opens the mic and shows the HUD (same as a hotkey dictation) — the human sees " +
+                "and can cancel it. Requires speak.app to be running.",
             inputSchema: askInputSchema
         ),
         MCPTool(
             name: "speak_confirm",
-            description: "Speak a yes/no question and return the human's deterministic yes/no/cancel " +
-                "answer as a boolean. Not implemented yet — needs the menubar-app link.",
+            description: "Speak a yes/no question and return the human's deterministic yes/no answer as " +
+                "a boolean. Fails with a clear error if the spoken answer is unclear or the human cancels, " +
+                "rather than guessing. Requires speak.app to be running.",
             inputSchema: confirmInputSchema
         ),
         MCPTool(

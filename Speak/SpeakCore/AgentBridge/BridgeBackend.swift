@@ -6,19 +6,14 @@
 // stays unit-testable with an in-memory stub — the same seam pattern as
 // `Transcribing` / `LLMCleaning` elsewhere in SpeakCore.
 //
-// H-3 scope (specs/horizon-voice-os.md Pillar 3): the menubar-app link
-// (XPC/UNIX-socket) is explicitly a later task. In this slice:
-//   - `speak_status` gets a REAL backend (`CLIBridgeBackend`) by reusing the
-//     existing CFMessagePort CLI IPC (Speak/SpeakCore/CLI/CLIContract.swift)
-//     that already answers "is the app running, what state is it in" for
-//     `speak --status`. No new transport is introduced.
-//   - `speak_say` has no synthesizer seam to call yet (VoiceOut / Pillar 2 is
-//     unbuilt).
-//   - `speak_ask` / `speak_confirm` need a live mic round-trip through the
-//     running app (the XPC link).
-// All three report a clean, structured "not available" result rather than a
-// JSON-RPC protocol error, so a connected agent can degrade gracefully — the
-// horizon spec's "every pillar has an off switch."
+// H-3 scope (specs/horizon-voice-os.md Pillar 3): all four tools are now wired to
+// a real running app instance, reusing the existing CFMessagePort CLI IPC
+// (Speak/SpeakCore/CLI/CLIContract.swift) — no new transport (XPC/UNIX-socket) was
+// needed. `say`/`ask`/`confirm` ride the same wire the `--start`/`--stop`/`--status`
+// CLI verbs already use, extended with `.say`/`.ask`/`.confirm` `CLICommand` cases.
+// `BridgeUnavailable.appNotRunning` remains the one "not available" case every tool
+// can still report — the horizon spec's "every pillar has an off switch" — for when
+// speak.app simply isn't running.
 
 import Foundation
 
@@ -54,23 +49,25 @@ public struct BridgeUnavailable: Error, Sendable, Equatable, CustomStringConvert
 
     public static let appNotRunning = BridgeUnavailable("speak is not running. Open speak.app first.")
 
-    /// `speak_say`: no TTS seam exists yet (VoiceOut / Pillar 2 is a separate,
-    /// unbuilt horizon item — see specs/horizon-voice-os.md).
-    public static func noSynthesizer(_ tool: String) -> BridgeUnavailable {
-        BridgeUnavailable(
-            "\(tool) has no synthesizer wired yet — VoiceOut (Pillar 2, specs/horizon-voice-os.md) " +
-            "is not built in this slice."
-        )
+    /// `speak_ask` / `speak_confirm`: the round-trip started but no answer arrived
+    /// within the requested (or default) timeout — see
+    /// `CLIContract.askConfirmDefaultTimeoutSeconds`. [decision: H-3]
+    public static func timedOut(_ tool: String) -> BridgeUnavailable {
+        BridgeUnavailable("\(tool) timed out waiting for a spoken answer.")
     }
 
-    /// `speak_ask` / `speak_confirm`: both need a live mic round-trip through
-    /// the running app, which requires the menubar-app link that is out of
-    /// scope for H-3.
-    public static func needsTransport(_ tool: String) -> BridgeUnavailable {
-        BridgeUnavailable(
-            "\(tool) needs a live round-trip through the running speak.app (mic + STT) — the " +
-            "menubar-app link (XPC/socket transport, specs/horizon-voice-os.md Pillar 3) is a later task."
-        )
+    /// `speak_confirm`: an answer arrived but didn't match any yes/no/cancel phrase
+    /// (`YesNoCancelExtractor` returned `.unclear`/`.cancel`). Reported as
+    /// "unavailable" rather than defaulting to `false`, so a caller never mistakes
+    /// an ambiguous answer for a deliberate "no". [decision: H-3]
+    public static func unclearAnswer(_ tool: String) -> BridgeUnavailable {
+        BridgeUnavailable("\(tool) got an answer that wasn't a recognizable yes/no/cancel.")
+    }
+
+    /// Any other transport-level failure translating a CLI reply (malformed JSON,
+    /// an `ok == false` reply with no more specific mapping, etc).
+    public static func transportError(_ tool: String, _ detail: String) -> BridgeUnavailable {
+        BridgeUnavailable("\(tool) transport error: \(detail)")
     }
 }
 

@@ -27,9 +27,9 @@ private final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
         status: BridgeStatusReport = BridgeStatusReport(
             appRunning: true, engineState: "idle", hotkeyBinding: "Fn ×2", detail: nil
         ),
-        say: Result<Void, BridgeUnavailable> = .failure(.noSynthesizer("speak_say")),
-        ask: Result<String, BridgeUnavailable> = .failure(.needsTransport("speak_ask")),
-        confirm: Result<Bool, BridgeUnavailable> = .failure(.needsTransport("speak_confirm"))
+        say: Result<Void, BridgeUnavailable> = .success(()),
+        ask: Result<String, BridgeUnavailable> = .success("blue"),
+        confirm: Result<Bool, BridgeUnavailable> = .success(true)
     ) {
         self.statusResult = status
         self.sayResult = say
@@ -295,14 +295,12 @@ struct AgentBridgeServerToolsCallTests {
         #expect(outbound.error == nil)  // still a JSON-RPC success — this is a tool-level error
     }
 
-    @Test("speak_say with no synthesizer wired is a clean tool execution error, not a protocol error")
-    func sayNotWired() async throws {
+    @Test("speak_say with a running backend is a clean success result")
+    func saySucceeds() async throws {
         let server = AgentBridgeServer(backend: StubBridgeBackend())
         let outbound = try await call(server, name: "speak_say", arguments: ["text": .string("hello")])
         let result = try #require(outbound.result?.objectValue)
-        #expect(result["isError"]?.boolValue == true)
-        let text = result["content"]?.arrayValue?.first?.objectValue?["text"]?.stringValue ?? ""
-        #expect(text.contains("VoiceOut"))
+        #expect(result["isError"]?.boolValue == nil || result["isError"]?.boolValue == false)
         #expect(outbound.error == nil)
     }
 
@@ -314,22 +312,42 @@ struct AgentBridgeServerToolsCallTests {
         #expect(result["isError"]?.boolValue == true)
     }
 
-    @Test("speak_ask is not implemented in this slice")
-    func askNotImplemented() async throws {
+    @Test("speak_ask with a running backend returns the spoken answer as text")
+    func askSucceeds() async throws {
         let server = AgentBridgeServer(backend: StubBridgeBackend())
         let outbound = try await call(server, name: "speak_ask", arguments: ["question": .string("coffee or tea?")])
         let result = try #require(outbound.result?.objectValue)
-        #expect(result["isError"]?.boolValue == true)
+        #expect(result["isError"]?.boolValue == nil || result["isError"]?.boolValue == false)
         let text = result["content"]?.arrayValue?.first?.objectValue?["text"]?.stringValue ?? ""
-        #expect(text.contains("menubar-app link"))
+        #expect(text == "blue")
     }
 
-    @Test("speak_confirm is not implemented in this slice")
-    func confirmNotImplemented() async throws {
+    @Test("speak_ask reports a clean tool execution error (not a protocol error) when the backend times out")
+    func askTimeoutIsToolError() async throws {
+        let server = AgentBridgeServer(backend: StubBridgeBackend(ask: .failure(.timedOut("speak_ask"))))
+        let outbound = try await call(server, name: "speak_ask", arguments: ["question": .string("q?")])
+        let result = try #require(outbound.result?.objectValue)
+        #expect(result["isError"]?.boolValue == true)
+        #expect(outbound.error == nil)
+    }
+
+    @Test("speak_confirm with a running backend returns a deterministic yes/no")
+    func confirmSucceeds() async throws {
         let server = AgentBridgeServer(backend: StubBridgeBackend())
         let outbound = try await call(server, name: "speak_confirm", arguments: ["question": .string("proceed?")])
         let result = try #require(outbound.result?.objectValue)
+        #expect(result["isError"]?.boolValue == nil || result["isError"]?.boolValue == false)
+        let text = result["content"]?.arrayValue?.first?.objectValue?["text"]?.stringValue ?? ""
+        #expect(text == "yes")
+    }
+
+    @Test("speak_confirm reports a clean tool execution error when the answer is unclear")
+    func confirmUnclearIsToolError() async throws {
+        let server = AgentBridgeServer(backend: StubBridgeBackend(confirm: .failure(.unclearAnswer("speak_confirm"))))
+        let outbound = try await call(server, name: "speak_confirm", arguments: ["question": .string("q?")])
+        let result = try #require(outbound.result?.objectValue)
         #expect(result["isError"]?.boolValue == true)
+        #expect(outbound.error == nil)
     }
 
     @Test("an unknown tool name is a JSON-RPC protocol error (-32602), not a tool result")
@@ -425,17 +443,128 @@ struct CLIBridgeBackendTests {
         #expect(report.detail?.contains("not running") == true)
     }
 
-    @Test("say/ask/confirm always report unavailable in this slice")
-    func sayAskConfirmAreNotWired() async {
-        let backend = CLIBridgeBackend(transport: StubCLITransport(reply: .accepted()))
-        if case .success = await backend.say(text: "hi", interrupt: false) {
-            Issue.record("speak_say should not have a live synthesizer in this slice")
+    @Test("say() maps an accepted CLIReply to success and sends a .say command")
+    func sayMapsAcceptedToSuccess() async {
+        let stub = StubCLITransport(reply: .accepted())
+        let backend = CLIBridgeBackend(transport: stub)
+        let result = await backend.say(text: "hi", interrupt: true)
+        guard case .success = result else {
+            Issue.record("expected success, got \(result)")
+            return
         }
-        if case .success = await backend.ask(question: "q?", timeoutSeconds: nil) {
-            Issue.record("speak_ask should not be implemented in this slice")
+        #expect(stub.lastCommand == .say)
+        #expect(stub.lastTimeoutSeconds == CLIContract.sendTimeoutSeconds)
+    }
+
+    @Test("say() maps portNotFound to .appNotRunning")
+    func sayMapsPortNotFoundToAppNotRunning() async {
+        let backend = CLIBridgeBackend(transport: StubCLITransport(error: .portNotFound))
+        let result = await backend.say(text: "hi", interrupt: false)
+        guard case .failure(let reason) = result else {
+            Issue.record("expected failure, got \(result)")
+            return
         }
-        if case .success = await backend.confirm(question: "q?") {
-            Issue.record("speak_confirm should not be implemented in this slice")
+        #expect(reason == .appNotRunning)
+    }
+
+    @Test("say() maps an ok=false CLIReply to a failure carrying the app's error string")
+    func sayMapsFailureReply() async {
+        let backend = CLIBridgeBackend(transport: StubCLITransport(reply: .failure("no voice output")))
+        let result = await backend.say(text: "hi", interrupt: false)
+        guard case .failure(let reason) = result else {
+            Issue.record("expected failure, got \(result)")
+            return
         }
+        #expect(reason.description.contains("no voice output"))
+    }
+
+    @Test("ask() maps a CLIReply with an answer to success, using the long ask/confirm timeout")
+    func askMapsAnsweredToSuccess() async {
+        let stub = StubCLITransport(reply: .asked("blue please"))
+        let backend = CLIBridgeBackend(transport: stub)
+        let result = await backend.ask(question: "coffee or tea?", timeoutSeconds: 10)
+        guard case .success(let answer) = result else {
+            Issue.record("expected success, got \(result)")
+            return
+        }
+        #expect(answer == "blue please")
+        #expect(stub.lastCommand == .ask)
+        #expect(stub.lastTimeoutSeconds == 15)  // caller's 10s + the 5s wire-call buffer
+    }
+
+    @Test("ask() falls back to CLIContract.askConfirmDefaultTimeoutSeconds when the caller supplies none")
+    func askUsesDefaultTimeoutWhenNilRequested() async {
+        let stub = StubCLITransport(reply: .asked("ok"))
+        let backend = CLIBridgeBackend(transport: stub)
+        _ = await backend.ask(question: "q?", timeoutSeconds: nil)
+        #expect(stub.lastTimeoutSeconds == CLIContract.askConfirmDefaultTimeoutSeconds + 5)
+    }
+
+    @Test("ask() maps a transport timeout to .timedOut")
+    func askMapsTransportTimeout() async {
+        let backend = CLIBridgeBackend(transport: StubCLITransport(error: .timeout))
+        let result = await backend.ask(question: "q?", timeoutSeconds: 5)
+        guard case .failure(let reason) = result else {
+            Issue.record("expected failure, got \(result)")
+            return
+        }
+        #expect(reason.description.contains("timed out"))
+    }
+
+    @Test("ask() maps portNotFound to .appNotRunning")
+    func askMapsPortNotFound() async {
+        let backend = CLIBridgeBackend(transport: StubCLITransport(error: .portNotFound))
+        let result = await backend.ask(question: "q?", timeoutSeconds: 5)
+        guard case .failure(let reason) = result else {
+            Issue.record("expected failure, got \(result)")
+            return
+        }
+        #expect(reason == .appNotRunning)
+    }
+
+    @Test("confirm() maps confirmed=true to success(true)")
+    func confirmMapsTrue() async {
+        let stub = StubCLITransport(reply: .confirmed(true))
+        let backend = CLIBridgeBackend(transport: stub)
+        let result = await backend.confirm(question: "proceed?")
+        guard case .success(let yes) = result else {
+            Issue.record("expected success, got \(result)")
+            return
+        }
+        #expect(yes == true)
+        #expect(stub.lastCommand == .confirm)
+    }
+
+    @Test("confirm() maps confirmed=false to success(false)")
+    func confirmMapsFalse() async {
+        let backend = CLIBridgeBackend(transport: StubCLITransport(reply: .confirmed(false)))
+        let result = await backend.confirm(question: "proceed?")
+        guard case .success(let yes) = result else {
+            Issue.record("expected success, got \(result)")
+            return
+        }
+        #expect(yes == false)
+    }
+
+    @Test("confirm() maps ok=true/confirmed=nil (unclear answer) to a failure, never a guessed bool")
+    func confirmMapsUnclearToFailure() async {
+        let backend = CLIBridgeBackend(transport: StubCLITransport(reply: .confirmed(nil)))
+        let result = await backend.confirm(question: "proceed?")
+        guard case .failure(let reason) = result else {
+            Issue.record("expected failure, got \(result)")
+            return
+        }
+        #expect(reason.description.contains("recognizable"))
+    }
+
+    @Test("confirm() maps a transport timeout to .timedOut")
+    func confirmMapsTransportTimeout() async {
+        let backend = CLIBridgeBackend(transport: StubCLITransport(error: .timeout))
+        let result = await backend.confirm(question: "q?")
+        guard case .failure(let reason) = result else {
+            Issue.record("expected failure, got \(result)")
+            return
+        }
+        #expect(reason.description.contains("timed out"))
     }
 }

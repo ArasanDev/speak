@@ -53,6 +53,53 @@ final class CLIContractTests: XCTestCase {
         XCTAssertThrowsError(try CLIRequest.decode(bad))
     }
 
+    // MARK: - H-3 say/ask/confirm CLIRequest codec
+
+    func testRequestEncodeDecodeSay() throws {
+        let req = CLIRequest(cmd: .say, text: "hello there", interrupt: true)
+        let data = try req.encode()
+        let decoded = try CLIRequest.decode(data)
+        XCTAssertEqual(decoded.cmd, .say)
+        XCTAssertEqual(decoded.text, "hello there")
+        XCTAssertEqual(decoded.interrupt, true)
+    }
+
+    func testRequestSayJSONShape() throws {
+        let req = CLIRequest(cmd: .say, text: "hi", interrupt: false)
+        let data = try req.encode()
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertEqual(json?["cmd"] as? String, "say")
+        XCTAssertEqual(json?["text"] as? String, "hi")
+        XCTAssertEqual(json?["interrupt"] as? Bool, false)
+    }
+
+    func testRequestEncodeDecodeAsk() throws {
+        let req = CLIRequest(cmd: .ask, question: "coffee or tea?", timeout: 30)
+        let data = try req.encode()
+        let decoded = try CLIRequest.decode(data)
+        XCTAssertEqual(decoded.cmd, .ask)
+        XCTAssertEqual(decoded.question, "coffee or tea?")
+        XCTAssertEqual(decoded.timeout, 30)
+    }
+
+    func testRequestEncodeDecodeConfirm() throws {
+        let req = CLIRequest(cmd: .confirm, question: "proceed?", timeout: 60)
+        let data = try req.encode()
+        let decoded = try CLIRequest.decode(data)
+        XCTAssertEqual(decoded.cmd, .confirm)
+        XCTAssertEqual(decoded.question, "proceed?")
+        XCTAssertEqual(decoded.timeout, 60)
+    }
+
+    func testRequestAskOmitsTimeoutWhenNil() throws {
+        // Caller didn't specify a timeout — the field must be absent/null, not 0,
+        // so the app side can fall back to `CLIContract.askConfirmDefaultTimeoutSeconds`.
+        let req = CLIRequest(cmd: .ask, question: "q?")
+        let data = try req.encode()
+        let decoded = try CLIRequest.decode(data)
+        XCTAssertNil(decoded.timeout)
+    }
+
     // MARK: - CLIReply codec
 
     func testReplyAcceptedRoundTrip() throws {
@@ -95,6 +142,54 @@ final class CLIContractTests: XCTestCase {
     func testReplyDecodeMalformedThrows() {
         let bad = Data("not-json".utf8)
         XCTAssertThrowsError(try CLIReply.decode(bad))
+    }
+
+    // MARK: - H-3 say/ask/confirm CLIReply codec
+
+    func testReplyAskedRoundTrip() throws {
+        let reply = CLIReply.asked("blue please")
+        let data = try reply.encode()
+        let decoded = try CLIReply.decode(data)
+        XCTAssertTrue(decoded.ok)
+        XCTAssertEqual(decoded.answer, "blue please")
+        XCTAssertNil(decoded.confirmed)
+        XCTAssertNil(decoded.error)
+    }
+
+    func testReplyAskedAllowsEmptyStringAnswer() throws {
+        // An empty transcript is a valid (if unusual) spoken answer — distinct
+        // from "no answer arrived" (which the app maps to `.failure`, never
+        // `.asked("")`). [decision: H-3]
+        let reply = CLIReply.asked("")
+        let data = try reply.encode()
+        let decoded = try CLIReply.decode(data)
+        XCTAssertTrue(decoded.ok)
+        XCTAssertEqual(decoded.answer, "")
+    }
+
+    func testReplyConfirmedTrueRoundTrip() throws {
+        let reply = CLIReply.confirmed(true)
+        let data = try reply.encode()
+        let decoded = try CLIReply.decode(data)
+        XCTAssertTrue(decoded.ok)
+        XCTAssertEqual(decoded.confirmed, true)
+    }
+
+    func testReplyConfirmedFalseRoundTrip() throws {
+        let reply = CLIReply.confirmed(false)
+        let data = try reply.encode()
+        let decoded = try CLIReply.decode(data)
+        XCTAssertTrue(decoded.ok)
+        XCTAssertEqual(decoded.confirmed, false)
+    }
+
+    func testReplyConfirmedUnclearRoundTrip() throws {
+        // ok == true but confirmed == nil is the wire shape for "unclear answer".
+        let reply = CLIReply.confirmed(nil)
+        let data = try reply.encode()
+        let decoded = try CLIReply.decode(data)
+        XCTAssertTrue(decoded.ok)
+        XCTAssertNil(decoded.confirmed)
     }
 
     // MARK: - CLIState from MenubarIcon
@@ -207,6 +302,25 @@ final class CLIContractTests: XCTestCase {
         XCTAssertEqual(stub.lastCommand, .start)
     }
 
+    func testDefaultSendUsesDefaultTimeout() throws {
+        // The protocol-extension `send(_:)` convenience must forward
+        // `CLIContract.sendTimeoutSeconds` — never a bespoke value — to the
+        // explicit-timeout overload. [decision: H-3]
+        let stub = StubCLITransport(reply: .accepted())
+        _ = try stub.send(CLIRequest(cmd: .start))
+        XCTAssertEqual(stub.lastTimeoutSeconds, CLIContract.sendTimeoutSeconds)
+    }
+
+    func testExplicitTimeoutOverrideIsPlumbedThrough() throws {
+        // `ask`/`confirm` need a much longer timeout than the 3 s default — verify
+        // the override actually reaches the transport call, not just the default.
+        // [decision: H-3]
+        let stub = StubCLITransport(reply: .asked("yes"))
+        _ = try stub.send(CLIRequest(cmd: .ask, question: "q?", timeout: 45), timeoutSeconds: 45)
+        XCTAssertEqual(stub.lastTimeoutSeconds, 45)
+        XCTAssertEqual(stub.lastCommand, .ask)
+    }
+
     func testStubTransportThrowsPortNotFound() {
         let stub = StubCLITransport(error: .portNotFound)
         XCTAssertThrowsError(try stub.send(CLIRequest(cmd: .status))) { error in
@@ -230,7 +344,26 @@ final class CLIContractTests: XCTestCase {
     func testPortNameIsExactValue() {
         XCTAssertEqual(CLIContract.portName as String, "com.speak.app.cli")
     }
+
+    // MARK: - H-3 ask/confirm default timeout constant
+
+    func testAskConfirmDefaultTimeoutIsSixtySeconds() {
+        // Guards against an accidental change to the documented default — callers
+        // (CLIBridgeBackend, the MCP tool schema's "timeout" description) rely on
+        // this being generous enough for a human to notice, think, and answer.
+        // [decision: H-3]
+        XCTAssertEqual(CLIContract.askConfirmDefaultTimeoutSeconds, 60.0)
+    }
 }
+
+// [deferred — needs human verification] The live CFMessagePort run-loop-pump
+// round-trip in `CLIPortServer.handleAskOrConfirm`/`pumpUntilResult` (the actual
+// nested-RunLoop pump while an async Task completes) is inherently timing-sensitive
+// and requires a live CFMessagePort pair across two processes/threads to exercise
+// meaningfully — not unit-tested here. The pieces that ARE unit tested: request/
+// reply encode-decode for say/ask/confirm (above), the timeout override plumbing
+// (above), the yes/no/cancel extractor (YesNoCancelExtractorTests.swift), and the
+// CLIBridgeBackend → CLIReply translation (AgentBridgeServerTests.swift).
 
 // MARK: - Pure idempotency decision function (tested above)
 //
@@ -257,6 +390,13 @@ private func idempotencyDecision(command: CLICommand, icon: MenubarIcon) -> Idem
 
     case .status:
         return .read
+
+    case .say, .ask, .confirm:
+        // H-3: say/ask/confirm are not gated by this idempotency table — say is
+        // always dispatched (no icon precondition); ask/confirm are handled by the
+        // dedicated run-loop pump path in `CLIPortServer.handleAskOrConfirm`, not
+        // the `.dispatch`/`.noOp`/`.read` decision this pure mirror models.
+        return .read
     }
 }
 
@@ -278,8 +418,11 @@ final class StubCLITransport: CLITransport, @unchecked Sendable {
         self.stubbedError = error
     }
 
-    func send(_ request: CLIRequest) throws -> CLIReply {
+    private(set) var lastTimeoutSeconds: TimeInterval?
+
+    func send(_ request: CLIRequest, timeoutSeconds: TimeInterval) throws -> CLIReply {
         lastCommand = request.cmd
+        lastTimeoutSeconds = timeoutSeconds
         if let stubbedErr = stubbedError { throw stubbedErr }
         guard let reply = stubbedReply else {
             throw CLITransportError.badReply("StubCLITransport: no reply configured")

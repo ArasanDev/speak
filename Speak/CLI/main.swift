@@ -119,6 +119,15 @@ case .start:
 
 case .stop:
     emit("stop command accepted by speak.")
+
+case .say, .ask, .confirm:
+    // H-3: the `speak` CLI tool's flag parser above only recognizes
+    // --start/--stop/--status — say/ask/confirm are reached exclusively via the
+    // MCP agent-bridge tool layer (Speak/MCP/main.swift → AgentBridgeServer →
+    // CLIBridgeBackend), which builds its own CLIRequest and does not go through
+    // this switch. Unreachable from this binary; present only for the compiler's
+    // exhaustiveness check on the shared `CLICommand` enum. [decision: H-3]
+    fail("say/ask/confirm are not available via the speak CLI tool — use the MCP agent bridge instead.")
 }
 
 exit(0)
