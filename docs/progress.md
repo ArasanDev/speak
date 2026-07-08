@@ -135,7 +135,7 @@
   - Live paste across TextEdit/Slack/Terminal.
   - Permission prompts + System Settings deep-links firing correctly live.
 - **P11-b — signed/notarized `.dmg`** — blocked on a Developer ID cert (open question #4).
-- **PE-3.1/#51, PE-3.2/#52** — Profile Engine voice-override + pin-to-context (post-v0 north star, not on critical path).
+- ~~PE-3.1/#51, PE-3.2/#52~~ — **CLOSED**: both landed on master (`58bbdb8`/`9ad8858` PE-3.1 voice command detection, `4840d38`/`ee80505` PE-3.2 pin-to-context + P2.1 CaretLocator) — this list was stale, corrected 2026-07-08.
 
 ### Orchestration note
 Models: **Opus** (judgment/design/review) + **fast worker** (Haiku/WSL2 MiniMax). Design is locked in specs; route mechanical multi-file implementation to the worker; orchestrator reviews diffs + owns commits.
