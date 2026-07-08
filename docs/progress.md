@@ -149,3 +149,66 @@ Models: **Opus** (judgment/design/review) + **fast worker** (Haiku/WSL2 MiniMax)
 | V1 | Did Phase 1A (`val-oss-compare`) and 1B (`val-skill-sdk`) agents complete? | Unknown — check progress notes or re-run |
 | 3 | Does write+`Cmd+V` avoid the paste prompt incl. macOS 26.4 Terminal provenance check? | `[unverified]` — test in Terminal (human) |
 | 4 | Developer ID signing cert for notarization? | Unverified — needed for P11 |
+| ~~V2~~ | ~~fix-input2 changes — should they merge?~~ | **CLOSED** — merged `d05e740` (2026-06-26), gates green |
+| ~~V3~~ | ~~DictationTranscriber contextualStrings support?~~ | **CLOSED** [verified via SDK arm64e-apple-macos.swiftinterface 2026-06-26]: `DictationTranscriber` exists in `Speech`; `AnalysisContext.contextualStrings[.general]` is a valid property. H4 seam is correct. |
+
+---
+
+## Done (2026-07-08 — dist/speak.cask.rb verified, P11-b scaffold note added)
+
+**builder-release checked P11-b's Homebrew Cask scaffold.** `dist/speak.cask.rb` already
+existed (from `d790b72 [P11] release: real sign/notarize/dmg pipeline + cask + CI hardening`)
+and was structurally sound: valid Cask DSL (`ruby -c` passes), `app "Speak.app"`,
+`depends_on macos: ">= :tahoe"` (macOS 26), `url`/artifact naming (`Speak.dmg`) consistent
+with the `make release` target's `$(DMG)` output, placeholder `sha256` clearly marked.
+No rewrite needed — added one header comment making explicit that the cask is **inert
+until P11-b's Developer ID cert lands** (no cert exists yet; `make release` has never
+produced a real signed+notarized `.dmg`, so sha256/url are placeholders, not real
+artifact data). Cites this file (`docs/roadmap.md` line ~470: "v0 does NOT require P11-b").
+No build/test/lint run — pure doc/scaffold comment, no Swift changed.
+
+---
+
+## Done (2026-06-21, loop run #26 — PHASE 1 base-hardening COMPLETE + paste test-hygiene fix)
+
+**Executed all of Phase 1 from `specs/acceleration-plan.md` (autonomous loop).** Five
+surgical, mostly-additive seam-hardening tasks, all merged on `master` and verified by
+an independent orchestrator gate from a wiped DerivedData (**build ✅ · 199 tests / 5
+XCTSkip / 0 failures · lint 0 serious · moat 7/7**):
+
+- **H1 `6dbe029`** — multi-language seam (builder-engine). `SpeakEngine.newSession()` reads
+  `settings.language` at call-time. Behavior-neutral (defaults `en-US`). +`SpeakEngineLanguageTests` (3 tests).
+- **H2 `4a3ad09`** — App-test infra `TEST_HOST` (builder-release). `SpeakTests` now HOSTS the `Speak`
+  app target. XCTest startup gate in `SpeakApp.swift` skips `startMonitoring()` under
+  `XCTestConfigurationFilePath`. +`TranscriptOverlayPanelTests` (6 tests).
+- **H4 `9bdc20d`** — `customVocabulary` seam (builder-audio-stt). `vocabulary: [String] = []` on
+  `AppleSpeechTranscriber`, wired into `AnalysisContext.contextualStrings[.general]`. SDK-verified
+  against `arm64e-apple-macos.swiftinterface`. +7 tests.
+- **H5 `f2b1d1f`** — `StreamingTextInserting` protocol (builder-input). Define-only (`insertChunk(_:)` /
+  `finalize()`). No conformer. Additive, zero risk.
+- **H3 `9a3c8c4`** — Decompose `DictationController` (builder-app). 415→361 lines. Extracted
+  `OverlayController` + `WindowPresenter`. Behavior identical. +`OverlayControllerTests` (8) +
+  `WindowPresenterTests` (4).
+
+**Paste test-hygiene fix `30e99f2`:** `PasteboardWriter` now has injectable `writeClipboard` +
+`postEvent` seams; tests inject a `PasteSideEffectRecorder`. Confirmed no paste into user's terminal
+during `make test`.
+
+**Orchestration lesson (durable):** `Agent(isolation:"worktree")` did NOT isolate named/background
+subagents in CC 2.1.x — they wrote the shared checkout. Verify `git worktree list` after spawning.
+Standing fix: each agent calls `EnterWorktree` first + never commits.
+
+---
+
+## Done (2026-06-21, loop run #25 — LIVE base verified + full-product acceleration plan)
+
+**Milestone: the v0 base WORKS LIVE.** User ran `make dev-cert` + `make run`, granted permissions,
+and **dictated development instructions into Claude Code using speak itself** — recursive feedback loop.
+Confirmed live (`c9392bd`): double-tap Fn start/stop, overlay over other apps, partials streaming live,
+paste at cursor into terminal with no macOS 26.4 paste-prompt, raw-fallback with Apple Intelligence off.
+
+**Pivoted mission: "finish v0" → "build the full product, fast."**
+
+**`specs/acceleration-plan.md` produced** from 3 parallel scouts (architecture audit, product roadmap,
+competitor analysis). Four locked user decisions: base-hardening-first · local-first+pluggable-later ·
+**full-window dashboard** · **Monaco** typographic theme.
