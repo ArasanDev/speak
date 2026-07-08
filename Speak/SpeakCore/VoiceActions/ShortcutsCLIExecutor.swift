@@ -104,7 +104,7 @@ public struct ShortcutsCLIExecutor: ActionExecuting, Sendable {
                 // Drain both pipes concurrently BEFORE waiting for exit — see the
                 // PIPE-READ SAFETY note above. See `drainPipesConcurrently` for
                 // why `resultQueue` (not the raw vars) is the sync point.
-                let (drainGroup, resultQueue, pipeResults) = Self.drainPipesConcurrently(outPipe: outPipe, errPipe: errPipe)
+                let drain = Self.drainPipesConcurrently(outPipe: outPipe, errPipe: errPipe)
 
                 // Watchdog: only ever terminates the process, never resumes the
                 // continuation itself — the single `resume` below always fires
@@ -131,11 +131,11 @@ public struct ShortcutsCLIExecutor: ActionExecuting, Sendable {
 
                 // Bounded past `timeout + killGrace`: a straggling grandchild
                 // holding the pipe open must not make this call hang forever.
-                _ = drainGroup.wait(timeout: .now() + timeout + killGrace + 2.0)
+                _ = drain.group.wait(timeout: .now() + timeout + killGrace + 2.0)
                 process.waitUntilExit()
                 watchdog.cancel()
                 killWatchdog.cancel()
-                let (outData, errData) = resultQueue.sync { (pipeResults.out, pipeResults.err) }
+                let (outData, errData) = drain.resultQueue.sync { (drain.results.out, drain.results.err) }
 
                 if process.terminationStatus == 0 {
                     let output = String(data: outData, encoding: .utf8)
@@ -151,26 +151,28 @@ public struct ShortcutsCLIExecutor: ActionExecuting, Sendable {
         }
     }
 
-    /// Reads `outPipe`/`errPipe` to EOF concurrently on background queues, so
-    /// one pipe's kernel buffer filling while the other blocks on write can't
-    /// deadlock `Process` (see PIPE-READ SAFETY above).
-    ///
-    /// Returns the `DispatchGroup` to wait on, the `DispatchQueue` that
-    /// synchronizes writes to the returned result box, and the box itself.
-    /// The queue matters because SIGKILL only guarantees OUR direct child
-    /// exits — a grandchild it spawned (e.g. a shell script's `sleep`) can
-    /// inherit a pipe's write end and keep it open past the kill, so the
-    /// caller's `drainGroup.wait()` is bounded rather than unconditional; the
-    /// sync queue is what makes reading the box after giving up race-free.
+    /// Result of `drainPipesConcurrently`: the `DispatchGroup` to wait on, the
+    /// `DispatchQueue` that synchronizes writes to `results`, and `results`
+    /// itself. The queue matters because SIGKILL only guarantees OUR direct
+    /// child exits — a grandchild it spawned (e.g. a shell script's `sleep`)
+    /// can inherit a pipe's write end and keep it open past the kill, so the
+    /// caller's `group.wait()` is bounded rather than unconditional; the sync
+    /// queue is what makes reading `results` after giving up race-free.
+    private struct PipeDrain {
+        let group: DispatchGroup
+        let resultQueue: DispatchQueue
+        let results: PipeReadResults
+    }
+
     private final class PipeReadResults: @unchecked Sendable {
         var out = Data()
         var err = Data()
     }
 
-    private static func drainPipesConcurrently(
-        outPipe: Pipe,
-        errPipe: Pipe
-    ) -> (DispatchGroup, DispatchQueue, PipeReadResults) {
+    /// Reads `outPipe`/`errPipe` to EOF concurrently on background queues, so
+    /// one pipe's kernel buffer filling while the other blocks on write can't
+    /// deadlock `Process` (see PIPE-READ SAFETY above).
+    private static func drainPipesConcurrently(outPipe: Pipe, errPipe: Pipe) -> PipeDrain {
         let drainGroup = DispatchGroup()
         let resultQueue = DispatchQueue(label: "ShortcutsCLIExecutor.pipeResult")
         let results = PipeReadResults()
@@ -188,6 +190,6 @@ public struct ShortcutsCLIExecutor: ActionExecuting, Sendable {
             drainGroup.leave()
         }
 
-        return (drainGroup, resultQueue, results)
+        return PipeDrain(group: drainGroup, resultQueue: resultQueue, results: results)
     }
 }
