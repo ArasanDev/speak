@@ -477,6 +477,11 @@ private struct AICleanupSettingsTab: View {
     /// Whether to show the Ollama guided-setup sheet.
     @State private var showOllamaSetup: Bool = false
 
+    /// Whether to show the API key-entry sheet for a cloud preset.
+    /// [decision V01-2 follow-up: separate flag from `showOllamaSetup` since
+    ///  the two sheets present for mutually exclusive engine selections]
+    @State private var showKeyEntry: Bool = false
+
     // MARK: - Canned sample for the diff preview
 
     /// The fixed raw transcript used as the diff preview source.
@@ -621,10 +626,9 @@ private struct AICleanupSettingsTab: View {
                     Text("Ollama (local server)").tag(CleanupEngine.ollama(model: "qwen2.5:3b"))
                     // v0.1 opt-in — cloud OpenAI-compatible presets (V01-2). Each is strictly
                     // opt-in: nothing runs until the user also stores an API key via
-                    // `LLMKeychainStore` (Settings → AI Cleanup → API key, TODO full
-                    // `CleanupEngineSheet` — see roadmap V01-2 file list). [decision V01-2:
-                    // picker exposes the presets now so the setting round-trips; the
-                    // SecureField key-entry sheet is tracked as app-shell follow-up work.]
+                    // `LLMKeychainStore` (Settings → AI Cleanup → "Enter API key…" →
+                    // `CleanupEngineSheet`). [decision V01-2 follow-up: key entry lives
+                    // in its own sheet/view model, see CleanupEngineSheet.swift]
                     ForEach([ProviderPreset.sarvamLLM, .openAI, .groq, .openRouter], id: \.self) { preset in
                         Text(preset.displayName)
                             .tag(CleanupEngine.openAICompatible(preset: preset, model: preset.defaultModel))
@@ -648,6 +652,11 @@ private struct AICleanupSettingsTab: View {
             }
             .sheet(isPresented: $showOllamaSetup) {
                 OllamaSetupSheet(isPresented: $showOllamaSetup)
+            }
+            .sheet(isPresented: $showKeyEntry) {
+                if case .openAICompatible(let preset, _) = store.cleanupEngine {
+                    CleanupEngineSheet(isPresented: $showKeyEntry, preset: preset)
+                }
             }
         }
         .formStyle(.grouped)
@@ -683,9 +692,13 @@ private struct AICleanupSettingsTab: View {
             HStack(spacing: SpeakSpacing.xs) {
                 Image(systemName: "info.circle")
                     .foregroundStyle(.secondary)
-                Text("\(preset.displayName) requires an API key, stored in Keychain — not yet editable here.")
+                Text("\(preset.displayName) requires an API key, stored in Keychain.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Spacer()
+                Button("Enter API key\u{2026}") { showKeyEntry = true }
+                    .font(.caption)
+                    .buttonStyle(.borderless)
             }
 
         case .mlx:
