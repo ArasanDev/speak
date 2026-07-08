@@ -41,6 +41,7 @@
 // (P11+) calls `beginDictation` on hotkey-start and `endDictation` on
 // hotkey-stop; `cancelDictation` is called on hotkey-cancel / quit.
 
+import AVFoundation
 import Foundation
 import os
 
@@ -454,6 +455,14 @@ public actor SpeakEngine {
         guard !muted else {
             SpeakLog.engine.info("SpeakEngine: beginDictation refused — microphone is muted.")
             throw SpeakError.microphoneMuted
+        }
+        // Mic-permission gate: without this, a denied/revoked TCC grant lets
+        // AVAudioEngine.start() succeed while CoreAudio silently feeds zeroed
+        // buffers — a session that runs to .done with an empty transcript and
+        // no error anywhere. Checked here, the one place that starts capture.
+        guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
+            SpeakLog.engine.info("SpeakEngine: beginDictation refused — microphone not authorized.")
+            throw SpeakError.microphoneDenied
         }
         // [A3] Re-entrancy guard: SpeakEngine is a bare actor (NOT @MainActor).
         // A second beginDictation() call entering during the `await session.start()`

@@ -34,7 +34,11 @@ public final class PermissionManager: PermissionManaging {
     @discardableResult
     public func requestMicrophone() async -> PermissionState {
         let current = AVCaptureDevice.authorizationStatus(for: .audio)
-        guard current == .notDetermined else { return Self.map(current) }
+        guard current == .notDetermined else {
+            let state = Self.map(current)
+            SpeakLog.permissions.info("microphone request skipped, already \(String(describing: state), privacy: .public)")
+            return state
+        }
         let granted = await AVCaptureDevice.requestAccess(for: .audio)
         let state: PermissionState = granted ? .granted : .denied
         SpeakLog.permissions.info("microphone request → \(String(describing: state), privacy: .public)")
