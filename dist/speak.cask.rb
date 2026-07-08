@@ -2,6 +2,14 @@
 #
 # Cask Cookbook: https://docs.brew.sh/Cask-Cookbook
 #
+# INERT until docs/roadmap.md P11-b (Developer ID sign + notarize + Homebrew
+# Cask) lands. This scaffold cannot be published or meaningfully installed
+# today: there is no Developer ID Application cert, so `make release` has
+# never produced a real signed+notarized Speak.dmg, and the sha256/url below
+# are placeholders, not a real artifact checksum. v0 does not require P11-b —
+# it ships as a build-from-source preview via dist/speak.rb (P11-a). Fill in
+# the real version/url/sha256 only once a genuine Developer ID release exists.
+#
 # PLACEHOLDER VALUES — update sha256 and url after `make release`:
 #   shasum -a 256 build/release/Speak.dmg
 #

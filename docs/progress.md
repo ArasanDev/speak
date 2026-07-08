@@ -181,6 +181,21 @@ Nothing blocking. Human-gate items remain owner-only (live paste in 3 apps, late
 
 ---
 
+## Done (2026-07-08 — dist/speak.cask.rb verified, P11-b scaffold note added)
+
+**builder-release checked P11-b's Homebrew Cask scaffold.** `dist/speak.cask.rb` already
+existed (from `d790b72 [P11] release: real sign/notarize/dmg pipeline + cask + CI hardening`)
+and was structurally sound: valid Cask DSL (`ruby -c` passes), `app "Speak.app"`,
+`depends_on macos: ">= :tahoe"` (macOS 26), `url`/artifact naming (`Speak.dmg`) consistent
+with the `make release` target's `$(DMG)` output, placeholder `sha256` clearly marked.
+No rewrite needed — added one header comment making explicit that the cask is **inert
+until P11-b's Developer ID cert lands** (no cert exists yet; `make release` has never
+produced a real signed+notarized `.dmg`, so sha256/url are placeholders, not real
+artifact data). Cites this file (`docs/roadmap.md` line ~470: "v0 does NOT require P11-b").
+No build/test/lint run — pure doc/scaffold comment, no Swift changed.
+
+---
+
 ## Done (2026-06-21, loop run #26 — PHASE 1 base-hardening COMPLETE + paste test-hygiene fix)
 
 **Executed all of Phase 1 from `specs/acceleration-plan.md` (autonomous loop).** Five
