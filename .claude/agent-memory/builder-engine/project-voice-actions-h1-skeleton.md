@@ -1,6 +1,6 @@
 ---
 name: voice-actions-h1-skeleton
-description: H-1 Voice Actions intent-router (specs/horizon-voice-os.md Pillar 1) built as a standalone SpeakCore/VoiceActions/ module — NOT wired into CaptureSession/SpeakEngine/DictationController yet.
+description: H-1 Voice Actions intent-router (specs/horizon-voice-os.md Pillar 1). As of loop #45 it IS wired into the live pipeline (CaptureSession.stop → SpeakEngine.newSession → DictationController); this note documents the skeleton design + how the live wiring was done.
 metadata:
   type: project
 ---
@@ -22,22 +22,42 @@ catalog → `.action` (canonical catalog casing preserved, not spoken casing —
 `shortcuts run` may be case-sensitive); anything else under the prefix →
 `.command`. This is a stand-in for the eventual 3B pass, not real understanding.
 
-**How to apply:** the module is deliberately NOT wired into the live dictation
-pipeline — `CaptureSession`/`SpeakEngine`/`DictationController` are untouched,
-so existing dictation behavior is byte-identical even with the feature merged.
-Whoever picks up H-2/H-3/H-4 (or wires H-1 live) needs to: (1) call
-`VoiceActionsCoordinator.handle(transcript:knownActionNames:)` somewhere after
-a final transcript (likely `SpeakEngine.newSession()` or `DictationController`,
-following the same "read settings once per session" pattern as
-`activeVoiceCommandPreprocessor` in `SpeakEngine.swift`), (2) supply a live
-`CommandModeService` (needs the App-layer `AccessibilitySelection` AX
-conformer, already `[deferred — human verification]` for
-`CommandModeController`), (3) decide where `ShortcutsCLIExecutor.listActionNames()`
-gets called from (it's async/Process-backed — probably cached per-session, not
-per-transcript, to avoid a `shortcuts list` subprocess on every dictation).
+**Live wiring (loop #45, uncommitted in a worktree, pending orchestrator commit):**
+the paste happens *inside* `CaptureSession.stop()` → `runPaste()`, so the App
+layer sees the transcript only AFTER paste and cannot suppress it for an executed
+action. Therefore the wiring lives in the engine/session, NOT `DictationController`
+(the task brief's guess was wrong — surfaced, not papered over):
+- `CaptureSession` gained an optional `voiceActionsHandler: (@Sendable (String)
+  async -> VoiceActionOutcome)?` (default nil), injected exactly like
+  `voiceCommandPreprocessor`. `stop()` calls `routeVoiceActions(...)` at the
+  `rawText`-ready seam (after the empty-transcript guard, before cleanup+paste);
+  it returns a terminal `TranscriptionResult?` — non-nil ⇒ action/command executed,
+  paste SUPPRESSED, settle `.done` via `settleVoiceActionExecuted` (no latency, no
+  paste); nil ⇒ proceed with normal cleanup+paste. `.dictation` and
+  `.degradedToDictation` both return nil ⇒ ORIGINAL transcript is pasted.
+- `SpeakEngine.init` gained `voiceActionsExecutor` + `voiceActionsCommandService`
+  (both nil-default, all-SpeakCore ⇒ engine stays AppKit-free). `newSession()`
+  builds the handler ONLY when `settings.voiceActionsEnabled`; disabled ⇒ nil
+  handler ⇒ byte-identical pre-H-1 path. **The catalog fetch is prefix-gated**:
+  the handler runs `PrefixActionRouter.route(rawText, [])` first and only calls
+  `executor.listActionNames()` (spawns `shortcuts list`) when the prefix matched —
+  keeps the subprocess off the stop→paste critical path for plain dictation.
+- `DictationController` passes `voiceActionsExecutor: ShortcutsCLIExecutor()`.
+  **`CommandModeService` is left nil in production** (needs the App-layer AX
+  `SelectionAccessing` conformer, still `[deferred — human verification]`), so the
+  `.command` route degrades to dictation; the `.action` (Shortcuts) route is the
+  real live path.
+- History: an executed action DOES write a history entry (rawText = utterance,
+  cleanedText nil, latency 0) — falls out of `settleVoiceActionExecuted` returning
+  non-empty rawText; consistent with the `latency==0 ≡ no-measurement` sentinel.
+- Tests: `VoiceActionsPipelineTests.swift` (colocated) drives a real
+  `CaptureSession` with the same handler closure `newSession` builds.
+
 `[unverified — dogfood H-4]`: headless `shortcuts run` behavior for
 input-requesting shortcuts — the executor has a timeout watchdog as mitigation
-but it has never been tested against a real such shortcut.
+but it has never been tested against a real such shortcut. `[deferred]` still:
+live `.command` route (needs the AX selection conformer), and the 3B classifier
+(spec line 22-25) that replaces the deterministic exact-catalog-match stand-in.
 
 See also [[project-speechanalyzer-segment-semantics]] for the sibling
 CaptureSession accumulation pattern this module deliberately does NOT touch.

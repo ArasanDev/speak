@@ -346,7 +346,15 @@ final class DictationController: CLICommandHandler {
             history: historyStore,
             settings: store,
             snippetStore: snippetStore,
-            profileStore: profileStore
+            profileStore: profileStore,
+            // [H-1] Voice Actions live executor (specs/horizon-voice-os.md, Pillar 1).
+            // ShortcutsCLIExecutor is all-SpeakCore (wraps `/usr/bin/shortcuts`), so the
+            // engine stays AppKit-free. Consulted only when `settings.voiceActionsEnabled`
+            // is on (default false → zero behavior change). The `.command` route's
+            // CommandModeService is intentionally NOT wired here: it needs an App-layer AX
+            // SelectionAccessing conformer that is still [deferred — human verification],
+            // so `.command` degrades to dictation until that lands.
+            voiceActionsExecutor: ShortcutsCLIExecutor()
         )
 
         monitor = HotkeyMonitor()

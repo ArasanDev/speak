@@ -75,6 +75,20 @@ public actor SpeakEngine {
     /// this actor-safe.
     private let settings: SettingsStore
 
+    /// [H-1] Optional Voice Actions executor (specs/horizon-voice-os.md, Pillar 1).
+    /// `ShortcutsCLIExecutor()` in production (injected by the app shell); `nil` in
+    /// tests/CLI. When `nil`, the `.action` route always degrades to dictation (the
+    /// coordinator's own contract). All-SpeakCore protocol — keeps the engine
+    /// AppKit-free, same as `transcriber`/`cleaner`/`inserter`.
+    private let voiceActionsExecutor: (any ActionExecuting)?
+
+    /// [H-1] Optional Voice Actions command service — routes a `.command` utterance
+    /// through the on-device selection transform. `nil` in production for now: it
+    /// requires an App-layer AX `SelectionAccessing` conformer that is still
+    /// `[deferred — human verification]`, so the `.command` route degrades to
+    /// dictation until that lands. Injectable (non-nil) so tests exercise the route.
+    private let voiceActionsCommandService: CommandModeService?
+
     // MARK: - Session state (actor-isolated)
 
     /// The in-flight dictation session. `nil` when idle.
@@ -119,7 +133,9 @@ public actor SpeakEngine {
                 history: any HistoryStoring,
                 settings: SettingsStore,
                 snippetStore: SnippetStore? = nil,
-                profileStore: ProfileStore? = nil) {
+                profileStore: ProfileStore? = nil,
+                voiceActionsExecutor: (any ActionExecuting)? = nil,
+                voiceActionsCommandService: CommandModeService? = nil) {
         self.transcriber = transcriber
         self.cleaner = cleaner
         self.inserter = inserter
@@ -127,6 +143,8 @@ public actor SpeakEngine {
         self.settings = settings
         self.snippetStore = snippetStore
         self.profileStore = profileStore
+        self.voiceActionsExecutor = voiceActionsExecutor
+        self.voiceActionsCommandService = voiceActionsCommandService
     }
 
     // MARK: - Session factory
@@ -280,6 +298,46 @@ public actor SpeakEngine {
             }
         }
 
+        // [H-1] Assemble the Voice Actions handler (specs/horizon-voice-os.md, Pillar 1)
+        // ONLY when the feature is enabled. When disabled, `nil` is passed so
+        // CaptureSession.stop() runs the literal pre-H-1 delivery path (byte-identical
+        // dictation — the coordinator's internal `guard enabled` is a second line of
+        // defence, not the one relied on here). Read once per session, like every other
+        // setting above. The router prefix is read now so a Settings change applies on
+        // the next dictation without an engine restart. The closure fetches the action
+        // catalog from the executor (an async OS call) and delegates to the coordinator,
+        // whose "never lose words" contract owns every degrade-to-dictation path.
+        var activeVoiceActionsHandler: CaptureSession.VoiceActionsHandler?
+        if settings.voiceActionsEnabled {
+            let prefix = settings.voiceActionsPrefix
+            let executor = voiceActionsExecutor
+            let router = PrefixActionRouter(prefix: prefix)
+            let coordinator = VoiceActionsCoordinator(
+                router: router,
+                executor: executor,
+                commandService: voiceActionsCommandService,
+                enabled: true
+            )
+            activeVoiceActionsHandler = { rawText in
+                // Cheap prefix gate FIRST — keep the (subprocess-spawning) `shortcuts list`
+                // catalog fetch OFF the stop→paste critical path for the common case
+                // (plain, non-prefixed dictation). `route(_, [])` returns `.dictation`
+                // exactly when the prefix did not match (with an empty catalog a matched
+                // prefix can only yield `.command`, never `.action`), so a `.dictation`
+                // here means "not a voice action" — return immediately, no catalog fetch.
+                guard case .dictation = router.route(rawText, knownActionNames: []) else {
+                    let knownActionNames = await executor?.listActionNames() ?? []
+                    return await coordinator.handle(transcript: rawText, knownActionNames: knownActionNames)
+                }
+                return .dictation(text: rawText)
+            }
+            let executorState = executor != nil ? "wired" : "none"
+            let commandState = voiceActionsCommandService != nil ? "wired" : "none"
+            SpeakLog.voiceActions.info(
+                "SpeakEngine: Voice Actions enabled — prefix='\(prefix, privacy: .public)', executor=\(executorState, privacy: .public), commandService=\(commandState, privacy: .public)."
+            )
+        }
+
         let session = CaptureSession(
             transcriber: transcriber,
             cleaner: activeCleaner,
@@ -288,7 +346,8 @@ public actor SpeakEngine {
             locale: activeLocale,
             cleanupMode: activeMode,
             expander: activeExpander,
-            voiceCommandPreprocessor: activeVoiceCommandPreprocessor
+            voiceCommandPreprocessor: activeVoiceCommandPreprocessor,
+            voiceActionsHandler: activeVoiceActionsHandler
         )
         currentSession = session
         return session

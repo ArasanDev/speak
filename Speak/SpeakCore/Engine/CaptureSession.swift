@@ -64,6 +64,19 @@ public actor CaptureSession {
     public typealias VoiceCommandPreprocessor = @Sendable (String) -> (transcript: String, modeOverride: CleanupMode?)?
     private let voiceCommandPreprocessor: VoiceCommandPreprocessor?
 
+    /// [H-1] Optional Voice Actions router (specs/horizon-voice-os.md, Pillar 1).
+    /// Consulted in `stop()` on the raw transcript (prefix intact), AFTER snippet
+    /// expansion / the empty-transcript guard but BEFORE cleanup + paste — the one
+    /// seam where an executed action/command can suppress the dictation paste.
+    ///
+    /// `nil` (default, and whenever `SettingsStore.voiceActionsEnabled == false`)
+    /// means the whole routing block in `stop()` is skipped and the delivery path
+    /// is byte-identical to pre-H-1 dictation. Assembled in `SpeakEngine.newSession()`
+    /// (it captures the coordinator + fetches the action catalog), following the
+    /// same inject-a-closure pattern as `voiceCommandPreprocessor`.
+    public typealias VoiceActionsHandler = @Sendable (String) async -> VoiceActionOutcome
+    private let voiceActionsHandler: VoiceActionsHandler?
+
     // MARK: - Mutable session state (actor-isolated)
 
     var state: State = .idle
@@ -132,7 +145,8 @@ public actor CaptureSession {
                 locale: Locale = Locale(identifier: "en-US"),
                 cleanupMode: CleanupMode = .punctuation,
                 expander: (any SnippetExpanding)? = nil,
-                voiceCommandPreprocessor: VoiceCommandPreprocessor? = nil) {
+                voiceCommandPreprocessor: VoiceCommandPreprocessor? = nil,
+                voiceActionsHandler: VoiceActionsHandler? = nil) {
         self.transcriber = transcriber
         self.cleaner = cleaner
         self.inserter = inserter
@@ -141,6 +155,7 @@ public actor CaptureSession {
         self.cleanupMode = cleanupMode
         self.expander = expander
         self.voiceCommandPreprocessor = voiceCommandPreprocessor
+        self.voiceActionsHandler = voiceActionsHandler
     }
 
     // MARK: - PE-3 per-dictation cleanup override (live panel)
@@ -366,6 +381,17 @@ public actor CaptureSession {
         let sessionEndedAt = Date()
         let duration = sessionEndedAt.timeIntervalSince(sessionStartTime ?? sessionEndedAt)
 
+        // [H-1] Voice Actions routing (specs/horizon-voice-os.md, Pillar 1). Consulted
+        // on `rawText` (prefix intact, pre-cleanup) at the one seam where an executed
+        // action/command can suppress the dictation paste. Returns a non-nil result to
+        // settle terminally (paste suppressed); `nil` ⇒ proceed with the normal cleanup+
+        // paste path below (feature off, plain dictation, or degrade — words preserved).
+        if let executedResult = try await routeVoiceActions(
+            rawText: rawText, duration: duration, createdAt: sessionEndedAt
+        ) {
+            return executedResult
+        }
+
         // Run cleanup. Never throws — all failure/timeout paths return raw fallback.
         // `cleanupSeconds` is the measured time spent inside the cleanup pass:
         //   - Exactly 0.0 (sentinel) when cleanup was skipped (cleaner nil or unavailable).
@@ -437,6 +463,77 @@ public actor CaptureSession {
             cleanup=\(String(format: "%.0f", latency.cleanupSeconds * 1000), privacy: .public)ms
             """)
         return resultWithLatency
+    }
+
+    /// [H-1] Run the Voice Actions router against `rawText` and map its outcome.
+    ///
+    /// - Returns: a terminal `TranscriptionResult` when an action/command executed
+    ///   (the caller must return it immediately — the dictation paste is suppressed);
+    ///   `nil` when the caller should proceed with the normal cleanup + paste path
+    ///   (feature off, plain `.dictation`, or a `.degradedToDictation` — in which case
+    ///   the ORIGINAL transcript is preserved and pasted, never lost).
+    /// - Throws: the cancel error if a `cancel()` entered the actor while the (async)
+    ///   action/command was in flight — a cancelled session must never settle `.done`.
+    private func routeVoiceActions(
+        rawText: String,
+        duration: TimeInterval,
+        createdAt: Date
+    ) async throws -> TranscriptionResult? {
+        guard let voiceActionsHandler else { return nil }
+        let outcome = await voiceActionsHandler(rawText)
+        // [A1-parallel] `run(named:)` / `CommandModeService.run` are async — a cancel()
+        // may have entered the actor while they were in flight. Re-check BEFORE settling
+        // terminal state so a cancelled session never reports `.done`.
+        if case .error(let cancelErr) = state {
+            SpeakLog.engine.info("CaptureSession: cancel arrived during Voice Actions routing — aborting.")
+            throw cancelErr
+        }
+        switch outcome {
+        case .dictation:
+            return nil  // proceed with normal cleanup + paste.
+        case .degradedToDictation(_, let reason):
+            // The words survive: proceed with normal cleanup + paste of rawText.
+            SpeakLog.voiceActions.info(
+                "CaptureSession: Voice Actions degraded to dictation — \(reason, privacy: .public)."
+            )
+            return nil
+        case .actionExecuted(let name):
+            SpeakLog.voiceActions.info(
+                "CaptureSession: Voice Actions executed action '\(name, privacy: .public)' — suppressing dictation paste."
+            )
+            return settleVoiceActionExecuted(rawText: rawText, duration: duration, createdAt: createdAt)
+        case .commandExecuted:
+            SpeakLog.voiceActions.info(
+                "CaptureSession: Voice Actions command executed (selection replaced) — suppressing dictation paste."
+            )
+            return settleVoiceActionExecuted(rawText: rawText, duration: duration, createdAt: createdAt)
+        }
+    }
+
+    /// [H-1] Settle the session terminally after Voice Actions executed an action or a
+    /// command — the paste is deliberately suppressed (the action/command already
+    /// superseded the dictation). Mirrors the empty-transcript terminal settle: reach
+    /// `.done`, finish the partials stream, and return a paste-free `TranscriptionResult`.
+    ///
+    /// No `latency` record is attached — no paste occurred, so `stopToPasteSeconds` would
+    /// be meaningless. `cleanedText` is nil: cleanup was skipped. `rawText` carries the
+    /// original utterance (prefix intact) so history/`lastTranscript` never see empty text.
+    private func settleVoiceActionExecuted(
+        rawText: String,
+        duration: TimeInterval,
+        createdAt: Date
+    ) -> TranscriptionResult {
+        state = .done
+        partialsContinuation?.finish()
+        partialsContinuation = nil
+        streamTask = nil
+        return TranscriptionResult(
+            rawText: rawText,
+            cleanedText: nil,
+            duration: duration,
+            engineId: transcriber.id,
+            createdAt: createdAt
+        )
     }
 
     /// Hard cancel — stop the STT immediately and move the session to `.error`.
