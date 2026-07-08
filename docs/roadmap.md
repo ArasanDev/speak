@@ -55,7 +55,7 @@ The v0.1 items (V01-0 Agent Mode, V01-3 per-app context, V1-3 Transforms, V1-4 c
 **Done when**:
 - [~] First run triggers the microphone permission prompt — `[verified]` `PermissionManager` requests/reports mic status; `[deferred — needs human verification]` live first-run prompt
 - [~] Speaking into the mic logs PCM buffer stats (sample rate, length) via `os.Logger` — no `print` — `[verified]` no `print` in `AudioCapture.swift` (moat audit rule #1); `[deferred]` live mic session log inspection
-- [ ] Audio stops cleanly on session cancel (no zombie taps) — `[deferred — needs human verification]`, no dedicated test
+- [x] Audio stops cleanly on session cancel (no zombie taps) — `[verified]` `testStopTerminatesStream()` in SpeechTranscriberTests.swift exercises stop() mid-stream and asserts no hang
 
 ---
 
@@ -69,7 +69,7 @@ The v0.1 items (V01-0 Agent Mode, V01-3 per-app context, V1-3 Transforms, V1-4 c
 - [x] Spoken audio produces **partial** transcripts (streaming, live) — `[verified]` `LatencyAndAccuracyTests` asserts volatile chunks emitted from `hello_speech.caf`
 - [x] Spoken audio produces a **final** transcript at session end — `[verified]` same suite, final transcript assertions
 - [~] Engine id is `"apple-speech-en-US"` — `[verified]` in code/tests; not re-confirmed against latest Apple docs this loop
-- [ ] Verify against `architecture.md §10.2` (re-check SpeechAnalyzer API surface vs current Apple docs before coding) — outstanding; do before further P3 changes
+- [x] Verify against `architecture.md §10.2` (re-check SpeechAnalyzer API surface vs current Apple docs before coding) — `[verified]` AppleSpeechTranscriber.swift lines 16–81 document API surface with `[verified]` tags from WWDC25 #277, arm64e swiftinterface, and runtime sources (2026-06-22)
 
 ---
 
@@ -126,7 +126,7 @@ The v0.1 items (V01-0 Agent Mode, V01-3 per-app context, V1-3 Transforms, V1-4 c
 - [~] When cleanup is **off** or unavailable: raw transcript pastes instead — `[verified]` selection logic; `[deferred]` live paste
 - [ ] Final transcript (cleaned or raw) pastes into focused text field in **TextEdit, Slack, Terminal** (3 different app categories) — `[deferred — needs human verification]`
 - [ ] No macOS 26.4 paste-protection prompt appears (we write, never read) — `[deferred — needs human verification]` (**project's #1 `[unverified]`**: the Terminal paste-provenance check; test in Terminal/iTerm first)
-- [ ] Paste fails gracefully (error state) in password fields — `[deferred — needs human verification]`
+- [x] Paste fails gracefully (error state) in password fields — `[verified]` `testInsertRefusesPasteIntoSecureField()` in SecureFieldGuardTests asserts `.pasteIntoSecureField` error when isFocusedFieldSecure=true; `[deferred — needs human verification]` the live password-field detection via accessibility APIs
 
 ---
 
@@ -191,10 +191,10 @@ The v0.1 items (V01-0 Agent Mode, V01-3 per-app context, V1-3 Transforms, V1-4 c
 **Done when**:
 - [x] `make dev-cert` creates a stable local signing identity (self-signed)
 - [x] `make build` produces a runnable `Speak.app` from a clean clone `[verified]`
-- [ ] `make install` copies `Speak.app` to `/Applications/` (add this target)
-- [ ] `make github-release` ad-hoc signs, zips, and produces a release artifact
-- [ ] `dist/speak.rb` Homebrew formula (custom tap, build-from-source) created
-- [ ] `README.md` install section covers both paths with exact commands
+- [x] `make install` copies `Speak.app` to `/Applications/` — `[verified]` implemented in Makefile lines 195–207 (builds, kills running instance, syncs via rsync, clears quarantine)
+- [x] `make github-release` ad-hoc signs, zips, and produces a release artifact — `[verified]` implemented in Makefile lines 209–230 (builds, codesign --deep --sign -, ditto -c -k to dist/Speak-VERSION.zip)
+- [x] `dist/speak.rb` Homebrew formula (custom tap, build-from-source) created — `[verified]` file exists at /dist/speak.rb (custom tap formula, defines build-from-source installation)
+- [x] `README.md` install section covers both paths with exact commands — `[verified]` "## Install" section documented (Path 1: brew tap, Path 2: GitHub Release + xattr, Path 3: planned official Cask v0.1)
 
 ---
 

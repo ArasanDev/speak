@@ -354,6 +354,17 @@ final class OnboardingViewModel {
                 // If the currently displayed step's permission just became granted,
                 // auto-advance and clear any "waiting" state so no stale widget lingers.
                 switch self.displayedStep {
+                case .microphone:
+                    // Mirrors the `.accessibility` case below: a user who denies
+                    // mic access, opens System Settings via the escape hatch
+                    // (`openSystemSettings(for: .microphone)`), and grants it
+                    // there would otherwise be stuck on this step forever — the
+                    // poll refreshes `evaluation` but nothing advanced
+                    // `displayedStep`, unlike the accessibility flow.
+                    if self.permissionManager.status(.microphone) == .granted {
+                        self.displayedStep = .accessibility
+                    }
+
                 case .accessibility:
                     if self.permissionManager.status(.accessibility) == .granted {
                         self.isWaitingForAccessibility = false

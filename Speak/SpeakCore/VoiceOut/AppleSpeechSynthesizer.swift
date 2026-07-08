@@ -70,6 +70,11 @@ public actor AppleSpeechSynthesizer: SpeechSynthesizing {
     /// or via `stop()`). `nil` when idle.
     private var continuation: CheckedContinuation<Void, Never>?
 
+    /// Resumed by `finishSpeaking()` alongside `continuation`. Lets `stop()`
+    /// actually suspend until the interrupted utterance's `didCancel` callback
+    /// has run — see `stop()` doc for why this matters.
+    private var pendingStopContinuation: CheckedContinuation<Void, Never>?
+
     private var speaking = false
 
     public init() {
@@ -114,12 +119,27 @@ public actor AppleSpeechSynthesizer: SpeechSynthesizing {
         }
     }
 
+    /// Interrupts the in-flight utterance and does not return until it has
+    /// actually stopped — i.e. until `finishSpeaking()` has run for it.
+    ///
+    /// This await is load-bearing, not decorative: `stopSpeaking(at:)` fires
+    /// the delegate's `didCancel` asynchronously, on whatever thread AVFoundation
+    /// chooses, hopped back via a `Task` (see `SpeechSynthesizerDelegateBridge`).
+    /// If `stop()` returned as soon as `stopSpeaking()` was called (as it
+    /// previously did), `speak()`'s interrupt path — `if speaking { await stop() }`
+    /// — would proceed to overwrite `self.continuation` with the *new* call's
+    /// continuation before the *old* call's `didCancel` had arrived. The old
+    /// caller would then hang forever (its continuation silently orphaned), and
+    /// the new caller's `speak()` would resolve against the stale cancel event
+    /// instead of its own utterance finishing.
     public func stop() async {
         guard speaking else { return }
-        // `stopSpeaking(at: .immediate)` fires the delegate's `didCancel`
-        // [verified via swiftc], which routes through `finishSpeaking()` below
-        // and resumes any awaiting `speak(_:locale:)` caller.
-        synthesizer.stopSpeaking(at: .immediate)
+        await withCheckedContinuation { (stopContinuation: CheckedContinuation<Void, Never>) in
+            pendingStopContinuation = stopContinuation
+            // `didCancel` [verified via swiftc] routes through `finishSpeaking()`
+            // below, which resumes both `continuation` and `stopContinuation`.
+            synthesizer.stopSpeaking(at: .immediate)
+        }
         SpeakLog.voiceOut.info("AppleSpeechSynthesizer: stop() — interrupted in-flight speech.")
     }
 
@@ -134,5 +154,7 @@ public actor AppleSpeechSynthesizer: SpeechSynthesizing {
         speaking = false
         continuation?.resume()
         continuation = nil
+        pendingStopContinuation?.resume()
+        pendingStopContinuation = nil
     }
 }
