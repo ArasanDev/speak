@@ -7,13 +7,49 @@
 
 ## Current phase
 
-**Loop #49 (2026-07-11) — Product direction reconciled. Speak is the local,
-provider-neutral human-agent interface; dictation remains the completed
-foundation and universal fallback. MCP is the first adapter, while semantic
-workflows, sessions, calls, receipts, and attention policy form the product.
-P14 dictation measurement gates remain open and unchanged.**
+**Loop #50 (2026-07-11) — AVB-5 SHIPPED (`e7afc48`): `speak_request_input`
+structured input workflow with typed outcomes. One item open before AVB-5 is
+done per spec §6: the live agent question-response round trip (needs the human
+at the mic against a relaunched app + reinstalled bridge).**
 
 ### What changed this loop (read before doing anything)
+-26. **AVB-5 `speak_request_input` (2026-07-11, `e7afc48`).** Orchestrated:
+   Fable orchestrator + 1 Sonnet 5 implementer + 1 Sonnet 5 adversarial
+   reviewer; orchestrator independently re-ran every gate before commit.
+   - New MCP tool `speak_request_input(requestId, idempotencyKey?, prompt,
+     mode: freeform|choice|approval, choices?, timeout?, consequence?,
+     spokenSummary?)` returning exactly one typed outcome:
+     `answered`/`declined`/`cancelled`/`timedOut`/`busy` (spec
+     `agent-voice-bridge.md` §6). Domain types in
+     `SpeakCore/AgentBridge/HumanResponse.swift`, MCP-independent per §3.
+   - Deterministic `RequestInputExtractor` (phrase-list, no LLM). `[decision]`
+     `declined` = explicit verbal refusal in choice/approval only; `cancelled`
+     = human stops capture; freeform never yields `declined`; ambiguous
+     choice/approval speech is a tool execution error (the existing
+     `unclearAnswer` ethic), never a false decline. `idempotencyKey` is
+     plumbed but in-flight dedupe only (any concurrent capture → `busy`);
+     durable replay deferred to the durable-Agent-Calls slice.
+   - `speak_ask`/`speak_confirm` rebased as thin compatibility adapters over
+     `cliRequestInput`; external behavior preserved.
+   - **Review finding fixed (ship-blocker):** TOCTOU busy-race — two
+     near-simultaneous captures could both pass the busy guard because
+     `SpeakEngine.beginDictation()` silently no-op'd on [A3] collision; losing
+     caller could read the winner's transcript (§8 violation). Fixed: engine
+     returns `@discardableResult Bool` (started vs collided);
+     `DictationController.beginDictation()` returns
+     `DictationStartOutcome` (started/collided/failed); only a true collision
+     maps to `.busy`, mute/permission failures map to `.timedOut`. Hotkey path
+     byte-identical (discards the value). Regression tests added
+     (`SessionIntegrityTests`, `DictationStartOutcomeRefusalTests`).
+   - Preserved: visible HUD capture, paste suppression for agent answers,
+     stale-answer isolation, user-stop releases request early.
+   - Gates (orchestrator-run, clean shell): build ✅ / 741 XCTest 0-fail
+     (9 known skips) + 176 Swift Testing ✅ / lint 0 serious ✅ /
+     verify-moat 7/7 ✅. `make install-mcp-user` re-run post-commit.
+   - **`[deferred — needs human]`**: the spec-§6 live round trip
+     (`speak_request_input` question → real spoken answer via a live Codex or
+     Claude Code session against the relaunched app). This is the last AVB-5
+     done-condition item.
 -25. **Human-Agent Interface direction freeze (2026-07-11).**
    - Reconciled `AGENTS.md`, `docs/product.md`, `docs/architecture.md`,
      `docs/roadmap.md`, and the canonical bridge specification around one
