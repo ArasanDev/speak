@@ -7,9 +7,29 @@
 
 ## Current phase
 
-**Loop #46 (2026-07-08, 07b0591) — H-1 Voice Actions FULLY live (both `.action` and `.command` routes wired into stop→paste), H-4 ShortcutsCLIExecutor two-stage SIGTERM/SIGKILL watchdog hardening merged to master. Gates: build ✅ / `make test` 725 XCTest 0-fail + 139 Swift Testing pass ✅ / lint 0-serious ✅ / verify-moat 7/7 ✅.**
+**Loop #48 (2026-07-11) — Agent Voice Bridge productization in progress. Local dictation remains the wedge; MCP is being reshaped from developer scaffolding into a concise, local human-agent voice channel. `speak_notify` + stable user install landed in the worktree; interactive input paste/stale-result safety hardened. P14 measurement gates remain open and unchanged.**
 
 ### What changed this loop (read before doing anything)
+-24. **Agent Voice Bridge product contract + first product slice (2026-07-11, uncommitted).**
+   - Added `specs/agent-voice-bridge.md` `[decision]`: Speak is the local human I/O layer for agents, not an agent, general automation server, or shell/file/browser toolbox. The flagship loop is rich voice prompt → agent works → concise completion/blocker spoken locally → bounded visible response.
+   - Added `speak_notify(summary, kind, detail?, interrupt?)` as the preferred MCP application tool. Its discovery description limits use to final outcomes, blockers, high-severity warnings, and explicit readback; routine progress/logs/diffs remain visual. Existing four tools remain compatibility primitives.
+   - Added `make install-mcp-user`: relocatable `speak-mcp` + `SpeakCore`/`SpeakLLM` framework layout under `~/Library/Application Support/speak/mcp/`. Relocated launch verified from a temporary install root. Homebrew formula now installs `speak-mcp`; README includes Codex and Claude Code setup.
+   - Fixed two interactive bridge hazards found during audit: MCP answers now suppress focused-app paste delivery, and `cliAsk` clears/restores shared transcript state so a failed capture cannot return an older dictation. A user stop now releases the request without waiting the full configured timeout.
+   - Verification: full post-hardening suite ✅; focused `CaptureSessionTests` 18/18 ✅; lint 0 serious on changed files ✅; verify-moat 7/7 ✅; relocated MCP launch ✅.
+   - **Live flagship proof** `[verified 2026-07-11]`: installed bridge negotiated MCP 2025-11-25, `speak_status` returned the running app's idle state + live hotkey, and `speak_notify` delivered “Speak agent bridge is ready.” through the app's VoiceOut path. Codex global MCP config now points at the stable installed bridge.
+   - `[deferred — product]` queue/cooldown/per-client policy and unified structured `speak_request_input`.
+
+-23. **P13 DOGFOOD PASS (2026-07-10, human-verified live).** All four critical unverified items confirmed:
+   - **Terminal paste-provenance prompt**: ✅ PASS — no macOS 26.4 paste-protection prompt observed; text pastes directly into Terminal without prompting.
+   - **Hotkey false-trigger rate**: ✅ PASS — ~2 hours continuous real use (15+ min sustained sessions); no accidental dictation overlays; 400ms double-tap window acceptable.
+   - **Live paste across apps**: ✅ PASS — Terminal, Slack, TextEdit all receive text correctly; paste lands in correct location (message box, code editor, etc.).
+   - **Permission flow**: ✅ PASS — Microphone prompt fires on first run; Accessibility deep-link opens correct System Settings pane; both grants stick across sessions.
+   - **P14 cleanup latency — Known limitation, not a blocker** `[decision]`: Cleanup taking 5–10 seconds on long dictations (~3 min speech) is a trade-off of the small on-device Foundation Models engine (designed for privacy + speed, not throughput). **Decision**: Ship v0 with this documented caveat. Larger models (via v0.1's pluggable OpenAI-compatible engines — Ollama, Sarvam, OpenAI, Groq, OpenRouter) will provide faster cleanup for long inputs without sacrificing local-by-default. Defer profiling/streaming cleanup to v0.1+ when multi-model comparison is meaningful.
+   - **Test-context summary**: Terminal (`git reset --hard` style imperative), Slack (collaborative), TextEdit (prose), continuous 2-hour coding session (hotkey endurance). No false triggers, no permission edge cases.
+   - **Gates still green**: build ✅ / `make test` (unchanged from #46) ✅ / lint ✅ / verify-moat 7/7 ✅.
+   - **Decision**: P13 is feature-complete and human-verified. Proceed directly to P14 (investigate + fix the cleanup latency regression, then ship v0). No code changes required for P13 itself — this was pure verification.
+
+-22. **Loop #46 (2026-07-08, 07b0591) — H-1 Voice Actions FULLY live (both `.action` and `.command` routes wired into stop→paste), H-4 ShortcutsCLIExecutor two-stage SIGTERM/SIGKILL watchdog hardening merged to master. Gates: build ✅ / `make test` 725 XCTest 0-fail + 139 Swift Testing pass ✅ / lint 0-serious ✅ / verify-moat 7/7 ✅.**
 -22. **H-1 Voice Actions FULLY live + H-4 watchdog hardening merged to master (loops #45→46).** Three commits land the horizon skeleton into production:
    - `e555a10` [H-1] routes finished transcripts through VoiceActionsCoordinator in CaptureSession.stop(); `.action` route via ShortcutsCLIExecutor now on the real stop→paste critical path (prefix-gated to avoid catalog fetch for plain dictation).
    - `e3243dc` [H-1] wires `CommandModeService(selection: AccessibilitySelection(), cleaner:)` into `.command` route (reuses the same `AccessibilitySelection` conformer `CommandModeController` already uses in production) — both routes now integrated into the live dictation pipeline. **`.command` is wired and live, not degrading** — only the underlying AX I/O behavior (does read/replace actually work against a real focused element in TextEdit/Slack) stays `[deferred — needs human verification]`, same boundary `AccessibilitySelection` already carried pre-H-1.

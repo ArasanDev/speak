@@ -96,6 +96,10 @@ public actor CaptureSession {
     /// "no AI", not "a different prompt". [decision PE-3.]
     /// `private(set)`: read by the sibling `+Cleanup` extension; set only via the method below.
     private(set) var forcedRaw = false
+    /// Agent Bridge input is a return value to the requesting MCP client, not text
+    /// intended for the frontmost application. Set before stop so the normal STT +
+    /// cleanup path runs but paste delivery is skipped. [decision: Agent Voice Bridge]
+    private var suppressPasteDelivery = false
     var streamTask: Task<Void, Never>?
     private var latestChunk: TranscriptChunk?
     /// Accumulates text from finalized (isFinal == true) chunks.
@@ -178,6 +182,12 @@ public actor CaptureSession {
     /// `runCleanup` skips the cleaner and the raw transcript is pasted. Set once at stop.
     public func forceRawForThisSession() {
         forcedRaw = true
+    }
+
+    /// Return this session's transcript to an agent without injecting it into the
+    /// focused application. Effective only when set before `stop()` reaches delivery.
+    public func suppressPasteForAgentResponse() {
+        suppressPasteDelivery = true
     }
 
     // MARK: - State observation
@@ -425,6 +435,10 @@ public actor CaptureSession {
             // latency is set below after the paste step, once t_pasted is known.
         )
 
+        if suppressPasteDelivery {
+            return settleAgentResponse(result)
+        }
+
         // Paste step (P6): deliver the final text via runPaste() (CaptureSession+Paste.swift).
         try await runPaste(result)
 
@@ -463,6 +477,15 @@ public actor CaptureSession {
             cleanup=\(String(format: "%.0f", latency.cleanupSeconds * 1000), privacy: .public)ms
             """)
         return resultWithLatency
+    }
+
+    private func settleAgentResponse(_ result: TranscriptionResult) -> TranscriptionResult {
+        state = .done
+        partialsContinuation?.finish()
+        partialsContinuation = nil
+        streamTask = nil
+        SpeakLog.agentBridge.info("CaptureSession: agent response ready — paste delivery suppressed.")
+        return result
     }
 
     /// [H-1] Run the Voice Actions router against `rawText` and map its outcome.

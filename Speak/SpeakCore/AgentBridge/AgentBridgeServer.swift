@@ -147,6 +147,24 @@ public actor AgentBridgeServer {
             let report = await backend.status()
             return Self.render(report)
 
+        case "speak_notify":
+            guard let summary = call.arguments["summary"]?.stringValue?
+                .trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty else {
+                return .error("speak_notify requires a non-empty 'summary' argument.")
+            }
+            let kind = call.arguments["kind"]?.stringValue ?? "completion"
+            let allowedKinds = ["completion", "blocked", "warning", "requested"]
+            guard allowedKinds.contains(kind) else {
+                return .error("speak_notify 'kind' must be completion, blocked, warning, or requested.")
+            }
+            let interrupt = call.arguments["interrupt"]?.boolValue ?? false
+            switch await backend.say(text: summary, interrupt: interrupt) {
+            case .success:
+                return .text("notification accepted (kind: \(kind)).")
+            case .failure(let reason):
+                return .error(reason.description)
+            }
+
         case "speak_say":
             guard let text = call.arguments["text"]?.stringValue, !text.isEmpty else {
                 return .error("speak_say requires a non-empty 'text' argument.")

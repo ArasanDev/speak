@@ -26,10 +26,10 @@
 
 class Speak < Formula
   desc "Local-first, free, open-source AI voice dictation for macOS"
-  homepage "https://github.com/yourusername/speak"
+  homepage "https://github.com/ArasanDev/speak"
 
   # PLACEHOLDER — update url + sha256 once the first GitHub Release tag exists.
-  url "https://github.com/yourusername/speak/archive/refs/tags/v0.0.1.tar.gz"
+  url "https://github.com/ArasanDev/speak/archive/refs/tags/v0.0.1.tar.gz"
   sha256 "PLACEHOLDER_SHA256_UPDATE_ON_FIRST_TAG"
 
   license "MIT"
@@ -56,6 +56,16 @@ class Speak < Formula
     app_src = "build/DerivedData/Build/Products/Release/Speak.app"
     (prefix/"Applications").mkpath
     cp_r app_src, "#{prefix}/Applications/Speak.app"
+
+    # Install the agent voice bridge in a relocatable libexec layout. Both CLI
+    # binaries link SpeakCore with @executable_path/../Frameworks, so keeping the
+    # real executable in libexec/bin and exposing it through a Homebrew wrapper
+    # preserves that runtime contract. [decision: Agent Voice Bridge]
+    products = "build/DerivedData/Build/Products/Release"
+    (libexec/"bin").install "#{products}/speak-mcp"
+    (libexec/"Frameworks").install "#{products}/SpeakCore.framework"
+    (libexec/"Frameworks").install "#{products}/SpeakLLM.framework"
+    bin.write_exec_script libexec/"bin/speak-mcp"
   end
 
   def caveats
@@ -72,6 +82,12 @@ class Speak < Formula
 
       On first launch, speak will prompt for Microphone + Accessibility permissions.
       All transcription runs on-device — no audio ever leaves your Mac.
+
+      Agent voice bridge executable:
+        #{bin}/speak-mcp
+
+      Add that command as a local stdio MCP server in Codex, Claude Code, or
+      another MCP-capable coding agent. Keep Speak.app running while using it.
     EOS
   end
 
@@ -79,5 +95,6 @@ class Speak < Formula
     # Verify the app bundle exists with a runnable binary (no display required).
     assert_predicate opt_prefix/"Applications/Speak.app/Contents/MacOS/Speak",
       :executable?
+    assert_predicate bin/"speak-mcp", :executable?
   end
 end

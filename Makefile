@@ -13,6 +13,8 @@ SCHEME   := Speak
 CONFIG   := Debug
 DERIVED  := build/DerivedData
 APP      := $(DERIVED)/Build/Products/$(CONFIG)/Speak.app
+PRODUCTS := $(DERIVED)/Build/Products/$(CONFIG)
+MCP_USER_DIR ?= $$HOME/Library/Application Support/speak/mcp
 
 XCB := xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration $(CONFIG) -derivedDataPath $(DERIVED)
 
@@ -59,7 +61,7 @@ APP_BIN   := Speak.app/Contents/MacOS/Speak
 # Local history store (P9). `make history` dumps recent dictations (raw vs cleaned).
 HISTORY_DB := $$HOME/Library/Application Support/speak/history.sqlite
 
-.PHONY: all help generate build test eval study lint fmt run kill relaunch logs logs-show history doctor gates lsp clean install github-release release verify-moat dev-cert reset-permissions release-preflight
+.PHONY: all help generate build test eval study lint fmt run kill relaunch logs logs-show history doctor gates lsp clean install install-mcp-user github-release release verify-moat dev-cert reset-permissions release-preflight
 
 all: build
 
@@ -205,6 +207,22 @@ install: build
 	@xattr -cr /Applications/Speak.app
 	@echo "install: Speak.app → /Applications/ (v$(VERSION)). Launch from Spotlight or:"
 	@echo "         open /Applications/Speak.app"
+
+## install-mcp-user: install the local agent voice bridge without requiring root.
+##
+## The tool binary's rpath is @executable_path/../Frameworks, so this stable
+## user-scoped layout keeps SpeakCore/SpeakLLM beside it and works independently
+## of DerivedData. The menubar app must still be running to own TTS and the mic.
+install-mcp-user: build
+	@echo "==> install-mcp-user: installing local MCP bridge ..."
+	@mkdir -p "$(MCP_USER_DIR)/bin" "$(MCP_USER_DIR)/Frameworks"
+	@rsync -a "$(PRODUCTS)/speak-mcp" "$(MCP_USER_DIR)/bin/speak-mcp"
+	@rsync -a --delete "$(PRODUCTS)/SpeakCore.framework/" "$(MCP_USER_DIR)/Frameworks/SpeakCore.framework/"
+	@rsync -a --delete "$(PRODUCTS)/SpeakLLM.framework/" "$(MCP_USER_DIR)/Frameworks/SpeakLLM.framework/"
+	@chmod +x "$(MCP_USER_DIR)/bin/speak-mcp"
+	@echo "install-mcp-user: installed $(MCP_USER_DIR)/bin/speak-mcp"
+	@echo "Add this stdio server to your agent's MCP configuration:"
+	@echo '  {"command":"$(MCP_USER_DIR)/bin/speak-mcp"}'
 
 ## github-release: build, ad-hoc sign, and zip into dist/ for a GitHub Releases artifact.
 ##

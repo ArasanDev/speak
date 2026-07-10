@@ -82,21 +82,46 @@ extension DictationController {
             return .timedOut
         }
 
+        let previousTranscript = lastTranscript
+        lastTranscript = ""
         await beginDictation()
         guard icon == .listening else {
             // beginDictation() failed (permission denied, muted, etc.) and already
             // routed itself to .error/.idle with its own HUD messaging.
             SpeakLog.engine.info("DictationController: cliAsk — beginDictation did not reach .listening; aborting.")
+            lastTranscript = previousTranscript
             return .timedOut
         }
 
-        let listenNanoseconds = UInt64(max(0, timeoutSeconds) * 1_000_000_000)
-        try? await Task.sleep(nanoseconds: listenNanoseconds)
+        // The answer belongs to the requesting MCP client. It must never be
+        // injected into whichever editor/terminal happens to retain focus.
+        await engine.suppressPasteForAgentResponse()
 
-        // A CLI --stop, Escape, or mute could have ended the session while we slept;
-        // endDictation() itself no-ops (with a log line) unless icon == .listening,
-        // so this call is always safe.
-        await endDictation()
+        let deadline = Date().addingTimeInterval(max(0, timeoutSeconds))
+        // A hotkey/Escape stop should complete the request immediately instead of
+        // making the agent wait out the full timeout. 100 ms is the existing
+        // permission/hotkey watchdog cadence. [decision: reuse measured UI cadence]
+        let pollNanoseconds: UInt64 = 100_000_000
+        while Date() < deadline, [.listening, .processing].contains(icon) {
+            try? await Task.sleep(nanoseconds: pollNanoseconds)
+        }
+
+        // Timeout closes a still-listening session. If the user already stopped,
+        // wait above carries us through processing until lastTranscript is owned by
+        // this request rather than returning stale shared state.
+        if icon == .listening {
+            await endDictation()
+        } else {
+            // An out-of-band stop may already be running endDictation(). Do not
+            // inspect shared transcript state until that request-owned stop settles.
+            while icon == .processing {
+                try? await Task.sleep(nanoseconds: pollNanoseconds)
+            }
+        }
+        guard !lastTranscript.isEmpty else {
+            lastTranscript = previousTranscript
+            return .timedOut
+        }
         return .answered(lastTranscript)
     }
 

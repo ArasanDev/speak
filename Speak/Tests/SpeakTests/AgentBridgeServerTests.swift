@@ -22,6 +22,8 @@ private final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
     var sayResult: Result<Void, BridgeUnavailable>
     var askResult: Result<String, BridgeUnavailable>
     var confirmResult: Result<Bool, BridgeUnavailable>
+    private(set) var lastSaidText: String?
+    private(set) var lastInterrupt: Bool?
 
     init(
         status: BridgeStatusReport = BridgeStatusReport(
@@ -38,7 +40,11 @@ private final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
     }
 
     func status() async -> BridgeStatusReport { statusResult }
-    func say(text: String, interrupt: Bool) async -> Result<Void, BridgeUnavailable> { sayResult }
+    func say(text: String, interrupt: Bool) async -> Result<Void, BridgeUnavailable> {
+        lastSaidText = text
+        lastInterrupt = interrupt
+        return sayResult
+    }
     func ask(question: String, timeoutSeconds: Double?) async -> Result<String, BridgeUnavailable> { askResult }
     func confirm(question: String) async -> Result<Bool, BridgeUnavailable> { confirmResult }
 }
@@ -225,14 +231,28 @@ struct AgentBridgeServerHandshakeTests {
 
 @Suite("AgentBridgeServer tools/list")
 struct AgentBridgeServerToolsListTests {
-    @Test("lists exactly the four Pillar-3 tools by name")
-    func listsAllFourTools() async throws {
+    @Test("lists the product notification tool and four compatibility tools")
+    func listsAllTools() async throws {
         let server = AgentBridgeServer(backend: StubBridgeBackend())
         let inbound = JSONRPCInbound(id: .number(1), method: "tools/list", params: nil)
         let outbound = try #require(await server.handle(inbound))
         let tools = try #require(outbound.result?.objectValue?["tools"]?.arrayValue)
         let names = Set(tools.compactMap { $0.objectValue?["name"]?.stringValue })
-        #expect(names == ["speak_say", "speak_ask", "speak_confirm", "speak_status"])
+        #expect(names == ["speak_notify", "speak_say", "speak_ask", "speak_confirm", "speak_status"])
+    }
+
+    @Test("speak_notify requires a summary and constrains notification kinds")
+    func notifySchema() async throws {
+        let server = AgentBridgeServer(backend: StubBridgeBackend())
+        let inbound = JSONRPCInbound(id: .number(1), method: "tools/list", params: nil)
+        let outbound = try #require(await server.handle(inbound))
+        let tools = try #require(outbound.result?.objectValue?["tools"]?.arrayValue)
+        let notify = try #require(tools.first { $0.objectValue?["name"]?.stringValue == "speak_notify" })
+        let schema = try #require(notify.objectValue?["inputSchema"]?.objectValue)
+        #expect(schema["required"]?.arrayValue?.first?.stringValue == "summary")
+        let kinds = schema["properties"]?.objectValue?["kind"]?.objectValue?["enum"]?.arrayValue?
+            .compactMap(\.stringValue)
+        #expect(kinds == ["completion", "blocked", "warning", "requested"])
     }
 
     @Test("every tool has a non-empty description and an object inputSchema")
@@ -302,6 +322,36 @@ struct AgentBridgeServerToolsCallTests {
         let result = try #require(outbound.result?.objectValue)
         #expect(result["isError"]?.boolValue == nil || result["isError"]?.boolValue == false)
         #expect(outbound.error == nil)
+    }
+
+    @Test("speak_notify speaks only its trimmed summary and forwards interruption policy")
+    func notifySucceeds() async throws {
+        let backend = StubBridgeBackend()
+        let server = AgentBridgeServer(backend: backend)
+        let outbound = try await call(server, name: "speak_notify", arguments: [
+            "summary": .string("  Build finished.  "),
+            "kind": .string("completion"),
+            "detail": .string("A long diff stays visual."),
+            "interrupt": .bool(true)
+        ])
+        let result = try #require(outbound.result?.objectValue)
+        #expect(result["isError"]?.boolValue == nil || result["isError"]?.boolValue == false)
+        #expect(backend.lastSaidText == "Build finished.")
+        #expect(backend.lastInterrupt == true)
+        let text = result["content"]?.arrayValue?.first?.objectValue?["text"]?.stringValue ?? ""
+        #expect(text.contains("completion"))
+    }
+
+    @Test("speak_notify rejects missing summaries and unknown kinds")
+    func notifyValidation() async throws {
+        let server = AgentBridgeServer(backend: StubBridgeBackend())
+        let missing = try await call(server, name: "speak_notify")
+        #expect(missing.result?.objectValue?["isError"]?.boolValue == true)
+
+        let unknownKind = try await call(server, name: "speak_notify", arguments: [
+            "summary": .string("Done"), "kind": .string("routine")
+        ])
+        #expect(unknownKind.result?.objectValue?["isError"]?.boolValue == true)
     }
 
     @Test("speak_say missing the required 'text' argument is a tool execution error")

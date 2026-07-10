@@ -8,6 +8,30 @@
 import Foundation
 
 public enum AgentBridgeTools {
+    public static let notifyInputSchema: JSONValue = [
+        "type": "object",
+        "properties": [
+            "summary": [
+                "type": "string",
+                "description": "A short, self-contained outcome to speak. Use one to three sentences."
+            ],
+            "kind": [
+                "type": "string",
+                "enum": ["completion", "blocked", "warning", "requested"],
+                "description": "Why this deserves the developer's attention. Defaults to completion."
+            ],
+            "detail": [
+                "type": "string",
+                "description": "Reserved for the future visual inbox. Currently ignored and never spoken."
+            ],
+            "interrupt": [
+                "type": "boolean",
+                "description": "Replace speech already in progress. Defaults to false."
+            ]
+        ],
+        "required": ["summary"]
+    ]
+
     public static let sayInputSchema: JSONValue = [
         "type": "object",
         "properties": [
@@ -51,6 +75,14 @@ public enum AgentBridgeTools {
     ]
 
     public static let all: [MCPTool] = [
+        MCPTool(
+            name: "speak_notify",
+            description: "Notify the developer with a concise local spoken summary. Use only for a final " +
+                "task outcome, a blocker, a high-severity warning, or readback the user explicitly requested. " +
+                "Do not narrate routine progress, logs, diffs, stack traces, or full agent responses. " +
+                "Requires speak.app to be running.",
+            inputSchema: notifyInputSchema
+        ),
         MCPTool(
             name: "speak_say",
             description: "Speak text aloud on the human's Mac (fire-and-forget status channel). " +

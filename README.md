@@ -83,6 +83,56 @@ double-tap Fn requires no holding (RSI-kind, easy reach on every Mac keyboard).
 
 ---
 
+## Voice for coding agents
+
+`speak` can act as a local voice I/O layer for MCP-capable coding agents. The
+first product workflow is deliberately narrow: an agent can announce a concise
+completion, blocker, warning, or user-requested readback through the Mac's
+on-device voice. The app—not the agent—owns speech, microphone permissions, and
+the visible dictation HUD.
+
+Install the bridge from a source checkout:
+
+```bash
+make install-mcp-user
+open /Applications/Speak.app
+```
+
+The command installs to a stable user-scoped path:
+
+```text
+~/Library/Application Support/speak/mcp/bin/speak-mcp
+```
+
+Add it to Codex:
+
+```bash
+codex mcp add speak-app -- "$HOME/Library/Application Support/speak/mcp/bin/speak-mcp"
+```
+
+Or Claude Code:
+
+```bash
+claude mcp add --scope user speak-app -- "$HOME/Library/Application Support/speak/mcp/bin/speak-mcp"
+```
+
+Homebrew installs expose the same bridge as `speak-mcp`, so the command can be
+shortened to `codex mcp add speak-app -- speak-mcp` or its Claude Code equivalent.
+
+The preferred tool is `speak_notify`. Its description tells agents to speak only
+final outcomes, blockers, high-severity warnings, or readback you explicitly
+requested—not logs, diffs, stack traces, routine progress, or full responses.
+The lower-level `speak_say`, `speak_ask`, `speak_confirm`, and `speak_status`
+tools remain compatibility/experimental primitives while the native attention
+and paste-free response UX is completed. See
+[`specs/agent-voice-bridge.md`](specs/agent-voice-bridge.md).
+
+Everything in this bridge is local stdio plus local macOS IPC. It opens no
+network listener and does not give an agent access to audio history, files, the
+screen, or pasteboard contents.
+
+---
+
 ## Privacy
 
 Privacy is structural, not a setting:
@@ -137,7 +187,7 @@ brew install speak
 
 ### Path 2 — GitHub Release (ad-hoc signed zip)
 
-Download the pre-built `.zip` from [GitHub Releases](https://github.com/yourusername/speak/releases),
+Download the pre-built `.zip` from [GitHub Releases](https://github.com/ArasanDev/speak/releases),
 then run once:
 
 ```bash
@@ -165,7 +215,7 @@ Requirements: macOS 26 (Tahoe), Apple Silicon, Xcode 26+.
 brew install xcodegen swiftlint xcbeautify
 
 # Clone and build
-git clone https://github.com/yourhandle/speak.git
+git clone https://github.com/ArasanDev/speak.git
 cd speak
 make build    # generates Speak.xcodeproj, builds Speak.app + SpeakCore.framework
 make test     # 481 tests, 0 failures

@@ -156,6 +156,16 @@ private actor CleanerRecorder {
     func snapshot() -> [(text: String, mode: CleanupMode)] { calls }
 }
 
+private actor AgentResponseRecordingInserter: TextInserting {
+    private(set) var texts: [String] = []
+
+    func insert(_ text: String) async throws {
+        texts.append(text)
+    }
+
+    func snapshot() -> [String] { texts }
+}
+
 /// A cleaner that **never** returns from `clean()` — simulates a hung
 /// Foundation Models session. Non-cooperative: awaits a CheckedContinuation
 /// that is never resumed, so `Task.cancel()` alone cannot unblock it.
@@ -285,6 +295,23 @@ final class CaptureSessionTests: XCTestCase {
         XCTAssertEqual(result.engineId, "mock-stt", "engineId is STT id when no cleanup")
         let state = await session.currentState
         XCTAssertTrue(state == .done, "stop() must end in .done, got \(state)")
+    }
+
+    func testAgentResponseReturnsTranscriptWithoutPasteDelivery() async throws {
+        let transcriber = MockTranscriber(script: makeChunks(["agent answer"]))
+        let inserter = AgentResponseRecordingInserter()
+        let session = CaptureSession(transcriber: transcriber, inserter: inserter)
+
+        try await session.start()
+        await session.suppressPasteForAgentResponse()
+        let result = try await session.stop()
+
+        XCTAssertEqual(result.rawText, "agent answer")
+        XCTAssertNil(result.latency, "No paste occurred, so stop-to-paste latency must be absent.")
+        let inserted = await inserter.snapshot()
+        XCTAssertTrue(inserted.isEmpty, "An MCP answer must never paste into the focused application.")
+        let state = await session.currentState
+        XCTAssertEqual(state, .done)
     }
 
     // MARK: - Cleanup off (cleaner == nil)

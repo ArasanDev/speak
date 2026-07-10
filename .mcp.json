@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "speak-app": {
+      "command": "/bin/zsh",
+      "args": ["-lc", "exec \"$HOME/Library/Application Support/speak/mcp/bin/speak-mcp\""]
+    },
     "xcode": {
       "command": "xcrun",
       "args": ["mcpbridge"]

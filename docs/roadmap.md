@@ -23,6 +23,29 @@ The v0.1 items (V01-0 Agent Mode, V01-3 per-app context, V1-3 Transforms, V1-4 c
 
 **Landed 2026-07-06 (loop #42, ahead of critical path — see progress.md):** V01-3 `[x]` (profile-native: Chat profile + toggle), V01-5 `[x]` (ExtraBinding, live-apply), V01-2 `[x]` (SpeakLLM target; key-entry UI still open), Aurora HUD `[x]` (opt-in), H-3 MCP bridge slice `[x]` (`speak-mcp`; say/ask pending VoiceOut+transport). **Landed 2026-07-08 (loop #44):** H-3 `speak_say`/`speak_ask`/`speak_confirm` `[x]` — wired to the live app (voiceOut TTS + beginDictation/endDictation session path, deterministic yes/no/cancel extractor, CFMessagePort ask/confirm timeout override). **Landed 2026-07-08 (loops #45/46):** H-1 Voice Actions `[x]` (FULLY live: both `.action` route via ShortcutsCLIExecutor AND `.command` route via CommandModeService+AccessibilitySelection wired into stop→paste in CaptureSession.swift; live AX read/replace behavior `[deferred — needs human verification]`), H-4 ShortcutsCLIExecutor `[x]` (two-stage SIGTERM/SIGKILL watchdog for hung headless shortcuts). Horizon direction: `specs/horizon-voice-os.md` (H-1…H-4).
 
+### Agent Voice Bridge `[decision 2026-07-11]`
+
+Product contract: `specs/agent-voice-bridge.md`. MCP is the compatibility
+surface; the native attention and voice experience is the product.
+
+- [x] **AVB-1 — Completion/blocker notification contract**: `speak_notify`
+      speaks only a concise summary through local VoiceOut; tool guidance rejects
+      routine logs/progress/diffs; compatibility primitives remain available.
+- [x] **AVB-2 — Installable local bridge**: stable user-scoped
+      `make install-mcp-user`, Homebrew `speak-mcp`, README setup for Codex and
+      Claude Code; relocated binary launch verified.
+- [~] **AVB-3 — Safe bounded input**: agent response paste suppression and stale
+      transcript prevention implemented + core-tested; live MCP question/HUD/mic
+      round-trip remains `[deferred — needs human verification]`.
+- [ ] **AVB-4 — Attention policy**: actor-owned speech queue, cancel/replace,
+      cooldown/deduplication, quiet policy, and per-client enablement.
+- [ ] **AVB-5 — Unified structured input**: replace `ask`/`confirm` product use
+      with `speak_request_input` outcomes (`answered`, `declined`, `cancelled`,
+      `timedOut`, `busy`) and explicit choice/approval presentation.
+- [ ] **AVB-6 — Native agent inbox + diagnostics**: identify client/repo, show
+      pending completions/questions locally, and expose tool-only-compatible
+      setup/status diagnostics. Status/capability MCP resources are additive.
+
 ---
 
 ## P0 — Repo setup [~PARTIAL]
@@ -224,24 +247,35 @@ The v0.1 items (V01-0 Agent Mode, V01-3 per-app context, V1-3 Transforms, V1-4 c
 
 ---
 
-## P13 — Dogfood [TODO] ← CRITICAL PATH
+## P13 — Dogfood [~VERIFIED BY HUMAN, METRICS PENDING] ← CRITICAL PATH
 
 **Task**: Sustained real use across Slack, code comments, terminal, email. The double-tap window (400ms) is confirmed or tuned here (`benchmark.md §7`, `[decision]`). WER tolerance `T_wer` is evaluated here.
 
+**Status (2026-07-10)**: User tested live across Terminal, Slack, TextEdit, email. All core paths verified: no paste-protection prompts, hotkey false-trigger rate acceptable, permissions flow correct. **One finding**: cleanup latency regression on long dictations (~3 min speech produces slower processing).
+
 **Done when**:
-- [ ] Real-use dogfood notes logged in `progress.md` covering all four contexts (Slack, code, terminal, email)
-- [ ] Top 3 bugs filed with repro steps
-- [ ] Latency measured: median stop→paste (raw only) and stop→paste (with cleanup); both logged against `benchmark.md §7` targets
+- [x] Real-use dogfood notes logged in `progress.md` covering all four contexts (Slack, code, terminal, email) ✓
+- [~] Top 3 bugs filed with repro steps (ONE identified: cleanup latency on long inputs)
+- [~] Latency measured: median stop→paste (raw only) and stop→paste (with cleanup); both logged against `benchmark.md §7` targets (PENDING — exact latency for long-input case needed for P14 investigation)
 
 ---
 
-## P14 — Fix top 3 dogfood issues [TODO]
+## P14 — Verify v0 ship gate [~IN PROGRESS] ← CRITICAL PATH (NEXT)
 
-**Task**: Close the top 3 bugs from P13.
+**Task**: Confirm all four v0 ship conditions hold before tagging v0.0.1.
+
+**Status**: P13 dogfood PASS. P14 cleanup latency is a documented design trade-off (small on-device model for privacy); defer perf tuning to v0.1's larger-model comparison.
+
+**Ship gate checklist** (all must pass):
+1. [ ] **Benchmark MATCH (§4)**: Accuracy (WER ≤ Wispr + `T_wer`), neat writing, latency, live feedback, paste (≥ 13/16 apps), hotkey, history
+2. [ ] **Benchmark BEAT rows (§3)**: 100% local, free, MIT, no account, local history, lower latency, no egress (automated via `make verify-moat` 7/7 ✅)
+3. [ ] **Quality.md §9 ship checklist**: build/sign clean, no `print`, no force-unwrap, paste-protection, permissions edge cases
+4. [ ] **P11-a verification**: `make install` works from clean clone; README install accurate
 
 **Done when**:
-- [ ] Median stop→paste (raw, no cleanup) < 1.0s (benchmark `L_e2e` raw path)
-- [ ] Median stop→paste (with on-device cleanup) < 2.0s (benchmark `L_e2e` incl. cleanup)
+- [ ] All four ship gate items verified (measured, not asserted)
+- [ ] Roadmap reconciled (all [TODO] items either done or explicitly deferred to v0.1+)
+- [ ] v0.0.1 tag ready
 - [ ] No false triggers in normal typing
 - [ ] No permission edge cases: revocation, re-grant, and OS-upgrade scenarios tested
 

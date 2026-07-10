@@ -411,6 +411,14 @@ public actor SpeakEngine {
         SpeakLog.engine.info("SpeakEngine: live-panel Raw override — this dictation will paste raw.")
     }
 
+    /// Mark the active session as an Agent Bridge response. The transcript is
+    /// returned through MCP and must not be pasted into the focused application.
+    public func suppressPasteForAgentResponse() async {
+        guard let session = currentSession else { return }
+        await session.suppressPasteForAgentResponse()
+        SpeakLog.agentBridge.info("SpeakEngine: agent response will not paste into the focused app.")
+    }
+
     // MARK: - Profile preview (PE-2: AI Studio live-test box; reused by #40 eval harness)
 
     /// The outcome of previewing a profile over a sample — distinguishes "the model is
