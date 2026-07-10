@@ -98,6 +98,14 @@ public enum CLICommand: String, Codable, Sendable {
     case ask
     /// H-3: speak a yes/no question, then listen and return a deterministic yes/no/unclear. [decision: H-3]
     case confirm
+    /// AVB-5 (specs/agent-voice-bridge.md §6): speak a prompt in one of three modes
+    /// (freeform/choice/approval), then listen and return exactly one of the five
+    /// canonical `HumanResponseOutcome` outcomes. `.ask`/`.confirm` remain on the wire
+    /// unchanged for existing clients; `speak_ask`/`speak_confirm` are now thin
+    /// adapters implemented in terms of this workflow at the app layer
+    /// (`DictationController.cliAsk`/`cliConfirm` call `cliRequestInput` internally).
+    /// [decision: AVB-5]
+    case requestInput
 }
 
 /// The JSON envelope wrapping a `CLICommand` over the wire.
@@ -113,17 +121,50 @@ public struct CLIRequest: Codable, Sendable {
     public let interrupt: Bool?
     /// `ask`/`confirm`: the question to speak, then listen for.
     public let question: String?
-    /// `ask`/`confirm`: caller-requested timeout in seconds for the round-trip.
-    /// Falls back to `CLIContract.askConfirmDefaultTimeoutSeconds` when nil. [decision: H-3]
+    /// `ask`/`confirm`/`requestInput`: caller-requested timeout in seconds for the
+    /// round-trip. Falls back to `CLIContract.askConfirmDefaultTimeoutSeconds` when
+    /// nil. [decision: H-3]
     public let timeout: Double?
 
+    // MARK: - AVB-5 requestInput fields
+
+    /// `requestInput`: caller-supplied request identifier (spec §3 `AgentCall`).
+    public let requestId: String?
+    /// `requestInput`: optional idempotency key — a duplicate call for an
+    /// in-flight request is refused as `.busy`, never queued (in-flight dedupe
+    /// only; no durable replay in this slice). [decision: AVB-5]
+    public let idempotencyKey: String?
+    /// `requestInput`: the prompt to speak (unless `spokenSummary` overrides it)
+    /// and listen for an answer to.
+    public let prompt: String?
+    /// `requestInput`: which of the three interaction shapes this request is.
+    public let mode: RequestInputMode?
+    /// `requestInput`: required (and non-empty) iff `mode == .choice`.
+    public let choices: [String]?
+    /// `requestInput`: optional human-readable statement of what answering
+    /// implies — reserved for future presentation; not currently spoken.
+    public let consequence: String?
+    /// `requestInput`: what to actually speak aloud; defaults to `prompt` when nil.
+    public let spokenSummary: String?
+
     public init(cmd: CLICommand, text: String? = nil, interrupt: Bool? = nil,
-                question: String? = nil, timeout: Double? = nil) {
+                question: String? = nil, timeout: Double? = nil,
+                requestId: String? = nil, idempotencyKey: String? = nil,
+                prompt: String? = nil, mode: RequestInputMode? = nil,
+                choices: [String]? = nil, consequence: String? = nil,
+                spokenSummary: String? = nil) {
         self.cmd = cmd
         self.text = text
         self.interrupt = interrupt
         self.question = question
         self.timeout = timeout
+        self.requestId = requestId
+        self.idempotencyKey = idempotencyKey
+        self.prompt = prompt
+        self.mode = mode
+        self.choices = choices
+        self.consequence = consequence
+        self.spokenSummary = spokenSummary
     }
 }
 
@@ -156,6 +197,15 @@ public struct CLIReply: Codable, Sendable {
     /// yes/no answer, `nil` when the spoken answer was unclear (neither yes, no, nor
     /// cancel) — see `YesNoCancelExtractor`. [decision: H-3]
     public let confirmed: Bool?
+    /// Present in `requestInput` replies: the raw-value name of the
+    /// `HumanResponseOutcome` case ("answered"/"declined"/"cancelled"/
+    /// "timedOut"/"busy"). [decision: AVB-5]
+    public let outcome: String?
+    /// Present in `requestInput` replies only for an `.answered` outcome that
+    /// matched a specific option — `.approval`'s "approved", or one of
+    /// `.choice`'s `choices`. `answer` (above) carries the raw transcript text
+    /// for the same case. [decision: AVB-5]
+    public let choice: String?
 
     // MARK: - Factory helpers
 
@@ -185,14 +235,57 @@ public struct CLIReply: Codable, Sendable {
         CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: nil, confirmed: value)
     }
 
+    /// `requestInput` reply carrying one of the five canonical
+    /// `HumanResponseOutcome` outcomes. Always `ok: true` — a refused/expired/
+    /// cancelled request is a legitimate outcome, not a transport failure;
+    /// `.failure(_:)` is reserved for malformed requests (bad mode, missing
+    /// prompt) and internal errors. [decision: AVB-5]
+    public static func requestInputResult(_ outcome: HumanResponseOutcome) -> CLIReply {
+        switch outcome {
+        case .answered(let text, let choice):
+            return CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: text,
+                             confirmed: nil, outcome: "answered", choice: choice)
+        case .declined:
+            return CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: nil,
+                             confirmed: nil, outcome: "declined", choice: nil)
+        case .cancelled:
+            return CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: nil,
+                             confirmed: nil, outcome: "cancelled", choice: nil)
+        case .timedOut:
+            return CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: nil,
+                             confirmed: nil, outcome: "timedOut", choice: nil)
+        case .busy:
+            return CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: nil,
+                             confirmed: nil, outcome: "busy", choice: nil)
+        }
+    }
+
     public init(ok: Bool, error: String?, state: CLIState?, binding: String?,
-                answer: String? = nil, confirmed: Bool? = nil) {
+                answer: String? = nil, confirmed: Bool? = nil,
+                outcome: String? = nil, choice: String? = nil) {
         self.ok = ok
         self.error = error
         self.state = state
         self.binding = binding
         self.answer = answer
         self.confirmed = confirmed
+        self.outcome = outcome
+        self.choice = choice
+    }
+
+    /// Decode a `requestInput` reply's `outcome`/`answer`/`choice` fields back
+    /// into a `HumanResponseOutcome`. `nil` when `outcome` is missing/unrecognized
+    /// — the caller (`CLIBridgeBackend`) treats that as a transport error rather
+    /// than guessing. [decision: AVB-5]
+    public func decodedHumanResponseOutcome() -> HumanResponseOutcome? {
+        switch outcome {
+        case "answered": return .answered(text: answer, choice: choice)
+        case "declined": return .declined
+        case "cancelled": return .cancelled
+        case "timedOut": return .timedOut
+        case "busy": return .busy
+        default: return nil
+        }
     }
 }
 

@@ -308,13 +308,22 @@ final class ReentrantBeginDictationTests: XCTestCase {
         let transcriber = CountingTranscriber()
         let engine = try makeEngine(transcriber: transcriber)
 
-        try await engine.beginDictation()
+        let firstStarted = try await engine.beginDictation()
+        XCTAssertTrue(firstStarted, "First beginDictation must report that it actually started a session")
 
         let countAfterFirst = transcriber.startStreamCount()
         XCTAssertEqual(countAfterFirst, 1, "First beginDictation must start exactly 1 stream")
 
         // Second call while first is still in flight — must be a no-op.
-        try await engine.beginDictation()
+        let secondStarted = try await engine.beginDictation()
+
+        // AVB-5 follow-up: the [A3] collision must be observable via the return
+        // value, not just inferred from a stream count — this is exactly the
+        // signal `DictationController.cliRequestInput`'s busy-vs-owns-the-session
+        // decision depends on. A caller that only checked stream side effects
+        // (as this test used to) could not distinguish "I started it" from
+        // "someone else already did".
+        XCTAssertFalse(secondStarted, "Second beginDictation while a session is in flight must report it did NOT start one")
 
         let countAfterSecond = transcriber.startStreamCount()
         XCTAssertEqual(countAfterSecond, 1,

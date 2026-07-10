@@ -111,4 +111,48 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
             return .failure(.transportError("speak_confirm", String(describing: error)))
         }
     }
+
+    // MARK: - AVB-5 requestInput
+
+    public func requestInput(
+        requestId: String,
+        idempotencyKey: String?,
+        prompt: String,
+        mode: RequestInputMode,
+        choices: [String]?,
+        timeoutSeconds: Double?,
+        consequence: String?,
+        spokenSummary: String?
+    ) async -> Result<HumanResponseOutcome, BridgeUnavailable> {
+        let effectiveTimeout = timeoutSeconds ?? CLIContract.askConfirmDefaultTimeoutSeconds
+        let request = CLIRequest(
+            cmd: .requestInput,
+            timeout: effectiveTimeout,
+            requestId: requestId,
+            idempotencyKey: idempotencyKey,
+            prompt: prompt,
+            mode: mode,
+            choices: choices,
+            consequence: consequence,
+            spokenSummary: spokenSummary
+        )
+        do {
+            // Same buffer rationale as `ask`/`confirm` above: the app-side reply
+            // itself waits up to `effectiveTimeout`. [decision: AVB-5]
+            let reply = try transport.send(request, timeoutSeconds: effectiveTimeout + 5)
+            guard reply.ok else {
+                return .failure(.transportError("speak_request_input", reply.error ?? "unknown error"))
+            }
+            guard let outcome = reply.decodedHumanResponseOutcome() else {
+                return .failure(.transportError("speak_request_input", "reply missing/invalid 'outcome' field"))
+            }
+            return .success(outcome)
+        } catch CLITransportError.portNotFound {
+            return .failure(.appNotRunning)
+        } catch CLITransportError.timeout {
+            return .failure(.timedOut("speak_request_input"))
+        } catch {
+            return .failure(.transportError("speak_request_input", String(describing: error)))
+        }
+    }
 }

@@ -8,11 +8,60 @@ import AppKit
 import Foundation
 import SpeakCore
 
+/// Outcome of `DictationController.beginDictation()` — distinguishes WHY a call
+/// didn't reach `.listening`, not just whether it did. [decision: AVB-5 follow-up]
+///
+/// This distinction exists for `cliRequestInput`: only `.collided` means "retry
+/// later, this will resolve on its own" (`.busy`, per spec §6). `.failed` (mic
+/// muted, permission denied, or any other thrown error) is not self-resolving —
+/// reporting it as `.busy` would be a misleading signal to the calling agent, so
+/// it maps to `.timedOut` instead, preserving the pre-AVB-5 behavior for those
+/// causes.
+enum DictationStartOutcome: Equatable {
+    /// Actually started a new session and reached `.listening`.
+    case started
+    /// `SpeakEngine`'s [A3] re-entrancy guard no-op'd — another capture (hotkey
+    /// or a second agent call) already owns the only session slot. Nothing here
+    /// was touched: no icon, no overlay, no transcript.
+    case collided
+    /// A soft-catch (`SpeakError.microphoneMuted`) or any other thrown error
+    /// refused to start. The existing icon/overlay/error-HUD handling for that
+    /// case already ran before this is returned.
+    case failed
+}
+
+extension DictationStartOutcome {
+    /// Pure mapping rule used by `cliRequestInput` (`DictationController+CLI.swift`):
+    /// `.started` → `nil` (continue the capture); `.collided` → `.busy` (retry
+    /// later, self-resolving); `.failed` → `.timedOut` (mute/permission/other
+    /// error — NOT self-resolving, so never reported as `.busy`). Factored out as
+    /// a pure function — mirrors the `RequestInputExtractor.isBusy`/
+    /// `outcomeForEmptyTranscript` pattern — so this specific outcome-fidelity
+    /// rule is directly unit-testable without a live app/mic/permission state.
+    /// [decision: AVB-5 follow-up]
+    var requestInputRefusal: HumanResponseOutcome? {
+        switch self {
+        case .started:  return nil
+        case .collided: return .busy
+        case .failed:   return .timedOut
+        }
+    }
+}
+
 extension DictationController {
 
     // MARK: - Begin / end dictation
 
-    func beginDictation() async {
+    /// - Returns: `.started` when this call actually started a session and reached
+    ///   `.listening`; `.collided` when `SpeakEngine`'s [A3] re-entrancy guard
+    ///   no-op'd because another capture is already in flight; `.failed` for a
+    ///   soft-catch (mute) or any other thrown error. `@discardableResult` so the
+    ///   hotkey path (which only ever cares about the side effects, never the
+    ///   return value) is byte-identical. Callers that need to know whether they
+    ///   actually own the resulting session (`cliRequestInput`) must check this.
+    ///   [decision: AVB-5 follow-up]
+    @discardableResult
+    func beginDictation() async -> DictationStartOutcome {
         // [H-2] "Any hotkey press cuts TTS instantly": a new dictation is the
         // primary interruption path for VoiceOut readback (specs/horizon-voice-os.md
         // Pillar 2). Stop unconditionally, before the mute/session guards below, so
@@ -37,7 +86,15 @@ extension DictationController {
             // prompt-customization panel (read-only) so the user can see what actually
             // governs cleanup for this dictation before adding to it.
             overlayController.overlayModel.defaultSystemPrompt = activeDestination.systemPrompt
-            try await engine.beginDictation(frontmostBundleID: frontmostBundleID)
+            guard try await engine.beginDictation(frontmostBundleID: frontmostBundleID) else {
+                // [A3] collision: another capture is already in flight. Not an error —
+                // leave every bit of state (icon, overlay, transcript) untouched, since
+                // this call started nothing and owns nothing.
+                SpeakLog.engine.info(
+                    "DictationController: beginDictation collided with an in-flight session — leaving state untouched."
+                )
+                return .collided
+            }
             icon = .listening
             SpeakLog.engine.info("DictationController: beginDictation succeeded → .listening")
             let engineRef = engine
@@ -73,10 +130,12 @@ extension DictationController {
                 onReclean: { [weak self] in self?.recleanCurrentTranscript() },
                 onReadback: settingsStore.readbackEnabled ? { [weak self] in self?.toggleReadback() } : nil
             )
+            return .started
         } catch SpeakError.microphoneMuted {
             monitor.notifySessionEnded()
             icon = .idle
             SpeakLog.engine.info("DictationController: start ignored — microphone muted.")
+            return .failed
         } catch {
             monitor.notifySessionEnded()
             // W2.2: show an error state in the HUD instead of silently hiding.
@@ -85,6 +144,7 @@ extension DictationController {
             SpeakLog.engine.error(
                 "DictationController: beginDictation failed — \(error.localizedDescription, privacy: .public)"
             )
+            return .failed
         }
     }
 

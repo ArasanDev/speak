@@ -50,7 +50,10 @@ public enum YesNoCancelExtractor {
     }
 
     /// lowercase → trim → strip punctuation → collapse whitespace runs.
-    private static func normalize(_ raw: String) -> String {
+    /// Not `private` — `RequestInputExtractor` (AVB-5) reuses it for `.choice`
+    /// mode's option matching so the two extractors stay byte-for-byte
+    /// consistent about what "the same normalized word" means. [decision: AVB-5]
+    static func normalize(_ raw: String) -> String {
         let lowered = raw.lowercased()
         let strippedPunctuation = String(lowered.unicodeScalars.filter { scalar in
             !CharacterSet.punctuationCharacters.contains(scalar)

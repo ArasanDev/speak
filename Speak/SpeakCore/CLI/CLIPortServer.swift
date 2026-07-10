@@ -64,6 +64,25 @@ public protocol CLICommandHandler: AnyObject {
     /// deterministic yes/no/cancel/unclear from the answer via `YesNoCancelExtractor`.
     /// Returns `.timedOut` if no answer arrives within `timeoutSeconds`. [decision: H-3]
     func cliConfirm(question: String, timeoutSeconds: TimeInterval) async -> CLIConfirmOutcome
+
+    // MARK: - AVB-5 (specs/agent-voice-bridge.md §6)
+
+    /// `speak_request_input`: speak `prompt` (or `spokenSummary` when given), then
+    /// run one full dictation round-trip on the same session path as `cliAsk`/
+    /// `cliConfirm`, and return exactly one of the five canonical
+    /// `HumanResponseOutcome` outcomes. Returns `.busy` immediately (without ever
+    /// opening the mic) when another agent-initiated capture is already in flight
+    /// — never queues. [decision: AVB-5]
+    func cliRequestInput(
+        requestId: String,
+        idempotencyKey: String?,
+        prompt: String,
+        mode: RequestInputMode,
+        choices: [String],
+        timeoutSeconds: TimeInterval,
+        consequence: String?,
+        spokenSummary: String?
+    ) async -> HumanResponseOutcome
 }
 
 // MARK: - H-3 async command outcomes
@@ -243,6 +262,9 @@ public final class CLIPortServer {
         if request.cmd == .ask || request.cmd == .confirm {
             return CLIPortServer.encodeReply(handleAskOrConfirm(request, handler: cmdHandler))
         }
+        if request.cmd == .requestInput {
+            return CLIPortServer.encodeReply(handleRequestInput(request, handler: cmdHandler))
+        }
 
         // We are on the main thread; the MainActor is available.
         // Read handler state synchronously for status; dispatch Tasks for start/stop/say.
@@ -302,9 +324,9 @@ public final class CLIPortServer {
                 SpeakLog.cli.info("CLIPortServer: say dispatched.")
                 return .accepted()
 
-            case .ask, .confirm:
+            case .ask, .confirm, .requestInput:
                 // Handled above, before this closure — unreachable here.
-                return .failure("internal: ask/confirm routed incorrectly")
+                return .failure("internal: ask/confirm/requestInput routed incorrectly")
             }
         }
 
@@ -384,6 +406,52 @@ public final class CLIPortServer {
         default:
             return .failure("internal: handleAskOrConfirm called with \(request.cmd.rawValue)")
         }
+    }
+
+    // MARK: - AVB-5 requestInput dispatch
+
+    /// Validate and dispatch a `requestInput` request, mirroring
+    /// `handleAskOrConfirm`'s Task-plus-pump shape. Validation failures (missing
+    /// prompt/mode, `.choice` mode with no `choices`) reply with `.failure(_:)` — a
+    /// malformed-request transport error, never one of the five canonical
+    /// outcomes. [decision: AVB-5]
+    private func handleRequestInput(_ request: CLIRequest, handler: any CLICommandHandler) -> CLIReply {
+        guard let requestId = request.requestId, !requestId.isEmpty else {
+            return .failure("requestInput requires a non-empty requestId")
+        }
+        guard let prompt = request.prompt, !prompt.isEmpty else {
+            return .failure("requestInput requires a non-empty prompt")
+        }
+        guard let mode = request.mode else {
+            return .failure("requestInput requires a mode (freeform, choice, or approval)")
+        }
+        let choices = request.choices ?? []
+        if mode == .choice, choices.isEmpty {
+            return .failure("requestInput mode 'choice' requires a non-empty 'choices' array")
+        }
+
+        let timeout = request.timeout ?? CLIContract.askConfirmDefaultTimeoutSeconds
+        let pumpCeiling = timeout + 2.0
+
+        let box = CLIPendingResultBox<HumanResponseOutcome>()
+        Task { @MainActor in
+            let outcome = await handler.cliRequestInput(
+                requestId: requestId,
+                idempotencyKey: request.idempotencyKey,
+                prompt: prompt,
+                mode: mode,
+                choices: choices,
+                timeoutSeconds: timeout,
+                consequence: request.consequence,
+                spokenSummary: request.spokenSummary
+            )
+            box.set(outcome)
+        }
+        guard let outcome = CLIPortServer.pumpUntilResult(timeoutSeconds: pumpCeiling, poll: box.get) else {
+            SpeakLog.cli.error("CLIPortServer: requestInput pump exhausted without a result.")
+            return .requestInputResult(.timedOut)
+        }
+        return .requestInputResult(outcome)
     }
 
     /// Pump the current (main) run loop in short slices until `poll()` returns a

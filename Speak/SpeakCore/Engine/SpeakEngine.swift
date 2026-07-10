@@ -517,7 +517,20 @@ public actor SpeakEngine {
     /// - Parameter frontmostBundleID: the frontmost app's bundle id at dictation
     ///   start, forwarded to `newSession()` for profile resolution. Read by the app
     ///   layer (@MainActor) so the engine stays AppKit-free. `nil` (CLI) → default.
-    public func beginDictation(frontmostBundleID: String? = nil) async throws {
+    /// - Returns: `true` when this call actually started a new session; `false`
+    ///   when the [A3] re-entrancy guard no-op'd because a session was already in
+    ///   flight. [decision: AVB-5 follow-up] Making the collision observable (as a
+    ///   return value, not a throw, so [Engine-L1]'s deliberate silent-no-op stays
+    ///   intact for the hotkey path) closes a check-then-act race: a caller that
+    ///   only checked `currentSession == nil` before calling this, then blindly
+    ///   assumed `.listening`/ownership after the `await` returned, could believe
+    ///   it owns a session that actually belongs to whichever caller won the race
+    ///   — and later read the other caller's `lastTranscript`. Callers that need
+    ///   ownership guarantees (`DictationController.beginDictation`,
+    ///   `cliRequestInput`) must check this return value before touching any
+    ///   session-owned state.
+    @discardableResult
+    public func beginDictation(frontmostBundleID: String? = nil) async throws -> Bool {
         // Hardware-mute gate (SPEC §7.4). Refuse before any session/capture is
         // created so the "no audio is read when muted" guarantee holds at the
         // only place that could start the microphone. Throws a dedicated refusal
@@ -548,7 +561,7 @@ public actor SpeakEngine {
             // debouncer is the primary re-entrancy gate; this is defence-in-depth only.
             // The CLI path does not have a debouncer, but a rapid double-tap there is
             // a user error, not an exceptional condition worth surfacing as an error.
-            return
+            return false
         }
         let session = newSession(frontmostBundleID: frontmostBundleID)
         SpeakLog.engine.info("SpeakEngine: beginDictation — starting new session.")
@@ -561,6 +574,7 @@ public actor SpeakEngine {
             currentSession = nil
             throw error
         }
+        return true
     }
 
     // MARK: - Hardware mute (SPEC §7.4)

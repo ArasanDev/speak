@@ -194,11 +194,82 @@ public actor AgentBridgeServer {
             case .failure(let reason): return .error(reason.description)
             }
 
+        case "speak_request_input":
+            return await runRequestInputTool(call)
+
         default:
             // Unreachable: handleToolsCall already checked membership in
             // AgentBridgeTools.all before calling runTool.
             return .error("Unknown tool: \(call.name)")
         }
+    }
+
+    // MARK: - AVB-5 speak_request_input
+
+    private func runRequestInputTool(_ call: MCPToolCallRequest) async -> MCPToolCallResult {
+        guard let requestId = call.arguments["requestId"]?.stringValue, !requestId.isEmpty else {
+            return .error("speak_request_input requires a non-empty 'requestId' argument.")
+        }
+        guard let prompt = call.arguments["prompt"]?.stringValue, !prompt.isEmpty else {
+            return .error("speak_request_input requires a non-empty 'prompt' argument.")
+        }
+        guard let modeRaw = call.arguments["mode"]?.stringValue, let mode = RequestInputMode(rawValue: modeRaw) else {
+            return .error("speak_request_input 'mode' must be one of freeform, choice, approval.")
+        }
+        let choices = call.arguments["choices"]?.arrayValue?.compactMap { $0.stringValue }
+        if mode == .choice, (choices ?? []).isEmpty {
+            return .error("speak_request_input mode 'choice' requires a non-empty 'choices' array.")
+        }
+
+        let result = await backend.requestInput(
+            requestId: requestId,
+            idempotencyKey: call.arguments["idempotencyKey"]?.stringValue,
+            prompt: prompt,
+            mode: mode,
+            choices: choices,
+            timeoutSeconds: call.arguments["timeout"]?.doubleValue,
+            consequence: call.arguments["consequence"]?.stringValue,
+            spokenSummary: call.arguments["spokenSummary"]?.stringValue
+        )
+        switch result {
+        case .success(let outcome):
+            // [decision: AVB-5 — locked] In choice/approval mode, an `.answered`
+            // outcome with no matched choice is an ambiguous spoken answer — a
+            // tool execution error, never a false-positive success. Freeform
+            // never has this ambiguity (choice is always nil by design there).
+            if mode != .freeform, case .answered(_, nil) = outcome {
+                let expected = mode == .choice ? "any of the offered choices" : "a recognizable yes/no"
+                return .error("speak_request_input got an answer that didn't match \(expected).")
+            }
+            return Self.renderRequestInput(outcome)
+        case .failure(let reason):
+            return .error(reason.description)
+        }
+    }
+
+    /// Structured `{outcome, text?, choice?}` JSON, serialized into the one text
+    /// content block `MCPContentBlock` supports (no structured-content block type
+    /// exists in this hand-written MCP layer — matches the rest of this file's
+    /// "no schema-generation library" posture). [decision: AVB-5]
+    private static func renderRequestInput(_ outcome: HumanResponseOutcome) -> MCPToolCallResult {
+        var fields: [String: JSONValue] = [:]
+        switch outcome {
+        case .answered(let text, let choice):
+            fields["outcome"] = .string("answered")
+            if let text { fields["text"] = .string(text) }
+            if let choice { fields["choice"] = .string(choice) }
+        case .declined:
+            fields["outcome"] = .string("declined")
+        case .cancelled:
+            fields["outcome"] = .string("cancelled")
+        case .timedOut:
+            fields["outcome"] = .string("timedOut")
+        case .busy:
+            fields["outcome"] = .string("busy")
+        }
+        let data = (try? JSONEncoder().encode(JSONValue.object(fields))) ?? Data()
+        let jsonString = String(data: data, encoding: .utf8) ?? "{}"
+        return .text(jsonString)
     }
 
     private static func render(_ report: BridgeStatusReport) -> MCPToolCallResult {

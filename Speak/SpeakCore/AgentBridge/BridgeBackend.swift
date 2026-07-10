@@ -80,4 +80,17 @@ public protocol BridgeBackend: Sendable {
     func say(text: String, interrupt: Bool) async -> Result<Void, BridgeUnavailable>
     func ask(question: String, timeoutSeconds: Double?) async -> Result<String, BridgeUnavailable>
     func confirm(question: String) async -> Result<Bool, BridgeUnavailable>
+
+    /// AVB-5 (specs/agent-voice-bridge.md §6): `speak_request_input`. Reuses the
+    /// CFMessagePort CLI IPC's new `.requestInput` command — no new transport.
+    func requestInput(
+        requestId: String,
+        idempotencyKey: String?,
+        prompt: String,
+        mode: RequestInputMode,
+        choices: [String]?,
+        timeoutSeconds: Double?,
+        consequence: String?,
+        spokenSummary: String?
+    ) async -> Result<HumanResponseOutcome, BridgeUnavailable>
 }

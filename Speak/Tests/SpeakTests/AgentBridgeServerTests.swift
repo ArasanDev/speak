@@ -22,8 +22,11 @@ private final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
     var sayResult: Result<Void, BridgeUnavailable>
     var askResult: Result<String, BridgeUnavailable>
     var confirmResult: Result<Bool, BridgeUnavailable>
+    var requestInputResult: Result<HumanResponseOutcome, BridgeUnavailable>
     private(set) var lastSaidText: String?
     private(set) var lastInterrupt: Bool?
+    private(set) var lastRequestInputMode: RequestInputMode?
+    private(set) var lastRequestInputChoices: [String]?
 
     init(
         status: BridgeStatusReport = BridgeStatusReport(
@@ -31,12 +34,14 @@ private final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
         ),
         say: Result<Void, BridgeUnavailable> = .success(()),
         ask: Result<String, BridgeUnavailable> = .success("blue"),
-        confirm: Result<Bool, BridgeUnavailable> = .success(true)
+        confirm: Result<Bool, BridgeUnavailable> = .success(true),
+        requestInput: Result<HumanResponseOutcome, BridgeUnavailable> = .success(.answered(text: "blue", choice: nil))
     ) {
         self.statusResult = status
         self.sayResult = say
         self.askResult = ask
         self.confirmResult = confirm
+        self.requestInputResult = requestInput
     }
 
     func status() async -> BridgeStatusReport { statusResult }
@@ -47,6 +52,15 @@ private final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
     }
     func ask(question: String, timeoutSeconds: Double?) async -> Result<String, BridgeUnavailable> { askResult }
     func confirm(question: String) async -> Result<Bool, BridgeUnavailable> { confirmResult }
+
+    func requestInput(
+        requestId: String, idempotencyKey: String?, prompt: String, mode: RequestInputMode,
+        choices: [String]?, timeoutSeconds: Double?, consequence: String?, spokenSummary: String?
+    ) async -> Result<HumanResponseOutcome, BridgeUnavailable> {
+        lastRequestInputMode = mode
+        lastRequestInputChoices = choices
+        return requestInputResult
+    }
 }
 
 // MARK: - JSONValue codec
@@ -231,14 +245,16 @@ struct AgentBridgeServerHandshakeTests {
 
 @Suite("AgentBridgeServer tools/list")
 struct AgentBridgeServerToolsListTests {
-    @Test("lists the product notification tool and four compatibility tools")
+    @Test("lists the product notification tool, speak_request_input, and its compatibility wrappers")
     func listsAllTools() async throws {
         let server = AgentBridgeServer(backend: StubBridgeBackend())
         let inbound = JSONRPCInbound(id: .number(1), method: "tools/list", params: nil)
         let outbound = try #require(await server.handle(inbound))
         let tools = try #require(outbound.result?.objectValue?["tools"]?.arrayValue)
         let names = Set(tools.compactMap { $0.objectValue?["name"]?.stringValue })
-        #expect(names == ["speak_notify", "speak_say", "speak_ask", "speak_confirm", "speak_status"])
+        #expect(names == [
+            "speak_notify", "speak_say", "speak_ask", "speak_confirm", "speak_request_input", "speak_status"
+        ])
     }
 
     @Test("speak_notify requires a summary and constrains notification kinds")
@@ -395,6 +411,168 @@ struct AgentBridgeServerToolsCallTests {
     func confirmUnclearIsToolError() async throws {
         let server = AgentBridgeServer(backend: StubBridgeBackend(confirm: .failure(.unclearAnswer("speak_confirm"))))
         let outbound = try await call(server, name: "speak_confirm", arguments: ["question": .string("q?")])
+        let result = try #require(outbound.result?.objectValue)
+        #expect(result["isError"]?.boolValue == true)
+        #expect(outbound.error == nil)
+    }
+
+    // MARK: - AVB-5 speak_request_input
+
+    @Test("speak_request_input freeform happy path returns {outcome: answered, text}")
+    func requestInputFreeformAnswered() async throws {
+        let backend = StubBridgeBackend(requestInput: .success(.answered(text: "blue please", choice: nil)))
+        let server = AgentBridgeServer(backend: backend)
+        let outbound = try await call(server, name: "speak_request_input", arguments: [
+            "requestId": .string("r1"), "prompt": .string("what color?"), "mode": .string("freeform")
+        ])
+        let result = try #require(outbound.result?.objectValue)
+        #expect(result["isError"]?.boolValue == nil || result["isError"]?.boolValue == false)
+        let text = try #require(result["content"]?.arrayValue?.first?.objectValue?["text"]?.stringValue)
+        let json = try #require(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+        #expect(json["outcome"] as? String == "answered")
+        #expect(json["text"] as? String == "blue please")
+        #expect(json["choice"] == nil)
+        #expect(backend.lastRequestInputMode == .freeform)
+    }
+
+    @Test("speak_request_input approval matched choice returns {outcome: answered, choice: approved}")
+    func requestInputApprovalApproved() async throws {
+        let backend = StubBridgeBackend(requestInput: .success(.answered(text: "yes", choice: "approved")))
+        let server = AgentBridgeServer(backend: backend)
+        let outbound = try await call(server, name: "speak_request_input", arguments: [
+            "requestId": .string("r2"), "prompt": .string("deploy?"), "mode": .string("approval")
+        ])
+        let result = try #require(outbound.result?.objectValue)
+        #expect(result["isError"]?.boolValue == nil || result["isError"]?.boolValue == false)
+        let text = try #require(result["content"]?.arrayValue?.first?.objectValue?["text"]?.stringValue)
+        let json = try #require(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+        #expect(json["outcome"] as? String == "answered")
+        #expect(json["choice"] as? String == "approved")
+    }
+
+    @Test("speak_request_input choice mode matched choice returns {outcome: answered, choice}")
+    func requestInputChoiceMatched() async throws {
+        let backend = StubBridgeBackend(requestInput: .success(.answered(text: "rollback", choice: "rollback")))
+        let server = AgentBridgeServer(backend: backend)
+        let outbound = try await call(server, name: "speak_request_input", arguments: [
+            "requestId": .string("r3"), "prompt": .string("rollback or forward?"), "mode": .string("choice"),
+            "choices": .array([.string("rollback"), .string("forward")])
+        ])
+        let result = try #require(outbound.result?.objectValue)
+        #expect(result["isError"]?.boolValue == nil || result["isError"]?.boolValue == false)
+        #expect(backend.lastRequestInputChoices == ["rollback", "forward"])
+    }
+
+    @Test("speak_request_input declined maps to {outcome: declined}, never a false success text")
+    func requestInputDeclined() async throws {
+        let backend = StubBridgeBackend(requestInput: .success(.declined))
+        let server = AgentBridgeServer(backend: backend)
+        let outbound = try await call(server, name: "speak_request_input", arguments: [
+            "requestId": .string("r4"), "prompt": .string("deploy?"), "mode": .string("approval")
+        ])
+        let result = try #require(outbound.result?.objectValue)
+        #expect(result["isError"]?.boolValue == nil || result["isError"]?.boolValue == false)
+        let text = try #require(result["content"]?.arrayValue?.first?.objectValue?["text"]?.stringValue)
+        let json = try #require(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+        #expect(json["outcome"] as? String == "declined")
+    }
+
+    @Test("speak_request_input cancelled/timedOut/busy each round-trip their own outcome tag",
+          arguments: [
+            (HumanResponseOutcome.cancelled, "cancelled"),
+            (HumanResponseOutcome.timedOut, "timedOut"),
+            (HumanResponseOutcome.busy, "busy")
+          ])
+    func requestInputLifecycleOutcomes(outcome: HumanResponseOutcome, expectedTag: String) async throws {
+        let backend = StubBridgeBackend(requestInput: .success(outcome))
+        let server = AgentBridgeServer(backend: backend)
+        let outbound = try await call(server, name: "speak_request_input", arguments: [
+            "requestId": .string("r5"), "prompt": .string("q?"), "mode": .string("freeform")
+        ])
+        let result = try #require(outbound.result?.objectValue)
+        #expect(result["isError"]?.boolValue == nil || result["isError"]?.boolValue == false)
+        let text = try #require(result["content"]?.arrayValue?.first?.objectValue?["text"]?.stringValue)
+        let json = try #require(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+        #expect(json["outcome"] as? String == expectedTag)
+    }
+
+    @Test("speak_request_input in choice mode with a non-matching answer is a tool execution error, not answered")
+    func requestInputAmbiguousChoiceIsError() async throws {
+        let backend = StubBridgeBackend(requestInput: .success(.answered(text: "something else", choice: nil)))
+        let server = AgentBridgeServer(backend: backend)
+        let outbound = try await call(server, name: "speak_request_input", arguments: [
+            "requestId": .string("r6"), "prompt": .string("rollback or forward?"), "mode": .string("choice"),
+            "choices": .array([.string("rollback"), .string("forward")])
+        ])
+        let result = try #require(outbound.result?.objectValue)
+        #expect(result["isError"]?.boolValue == true)
+    }
+
+    @Test("speak_request_input in approval mode with an unrecognized answer is a tool execution error")
+    func requestInputAmbiguousApprovalIsError() async throws {
+        let backend = StubBridgeBackend(requestInput: .success(.answered(text: "maybe idk", choice: nil)))
+        let server = AgentBridgeServer(backend: backend)
+        let outbound = try await call(server, name: "speak_request_input", arguments: [
+            "requestId": .string("r7"), "prompt": .string("deploy?"), "mode": .string("approval")
+        ])
+        let result = try #require(outbound.result?.objectValue)
+        #expect(result["isError"]?.boolValue == true)
+    }
+
+    @Test("speak_request_input in freeform mode never treats a nil choice as an error")
+    func requestInputFreeformNeverAmbiguous() async throws {
+        let backend = StubBridgeBackend(requestInput: .success(.answered(text: "anything", choice: nil)))
+        let server = AgentBridgeServer(backend: backend)
+        let outbound = try await call(server, name: "speak_request_input", arguments: [
+            "requestId": .string("r8"), "prompt": .string("q?"), "mode": .string("freeform")
+        ])
+        let result = try #require(outbound.result?.objectValue)
+        #expect(result["isError"]?.boolValue == nil || result["isError"]?.boolValue == false)
+    }
+
+    @Test("speak_request_input requires a non-empty requestId")
+    func requestInputRequiresRequestId() async throws {
+        let server = AgentBridgeServer(backend: StubBridgeBackend())
+        let outbound = try await call(server, name: "speak_request_input", arguments: [
+            "prompt": .string("q?"), "mode": .string("freeform")
+        ])
+        #expect(outbound.result?.objectValue?["isError"]?.boolValue == true)
+    }
+
+    @Test("speak_request_input requires a non-empty prompt")
+    func requestInputRequiresPrompt() async throws {
+        let server = AgentBridgeServer(backend: StubBridgeBackend())
+        let outbound = try await call(server, name: "speak_request_input", arguments: [
+            "requestId": .string("r9"), "mode": .string("freeform")
+        ])
+        #expect(outbound.result?.objectValue?["isError"]?.boolValue == true)
+    }
+
+    @Test("speak_request_input rejects an unrecognized mode")
+    func requestInputRejectsBadMode() async throws {
+        let server = AgentBridgeServer(backend: StubBridgeBackend())
+        let outbound = try await call(server, name: "speak_request_input", arguments: [
+            "requestId": .string("r10"), "prompt": .string("q?"), "mode": .string("bogus")
+        ])
+        #expect(outbound.result?.objectValue?["isError"]?.boolValue == true)
+    }
+
+    @Test("speak_request_input mode 'choice' requires a non-empty 'choices' array")
+    func requestInputChoiceRequiresChoices() async throws {
+        let server = AgentBridgeServer(backend: StubBridgeBackend())
+        let outbound = try await call(server, name: "speak_request_input", arguments: [
+            "requestId": .string("r11"), "prompt": .string("q?"), "mode": .string("choice")
+        ])
+        #expect(outbound.result?.objectValue?["isError"]?.boolValue == true)
+    }
+
+    @Test("speak_request_input surfaces a busy backend result as a clean tool execution error")
+    func requestInputBackendUnavailableIsToolError() async throws {
+        let backend = StubBridgeBackend(requestInput: .failure(.appNotRunning))
+        let server = AgentBridgeServer(backend: backend)
+        let outbound = try await call(server, name: "speak_request_input", arguments: [
+            "requestId": .string("r12"), "prompt": .string("q?"), "mode": .string("freeform")
+        ])
         let result = try #require(outbound.result?.objectValue)
         #expect(result["isError"]?.boolValue == true)
         #expect(outbound.error == nil)

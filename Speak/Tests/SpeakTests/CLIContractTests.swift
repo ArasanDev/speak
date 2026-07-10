@@ -391,11 +391,12 @@ private func idempotencyDecision(command: CLICommand, icon: MenubarIcon) -> Idem
     case .status:
         return .read
 
-    case .say, .ask, .confirm:
-        // H-3: say/ask/confirm are not gated by this idempotency table — say is
-        // always dispatched (no icon precondition); ask/confirm are handled by the
-        // dedicated run-loop pump path in `CLIPortServer.handleAskOrConfirm`, not
-        // the `.dispatch`/`.noOp`/`.read` decision this pure mirror models.
+    case .say, .ask, .confirm, .requestInput:
+        // H-3/AVB-5: say/ask/confirm/requestInput are not gated by this idempotency
+        // table — say is always dispatched (no icon precondition); ask/confirm/
+        // requestInput are handled by the dedicated run-loop pump paths in
+        // `CLIPortServer.handleAskOrConfirm`/`handleRequestInput`, not the
+        // `.dispatch`/`.noOp`/`.read` decision this pure mirror models.
         return .read
     }
 }

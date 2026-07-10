@@ -67,6 +67,48 @@ public enum AgentBridgeTools {
         "required": ["question"]
     ]
 
+    /// AVB-5 (specs/agent-voice-bridge.md §6). `choices` is required (and must be
+    /// non-empty) iff `mode == "choice"` — JSON Schema 2020-12 has no clean way to
+    /// express that conditional without `if`/`then`, so it's documented in
+    /// `choices`' description and enforced in code (`AgentBridgeServer.runTool`).
+    public static let requestInputInputSchema: JSONValue = [
+        "type": "object",
+        "properties": [
+            "requestId": [
+                "type": "string",
+                "description": "Caller-supplied identifier for this request (for correlating with logs)."
+            ],
+            "idempotencyKey": [
+                "type": "string",
+                "description": "Optional. A duplicate call with the same key while this request is still in flight returns 'busy' instead of opening a second capture."
+            ],
+            "prompt": [
+                "type": "string",
+                "description": "The question or statement to present to the human and listen for an answer to."
+            ],
+            "mode": [
+                "type": "string",
+                "enum": ["freeform", "choice", "approval"],
+                "description": "freeform: any spoken answer. choice: match one of 'choices'. approval: yes/no."
+            ],
+            "choices": [
+                "type": "array",
+                "items": ["type": "string"],
+                "description": "Required, non-empty, when mode is 'choice' — the options to match the spoken answer against. Ignored otherwise."
+            ],
+            "timeout": ["type": "number", "description": "Seconds to wait for a spoken answer before giving up."],
+            "consequence": [
+                "type": "string",
+                "description": "Optional human-readable statement of what answering implies. Reserved for future presentation; not currently spoken."
+            ],
+            "spokenSummary": [
+                "type": "string",
+                "description": "What to actually speak aloud. Defaults to 'prompt' when omitted."
+            ]
+        ],
+        "required": ["requestId", "prompt", "mode"]
+    ]
+
     /// No parameters. `additionalProperties: false` is the MCP-recommended
     /// shape for a zero-argument tool (explicitly accepts only empty objects).
     public static let statusInputSchema: JSONValue = [
@@ -102,6 +144,16 @@ public enum AgentBridgeTools {
                 "a boolean. Fails with a clear error if the spoken answer is unclear or the human cancels, " +
                 "rather than guessing. Requires speak.app to be running.",
             inputSchema: confirmInputSchema
+        ),
+        MCPTool(
+            name: "speak_request_input",
+            description: "Ask the human a freeform question, a multiple-choice question, or a yes/no " +
+                "approval, and get back a typed result: answered, declined, cancelled, timedOut, or busy. " +
+                "Opens the mic and shows the HUD (same as a hotkey dictation) — the human sees and can " +
+                "cancel every capture. Returns 'busy' immediately (never queues) if another agent-initiated " +
+                "capture is already in flight. Prefer this over speak_ask/speak_confirm for new integrations " +
+                "— they remain as compatibility wrappers. Requires speak.app to be running.",
+            inputSchema: requestInputInputSchema
         ),
         MCPTool(
             name: "speak_status",
