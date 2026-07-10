@@ -1,4 +1,10 @@
-# Horizon: `speak` → the Voice Layer for the Mac `[decision 2026-07-06, Fable loop #42]`
+# Superseded Horizon: Voice Layer exploration `[decision 2026-07-06]`
+
+> **Superseded 2026-07-11.** This exploration produced the implemented Voice
+> Actions, VoiceOut, and MCP bridge, but “Voice OS” is no longer the product
+> scope. The authoritative destination is the provider-neutral local
+> human-agent interface in `docs/product.md`; the normative workflow contract is
+> `specs/agent-voice-bridge.md`. Keep this file as implementation provenance.
 
 > Status: DIRECTION SPEC. Builds strictly on top of the immutable layering
 > (base core → Clean profile → Profile Engine). Nothing here inverts it.

@@ -17,7 +17,9 @@ on-device AI neat-writing (cleanup) — both engines are v0 defaults, both are
 Apple frameworks, zero third-party dependencies. `AVAudioEngine` for mic.
 `CGEventTap` for hotkeys. `NSPasteboard` write + `Cmd+V` simulate for paste.
 SQLite for history. `os.Logger` for logging. No FFI, no Rust, no third-party
-deps in v0.
+deps in v0. Above this foundation, a provider-neutral interaction domain owns
+agent sessions, human turns, calls, responses, attention events, and delivery
+receipts. MCP is one local adapter to that domain. `[decision 2026-07-11]`
 
 ---
 
@@ -98,15 +100,35 @@ v1+ (maybe): Speak.app (SwiftUI) ──► SpeakCore (Swift) ──ffi──► 
                                           └─────────────────────┘
 ```
 
+### 3.1 Agent interaction context `[decision 2026-07-11]`
+
+```text
+Human ⇄ Speak surfaces ⇄ Interaction Runtime ⇄ Provider adapter ⇄ Agent
+             │                    │
+          voice/text       local policy + state
+```
+
+The agent owns reasoning and execution. `speak` owns representation and
+delivery of human turns, durable calls requiring attention, and presentation of
+agent events. No adapter receives ambient microphone access, dictation history,
+pasteboard contents, files, or screen text.
+
+The interaction domain is protocol-independent. MCP, CLI IPC, a future local
+socket, App Intents, and focused-field paste are adapters with different
+capabilities. Capability negotiation selects the best path; paste remains the
+universal fallback.
+
 ---
 
 ## 4. Containers (C4 L2)
 
-Two deployable units in v0:
+Three deployable units in the current tree:
 - **`speak.app`** — the SwiftUI menubar app the user runs.
 - **`SpeakCore.framework`** — the headless dictation engine, embedded in the
   app. (Separated so a future CLI shim / iOS app / extracted portable engine
   can reuse it — the §1.1 seam.)
+- **`speak-mcp`** — a thin stdio MCP process. It translates JSON-RPC tool calls
+  into the app's existing local CFMessagePort IPC; it never owns audio or UI.
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -133,7 +155,7 @@ speak/
 ├── App/                          # SwiftUI app target
 │   ├── SpeakApp.swift            # @main, MenuBarExtra, state injection
 │   ├── MenuBar/                  # icon, status, quick toggles
-│   ├── Onboarding/               # 3-permission flow, hotkey picker
+│   ├── Onboarding/               # Microphone + Accessibility flow, hotkey picker
 │   ├── Settings/                 # hotkey, language, LLM, history, paste mode
 │   └── Overlay/                  # floating capture dot + partial transcript
 ├── SpeakCore/                    # Framework: headless dictation engine
@@ -157,10 +179,13 @@ speak/
 │   ├── Paste/
 │   │   └── PasteboardWriter.swift # NSPasteboard write + Cmd+V simulate
 │   ├── Permissions/
-│   │   └── PermissionManager.swift # mic/accessibility/input-monitoring state machine
+│   │   └── PermissionManager.swift # microphone/accessibility state machine
 │   ├── Storage/
 │   │   ├── HistoryStore.swift     # SQLite, last N dictations, searchable
 │   │   └── SettingsStore.swift    # typed UserDefaults wrapper
+│   ├── AgentBridge/               # interaction bridge + MCP workflow backend
+│   ├── VoiceOut/                  # local TTS behind SpeechSynthesizing
+│   ├── VoiceActions/              # separate human-invoked Shortcuts path
 │   └── Logging/
 │       └── SpeakLog.swift         # OSLog categories
 ├── SpeakLLM/                     # (v0.1) Ollama alternative cleanup engine

@@ -6,7 +6,7 @@
 // stays unit-testable with an in-memory stub — the same seam pattern as
 // `Transcribing` / `LLMCleaning` elsewhere in SpeakCore.
 //
-// H-3 scope (specs/horizon-voice-os.md Pillar 3): all four tools are now wired to
+// Agent bridge scope (specs/agent-voice-bridge.md): all five tools are wired to
 // a real running app instance, reusing the existing CFMessagePort CLI IPC
 // (Speak/SpeakCore/CLI/CLIContract.swift) — no new transport (XPC/UNIX-socket) was
 // needed. `say`/`ask`/`confirm` ride the same wire the `--start`/`--stop`/`--status`
@@ -71,7 +71,8 @@ public struct BridgeUnavailable: Error, Sendable, Equatable, CustomStringConvert
     }
 }
 
-/// Backs the four Pillar-3 tools. Every method reports what happened as a
+/// Backs the current five-tool catalog. `speak_notify` composes the same `say`
+/// backend as `speak_say`. Every method reports what happened as a
 /// value (never throws) so `AgentBridgeServer` can turn "not available" into
 /// a tool execution error instead of a protocol error.
 public protocol BridgeBackend: Sendable {

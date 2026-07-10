@@ -1,7 +1,7 @@
 // MCP/main.swift
 //
-// `speak-mcp` — the MCP agent-bridge CLI shim (specs/horizon-voice-os.md
-// Pillar 3 / H-3 vertical slice). Serves the Model Context Protocol over
+// `speak-mcp` — the MCP adapter for the local human-agent interface
+// (`specs/agent-voice-bridge.md`). Serves the Model Context Protocol over
 // stdio: reads newline-delimited JSON-RPC messages from stdin, dispatches
 // them through `AgentBridgeServer` (pure protocol logic in
 // SpeakCore/AgentBridge/), and writes newline-delimited JSON-RPC replies to
@@ -11,11 +11,9 @@
 // handshake, and tool-call routing all live in SpeakCore, where they are unit
 // tested with no I/O; this file only owns reading/writing raw bytes.
 //
-// Transport: stdio only, newline-delimited JSON, no sockets — per H-3 scope.
-// The XPC/socket link to the running menubar app (needed for a live
-// speak_say/speak_ask/speak_confirm) is a later task; this binary talks to
-// `speak.app` only via the EXISTING CFMessagePort CLI IPC, reused unchanged
-// inside `CLIBridgeBackend.status()`.
+// Transport: stdio only, newline-delimited JSON, no network listener. All five
+// tools talk to `speak.app` through the existing local CFMessagePort CLI IPC;
+// the app continues to own audio, microphone permission, and UI.
 //
 // Shutdown: per the MCP lifecycle spec, the client closes stdin to signal
 // shutdown ("First, closing the input stream to the child process"); this

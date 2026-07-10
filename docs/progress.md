@@ -7,10 +7,30 @@
 
 ## Current phase
 
-**Loop #48 (2026-07-11) — Agent Voice Bridge productization in progress. Local dictation remains the wedge; MCP is being reshaped from developer scaffolding into a concise, local human-agent voice channel. `speak_notify` + stable user install landed in the worktree; interactive input paste/stale-result safety hardened. P14 measurement gates remain open and unchanged.**
+**Loop #49 (2026-07-11) — Product direction reconciled. Speak is the local,
+provider-neutral human-agent interface; dictation remains the completed
+foundation and universal fallback. MCP is the first adapter, while semantic
+workflows, sessions, calls, receipts, and attention policy form the product.
+P14 dictation measurement gates remain open and unchanged.**
 
 ### What changed this loop (read before doing anything)
--24. **Agent Voice Bridge product contract + first product slice (2026-07-11, uncommitted).**
+-25. **Human-Agent Interface direction freeze (2026-07-11).**
+   - Reconciled `AGENTS.md`, `docs/product.md`, `docs/architecture.md`,
+     `docs/roadmap.md`, and the canonical bridge specification around one
+     boundary: Speak handles local input/output/routing/attention; connected
+     agents handle reasoning and action.
+   - Marked the broad Voice OS exploration superseded. Jarvis-like continuity
+     remains an experience goal, not permission for general automation.
+   - Audited actual implementation: five local MCP tools are working transport
+     primitives; sessions, durable calls, receipts, inbox, semantic progress,
+     direct agent ingress, and provider-neutral adapters are not implemented.
+   - **Next dependency-ready product task:** AVB-5 structured
+     `speak_request_input`, with typed outcomes and one live agent round trip.
+   - No production behavior or v0 ship gate changed in this documentation loop.
+   - Verification: build ✅ / lint 0 serious (existing warnings only) ✅ /
+     verify-moat 7/7 ✅ / `git diff --check` ✅.
+
+-24. **Agent Voice Bridge product contract + first product slice (2026-07-11, committed as `0dbf14e` + `4203c4d`).**
    - Added `specs/agent-voice-bridge.md` `[decision]`: Speak is the local human I/O layer for agents, not an agent, general automation server, or shell/file/browser toolbox. The flagship loop is rich voice prompt → agent works → concise completion/blocker spoken locally → bounded visible response.
    - Added `speak_notify(summary, kind, detail?, interrupt?)` as the preferred MCP application tool. Its discovery description limits use to final outcomes, blockers, high-severity warnings, and explicit readback; routine progress/logs/diffs remain visual. Existing four tools remain compatibility primitives.
    - Added `make install-mcp-user`: relocatable `speak-mcp` + `SpeakCore`/`SpeakLLM` framework layout under `~/Library/Application Support/speak/mcp/`. Relocated launch verified from a temporary install root. Homebrew formula now installs `speak-mcp`; README includes Codex and Claude Code setup.
@@ -18,7 +38,7 @@
    - Verification: full post-hardening suite ✅; focused `CaptureSessionTests` 18/18 ✅; lint 0 serious on changed files ✅; verify-moat 7/7 ✅; relocated MCP launch ✅.
    - **Live flagship proof** `[verified 2026-07-11]`: installed bridge negotiated MCP 2025-11-25, `speak_status` returned the running app's idle state + live hotkey, and `speak_notify` delivered “Speak agent bridge is ready.” through the app's VoiceOut path. Codex global MCP config now points at the stable installed bridge.
    - `[deferred — product]` queue/cooldown/per-client policy and unified structured `speak_request_input`.
-   - **AVB-4 attention queue follow-up (same loop, uncommitted):** `AgentSpeechQueue`
+   - **AVB-4 attention queue follow-up (same loop, committed):** `AgentSpeechQueue`
      now serializes non-interrupting notifications, replaces active + pending speech
      for urgent notifications, and discards the agent queue whenever human dictation
      starts. Three race-aware tests pass repeatedly (3 consecutive runs, 0 failures).

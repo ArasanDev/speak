@@ -23,7 +23,7 @@ dictated their development instructions into Claude Code *using speak* — a rec
 feedback loop (the product directing its own build). Verified this run:
 
 - **§0** build + launch (`make run`), menubar icon, onboarding, **Microphone** grant
-  fired ✓. **Accessibility** + **Input Monitoring** effectively confirmed (the tap
+  fired ✓. **Accessibility** effectively confirmed (the tap
   arms and synthetic Cmd+V lands — both require those grants) ✓.
 - **§2** double-tap Fn **starts** capture while another app has focus; single-tap Fn
   **stops** → processing → paste ✓. *(Still open: §2 false-trigger rate over 30 min.)*
@@ -249,13 +249,6 @@ persistence are unit-verified (`OnboardingFlowTests` — 14 tests, all green). T
       `?Privacy_Accessibility` anchor). After toggling the app on, the status indicator
       flips to ✓ within ~2 s (the 1.5 s poll interval + processing time).
       `[deep-link anchor correctness: deferred — verify on macOS 26 Tahoe]`
-- [ ] **Input Monitoring step — deep-link opens correct pane**: "Open System Settings"
-      opens `Privacy & Security → Input Monitoring` (the `?Privacy_ListenEvent` anchor).
-      After toggling on, the checkmark appears. `[anchor correctness: deferred — macOS 26]`
-- [ ] **IOHIDCheckAccess returns correct state**: after granting Input Monitoring in
-      System Settings and returning to the app, `PermissionManager.status(.inputMonitoring)`
-      returns `.granted`. After denying, returns `.denied`. Confirms IOKit live correctness.
-      `[deferred — environment-dependent, confirmed only with real TCC grant]`
 - [ ] **Hotkey step renders correctly**: "Double-tap Fn" explanation, the Fn icon, and
       "Finish Setup" button.
 - [ ] **Done step + auto-close**: "You're all set." screen appears, then the window
@@ -264,7 +257,7 @@ persistence are unit-verified (`OnboardingFlowTests` — 14 tests, all green). T
       the onboarding window does NOT appear again.
 - [ ] **Skip path works**: clicking "Skip for now" closes the onboarding window and does
       not re-show on next launch (flag is set). Permissions can be granted later via the
-      `Grant Accessibility + Input Monitoring` menu item.
+      `Grant Accessibility` menu item.
 - [ ] **Revocation → re-shows onboarding**: revoke Accessibility in System Settings while
       the app is running; quit and relaunch — the onboarding window re-appears on the
       Accessibility step (`showOnboardingIfNeeded` fires because `status(.accessibility)`

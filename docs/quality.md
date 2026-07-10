@@ -177,7 +177,7 @@ Assert against `architecture.md` §12 budgets:
 | 1 | SpeechAnalyzer quality worse than Wispr in noise | M | H | WhisperKit fallback (v0.1); document noise limits | If word-error-rate > Wispr's by >5pts in quiet tests, ship WhisperKit as default |
 | 2 | Fn key is OS-controlled, conflicts vary | H | M | Customizable hotkey from v0; document Fn vs F-key | If >10% users report Fn doesn't fire, promote a non-Fn default |
 | 3 | macOS 26.4 paste protection breaks Cmd+V `[unverified]` | L | H | We write, never read pasteboard — but write+Cmd+V bypass is unverified; **test paste in Terminal/iTerm early (P6), before relying on it** | If Cmd+V prompts in any top-20 app, switch that app to AX paste |
-| 4 | 3-permission onboarding drops 30%+ | H | H | Streamlined flow, deep-links, video walkthrough | If dropoff >25%, add a "skip and configure later" path |
+| 4 | Two-permission onboarding drops 30%+ | H | H | Explain Microphone + Accessibility, provide deep-links and a walkthrough | If dropoff >25%, add a "skip and configure later" path |
 | 5 | Local LLM adds 1–2s latency | M | M | Streaming UI; per-session disable | If median cleanup >2.5s, default cleanup OFF |
 | 6 | Apple closes/changes SpeechAnalyzer access | L | H | Pluggable protocol; WhisperKit ready as fallback | If API deprecated, ship WhisperKit as default in next minor |
 | 7 | Wispr Flow copies local-first model | L (2026) | H | Open source + community + MIT moat | Compete on free + open + dev UX, not feature parity |
@@ -206,7 +206,9 @@ Before tagging `v0.0.1`:
 - [ ] No global mutable state
 - [ ] Never reads the pasteboard (write-only)
 - [ ] No third-party dependencies (Apple frameworks only)
-- [ ] Signed + notarized; `brew install --cask speak` works on a clean machine
+- [ ] v0 developer preview builds and installs from source on a clean machine;
+      Developer ID notarization and the official Homebrew Cask remain the
+      separate P11-b distribution gate and do not block v0.0.1
 - [ ] 4h dogfood done (P13); top-3 bugs fixed (P14)
 - [ ] Performance budgets met (§4) or deviations documented
 - [ ] README + privacy section + demo GIF public (P12)

@@ -10,9 +10,14 @@ v0.1/v1/v2/v3+ tasks: see `docs/product.md §9`.
 
 ---
 
-## North star — Profile Engine `[decision 2026-06-29]` [TODO — post-v0]
+## North star — Human-Agent Interface Runtime `[decision 2026-07-11]`
 
-Spec: `specs/profile-engine.md` · prompts: `specs/profile-system-prompts.md` · WHY: `product.md §6d`.
+Canonical contract: `specs/agent-voice-bridge.md`. Dictation is the completed
+foundation and universal fallback. The Profile Engine remains the local input
+transformation subsystem; it is no longer the product destination.
+
+Profile subsystem: `specs/profile-engine.md` · prompts:
+`specs/profile-system-prompts.md` · WHY: `product.md §6d`.
 
 **Layering (immutable order — never invert)**:
 1. Base core: double-press activate / single-press stop; raw voice → text, no AI.
@@ -21,7 +26,11 @@ Spec: `specs/profile-engine.md` · prompts: `specs/profile-system-prompts.md` ·
 
 The v0.1 items (V01-0 Agent Mode, V01-3 per-app context, V1-3 Transforms, V1-4 code-aware) are re-framed as profiles once the engine lands.
 
-**Landed 2026-07-06 (loop #42, ahead of critical path — see progress.md):** V01-3 `[x]` (profile-native: Chat profile + toggle), V01-5 `[x]` (ExtraBinding, live-apply), V01-2 `[x]` (SpeakLLM target; key-entry UI still open), Aurora HUD `[x]` (opt-in), H-3 MCP bridge slice `[x]` (`speak-mcp`; say/ask pending VoiceOut+transport). **Landed 2026-07-08 (loop #44):** H-3 `speak_say`/`speak_ask`/`speak_confirm` `[x]` — wired to the live app (voiceOut TTS + beginDictation/endDictation session path, deterministic yes/no/cancel extractor, CFMessagePort ask/confirm timeout override). **Landed 2026-07-08 (loops #45/46):** H-1 Voice Actions `[x]` (FULLY live: both `.action` route via ShortcutsCLIExecutor AND `.command` route via CommandModeService+AccessibilitySelection wired into stop→paste in CaptureSession.swift; live AX read/replace behavior `[deferred — needs human verification]`), H-4 ShortcutsCLIExecutor `[x]` (two-stage SIGTERM/SIGKILL watchdog for hung headless shortcuts). Horizon direction: `specs/horizon-voice-os.md` (H-1…H-4).
+**Already landed:** the Profile Engine substrate, VoiceOut, Voice Actions, and
+the five-tool local MCP bridge. The former Voice OS exploration is historical;
+`specs/horizon-voice-os.md` is superseded. Working Voice Actions remain a
+separate human-invoked feature and do not expand the agent bridge into general
+automation.
 
 ### Agent Voice Bridge `[decision 2026-07-11]`
 
@@ -40,12 +49,21 @@ surface; the native attention and voice experience is the product.
 - [~] **AVB-4 — Attention policy**: actor-owned serial speech queue +
       cancel/replace semantics implemented and tested; cooldown/deduplication,
       quiet policy, and per-client enablement remain.
-- [ ] **AVB-5 — Unified structured input**: replace `ask`/`confirm` product use
+- [ ] **AVB-5 — Unified structured input (NEXT)**: replace `ask`/`confirm` product use
       with `speak_request_input` outcomes (`answered`, `declined`, `cancelled`,
-      `timedOut`, `busy`) and explicit choice/approval presentation.
-- [ ] **AVB-6 — Native agent inbox + diagnostics**: identify client/repo, show
-      pending completions/questions locally, and expose tool-only-compatible
-      setup/status diagnostics. Status/capability MCP resources are additive.
+      `timedOut`, `busy`), request ownership, idempotency, and explicit
+      choice/approval presentation. Live-dogfood one real agent round trip.
+- [ ] **AVB-6 — Session registration + capabilities**: stable provider/client,
+      repo, label, state, and supported delivery/response features.
+- [ ] **AVB-7 — Durable Agent Calls**: persist pending questions/approvals and
+      route later responses to their origin; add the native call inbox.
+- [ ] **AVB-8 — Semantic events + attention**: progress/completion/blocker
+      workflows, activity presentation, cooldown/dedup, quiet and per-client policy.
+- [ ] **AVB-9 — Direct human turn delivery**: select a registered session,
+      deliver a VoiceTurn with an acknowledgement receipt, then support amendment
+      and cancellation. Focused-field paste remains fallback.
+- [ ] **AVB-10 — Adapter expansion**: add provider integrations only after the
+      first closed loop passes live dogfood. MCP remains one adapter.
 
 ---
 

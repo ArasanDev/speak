@@ -5,7 +5,11 @@
 
 ## 1. Mission
 
-`speak` = macOS-native, local-first, free, open-source voice dictation app. Speech→text + AI neat-writing, both on-device, both pluggable. Not a chatbot. Not cloud. Not cross-platform in v0.
+`speak` = macOS-native, local-first, free, open-source human interface for
+software agents. Its completed v0 foundation is voice dictation: speech→text +
+AI neat-writing, both on-device and pluggable. The next product layer adds
+provider-neutral agent input, attention, and response workflows. `speak` is not
+an agent, chatbot, reasoning engine, or cloud service. Not cross-platform in v0.
 
 v0 is complete when `benchmark.md` §4 MATCH gate + §3 BEAT rows + `quality.md` §9 ship checklist all pass. No deadlines. No effort estimates. Run the loop until those gates pass.
 

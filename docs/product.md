@@ -10,13 +10,19 @@
 
 ## 0. One sentence
 
-> *The Mac-native, free, local-first voice dictation app that turns your speech
-> into clean, finished text at the cursor — privately, on-device, and open.*
+> *The Mac-native, free, local-first human interface for software agents: speak
+> naturally, reach the right session, and hear only what matters.*
 
-`speak` is an **AI dictation** app: speech becomes text, **and the AI writes it
-neatly** — filler removed, punctuation and capitalization correct, formatted to
-fit where it lands. The clean transcript is the product. The same core
-experience as Wispr Flow, but it never leaves your machine.
+`speak` begins as an **AI dictation** app: speech becomes text and the local AI
+writes it neatly. That complete dictation loop is the universal fallback and
+the trust foundation. The destination is a **local human-agent interface**:
+`speak` captures and preserves human intent, routes it to a chosen agent
+session, presents agent progress and calls consistently, and returns a spoken
+answer to the originating session. `[decision 2026-07-11]`
+
+The connected agent owns reasoning, planning, tools, and execution. `speak`
+owns input, output, routing, delivery state, and human attention. MCP is the
+first adapter, not the product model. `[decision 2026-07-11]`
 
 ---
 
@@ -57,9 +63,12 @@ toward; `benchmark.md` makes each line testable.)
 
 ## 2. What `speak` is NOT (non-goals)
 
-- **Not** an agentic coding tool. (That was the abandoned `deepvoice`; archived
-  in `research/sample-ideation.md`.)
-- **Not** a chatbot, voice assistant, or meeting scribe.
+- **Not an agent or coding engine.** It never plans, edits code, runs tools, or
+  substitutes for Codex, Claude Code, OpenCode, or another provider.
+- **Not an agent orchestrator.** It presents sessions and routes human turns;
+  it does not decide how agents divide or execute work.
+- **Not** a chatbot, meeting scribe, ambient listener, or general Mac automation
+  server.
 - **Not** cloud. No accounts, login, or telemetry. (Cloud STT may exist *only*
   as a later, explicit, user-keyed opt-in — never the default, never required.)
 - **Not** account-bound or sync-mandatory. Local is the point.
@@ -189,7 +198,7 @@ provider integration) in `roadmap.md`.
 
 ---
 
-## 6c. The `speak` difference — and the road to Jarvis
+## 6c. The `speak` difference — a Jarvis-like interface, not a Jarvis brain
 
 ### Five structural advantages (no competitor holds all five simultaneously)
 
@@ -213,19 +222,33 @@ out differently: fuller, more connected, more honest. `speak`'s job is not
 
 ### The progression
 
-- **Today**: speak → STT → LLM cleanup → paste (email, Slack, docs)
-- **v0.1**: speak → context-aware LLM → perfect format for the destination
-  (code, agent prompt, commit message, technical instruction)
-- **v1**: speak → screen context → LLM with full app + selection + clipboard
-  awareness → output indistinguishable from expert writing
-- **v2+**: speak → AI understands intent → structures as agent task → the
-  dictation is the instruction that executes
+- **Foundation**: speak → STT → local cleanup → paste anywhere.
+- **Bridge**: agent → meaningful workflow → local notification/question →
+  spoken human response.
+- **Interface**: human voice turn → preserved intent → chosen agent session →
+  delivery receipt; agent events → local attention policy → visual or spoken
+  presentation.
+- **Ecosystem**: provider adapters expose the same session, call, response, and
+  delivery contracts without moving reasoning into `speak`.
 
 The agentic era changes what a "good dictation" is. The user speaking into a
 coding terminal is not dictating text — they are giving instructions to an agent.
-`speak` is the **input layer for the agentic era**, starting from dictation and
-growing into that role. SuperWhisper shipped coding-agent integration in April 2026.
-`speak` builds it in v0.1 — locally, free, and open. `[decision]`
+`speak` is the **local human interface for the agentic era**, starting from
+dictation and growing into bidirectional agent interaction. The experience may
+feel continuous like a local Jarvis, but the intelligence remains in connected
+agents. `[decision 2026-07-11]`
+
+### Product laws `[decision 2026-07-11]`
+
+1. No typing is required; text remains available for precision and audit.
+2. Raw speech is preserved; semantic transformations are labeled and reversible.
+3. A delivered turn has a destination and receipt; “sent” is not assumed.
+4. Agent output is semantic (`blocked`, `needsDecision`, `completed`), not an
+   unrestricted request to manipulate UI or speech.
+5. Local user policy outranks agent-supplied urgency.
+6. Dictation and focused-field paste remain the fallback when no adapter exists.
+7. Every agent-initiated microphone session is visible, bounded, and cancellable.
+8. `speak` never exposes generic shell, file, Git, browser, or screen-control tools.
 
 ---
 
@@ -342,17 +365,29 @@ Everything essential to a private, neat-writing dictation app:
 - Hotkey (double-tap/single-tap Fn + full customization).
 - Live streaming overlay.
 - Paste at cursor (write-only pasteboard + Cmd+V; AX fallback where needed).
-- 3-permission onboarding.
+- Two-permission onboarding: Microphone + Accessibility.
 - Local searchable/exportable history.
 - Settings (hotkey, language, STT engine, cleanup engine + on/off, paste mode).
 - 100% local, free, open (MIT), offline.
 - **Done when** `benchmark.md`'s v0 MATCH gate + all BEAT rows pass.
 
-### v0.1 — Language, Engine & Intelligence (6 tasks, all additive)
+### Agent Interface Foundation — next after the v0 ship gate
+
+This is the next product transformation. Its normative contract is
+`specs/agent-voice-bridge.md`; implementation order is in `roadmap.md`.
+
+- Register and identify agent sessions.
+- Accept semantic progress, completion, blocker, question, and approval workflows.
+- Persist a local Agent Call inbox.
+- Route spoken responses to the originating session.
+- Add delivery receipts, retry safety, correction, and cancellation.
+- Apply local attention policy before visual or spoken interruption.
+
+### v0.1 — Language, Engine & Intelligence (additive)
 
 | Task | Feature | Key spec |
 |------|---------|---------|
-| V01-0 | **Coding agent integration** | Detect Claude Code/terminal frontmost → "[Agent Mode]" badge; imperative prompt format; auto-submit option; configurable app list |
+| V01-0 | **Agent-aware dictation profile** | Detect configured terminal/agent surfaces → faithful imperative formatting; no assumption of direct session delivery |
 | V01-1 | WhisperKit STT | 99 langs, MIT, CoreML, guided model download, language auto-detect |
 | V01-2 | Ollama cleanup (real impl) | localhost:11434, Qwen2.5:3B default, 4 model presets, guided setup, loopback-only |
 | V01-3 | Per-app context awareness | Bundle ID → AppContext (7 classes); injects tone/casing into cleanup prompt |

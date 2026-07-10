@@ -9,6 +9,10 @@
 Verified against primary sources this session (Anthropic docs + GitHub + Apple
 Newsroom); see `specs/verification-ledger.md` for the load-bearing claims.
 
+The shipped `speak-mcp` executable is product integration, not development
+tooling. Its canonical contract is `specs/agent-voice-bridge.md`; do not infer
+product MCP design from the development servers listed below. `[decision 2026-07-11]`
+
 ---
 
 ## 1. The standing team (`.claude/agents/team/`)
