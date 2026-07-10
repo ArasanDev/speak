@@ -52,7 +52,11 @@ extension DictationController {
             SpeakLog.voiceOut.info(
                 "DictationController: cliSay — \(text.count, privacy: .public) chars, interrupt=\(interrupt, privacy: .public)"
             )
-            await self.voiceOut.speak(text, locale: self.settingsStore.language)
+            await self.agentSpeechQueue.submit(
+                text: text,
+                locale: self.settingsStore.language,
+                interrupt: interrupt
+            )
         }
     }
 
@@ -74,7 +78,7 @@ extension DictationController {
     func cliAsk(question: String, timeoutSeconds: TimeInterval) async -> CLIAskOutcome {
         // [H-2] Cut off any in-flight readback before speaking the question — mirrors
         // beginDictation()'s own "any hotkey press cuts TTS instantly" contract.
-        await voiceOut.stop()
+        await agentSpeechQueue.cancelAll()
         await voiceOut.speak(question, locale: settingsStore.language)
 
         guard icon == .idle else {

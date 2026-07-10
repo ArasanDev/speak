@@ -6,7 +6,7 @@
 [![Status: pre-release (v0 in active development)](https://img.shields.io/badge/status-pre--release-orange)](docs/progress.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Platform: macOS 26+ · Apple Silicon](https://img.shields.io/badge/platform-macOS%2026%2B%20%C2%B7%20Apple%20Silicon-lightgrey)](#build-from-source)
-[![Tests: 481 passing](https://img.shields.io/badge/tests-481%20passing-green)](docs/progress.md)
+[![Tests: 883 passing](https://img.shields.io/badge/tests-883%20passing-green)](docs/progress.md)
 [![Moat audit: 7/7](https://img.shields.io/badge/moat%20audit-7%2F7-green)](#privacy)
 
 `speak` is a menubar app. Press a hotkey, talk, stop. A live overlay streams your
@@ -218,7 +218,7 @@ brew install xcodegen swiftlint xcbeautify
 git clone https://github.com/ArasanDev/speak.git
 cd speak
 make build    # generates Speak.xcodeproj, builds Speak.app + SpeakCore.framework
-make test     # 481 tests, 0 failures
+make test     # 741 XCTest + 142 Swift Testing tests
 make lint     # SwiftLint (force-unwrap / force-cast / force-try = error)
 make verify-moat  # 7/7 structural BEAT rows (offline, no egress, MIT, no account, ...)
 make run      # launch the menubar app

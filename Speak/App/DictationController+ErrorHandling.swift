@@ -18,7 +18,7 @@ extension DictationController {
         // Pillar 2). Stop unconditionally, before the mute/session guards below, so
         // readback audio never bleeds into a fresh capture regardless of how this
         // attempt turns out. `voiceOut.stop()` is a no-op when nothing is speaking.
-        await voiceOut.stop()
+        await agentSpeechQueue.cancelAll()
         do {
             // [PE-0 wiring] Capture the frontmost app on the main actor and pass its
             // bundle id down, so the engine can resolve an app-specific profile (e.g.

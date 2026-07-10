@@ -119,7 +119,8 @@ final class DictationController: CLICommandHandler {
     /// speaks `lastTranscript` or interrupts an in-flight readback. Internal (not
     /// `private`) so the `+VoiceOut` extension can reach it, matching `lastTranscript`/
     /// `lastRawTranscript`'s visibility below.
-    let voiceOut: any SpeechSynthesizing = AppleSpeechSynthesizer()
+    let voiceOut: any SpeechSynthesizing
+    let agentSpeechQueue: AgentSpeechQueue
 
     /// The most recent finished transcript (cleaned if available, else raw). Drives the
     /// "Paste Last Transcript" menu item (Wispr's Ctrl+Cmd+V re-paste); empty until the
@@ -322,6 +323,9 @@ final class DictationController: CLICommandHandler {
     // MARK: - Init
 
     init() {
+        let speechSynthesizer = AppleSpeechSynthesizer()
+        self.voiceOut = speechSynthesizer
+        self.agentSpeechQueue = AgentSpeechQueue(synthesizer: speechSynthesizer)
         let store = SettingsStore()
         self.settingsStore = store
         self.overlayController = OverlayController(settingsStore: store)

@@ -18,6 +18,13 @@
    - Verification: full post-hardening suite ✅; focused `CaptureSessionTests` 18/18 ✅; lint 0 serious on changed files ✅; verify-moat 7/7 ✅; relocated MCP launch ✅.
    - **Live flagship proof** `[verified 2026-07-11]`: installed bridge negotiated MCP 2025-11-25, `speak_status` returned the running app's idle state + live hotkey, and `speak_notify` delivered “Speak agent bridge is ready.” through the app's VoiceOut path. Codex global MCP config now points at the stable installed bridge.
    - `[deferred — product]` queue/cooldown/per-client policy and unified structured `speak_request_input`.
+   - **AVB-4 attention queue follow-up (same loop, uncommitted):** `AgentSpeechQueue`
+     now serializes non-interrupting notifications, replaces active + pending speech
+     for urgent notifications, and discards the agent queue whenever human dictation
+     starts. Three race-aware tests pass repeatedly (3 consecutive runs, 0 failures).
+     Cooldown/deduplication, quiet policy, and per-client enablement remain `[deferred]`.
+   - Post-queue gates: build ✅ / 741 XCTest (9 documented environment skips),
+     0 failures ✅ / 142 Swift Testing pass ✅ / lint 0 serious ✅ / verify-moat 7/7 ✅.
 
 -23. **P13 DOGFOOD PASS (2026-07-10, human-verified live).** All four critical unverified items confirmed:
    - **Terminal paste-provenance prompt**: ✅ PASS — no macOS 26.4 paste-protection prompt observed; text pastes directly into Terminal without prompting.

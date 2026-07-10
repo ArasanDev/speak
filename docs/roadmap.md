@@ -37,8 +37,9 @@ surface; the native attention and voice experience is the product.
 - [~] **AVB-3 — Safe bounded input**: agent response paste suppression and stale
       transcript prevention implemented + core-tested; live MCP question/HUD/mic
       round-trip remains `[deferred — needs human verification]`.
-- [ ] **AVB-4 — Attention policy**: actor-owned speech queue, cancel/replace,
-      cooldown/deduplication, quiet policy, and per-client enablement.
+- [~] **AVB-4 — Attention policy**: actor-owned serial speech queue +
+      cancel/replace semantics implemented and tested; cooldown/deduplication,
+      quiet policy, and per-client enablement remain.
 - [ ] **AVB-5 — Unified structured input**: replace `ask`/`confirm` product use
       with `speak_request_input` outcomes (`answered`, `declined`, `cancelled`,
       `timedOut`, `busy`) and explicit choice/approval presentation.
