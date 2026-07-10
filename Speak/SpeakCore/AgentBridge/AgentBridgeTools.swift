@@ -8,6 +8,19 @@
 import Foundation
 
 public enum AgentBridgeTools {
+    /// Reused by every tool below so `sessionId` documents the same contract
+    /// everywhere. [decision: AVB-6]
+    private static let sessionIdDescription: String =
+        "Optional. The sessionId returned by speak_register_session. If present and recognized, this call " +
+        "is attributed to that session. If present but unrecognized, the call still proceeds and the " +
+        "result notes the session is unregistered. If omitted, behavior is unchanged from before session " +
+        "registration existed."
+
+    private static let sessionIdProperty: JSONValue = [
+        "type": "string",
+        "description": .string(sessionIdDescription)
+    ]
+
     public static let notifyInputSchema: JSONValue = [
         "type": "object",
         "properties": [
@@ -27,7 +40,8 @@ public enum AgentBridgeTools {
             "interrupt": [
                 "type": "boolean",
                 "description": "Replace speech already in progress. Defaults to false."
-            ]
+            ],
+            "sessionId": sessionIdProperty
         ],
         "required": ["summary"]
     ]
@@ -39,7 +53,8 @@ public enum AgentBridgeTools {
             "interrupt": [
                 "type": "boolean",
                 "description": "Cut off any speech currently playing before speaking this. Defaults to false."
-            ]
+            ],
+            "sessionId": sessionIdProperty
         ],
         "required": ["text"]
     ]
@@ -51,7 +66,8 @@ public enum AgentBridgeTools {
                 "type": "string",
                 "description": "The question to speak, then listen for the human's spoken answer."
             ],
-            "timeout": ["type": "number", "description": "Seconds to wait for a spoken answer before giving up."]
+            "timeout": ["type": "number", "description": "Seconds to wait for a spoken answer before giving up."],
+            "sessionId": sessionIdProperty
         ],
         "required": ["question"]
     ]
@@ -62,9 +78,50 @@ public enum AgentBridgeTools {
             "question": [
                 "type": "string",
                 "description": "A yes/no question to speak and listen for a deterministic yes/no/cancel answer."
-            ]
+            ],
+            "sessionId": sessionIdProperty
         ],
         "required": ["question"]
+    ]
+
+    private static let capabilitiesRequestDescription: String =
+        "Optional. Capabilities this session wants to use. The response's 'capabilities' is the subset " +
+        "speak actually supports right now — anything else is silently dropped, not rejected."
+
+    private static let reRegisterSessionIdDescription: String =
+        "Optional. Re-register an existing sessionId (updates its fields and lastSeen) instead of " +
+        "minting a new one."
+
+    /// AVB-6 (specs/agent-voice-bridge.md §7.1). `capabilities` is the caller's
+    /// requested set; the response is the intersection with what speak actually
+    /// supports this slice — unknown requested capabilities are dropped
+    /// silently, never an error (that IS the negotiation).
+    public static let registerSessionInputSchema: JSONValue = [
+        "type": "object",
+        "properties": [
+            "provider": [
+                "type": "string",
+                "description": "The agent client/provider identifier, e.g. 'codex' or 'claude-code'."
+            ],
+            "label": [
+                "type": "string",
+                "description": "A short human-readable label for this session, shown to the user."
+            ],
+            "cwd": [
+                "type": "string",
+                "description": "Optional. The agent's working directory or repository path."
+            ],
+            "capabilities": [
+                "type": "array",
+                "items": ["type": "string"],
+                "description": .string(capabilitiesRequestDescription)
+            ],
+            "sessionId": [
+                "type": "string",
+                "description": .string(reRegisterSessionIdDescription)
+            ]
+        ],
+        "required": ["provider", "label"]
     ]
 
     /// AVB-5 (specs/agent-voice-bridge.md §6). `choices` is required (and must be
@@ -104,19 +161,33 @@ public enum AgentBridgeTools {
             "spokenSummary": [
                 "type": "string",
                 "description": "What to actually speak aloud. Defaults to 'prompt' when omitted."
-            ]
+            ],
+            "sessionId": sessionIdProperty
         ],
         "required": ["requestId", "prompt", "mode"]
     ]
 
-    /// No parameters. `additionalProperties: false` is the MCP-recommended
-    /// shape for a zero-argument tool (explicitly accepts only empty objects).
+    /// `sessionId` is the one optional property — everything else stays absent
+    /// so a bare `{}` call remains valid. [decision: AVB-6]
     public static let statusInputSchema: JSONValue = [
         "type": "object",
+        "properties": [
+            "sessionId": sessionIdProperty
+        ],
         "additionalProperties": false
     ]
 
     public static let all: [MCPTool] = [
+        MCPTool(
+            name: "speak_register_session",
+            description: "Register this agent session with speak so other tool calls can be attributed " +
+                "to it, and negotiate which capabilities are available. Registration identifies a " +
+                "routable destination and grants NO access to files, screen contents, dictation history, " +
+                "or the microphone. Returns a sessionId to pass as 'sessionId' on subsequent calls — " +
+                "optional everywhere else; skipping it preserves today's behavior. Requires speak.app " +
+                "to be running.",
+            inputSchema: registerSessionInputSchema
+        ),
         MCPTool(
             name: "speak_notify",
             description: "Notify the developer with a concise local spoken summary. Use only for a final " +

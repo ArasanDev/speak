@@ -106,6 +106,12 @@ public enum CLICommand: String, Codable, Sendable {
     /// (`DictationController.cliAsk`/`cliConfirm` call `cliRequestInput` internally).
     /// [decision: AVB-5]
     case requestInput
+    /// AVB-6 (specs/agent-voice-bridge.md §7.1): register (or re-register, if
+    /// `sessionId` is already known) an `AgentSession` and negotiate
+    /// capabilities. Fast/synchronous, in-memory — handled like `.status`, not
+    /// like `.ask`/`.confirm`/`.requestInput` (no mic, no human round-trip).
+    /// [decision: AVB-6]
+    case registerSession
 }
 
 /// The JSON envelope wrapping a `CLICommand` over the wire.
@@ -147,12 +153,30 @@ public struct CLIRequest: Codable, Sendable {
     /// `requestInput`: what to actually speak aloud; defaults to `prompt` when nil.
     public let spokenSummary: String?
 
+    // MARK: - AVB-6 session fields
+
+    /// `say`/`ask`/`confirm`/`requestInput`/`status`: optional session
+    /// attribution (spec §7.1). `registerSession`: optional existing
+    /// sessionId to re-register instead of minting a new one. [decision: AVB-6]
+    public let sessionId: String?
+    /// `registerSession`: the agent client/provider identifier.
+    public let provider: String?
+    /// `registerSession`: human-readable label for the session.
+    public let label: String?
+    /// `registerSession`: the agent's working directory/repository, if known.
+    public let workingDirectory: String?
+    /// `registerSession`: capabilities the caller is requesting. The reply's
+    /// `capabilities` is the intersection with what speak supports.
+    public let requestedCapabilities: [String]?
+
     public init(cmd: CLICommand, text: String? = nil, interrupt: Bool? = nil,
                 question: String? = nil, timeout: Double? = nil,
                 requestId: String? = nil, idempotencyKey: String? = nil,
                 prompt: String? = nil, mode: RequestInputMode? = nil,
                 choices: [String]? = nil, consequence: String? = nil,
-                spokenSummary: String? = nil) {
+                spokenSummary: String? = nil, sessionId: String? = nil,
+                provider: String? = nil, label: String? = nil,
+                workingDirectory: String? = nil, requestedCapabilities: [String]? = nil) {
         self.cmd = cmd
         self.text = text
         self.interrupt = interrupt
@@ -165,6 +189,11 @@ public struct CLIRequest: Codable, Sendable {
         self.choices = choices
         self.consequence = consequence
         self.spokenSummary = spokenSummary
+        self.sessionId = sessionId
+        self.provider = provider
+        self.label = label
+        self.workingDirectory = workingDirectory
+        self.requestedCapabilities = requestedCapabilities
     }
 }
 
@@ -206,12 +235,24 @@ public struct CLIReply: Codable, Sendable {
     /// `.choice`'s `choices`. `answer` (above) carries the raw transcript text
     /// for the same case. [decision: AVB-5]
     public let choice: String?
+    /// Present in `registerSession` replies: the (possibly server-generated)
+    /// sessionId. [decision: AVB-6]
+    public let sessionId: String?
+    /// Present in `registerSession` replies: the negotiated capabilities —
+    /// the intersection of the request's `requestedCapabilities` with what
+    /// speak actually supports this slice. [decision: AVB-6]
+    public let capabilities: [String]?
+    /// Present on any reply when the request carried a `sessionId` that was
+    /// not found in the registry — the call still proceeded normally
+    /// (compatibility first). `nil` when no `sessionId` was supplied, or when
+    /// it was supplied and recognized. [decision: AVB-6]
+    public let sessionNote: String?
 
     // MARK: - Factory helpers
 
     /// Accepted-ack for start/stop/say.
-    public static func accepted() -> CLIReply {
-        CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: nil, confirmed: nil)
+    public static func accepted(sessionNote: String? = nil) -> CLIReply {
+        CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: nil, confirmed: nil, sessionNote: sessionNote)
     }
 
     /// Error reply with a human-readable reason.
@@ -220,19 +261,29 @@ public struct CLIReply: Codable, Sendable {
     }
 
     /// Status reply carrying live icon + binding.
-    public static func status(state: CLIState, binding: String) -> CLIReply {
-        CLIReply(ok: true, error: nil, state: state, binding: binding, answer: nil, confirmed: nil)
+    public static func status(state: CLIState, binding: String, sessionNote: String? = nil) -> CLIReply {
+        CLIReply(ok: true, error: nil, state: state, binding: binding, answer: nil, confirmed: nil,
+                 sessionNote: sessionNote)
     }
 
     /// `ask` reply carrying the spoken answer's transcript text.
-    public static func asked(_ answer: String) -> CLIReply {
-        CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: answer, confirmed: nil)
+    public static func asked(_ answer: String, sessionNote: String? = nil) -> CLIReply {
+        CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: answer, confirmed: nil,
+                 sessionNote: sessionNote)
     }
 
     /// `confirm` reply carrying a deterministic yes/no, or `nil` when the spoken
     /// answer didn't match a recognized yes/no/cancel phrase ("unclear"). [decision: H-3]
-    public static func confirmed(_ value: Bool?) -> CLIReply {
-        CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: nil, confirmed: value)
+    public static func confirmed(_ value: Bool?, sessionNote: String? = nil) -> CLIReply {
+        CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: nil, confirmed: value,
+                 sessionNote: sessionNote)
+    }
+
+    /// `registerSession` reply carrying the (possibly re-used) sessionId and
+    /// negotiated capabilities. [decision: AVB-6]
+    public static func registered(sessionId: String, capabilities: [String]) -> CLIReply {
+        CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: nil, confirmed: nil,
+                 sessionId: sessionId, capabilities: capabilities)
     }
 
     /// `requestInput` reply carrying one of the five canonical
@@ -240,29 +291,31 @@ public struct CLIReply: Codable, Sendable {
     /// cancelled request is a legitimate outcome, not a transport failure;
     /// `.failure(_:)` is reserved for malformed requests (bad mode, missing
     /// prompt) and internal errors. [decision: AVB-5]
-    public static func requestInputResult(_ outcome: HumanResponseOutcome) -> CLIReply {
+    public static func requestInputResult(_ outcome: HumanResponseOutcome, sessionNote: String? = nil) -> CLIReply {
         switch outcome {
         case .answered(let text, let choice):
             return CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: text,
-                             confirmed: nil, outcome: "answered", choice: choice)
+                             confirmed: nil, outcome: "answered", choice: choice, sessionNote: sessionNote)
         case .declined:
             return CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: nil,
-                             confirmed: nil, outcome: "declined", choice: nil)
+                             confirmed: nil, outcome: "declined", choice: nil, sessionNote: sessionNote)
         case .cancelled:
             return CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: nil,
-                             confirmed: nil, outcome: "cancelled", choice: nil)
+                             confirmed: nil, outcome: "cancelled", choice: nil, sessionNote: sessionNote)
         case .timedOut:
             return CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: nil,
-                             confirmed: nil, outcome: "timedOut", choice: nil)
+                             confirmed: nil, outcome: "timedOut", choice: nil, sessionNote: sessionNote)
         case .busy:
             return CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: nil,
-                             confirmed: nil, outcome: "busy", choice: nil)
+                             confirmed: nil, outcome: "busy", choice: nil, sessionNote: sessionNote)
         }
     }
 
     public init(ok: Bool, error: String?, state: CLIState?, binding: String?,
                 answer: String? = nil, confirmed: Bool? = nil,
-                outcome: String? = nil, choice: String? = nil) {
+                outcome: String? = nil, choice: String? = nil,
+                sessionId: String? = nil, capabilities: [String]? = nil,
+                sessionNote: String? = nil) {
         self.ok = ok
         self.error = error
         self.state = state
@@ -271,6 +324,9 @@ public struct CLIReply: Codable, Sendable {
         self.confirmed = confirmed
         self.outcome = outcome
         self.choice = choice
+        self.sessionId = sessionId
+        self.capabilities = capabilities
+        self.sessionNote = sessionNote
     }
 
     /// Decode a `requestInput` reply's `outcome`/`answer`/`choice` fields back

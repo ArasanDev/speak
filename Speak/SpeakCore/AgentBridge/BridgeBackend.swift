@@ -71,26 +71,98 @@ public struct BridgeUnavailable: Error, Sendable, Equatable, CustomStringConvert
     }
 }
 
-/// Backs the current five-tool catalog. `speak_notify` composes the same `say`
+/// AVB-6 (specs/agent-voice-bridge.md §7.1): wraps a tool's normal return
+/// value with an optional note attached when a caller-supplied `sessionId`
+/// was not found in the registry. The call still proceeds normally
+/// (compatibility first — enforcement is a later policy slice); this is
+/// informational only, never a failure. `nil` when no `sessionId` was
+/// supplied, or when it was supplied and recognized.
+public struct BridgeOutcome<Value: Sendable>: Sendable {
+    public let value: Value
+    public let sessionNote: String?
+
+    public init(_ value: Value, sessionNote: String? = nil) {
+        self.value = value
+        self.sessionNote = sessionNote
+    }
+
+    /// The note shown when `sessionId` was supplied but not recognized.
+    /// [decision: AVB-6]
+    public static func unregisteredSessionNote(_ sessionId: String) -> String {
+        "note: sessionId '\(sessionId)' is not a registered session (call speak_register_session first) " +
+            "— proceeded anyway."
+    }
+}
+
+/// Bundles `speak_request_input`'s arguments so `BridgeBackend.requestInput`
+/// stays under the project's function-parameter-count limit. One value type
+/// shared by `AgentBridgeServer` (constructs it from tool-call arguments),
+/// `CLIBridgeBackend` (translates it to a `CLIRequest`), and any test double.
+/// [decision: AVB-6]
+public struct RequestInputCall: Sendable {
+    public let requestId: String
+    public let idempotencyKey: String?
+    public let prompt: String
+    public let mode: RequestInputMode
+    public let choices: [String]?
+    public let timeoutSeconds: Double?
+    public let consequence: String?
+    public let spokenSummary: String?
+    public let sessionId: String?
+
+    public init(
+        requestId: String,
+        idempotencyKey: String? = nil,
+        prompt: String,
+        mode: RequestInputMode,
+        choices: [String]? = nil,
+        timeoutSeconds: Double? = nil,
+        consequence: String? = nil,
+        spokenSummary: String? = nil,
+        sessionId: String? = nil
+    ) {
+        self.requestId = requestId
+        self.idempotencyKey = idempotencyKey
+        self.prompt = prompt
+        self.mode = mode
+        self.choices = choices
+        self.timeoutSeconds = timeoutSeconds
+        self.consequence = consequence
+        self.spokenSummary = spokenSummary
+        self.sessionId = sessionId
+    }
+}
+
+/// Backs the current tool catalog. `speak_notify` composes the same `say`
 /// backend as `speak_say`. Every method reports what happened as a
 /// value (never throws) so `AgentBridgeServer` can turn "not available" into
 /// a tool execution error instead of a protocol error.
 public protocol BridgeBackend: Sendable {
-    func status() async -> BridgeStatusReport
-    func say(text: String, interrupt: Bool) async -> Result<Void, BridgeUnavailable>
-    func ask(question: String, timeoutSeconds: Double?) async -> Result<String, BridgeUnavailable>
-    func confirm(question: String) async -> Result<Bool, BridgeUnavailable>
+    func status(sessionId: String?) async -> BridgeOutcome<BridgeStatusReport>
+    func say(text: String, interrupt: Bool, sessionId: String?) async -> Result<BridgeOutcome<Void>, BridgeUnavailable>
+    func ask(
+        question: String, timeoutSeconds: Double?, sessionId: String?
+    ) async -> Result<BridgeOutcome<String>, BridgeUnavailable>
+    func confirm(question: String, sessionId: String?) async -> Result<BridgeOutcome<Bool>, BridgeUnavailable>
 
     /// AVB-5 (specs/agent-voice-bridge.md §6): `speak_request_input`. Reuses the
     /// CFMessagePort CLI IPC's new `.requestInput` command — no new transport.
+    /// Arguments are bundled into `RequestInputCall` (AVB-6) to stay under the
+    /// project's function-parameter-count limit now that `sessionId` is threaded
+    /// through as well.
     func requestInput(
-        requestId: String,
-        idempotencyKey: String?,
-        prompt: String,
-        mode: RequestInputMode,
-        choices: [String]?,
-        timeoutSeconds: Double?,
-        consequence: String?,
-        spokenSummary: String?
-    ) async -> Result<HumanResponseOutcome, BridgeUnavailable>
+        _ call: RequestInputCall
+    ) async -> Result<BridgeOutcome<HumanResponseOutcome>, BridgeUnavailable>
+
+    /// AVB-6 (specs/agent-voice-bridge.md §7.1): `speak_register_session`.
+    /// Reuses the CFMessagePort CLI IPC's new `.registerSession` command — no
+    /// new transport. Returns the negotiated capabilities alongside the
+    /// (possibly server-generated) sessionId.
+    func registerSession(
+        sessionId: String?,
+        provider: String,
+        label: String,
+        workingDirectory: String?,
+        requestedCapabilities: [String]
+    ) async -> Result<(sessionId: String, capabilities: [String]), BridgeUnavailable>
 }

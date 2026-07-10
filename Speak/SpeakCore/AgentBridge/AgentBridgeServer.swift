@@ -142,60 +142,32 @@ public actor AgentBridgeServer {
     }
 
     private func runTool(_ call: MCPToolCallRequest) async -> MCPToolCallResult {
+        // AVB-6: every tool below accepts an optional 'sessionId' — absent
+        // means "exactly today's behavior" for all of them. [decision: AVB-6]
+        let sessionId = call.arguments["sessionId"]?.stringValue
+
         switch call.name {
+        case "speak_register_session":
+            return await runRegisterSessionTool(call)
+
         case "speak_status":
-            let report = await backend.status()
-            return Self.render(report)
+            let outcome = await backend.status(sessionId: sessionId)
+            return Self.render(outcome.value, sessionNote: outcome.sessionNote)
 
         case "speak_notify":
-            guard let summary = call.arguments["summary"]?.stringValue?
-                .trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty else {
-                return .error("speak_notify requires a non-empty 'summary' argument.")
-            }
-            let kind = call.arguments["kind"]?.stringValue ?? "completion"
-            let allowedKinds = ["completion", "blocked", "warning", "requested"]
-            guard allowedKinds.contains(kind) else {
-                return .error("speak_notify 'kind' must be completion, blocked, warning, or requested.")
-            }
-            let interrupt = call.arguments["interrupt"]?.boolValue ?? false
-            switch await backend.say(text: summary, interrupt: interrupt) {
-            case .success:
-                return .text("notification accepted (kind: \(kind)).")
-            case .failure(let reason):
-                return .error(reason.description)
-            }
+            return await runNotifyTool(call, sessionId: sessionId)
 
         case "speak_say":
-            guard let text = call.arguments["text"]?.stringValue, !text.isEmpty else {
-                return .error("speak_say requires a non-empty 'text' argument.")
-            }
-            let interrupt = call.arguments["interrupt"]?.boolValue ?? false
-            switch await backend.say(text: text, interrupt: interrupt) {
-            case .success: return .text("spoken.")
-            case .failure(let reason): return .error(reason.description)
-            }
+            return await runSayTool(call, sessionId: sessionId)
 
         case "speak_ask":
-            guard let question = call.arguments["question"]?.stringValue, !question.isEmpty else {
-                return .error("speak_ask requires a non-empty 'question' argument.")
-            }
-            let timeout = call.arguments["timeout"]?.doubleValue
-            switch await backend.ask(question: question, timeoutSeconds: timeout) {
-            case .success(let answer): return .text(answer)
-            case .failure(let reason): return .error(reason.description)
-            }
+            return await runAskTool(call, sessionId: sessionId)
 
         case "speak_confirm":
-            guard let question = call.arguments["question"]?.stringValue, !question.isEmpty else {
-                return .error("speak_confirm requires a non-empty 'question' argument.")
-            }
-            switch await backend.confirm(question: question) {
-            case .success(let yes): return .text(yes ? "yes" : "no")
-            case .failure(let reason): return .error(reason.description)
-            }
+            return await runConfirmTool(call, sessionId: sessionId)
 
         case "speak_request_input":
-            return await runRequestInputTool(call)
+            return await runRequestInputTool(call, sessionId: sessionId)
 
         default:
             // Unreachable: handleToolsCall already checked membership in
@@ -204,9 +176,103 @@ public actor AgentBridgeServer {
         }
     }
 
+    private func runNotifyTool(_ call: MCPToolCallRequest, sessionId: String?) async -> MCPToolCallResult {
+        guard let summary = call.arguments["summary"]?.stringValue?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty else {
+            return .error("speak_notify requires a non-empty 'summary' argument.")
+        }
+        let kind = call.arguments["kind"]?.stringValue ?? "completion"
+        let allowedKinds = ["completion", "blocked", "warning", "requested"]
+        guard allowedKinds.contains(kind) else {
+            return .error("speak_notify 'kind' must be completion, blocked, warning, or requested.")
+        }
+        let interrupt = call.arguments["interrupt"]?.boolValue ?? false
+        switch await backend.say(text: summary, interrupt: interrupt, sessionId: sessionId) {
+        case .success(let outcome):
+            return .text(Self.appendingNote("notification accepted (kind: \(kind)).", outcome.sessionNote))
+        case .failure(let reason):
+            return .error(reason.description)
+        }
+    }
+
+    private func runSayTool(_ call: MCPToolCallRequest, sessionId: String?) async -> MCPToolCallResult {
+        guard let text = call.arguments["text"]?.stringValue, !text.isEmpty else {
+            return .error("speak_say requires a non-empty 'text' argument.")
+        }
+        let interrupt = call.arguments["interrupt"]?.boolValue ?? false
+        switch await backend.say(text: text, interrupt: interrupt, sessionId: sessionId) {
+        case .success(let outcome): return .text(Self.appendingNote("spoken.", outcome.sessionNote))
+        case .failure(let reason): return .error(reason.description)
+        }
+    }
+
+    private func runAskTool(_ call: MCPToolCallRequest, sessionId: String?) async -> MCPToolCallResult {
+        guard let question = call.arguments["question"]?.stringValue, !question.isEmpty else {
+            return .error("speak_ask requires a non-empty 'question' argument.")
+        }
+        let timeout = call.arguments["timeout"]?.doubleValue
+        switch await backend.ask(question: question, timeoutSeconds: timeout, sessionId: sessionId) {
+        case .success(let outcome): return .text(Self.appendingNote(outcome.value, outcome.sessionNote))
+        case .failure(let reason): return .error(reason.description)
+        }
+    }
+
+    private func runConfirmTool(_ call: MCPToolCallRequest, sessionId: String?) async -> MCPToolCallResult {
+        guard let question = call.arguments["question"]?.stringValue, !question.isEmpty else {
+            return .error("speak_confirm requires a non-empty 'question' argument.")
+        }
+        switch await backend.confirm(question: question, sessionId: sessionId) {
+        case .success(let outcome):
+            return .text(Self.appendingNote(outcome.value ? "yes" : "no", outcome.sessionNote))
+        case .failure(let reason): return .error(reason.description)
+        }
+    }
+
+    // MARK: - AVB-6 speak_register_session
+
+    private func runRegisterSessionTool(_ call: MCPToolCallRequest) async -> MCPToolCallResult {
+        guard let provider = call.arguments["provider"]?.stringValue, !provider.isEmpty else {
+            return .error("speak_register_session requires a non-empty 'provider' argument.")
+        }
+        guard let label = call.arguments["label"]?.stringValue, !label.isEmpty else {
+            return .error("speak_register_session requires a non-empty 'label' argument.")
+        }
+        let workingDirectory = call.arguments["cwd"]?.stringValue
+        let requestedCapabilities = call.arguments["capabilities"]?.arrayValue?.compactMap { $0.stringValue } ?? []
+        let existingSessionId = call.arguments["sessionId"]?.stringValue
+
+        let result = await backend.registerSession(
+            sessionId: existingSessionId,
+            provider: provider,
+            label: label,
+            workingDirectory: workingDirectory,
+            requestedCapabilities: requestedCapabilities
+        )
+        switch result {
+        case .success(let registration):
+            let fields: [String: JSONValue] = [
+                "sessionId": .string(registration.sessionId),
+                "capabilities": .array(registration.capabilities.map { .string($0) })
+            ]
+            let data = (try? JSONEncoder().encode(JSONValue.object(fields))) ?? Data()
+            let jsonString = String(data: data, encoding: .utf8) ?? "{}"
+            return .text(jsonString)
+        case .failure(let reason):
+            return .error(reason.description)
+        }
+    }
+
+    /// Appends an AVB-6 sessionNote to a successful tool result's text, when
+    /// present. `nil` note (no sessionId supplied, or a recognized one) leaves
+    /// the text unchanged. [decision: AVB-6]
+    private static func appendingNote(_ text: String, _ note: String?) -> String {
+        guard let note else { return text }
+        return "\(text)\n\(note)"
+    }
+
     // MARK: - AVB-5 speak_request_input
 
-    private func runRequestInputTool(_ call: MCPToolCallRequest) async -> MCPToolCallResult {
+    private func runRequestInputTool(_ call: MCPToolCallRequest, sessionId: String?) async -> MCPToolCallResult {
         guard let requestId = call.arguments["requestId"]?.stringValue, !requestId.isEmpty else {
             return .error("speak_request_input requires a non-empty 'requestId' argument.")
         }
@@ -221,7 +287,7 @@ public actor AgentBridgeServer {
             return .error("speak_request_input mode 'choice' requires a non-empty 'choices' array.")
         }
 
-        let result = await backend.requestInput(
+        let result = await backend.requestInput(RequestInputCall(
             requestId: requestId,
             idempotencyKey: call.arguments["idempotencyKey"]?.stringValue,
             prompt: prompt,
@@ -229,19 +295,20 @@ public actor AgentBridgeServer {
             choices: choices,
             timeoutSeconds: call.arguments["timeout"]?.doubleValue,
             consequence: call.arguments["consequence"]?.stringValue,
-            spokenSummary: call.arguments["spokenSummary"]?.stringValue
-        )
+            spokenSummary: call.arguments["spokenSummary"]?.stringValue,
+            sessionId: sessionId
+        ))
         switch result {
         case .success(let outcome):
             // [decision: AVB-5 — locked] In choice/approval mode, an `.answered`
             // outcome with no matched choice is an ambiguous spoken answer — a
             // tool execution error, never a false-positive success. Freeform
             // never has this ambiguity (choice is always nil by design there).
-            if mode != .freeform, case .answered(_, nil) = outcome {
+            if mode != .freeform, case .answered(_, nil) = outcome.value {
                 let expected = mode == .choice ? "any of the offered choices" : "a recognizable yes/no"
                 return .error("speak_request_input got an answer that didn't match \(expected).")
             }
-            return Self.renderRequestInput(outcome)
+            return Self.renderRequestInput(outcome.value, sessionNote: outcome.sessionNote)
         case .failure(let reason):
             return .error(reason.description)
         }
@@ -251,7 +318,7 @@ public actor AgentBridgeServer {
     /// content block `MCPContentBlock` supports (no structured-content block type
     /// exists in this hand-written MCP layer — matches the rest of this file's
     /// "no schema-generation library" posture). [decision: AVB-5]
-    private static func renderRequestInput(_ outcome: HumanResponseOutcome) -> MCPToolCallResult {
+    private static func renderRequestInput(_ outcome: HumanResponseOutcome, sessionNote: String?) -> MCPToolCallResult {
         var fields: [String: JSONValue] = [:]
         switch outcome {
         case .answered(let text, let choice):
@@ -267,18 +334,20 @@ public actor AgentBridgeServer {
         case .busy:
             fields["outcome"] = .string("busy")
         }
+        if let sessionNote { fields["sessionNote"] = .string(sessionNote) }
         let data = (try? JSONEncoder().encode(JSONValue.object(fields))) ?? Data()
         let jsonString = String(data: data, encoding: .utf8) ?? "{}"
         return .text(jsonString)
     }
 
-    private static func render(_ report: BridgeStatusReport) -> MCPToolCallResult {
+    private static func render(_ report: BridgeStatusReport, sessionNote: String?) -> MCPToolCallResult {
         guard report.appRunning else {
             return .error(report.detail ?? BridgeUnavailable.appNotRunning.reason)
         }
         var lines = ["speak is running.", "state: \(report.engineState ?? "unknown")"]
         if let binding = report.hotkeyBinding { lines.append("hotkey: \(binding)") }
         if let detail = report.detail { lines.append(detail) }
+        if let sessionNote { lines.append(sessionNote) }
         return .text(lines.joined(separator: "\n"))
     }
 

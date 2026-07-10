@@ -83,6 +83,26 @@ public protocol CLICommandHandler: AnyObject {
         consequence: String?,
         spokenSummary: String?
     ) async -> HumanResponseOutcome
+
+    // MARK: - AVB-6 (specs/agent-voice-bridge.md §7.1)
+
+    /// Update `lastSeen` for `sessionId` in the app's `AgentSessionRegistry` and
+    /// report whether it was known. Every tool that carries an optional
+    /// `sessionId` (notify/say/ask/confirm/request_input/status) routes through
+    /// this before replying so the wire can attach an "unregistered session"
+    /// note without rejecting the call. [decision: AVB-6]
+    func cliTouchSession(_ sessionId: String) async -> Bool
+
+    /// `speak_register_session`: register (or re-register, when `sessionId` is
+    /// already known) an `AgentSession` and negotiate capabilities against
+    /// `AgentSessionRegistry.supportedCapabilities`. [decision: AVB-6]
+    func cliRegisterSession(
+        sessionId: String?,
+        provider: String,
+        label: String,
+        workingDirectory: String?,
+        requestedCapabilities: [String]
+    ) async -> (sessionId: String, capabilities: [String])
 }
 
 // MARK: - H-3 async command outcomes
@@ -265,6 +285,16 @@ public final class CLIPortServer {
         if request.cmd == .requestInput {
             return CLIPortServer.encodeReply(handleRequestInput(request, handler: cmdHandler))
         }
+        if request.cmd == .registerSession {
+            return CLIPortServer.encodeReply(handleRegisterSession(request, handler: cmdHandler))
+        }
+
+        // AVB-6: resolve the optional sessionId note (if any) before the
+        // synchronous dispatch below — `cliTouchSession` is an actor call and
+        // cannot be awaited from inside `MainActor.assumeIsolated`'s closure.
+        // `nil` when the request carries no sessionId, matching "absent →
+        // exactly today's behavior." [decision: AVB-6]
+        let sessionNote = CLIPortServer.pumpedSessionNote(sessionId: request.sessionId, handler: cmdHandler)
 
         // We are on the main thread; the MainActor is available.
         // Read handler state synchronously for status; dispatch Tasks for start/stop/say.
@@ -277,7 +307,7 @@ public final class CLIPortServer {
                 let binding = cmdHandler.currentHotkeyDisplayString
                 SpeakLog.cli.info("CLIPortServer: status — state=\(state.rawValue, privacy: .public)")
                 SpeakLog.cli.info("CLIPortServer: status — binding=\(binding, privacy: .public)")
-                return .status(state: state, binding: binding)
+                return .status(state: state, binding: binding, sessionNote: sessionNote)
 
             case .start:
                 // Idempotency gate: only dispatch if idle.
@@ -322,11 +352,11 @@ public final class CLIPortServer {
                 }
                 cmdHandler.cliSay(text: text, interrupt: request.interrupt ?? false)
                 SpeakLog.cli.info("CLIPortServer: say dispatched.")
-                return .accepted()
+                return .accepted(sessionNote: sessionNote)
 
-            case .ask, .confirm, .requestInput:
+            case .ask, .confirm, .requestInput, .registerSession:
                 // Handled above, before this closure — unreachable here.
-                return .failure("internal: ask/confirm/requestInput routed incorrectly")
+                return .failure("internal: ask/confirm/requestInput/registerSession routed incorrectly")
             }
         }
 
@@ -369,6 +399,9 @@ public final class CLIPortServer {
         // A small buffer beyond the caller's timeout so the handler's own internal
         // timeout (if any) has a chance to resolve and set the box before we give up.
         let pumpCeiling = timeout + 2.0
+        // AVB-6: resolved up front so it's available regardless of which branch
+        // below returns. [decision: AVB-6]
+        let sessionNote = CLIPortServer.pumpedSessionNote(sessionId: request.sessionId, handler: handler)
 
         switch request.cmd {
         case .ask:
@@ -382,7 +415,7 @@ public final class CLIPortServer {
                 return .failure("speak_ask timed out waiting for a spoken answer")
             }
             switch outcome {
-            case .answered(let text): return .asked(text)
+            case .answered(let text): return .asked(text, sessionNote: sessionNote)
             case .timedOut: return .failure("speak_ask timed out waiting for a spoken answer")
             }
 
@@ -397,9 +430,9 @@ public final class CLIPortServer {
                 return .failure("speak_confirm timed out waiting for a spoken answer")
             }
             switch outcome {
-            case .yes: return .confirmed(true)
-            case .no: return .confirmed(false)
-            case .unclear, .cancelled: return .confirmed(nil)
+            case .yes: return .confirmed(true, sessionNote: sessionNote)
+            case .no: return .confirmed(false, sessionNote: sessionNote)
+            case .unclear, .cancelled: return .confirmed(nil, sessionNote: sessionNote)
             case .timedOut: return .failure("speak_confirm timed out waiting for a spoken answer")
             }
 
@@ -432,6 +465,7 @@ public final class CLIPortServer {
 
         let timeout = request.timeout ?? CLIContract.askConfirmDefaultTimeoutSeconds
         let pumpCeiling = timeout + 2.0
+        let sessionNote = CLIPortServer.pumpedSessionNote(sessionId: request.sessionId, handler: handler)
 
         let box = CLIPendingResultBox<HumanResponseOutcome>()
         Task { @MainActor in
@@ -449,9 +483,67 @@ public final class CLIPortServer {
         }
         guard let outcome = CLIPortServer.pumpUntilResult(timeoutSeconds: pumpCeiling, poll: box.get) else {
             SpeakLog.cli.error("CLIPortServer: requestInput pump exhausted without a result.")
-            return .requestInputResult(.timedOut)
+            return .requestInputResult(.timedOut, sessionNote: sessionNote)
         }
-        return .requestInputResult(outcome)
+        return .requestInputResult(outcome, sessionNote: sessionNote)
+    }
+
+    // MARK: - AVB-6 registerSession dispatch
+
+    /// Validate and dispatch a `registerSession` request. Bridges the actor-
+    /// isolated `AgentSessionRegistry` via the same Task-plus-pump mechanism
+    /// `handleAskOrConfirm`/`handleRequestInput` already use — registration
+    /// itself is fast/in-memory (no mic, no human round-trip, no realistic
+    /// timeout risk), but the actor hop still requires an `await`, which
+    /// cannot happen inside `MainActor.assumeIsolated`'s synchronous closure.
+    /// Reusing the existing, already-reviewed pump primitive here is
+    /// deliberate: a second bridging mechanism just for this one case would
+    /// add risk without adding safety. The main thread is never blocked
+    /// either way — this call simply resolves within the pump's first poll
+    /// slice in practice. [decision: AVB-6]
+    private func handleRegisterSession(_ request: CLIRequest, handler: any CLICommandHandler) -> CLIReply {
+        guard let provider = request.provider, !provider.isEmpty else {
+            return .failure("registerSession requires a non-empty provider")
+        }
+        guard let label = request.label, !label.isEmpty else {
+            return .failure("registerSession requires a non-empty label")
+        }
+
+        let box = CLIPendingResultBox<(sessionId: String, capabilities: [String])>()
+        Task { @MainActor in
+            let result = await handler.cliRegisterSession(
+                sessionId: request.sessionId,
+                provider: provider,
+                label: label,
+                workingDirectory: request.workingDirectory,
+                requestedCapabilities: request.requestedCapabilities ?? []
+            )
+            box.set(result)
+        }
+        guard let result = CLIPortServer.pumpUntilResult(timeoutSeconds: 5.0, poll: box.get) else {
+            SpeakLog.cli.error("CLIPortServer: registerSession pump exhausted without a result.")
+            return .failure("speak_register_session did not complete")
+        }
+        return .registered(sessionId: result.sessionId, capabilities: result.capabilities)
+    }
+
+    /// Resolve the optional "unregistered session" note for a request that
+    /// carries `sessionId`. `nil` when no `sessionId` was supplied (today's
+    /// behavior, unchanged) or when it was supplied and is a known session.
+    /// Bridges the actor-isolated `AgentSessionRegistry` the same way
+    /// `handleRegisterSession` does. [decision: AVB-6]
+    private static func pumpedSessionNote(sessionId: String?, handler: any CLICommandHandler) -> String? {
+        guard let sessionId else { return nil }
+        let box = CLIPendingResultBox<Bool>()
+        Task { @MainActor in
+            let known = await handler.cliTouchSession(sessionId)
+            box.set(known)
+        }
+        guard let known = pumpUntilResult(timeoutSeconds: 5.0, poll: box.get) else {
+            SpeakLog.cli.error("CLIPortServer: sessionId touch pump exhausted — omitting note.")
+            return nil
+        }
+        return known ? nil : BridgeOutcome<Void>.unregisteredSessionNote(sessionId)
     }
 
     /// Pump the current (main) run loop in short slices until `poll()` returns a

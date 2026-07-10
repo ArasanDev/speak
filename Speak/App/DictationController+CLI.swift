@@ -153,6 +153,40 @@ extension DictationController {
         return RequestInputExtractor.extract(transcript: lastTranscript, mode: mode, choices: choices)
     }
 
+    // MARK: - AVB-6 (specs/agent-voice-bridge.md §7.1) session registration
+
+    /// `speak_register_session`: register (or re-register, when `sessionId` is
+    /// already known) an `AgentSession` and negotiate capabilities. Fast/
+    /// in-memory — no mic, no HUD, no speech. [decision: AVB-6]
+    func cliRegisterSession(
+        sessionId: String?,
+        provider: String,
+        label: String,
+        workingDirectory: String?,
+        requestedCapabilities: [String]
+    ) async -> (sessionId: String, capabilities: [String]) {
+        let session = await agentSessionRegistry.register(
+            sessionId: sessionId,
+            provider: provider,
+            label: label,
+            workingDirectory: workingDirectory,
+            requestedCapabilities: requestedCapabilities
+        )
+        SpeakLog.cli.info(
+            "DictationController: cliRegisterSession(\(session.sessionId, privacy: .public)) — provider=\(provider, privacy: .public)."
+        )
+        return (sessionId: session.sessionId, capabilities: session.capabilities)
+    }
+
+    /// Update `lastSeen` for `sessionId` and report whether it was already
+    /// known. Every agent-bridge tool that carries an optional `sessionId`
+    /// routes through this so a call for an unrecognized session still
+    /// proceeds — the note is attached one layer up (`CLIPortServer`).
+    /// [decision: AVB-6]
+    func cliTouchSession(_ sessionId: String) async -> Bool {
+        await agentSessionRegistry.touch(sessionId: sessionId)
+    }
+
     /// `speak_ask`: speak `question`, then run one full dictation round-trip on the
     /// SAME session path `beginDictation()`/`endDictation()` (hotkey, CLI --start/
     /// --stop) uses, and return the resulting transcript.

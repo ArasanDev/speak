@@ -354,6 +354,58 @@ final class CLIContractTests: XCTestCase {
         // [decision: H-3]
         XCTAssertEqual(CLIContract.askConfirmDefaultTimeoutSeconds, 60.0)
     }
+
+    // MARK: - AVB-6 registerSession wire round-trip
+
+    func testRegisterSessionRequestEncodesAllFields() throws {
+        let req = CLIRequest(
+            cmd: .registerSession, sessionId: "existing-id", provider: "codex", label: "task-1",
+            workingDirectory: "/repo", requestedCapabilities: ["notify", "say"]
+        )
+        let data = try req.encode()
+        let decoded = try CLIRequest.decode(data)
+        XCTAssertEqual(decoded.cmd, .registerSession)
+        XCTAssertEqual(decoded.sessionId, "existing-id")
+        XCTAssertEqual(decoded.provider, "codex")
+        XCTAssertEqual(decoded.label, "task-1")
+        XCTAssertEqual(decoded.workingDirectory, "/repo")
+        XCTAssertEqual(decoded.requestedCapabilities, ["notify", "say"])
+    }
+
+    func testRegisterSessionRequestOmitsOptionalFieldsWhenAbsent() throws {
+        let req = CLIRequest(cmd: .registerSession, provider: "codex", label: "task-1")
+        let data = try req.encode()
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertNil(json?["sessionId"])
+        XCTAssertNil(json?["workingDirectory"])
+        XCTAssertNil(json?["requestedCapabilities"])
+    }
+
+    func testRegisteredReplyEncodesSessionIdAndCapabilities() throws {
+        let reply = CLIReply.registered(sessionId: "new-id", capabilities: ["notify", "status"])
+        let data = try reply.encode()
+        let decoded = try CLIReply.decode(data)
+        XCTAssertTrue(decoded.ok)
+        XCTAssertEqual(decoded.sessionId, "new-id")
+        XCTAssertEqual(decoded.capabilities, ["notify", "status"])
+    }
+
+    // MARK: - AVB-6 sessionNote plumbing
+
+    func testAcceptedCarriesOptionalSessionNote() throws {
+        let reply = CLIReply.accepted(sessionNote: "note: sessionId 'x' is not a registered session (call speak_register_session first) — proceeded anyway.")
+        let data = try reply.encode()
+        let decoded = try CLIReply.decode(data)
+        XCTAssertTrue(decoded.ok)
+        XCTAssertNotNil(decoded.sessionNote)
+    }
+
+    func testAcceptedOmitsSessionNoteWhenAbsent() throws {
+        let reply = CLIReply.accepted()
+        let data = try reply.encode()
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertNil(json?["sessionNote"])
+    }
 }
 
 // [deferred — needs human verification] The live CFMessagePort run-loop-pump
@@ -391,12 +443,13 @@ private func idempotencyDecision(command: CLICommand, icon: MenubarIcon) -> Idem
     case .status:
         return .read
 
-    case .say, .ask, .confirm, .requestInput:
-        // H-3/AVB-5: say/ask/confirm/requestInput are not gated by this idempotency
-        // table — say is always dispatched (no icon precondition); ask/confirm/
-        // requestInput are handled by the dedicated run-loop pump paths in
-        // `CLIPortServer.handleAskOrConfirm`/`handleRequestInput`, not the
-        // `.dispatch`/`.noOp`/`.read` decision this pure mirror models.
+    case .say, .ask, .confirm, .requestInput, .registerSession:
+        // H-3/AVB-5/AVB-6: say/ask/confirm/requestInput/registerSession are not gated
+        // by this idempotency table — say is always dispatched (no icon precondition);
+        // ask/confirm/requestInput/registerSession are handled by the dedicated
+        // run-loop pump paths in `CLIPortServer.handleAskOrConfirm`/
+        // `handleRequestInput`/`handleRegisterSession`, not the `.dispatch`/`.noOp`/
+        // `.read` decision this pure mirror models.
         return .read
     }
 }

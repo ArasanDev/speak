@@ -122,6 +122,13 @@ final class DictationController: CLICommandHandler {
     let voiceOut: any SpeechSynthesizing
     let agentSpeechQueue: AgentSpeechQueue
 
+    /// AVB-6 (specs/agent-voice-bridge.md §7.1): in-memory registry backing
+    /// `speak_register_session` and sessionId threading through the rest of
+    /// the agent-bridge tool surface. The TYPE lives in SpeakCore (so tests
+    /// and AVB-7 can reuse it); this instance is owned here, alongside the
+    /// rest of the CLI-handler state. [decision: AVB-6]
+    let agentSessionRegistry = AgentSessionRegistry()
+
     /// The most recent finished transcript (cleaned if available, else raw). Drives the
     /// "Paste Last Transcript" menu item (Wispr's Ctrl+Cmd+V re-paste); empty until the
     /// first dictation completes. Observed reactively so the menu enables/disables.

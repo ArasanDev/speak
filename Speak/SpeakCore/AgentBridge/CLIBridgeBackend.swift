@@ -19,46 +19,48 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
         self.transport = transport
     }
 
-    public func status() async -> BridgeStatusReport {
+    public func status(sessionId: String?) async -> BridgeOutcome<BridgeStatusReport> {
         do {
-            let reply = try transport.send(CLIRequest(cmd: .status))
+            let reply = try transport.send(CLIRequest(cmd: .status, sessionId: sessionId))
             guard reply.ok else {
-                return BridgeStatusReport(
+                return BridgeOutcome(BridgeStatusReport(
                     appRunning: true, engineState: nil, hotkeyBinding: nil,
                     detail: reply.error ?? "speak reported an error"
-                )
+                ), sessionNote: reply.sessionNote)
             }
-            return BridgeStatusReport(
+            return BridgeOutcome(BridgeStatusReport(
                 appRunning: true,
                 engineState: reply.state?.rawValue,
                 hotkeyBinding: reply.binding,
                 detail: nil
-            )
+            ), sessionNote: reply.sessionNote)
         } catch CLITransportError.portNotFound {
-            return BridgeStatusReport(
+            return BridgeOutcome(BridgeStatusReport(
                 appRunning: false, engineState: nil, hotkeyBinding: nil,
                 detail: BridgeUnavailable.appNotRunning.reason
-            )
+            ))
         } catch {
             // Any other transport failure (timeout, malformed reply) is
             // still "can't confirm the app is usable" from the agent's point
             // of view — report not-running with the diagnostic in `detail`
             // rather than surfacing a Swift error type across the MCP seam.
-            return BridgeStatusReport(
+            return BridgeOutcome(BridgeStatusReport(
                 appRunning: false, engineState: nil, hotkeyBinding: nil,
                 detail: "speak_status transport error: \(error)"
-            )
+            ))
         }
     }
 
-    public func say(text: String, interrupt: Bool) async -> Result<Void, BridgeUnavailable> {
-        let request = CLIRequest(cmd: .say, text: text, interrupt: interrupt)
+    public func say(
+        text: String, interrupt: Bool, sessionId: String?
+    ) async -> Result<BridgeOutcome<Void>, BridgeUnavailable> {
+        let request = CLIRequest(cmd: .say, text: text, interrupt: interrupt, sessionId: sessionId)
         do {
             let reply = try transport.send(request, timeoutSeconds: CLIContract.sendTimeoutSeconds)
             guard reply.ok else {
                 return .failure(BridgeUnavailable(reply.error ?? "speak_say reported an error"))
             }
-            return .success(())
+            return .success(BridgeOutcome((), sessionNote: reply.sessionNote))
         } catch CLITransportError.portNotFound {
             return .failure(.appNotRunning)
         } catch {
@@ -66,9 +68,11 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
         }
     }
 
-    public func ask(question: String, timeoutSeconds: Double?) async -> Result<String, BridgeUnavailable> {
+    public func ask(
+        question: String, timeoutSeconds: Double?, sessionId: String?
+    ) async -> Result<BridgeOutcome<String>, BridgeUnavailable> {
         let effectiveTimeout = timeoutSeconds ?? CLIContract.askConfirmDefaultTimeoutSeconds
-        let request = CLIRequest(cmd: .ask, question: question, timeout: effectiveTimeout)
+        let request = CLIRequest(cmd: .ask, question: question, timeout: effectiveTimeout, sessionId: sessionId)
         do {
             // A small buffer beyond the round-trip's own timeout so the app-side
             // reply (which itself waits up to `effectiveTimeout`) has time to arrive
@@ -80,7 +84,7 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
             guard let answer = reply.answer else {
                 return .failure(.transportError("speak_ask", "reply missing 'answer' field"))
             }
-            return .success(answer)
+            return .success(BridgeOutcome(answer, sessionNote: reply.sessionNote))
         } catch CLITransportError.portNotFound {
             return .failure(.appNotRunning)
         } catch CLITransportError.timeout {
@@ -90,9 +94,9 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
         }
     }
 
-    public func confirm(question: String) async -> Result<Bool, BridgeUnavailable> {
+    public func confirm(question: String, sessionId: String?) async -> Result<BridgeOutcome<Bool>, BridgeUnavailable> {
         let effectiveTimeout = CLIContract.askConfirmDefaultTimeoutSeconds
-        let request = CLIRequest(cmd: .confirm, question: question, timeout: effectiveTimeout)
+        let request = CLIRequest(cmd: .confirm, question: question, timeout: effectiveTimeout, sessionId: sessionId)
         do {
             let reply = try transport.send(request, timeoutSeconds: effectiveTimeout + 5)
             guard reply.ok else {
@@ -102,7 +106,7 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
                 // ok == true but confirmed == nil: the spoken answer was unclear/cancel.
                 return .failure(.unclearAnswer("speak_confirm"))
             }
-            return .success(confirmedValue)
+            return .success(BridgeOutcome(confirmedValue, sessionNote: reply.sessionNote))
         } catch CLITransportError.portNotFound {
             return .failure(.appNotRunning)
         } catch CLITransportError.timeout {
@@ -115,26 +119,20 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
     // MARK: - AVB-5 requestInput
 
     public func requestInput(
-        requestId: String,
-        idempotencyKey: String?,
-        prompt: String,
-        mode: RequestInputMode,
-        choices: [String]?,
-        timeoutSeconds: Double?,
-        consequence: String?,
-        spokenSummary: String?
-    ) async -> Result<HumanResponseOutcome, BridgeUnavailable> {
-        let effectiveTimeout = timeoutSeconds ?? CLIContract.askConfirmDefaultTimeoutSeconds
+        _ call: RequestInputCall
+    ) async -> Result<BridgeOutcome<HumanResponseOutcome>, BridgeUnavailable> {
+        let effectiveTimeout = call.timeoutSeconds ?? CLIContract.askConfirmDefaultTimeoutSeconds
         let request = CLIRequest(
             cmd: .requestInput,
             timeout: effectiveTimeout,
-            requestId: requestId,
-            idempotencyKey: idempotencyKey,
-            prompt: prompt,
-            mode: mode,
-            choices: choices,
-            consequence: consequence,
-            spokenSummary: spokenSummary
+            requestId: call.requestId,
+            idempotencyKey: call.idempotencyKey,
+            prompt: call.prompt,
+            mode: call.mode,
+            choices: call.choices,
+            consequence: call.consequence,
+            spokenSummary: call.spokenSummary,
+            sessionId: call.sessionId
         )
         do {
             // Same buffer rationale as `ask`/`confirm` above: the app-side reply
@@ -146,13 +144,46 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
             guard let outcome = reply.decodedHumanResponseOutcome() else {
                 return .failure(.transportError("speak_request_input", "reply missing/invalid 'outcome' field"))
             }
-            return .success(outcome)
+            return .success(BridgeOutcome(outcome, sessionNote: reply.sessionNote))
         } catch CLITransportError.portNotFound {
             return .failure(.appNotRunning)
         } catch CLITransportError.timeout {
             return .failure(.timedOut("speak_request_input"))
         } catch {
             return .failure(.transportError("speak_request_input", String(describing: error)))
+        }
+    }
+
+    // MARK: - AVB-6 registerSession
+
+    public func registerSession(
+        sessionId: String?,
+        provider: String,
+        label: String,
+        workingDirectory: String?,
+        requestedCapabilities: [String]
+    ) async -> Result<(sessionId: String, capabilities: [String]), BridgeUnavailable> {
+        let request = CLIRequest(
+            cmd: .registerSession,
+            sessionId: sessionId,
+            provider: provider,
+            label: label,
+            workingDirectory: workingDirectory,
+            requestedCapabilities: requestedCapabilities
+        )
+        do {
+            let reply = try transport.send(request, timeoutSeconds: CLIContract.sendTimeoutSeconds)
+            guard reply.ok else {
+                return .failure(BridgeUnavailable(reply.error ?? "speak_register_session reported an error"))
+            }
+            guard let registeredId = reply.sessionId else {
+                return .failure(.transportError("speak_register_session", "reply missing 'sessionId' field"))
+            }
+            return .success((sessionId: registeredId, capabilities: reply.capabilities ?? []))
+        } catch CLITransportError.portNotFound {
+            return .failure(.appNotRunning)
+        } catch {
+            return .failure(.transportError("speak_register_session", String(describing: error)))
         }
     }
 }
