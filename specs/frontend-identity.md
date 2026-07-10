@@ -120,6 +120,42 @@ provider returning 0.
   dogfooded; zero regression for existing users). Toggle in Settings and in
   the menubar menu.
 
+### Animation soul (research-informed amendment, 2026-07-11)
+
+Findings from the Codex Pets record, Clippy post-mortems, and desktop-pet /
+ambient-display research (three-agent sweep; sources in the research reports):
+
+1. **Never interrupt — presence only.** Clippy died of interruption and false
+   agency (Reeves, Cooper), not of having a face. Pip therefore never
+   overlays, never pops, never speaks uninvited; the `attention` knock is
+   peripheral and rate-limited (≥6s), and everything else is glanceable state.
+2. **Bars behave like a face; anatomy stays abstract.** Research: people
+   build "rich imaginative narratives from minimal stimuli" when they
+   perceive agency, and "unrealistic, cute avatars work better than
+   human-like ones" (Lawhead). So Pip earns character through *behavior*:
+   - **blink**: all five bars dip in unison for ~120ms at irregular
+     30–90s intervals while `idle` (life, not information — the ONE licensed
+     exception to the signal-only rule, because liveliness IS the signal
+     that speak is running);
+   - **sleep**: `dormant` bars settle into the flat line with a barely
+     visible 6s breath — closed eyes, functionally honest;
+   - **perk-up**: on capture-start, a 100ms anticipation dip *then* the jump
+     to live levels (Disney "anticipation" — the principle that survives at
+     this scale, per the tiny-canvas findings).
+3. **Readability at 56×36pt beats richness.** At pet scale the principles
+   that matter are Appeal, Anticipation, Timing, Secondary Action;
+   squash/stretch is imperceptible. The tally dot is the secondary action —
+   it corroborates the bars, never contradicts them. Silhouette (capsule +
+   bar heights) must read every state at a glance from peripheral vision.
+4. **Codex Pets' state triad maps to our bridge lifecycle** (running /
+   waiting-for-input / complete ↔ `agentWorking` / `attention` /
+   `delivered` flash) — validation that pet-as-agent-status is a proven
+   pattern. Their "click opens chat with the agent" is Pip's destiny once
+   voice-turn delivery (bridge spec §7.4) lands; for now click = dictate.
+5. **Off by default is the shipped norm** (Codex Pets ship opt-in too) and
+   the calm-technology metric applies: Pip succeeds if it *reduces*
+   app-polling and interruptions, never by engagement time.
+
 ### What Pip must never do
 - Open the mic by itself (only the human's click/hotkey does — spec §8).
 - Animate for marketing reasons (see motion charter).
