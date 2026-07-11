@@ -91,6 +91,18 @@ extension DictationController {
             return .busy
         }
 
+        // AVB-7 (specs/avb7-durable-calls-design.md): thin adapter side effect —
+        // durably record + immediately present this call so it's visible in the
+        // inbox while the round-trip is in flight, without changing latency or
+        // observable behavior. `sessionId: nil`, `expiresAt: nil` (this call
+        // resolves within its own call stack below — never lingers). Best-effort:
+        // any failure here is logged and swallowed, never surfaces to the caller
+        // or changes the returned outcome — existing AVB-5 behavior is unchanged.
+        let durableCallId = await recordDurableCallSubmission(
+            requestId: requestId, idempotencyKey: idempotencyKey, prompt: prompt, mode: mode,
+            choices: choices, consequence: consequence, spokenSummary: spokenSummary
+        )
+
         await agentSpeechQueue.cancelAll()
         await voiceOut.speak(spokenSummary ?? prompt, locale: settingsStore.language)
 
@@ -100,6 +112,7 @@ extension DictationController {
             SpeakLog.engine.info(
                 "DictationController: cliRequestInput(\(requestId, privacy: .public)) refused — busy after speaking."
             )
+            await resolveDurableCall(durableCallId, outcome: .busy)
             return .busy
         }
 
@@ -120,6 +133,7 @@ extension DictationController {
                 "DictationController: cliRequestInput(\(requestId, privacy: .public)) — beginDictation did not start (\(String(describing: refusal), privacy: .public))."
             )
             lastTranscript = previousTranscript
+            await resolveDurableCall(durableCallId, outcome: refusal)
             return refusal
         }
 
@@ -147,10 +161,73 @@ extension DictationController {
 
         guard !lastTranscript.isEmpty else {
             lastTranscript = previousTranscript
-            return RequestInputExtractor.outcomeForEmptyTranscript(reachedDeadline: reachedDeadline)
+            let outcome = RequestInputExtractor.outcomeForEmptyTranscript(reachedDeadline: reachedDeadline)
+            await resolveDurableCall(durableCallId, outcome: outcome)
+            return outcome
         }
 
-        return RequestInputExtractor.extract(transcript: lastTranscript, mode: mode, choices: choices)
+        let outcome = RequestInputExtractor.extract(transcript: lastTranscript, mode: mode, choices: choices)
+        await resolveDurableCall(durableCallId, outcome: outcome)
+        return outcome
+    }
+
+    // MARK: - AVB-7 request_input durable side effect
+
+    /// Submit + immediately present the durable `AgentCall` backing this
+    /// `speak_request_input` round-trip. Best-effort: failures are logged and
+    /// swallowed — `cliRequestInput`'s returned `HumanResponseOutcome` is never
+    /// affected. Returns `nil` when the write failed (or a race produced a
+    /// duplicate with no usable id), in which case `resolveDurableCall` below
+    /// is also a no-op. [decision: AVB-7]
+    private func recordDurableCallSubmission(
+        requestId: String, idempotencyKey: String?, prompt: String, mode: RequestInputMode,
+        choices: [String], consequence: String?, spokenSummary: String?
+    ) async -> UUID? {
+        do {
+            let result = try await agentCallStore.submit(AgentCallSubmission(
+                sessionId: nil, requestId: requestId, idempotencyKey: idempotencyKey, prompt: prompt,
+                mode: mode, choices: choices, consequence: consequence, spokenSummary: spokenSummary,
+                urgency: .normal, expiresAt: nil
+            ))
+            let callId: UUID
+            switch result {
+            case .created(let call):
+                callId = call.id
+            case .duplicateSubmission(let existingCallId):
+                // Rare: two request_input calls in-flight with the same
+                // (nil-session, idempotencyKey) pair. AVB-5's busy check
+                // already governs the actual capture; this only affects
+                // inbox bookkeeping, so recording against the existing row
+                // is fine — it does not get a second `markPresented`/`resolve`
+                // from THIS call stack (that would race the other one's), so
+                // skip presenting/resolving here and let the original caller
+                // own its own lifecycle.
+                SpeakLog.storage.info(
+                    "DictationController: durable requestInput submission was a duplicate of \(existingCallId.uuidString, privacy: .private) — skipping presentation."
+                )
+                return nil
+            }
+            try await agentCallStore.markPresented(id: callId)
+            return callId
+        } catch {
+            SpeakLog.storage.error(
+                "DictationController: durable requestInput submission failed — \(error.localizedDescription, privacy: .public)"
+            )
+            return nil
+        }
+    }
+
+    /// Resolve the durable `AgentCall` (if one was successfully recorded) with
+    /// the round-trip's outcome. Best-effort: failures are logged, never thrown.
+    private func resolveDurableCall(_ callId: UUID?, outcome: HumanResponseOutcome) async {
+        guard let callId else { return }
+        do {
+            try await agentCallStore.resolve(id: callId, outcome: outcome)
+        } catch {
+            SpeakLog.storage.error(
+                "DictationController: durable requestInput resolve failed — \(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 
     // MARK: - AVB-6 (specs/agent-voice-bridge.md §7.1) session registration
@@ -185,6 +262,141 @@ extension DictationController {
     /// [decision: AVB-6]
     func cliTouchSession(_ sessionId: String) async -> Bool {
         await agentSessionRegistry.touch(sessionId: sessionId)
+    }
+
+    // MARK: - AVB-7 (specs/avb7-durable-calls-design.md) durable calls
+
+    /// `speak_submit_call`: durably record a new `AgentCall`. Requires a known,
+    /// registered `sessionId` — the registry lives only in this (app) process,
+    /// so this check must happen here, never on the MCP side. [decision: AVB-7]
+    func cliSubmitCall(_ args: SubmitCallArguments) async -> CLISubmitCallOutcome {
+        guard let sessionId = args.sessionId, await agentSessionRegistry.isKnown(sessionId: sessionId) else {
+            SpeakLog.cli.info("DictationController: cliSubmitCall refused — unregistered session.")
+            return .unregistered
+        }
+        let expiresAt = Date().addingTimeInterval(args.expiresInSeconds)
+        do {
+            let result = try await agentCallStore.submit(AgentCallSubmission(
+                sessionId: sessionId, requestId: args.requestId, idempotencyKey: args.idempotencyKey,
+                prompt: args.prompt, mode: args.mode, choices: args.choices, consequence: args.consequence,
+                spokenSummary: args.spokenSummary, urgency: args.urgency, expiresAt: expiresAt
+            ))
+            switch result {
+            case .created(let call):
+                return .created(call)
+            case .duplicateSubmission(let existingCallId):
+                // The store's protocol only hands back the id — fetch the full
+                // call here so the wire reply needs no second round-trip.
+                guard let existing = try await agentCallStore.get(id: existingCallId, requestingSessionId: sessionId) else {
+                    // Practically unreachable: the row we just collided with must
+                    // exist for this sessionId.
+                    SpeakLog.storage.error("DictationController: cliSubmitCall duplicate lookup found no row.")
+                    return .internalError("duplicate call record not found")
+                }
+                return .duplicate(existing)
+            }
+        } catch {
+            SpeakLog.storage.error(
+                "DictationController: cliSubmitCall failed — \(error.localizedDescription, privacy: .public)"
+            )
+            return .internalError(error.localizedDescription)
+        }
+    }
+
+    /// AVB-7 inbox UI "Answer by voice" row action. Routes through the SAME
+    /// capture path `cliRequestInput` uses (`beginDictation()`/`endDictation()`,
+    /// `RequestInputExtractor`) — never a second, parallel mic path. Unlike
+    /// `cliRequestInput`, this does NOT submit a new `AgentCall` (the row's call
+    /// already exists, already `.presented`) — it only runs the round-trip and
+    /// resolves the SAME call id. A `.collided` start surfaces as `.busy` here
+    /// (never a silent no-op) so the inbox can show "capture busy" rather than
+    /// nothing happening. [decision: AVB-7]
+    ///
+    /// [decision: AVB-7 — accepted duplication] This mirrors the round-trip body
+    /// of `cliRequestInput` below rather than sharing a private helper; the two
+    /// differ only in which durable-store calls bracket the round-trip
+    /// (submit+present+resolve vs. resolve-only), and factoring that out is left
+    /// to a follow-up rather than risking `cliRequestInput`'s already-reviewed
+    /// AVB-5 behavior in this slice.
+    func answerAgentCallByVoice(_ call: AgentCall) async -> HumanResponseOutcome {
+        guard !RequestInputExtractor.isBusy(icon: icon) else {
+            SpeakLog.engine.info("DictationController: answerAgentCallByVoice(\(call.id.uuidString, privacy: .private)) refused — busy.")
+            return .busy
+        }
+
+        await agentSpeechQueue.cancelAll()
+        await voiceOut.speak(call.spokenSummary ?? call.prompt, locale: settingsStore.language)
+
+        guard !RequestInputExtractor.isBusy(icon: icon) else {
+            await resolveDurableCall(call.id, outcome: .busy)
+            return .busy
+        }
+
+        let previousTranscript = lastTranscript
+        lastTranscript = ""
+        if let refusal = await beginDictation().requestInputRefusal {
+            lastTranscript = previousTranscript
+            await resolveDurableCall(call.id, outcome: refusal)
+            return refusal
+        }
+
+        await engine.suppressPasteForAgentResponse()
+
+        let defaultAnswerTimeout: TimeInterval = 60
+        let deadline = Date().addingTimeInterval(defaultAnswerTimeout)
+        let pollNanoseconds: UInt64 = 100_000_000
+        while Date() < deadline, [.listening, .processing].contains(icon) {
+            try? await Task.sleep(nanoseconds: pollNanoseconds)
+        }
+        let reachedDeadline = Date() >= deadline
+
+        if icon == .listening {
+            await endDictation()
+        } else {
+            while icon == .processing {
+                try? await Task.sleep(nanoseconds: pollNanoseconds)
+            }
+        }
+
+        let outcome: HumanResponseOutcome
+        if lastTranscript.isEmpty {
+            lastTranscript = previousTranscript
+            outcome = RequestInputExtractor.outcomeForEmptyTranscript(reachedDeadline: reachedDeadline)
+        } else {
+            outcome = RequestInputExtractor.extract(transcript: lastTranscript, mode: call.mode, choices: call.choices)
+        }
+        await resolveDurableCall(call.id, outcome: outcome)
+        return outcome
+    }
+
+    /// AVB-7 inbox UI "Decline"/"Dismiss" row actions — no mic. `decline` maps to
+    /// `HumanResponseOutcome.declined`; `dismiss` maps to `.cancelled` (the
+    /// human explicitly chose not to engage, same terminal bucket as an
+    /// Escape-cancelled capture). [decision: AVB-7]
+    func declineAgentCall(_ callId: UUID) async {
+        await resolveDurableCall(callId, outcome: .declined)
+    }
+
+    func dismissAgentCall(_ callId: UUID) async {
+        await resolveDurableCall(callId, outcome: .cancelled)
+    }
+
+    /// `speak_get_call`: read-only poll. Requires a known, registered
+    /// `sessionId` — same reasoning as `cliSubmitCall`. [decision: AVB-7]
+    func cliGetCall(sessionId: String?, callId: UUID) async -> CLIGetCallOutcome {
+        guard let sessionId, await agentSessionRegistry.isKnown(sessionId: sessionId) else {
+            SpeakLog.cli.info("DictationController: cliGetCall refused — unregistered session.")
+            return .unregistered
+        }
+        do {
+            let call = try await agentCallStore.get(id: callId, requestingSessionId: sessionId)
+            return .call(call)
+        } catch {
+            SpeakLog.storage.error(
+                "DictationController: cliGetCall failed — \(error.localizedDescription, privacy: .public)"
+            )
+            return .call(nil)
+        }
     }
 
     /// `speak_ask`: speak `question`, then run one full dictation round-trip on the

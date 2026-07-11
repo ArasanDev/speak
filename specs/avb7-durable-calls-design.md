@@ -18,13 +18,22 @@ identity/ownership. Reuses AVB-5's `HumanResponseOutcome`, `RequestInputMode`,
    presented → terminal), queried by state for the inbox badge, and have their own retention
    (expiry) unrelated to dictation history retention. Coupling them would leak agent-call
    churn into the user-facing History pane's semantics.
-3. **Submit and poll are both fire-and-return DB operations — no run-loop pump.** Why:
-   `CLIPortServer`'s pump (`pumpUntilResult`, CLIPortServer.swift:457) already carries a
+3. **Submit and poll are fire-and-return DB operations — never a LONG-HELD run-loop pump.**
+   Why: `CLIPortServer`'s pump (`pumpUntilResult`, CLIPortServer.swift:457) already carries a
    documented orphaned-`Task` risk when its ceiling elapses before the awaited work finishes;
    the port is a single synchronous callback on the main run loop, so holding a pump open for
    a long-poll would block every other CLI command (including another agent's `--status` or
    `speak_get_call`) for the duration. Submit and get are synchronous actor reads/writes with
-   no waiting, so neither needs a pump at all.
+   no waiting on speech — but the actor hop still requires an `await`, which cannot happen
+   inside `MainActor.assumeIsolated`'s synchronous closure. As shipped, `CLIPortServer
+   .handleSubmitCall`/`handleGetCall` bridge that hop through the SAME short-held Task+pump
+   primitive `handleRegisterSession` already uses (a per-call `NSLock`'d `CLIPendingResultBox`
+   result box, 5 s hard ceiling): the `Task` resolves within the pump's first ~20 ms poll slice
+   in practice, since nothing in either path waits on a human. This is the same primitive
+   AVB-6 introduced, reused exactly as designed — not a second bridging mechanism, and not the
+   long-poll Concurrency Hazard 5 (below) warns against. [decision: AVB-7 orchestrator
+   amendment 2 — text corrected 2026-07-11 to match shipped code, which was correct from the
+   start; only this doc's wording undersold the (intentional) pump reuse]
 4. **`speak_request_input` keeps its existing synchronous dictation round-trip** (pump
    included) but now durably records the call as a side effect, satisfying "thin adapter over
    the durable path" without touching its latency or tested behavior. New durable calls
@@ -298,9 +307,14 @@ never authority" by construction, not by convention.
 4. **Two code paths must never resolve the same call.** `speak_submit_call` calls only resolve
    via the inbox UI; `speak_request_input` calls only resolve via their own synchronous pump —
    no shared resolution path, so no future change can wire one onto the other's id space.
-5. **Orphaned-Task risk avoided structurally, not mitigated** — Decision 3 means neither new
-   tool spawns a `Task` awaited via `pumpUntilResult`. A future genuine long-poll must not reuse
-   that pump; it needs its own bounded, cancellable mechanism off the single-threaded callback.
+5. **Orphaned-Task risk bounded, not eliminated — by construction, both new tools resolve
+   before the ceiling in practice.** Decision 3 means both new tools DO spawn a `Task` awaited
+   via the short-held pump (same primitive as `handleRegisterSession`), but neither one ever
+   waits on speech — the actor call resolves in the first poll slice, so the pump's 5 s ceiling
+   is a safety margin, never the expected path. A future GENUINE long-poll (one that waits on
+   a human or an external event) must not reuse this pump; it needs its own bounded,
+   cancellable mechanism off the single-threaded callback — that risk is what stays avoided
+   structurally, not the pump's use here.
 
 ## Test plan (invariants a test must lock)
 
@@ -313,6 +327,16 @@ never authority" by construction, not by convention.
   matching session; a `nil`-session call is only visible to a `nil`-session requester.
 - Recovery: a `pending` row with a past `expiresAt`, after reopen + `expireOverdue(now:)`,
   becomes `.expired`; a row with a future `expiresAt` is untouched.
+- Lazy expiry (corrected 2026-07-11 — the always-running-app case the startup sweep alone
+  misses): `get(id:requestingSessionId:)` and `pendingAndPresented()` each run the same CAS
+  expiry sweep before reading, so a call whose `expiresAt` passes mid-session (no restart)
+  is seen as `.expired` on the very next read, never immortal. A `resolve()` racing that lazy
+  sweep resolves to exactly one terminal state, same CAS guarantee as the explicit-sweep race.
+- Nil-session idempotency dedup: two `speak_request_input`-shaped submissions (`sessionId:
+  nil`) with the SAME `idempotencyKey` collide (`.duplicateSubmission`), not just two with a
+  shared non-nil `sessionId` — SQL NULL-distinctness means a naive `sessionId IS NULL` column
+  value defeats the partial unique index; the store maps `nil` to a fixed sentinel string
+  internally (public types unchanged) so the index actually fires.
 - `speak_request_input` adapter parity: all existing AVB-5 outcome/timeout/cancel/schema tests
   pass unmodified — the durable side effect must not change observable tool behavior.
 - Schema: opening a fresh DB creates the table; opening an already-migrated DB twice is a no-op.

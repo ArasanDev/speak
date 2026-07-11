@@ -133,6 +133,55 @@ public struct RequestInputCall: Sendable {
     }
 }
 
+/// Bundles `speak_submit_call`'s arguments so `BridgeBackend.submitCall` stays
+/// under the project's function-parameter-count limit, mirroring
+/// `RequestInputCall`. [decision: AVB-7]
+public struct SubmitCallArguments: Sendable {
+    public let requestId: String
+    public let idempotencyKey: String?
+    public let prompt: String
+    public let mode: RequestInputMode
+    public let choices: [String]
+    public let consequence: String?
+    public let spokenSummary: String?
+    public let urgency: AgentCallUrgency
+    /// Always concrete by the time this reaches `BridgeBackend` — the MCP tool
+    /// layer (`AgentBridgeServer`) applies `AgentCallDefaults.defaultExpirySeconds`
+    /// when the caller omits it. [decision: AVB-7 orchestrator amendment 1]
+    public let expiresInSeconds: Double
+    public let sessionId: String?
+
+    public init(
+        requestId: String, idempotencyKey: String? = nil, prompt: String, mode: RequestInputMode,
+        choices: [String] = [], consequence: String? = nil, spokenSummary: String? = nil,
+        urgency: AgentCallUrgency = .normal, expiresInSeconds: Double, sessionId: String? = nil
+    ) {
+        self.requestId = requestId
+        self.idempotencyKey = idempotencyKey
+        self.prompt = prompt
+        self.mode = mode
+        self.choices = choices
+        self.consequence = consequence
+        self.spokenSummary = spokenSummary
+        self.urgency = urgency
+        self.expiresInSeconds = expiresInSeconds
+        self.sessionId = sessionId
+    }
+}
+
+/// `speak_submit_call`'s success payload — the created (or, on a duplicate
+/// submission, existing) `AgentCall`, plus whether it was a duplicate.
+/// [decision: AVB-7]
+public struct AgentCallSubmitOutcome: Sendable, Equatable {
+    public let call: AgentCall
+    public let duplicate: Bool
+
+    public init(call: AgentCall, duplicate: Bool) {
+        self.call = call
+        self.duplicate = duplicate
+    }
+}
+
 /// Backs the current tool catalog. `speak_notify` composes the same `say`
 /// backend as `speak_say`. Every method reports what happened as a
 /// value (never throws) so `AgentBridgeServer` can turn "not available" into
@@ -165,4 +214,15 @@ public protocol BridgeBackend: Sendable {
         workingDirectory: String?,
         requestedCapabilities: [String]
     ) async -> Result<(sessionId: String, capabilities: [String]), BridgeUnavailable>
+
+    // MARK: - AVB-7 (specs/avb7-durable-calls-design.md) durable calls
+
+    /// `speak_submit_call`. No mic, no pump — a fast durable write. Fails with
+    /// `BridgeUnavailable` when the caller has no registered session (never
+    /// silently proceeds, unlike the advisory `sessionNote` other tools attach).
+    func submitCall(_ args: SubmitCallArguments) async -> Result<BridgeOutcome<AgentCallSubmitOutcome>, BridgeUnavailable>
+
+    /// `speak_get_call`. `nil` inside the outcome means "not found or not yours"
+    /// — isolation, never an error. [decision: AVB-7]
+    func getCall(callId: UUID, sessionId: String?) async -> Result<BridgeOutcome<AgentCall?>, BridgeUnavailable>
 }

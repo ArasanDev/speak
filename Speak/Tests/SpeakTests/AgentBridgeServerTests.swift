@@ -17,13 +17,17 @@ import Testing
 /// A configurable `BridgeBackend` for exercising `AgentBridgeServer` without
 /// any real transport — the seam pattern used throughout SpeakCore
 /// (MockCleaner-equivalent for the AgentBridge layer).
-private final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
+/// `internal` (not `private`) so `AgentBridgeServerAVB7Tests.swift` (split out
+/// for [lint] type_body_length) can reuse it. [decision: AVB-7]
+final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
     var statusResult: BridgeStatusReport
     var sayResult: Result<Void, BridgeUnavailable>
     var askResult: Result<String, BridgeUnavailable>
     var confirmResult: Result<Bool, BridgeUnavailable>
     var requestInputResult: Result<HumanResponseOutcome, BridgeUnavailable>
     var registerSessionResult: Result<(sessionId: String, capabilities: [String]), BridgeUnavailable>
+    var submitCallResult: Result<AgentCallSubmitOutcome, BridgeUnavailable>
+    var getCallResult: Result<AgentCall?, BridgeUnavailable>
     /// Set to make the corresponding tool call's `BridgeOutcome.sessionNote` non-nil.
     var sessionNote: String?
     private(set) var lastSaidText: String?
@@ -34,6 +38,8 @@ private final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
     private(set) var lastRegisterProvider: String?
     private(set) var lastRegisterLabel: String?
     private(set) var lastRegisterCapabilities: [String]?
+    private(set) var lastSubmitCallArgs: SubmitCallArguments?
+    private(set) var lastGetCallId: UUID?
 
     init(
         status: BridgeStatusReport = BridgeStatusReport(
@@ -45,6 +51,8 @@ private final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
         requestInput: Result<HumanResponseOutcome, BridgeUnavailable> = .success(.answered(text: "blue", choice: nil)),
         registerSession: Result<(sessionId: String, capabilities: [String]), BridgeUnavailable> =
             .success((sessionId: "generated-id", capabilities: ["notify", "say"])),
+        submitCall: Result<AgentCallSubmitOutcome, BridgeUnavailable>? = nil,
+        getCall: Result<AgentCall?, BridgeUnavailable> = .success(nil),
         sessionNote: String? = nil
     ) {
         self.statusResult = status
@@ -53,6 +61,17 @@ private final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
         self.confirmResult = confirm
         self.requestInputResult = requestInput
         self.registerSessionResult = registerSession
+        self.submitCallResult = submitCall ?? .success(
+            AgentCallSubmitOutcome(
+                call: AgentCall(
+                    id: UUID(), sessionId: "s1", requestId: "r1", idempotencyKey: nil, prompt: "p",
+                    mode: .freeform, choices: [], consequence: nil, spokenSummary: nil, urgency: .normal,
+                    state: .pending, createdAt: Date(), expiresAt: Date().addingTimeInterval(86_400)
+                ),
+                duplicate: false
+            )
+        )
+        self.getCallResult = getCall
         self.sessionNote = sessionNote
     }
 
@@ -98,6 +117,18 @@ private final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
         lastRegisterLabel = label
         lastRegisterCapabilities = requestedCapabilities
         return registerSessionResult
+    }
+
+    func submitCall(_ args: SubmitCallArguments) async -> Result<BridgeOutcome<AgentCallSubmitOutcome>, BridgeUnavailable> {
+        lastSubmitCallArgs = args
+        lastSessionId = args.sessionId
+        return submitCallResult.map { BridgeOutcome($0, sessionNote: sessionNote) }
+    }
+
+    func getCall(callId: UUID, sessionId: String?) async -> Result<BridgeOutcome<AgentCall?>, BridgeUnavailable> {
+        lastGetCallId = callId
+        lastSessionId = sessionId
+        return getCallResult.map { BridgeOutcome($0, sessionNote: sessionNote) }
     }
 }
 
@@ -292,7 +323,7 @@ struct AgentBridgeServerToolsListTests {
         let names = Set(tools.compactMap { $0.objectValue?["name"]?.stringValue })
         #expect(names == [
             "speak_register_session", "speak_notify", "speak_say", "speak_ask", "speak_confirm",
-            "speak_request_input", "speak_status"
+            "speak_request_input", "speak_status", "speak_submit_call", "speak_get_call"
         ])
     }
 

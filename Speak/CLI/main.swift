@@ -120,14 +120,14 @@ case .start:
 case .stop:
     emit("stop command accepted by speak.")
 
-case .say, .ask, .confirm, .requestInput, .registerSession:
-    // H-3/AVB-5/AVB-6: the `speak` CLI tool's flag parser above only recognizes
-    // --start/--stop/--status — say/ask/confirm/requestInput/registerSession are
-    // reached exclusively via the MCP agent-bridge tool layer (Speak/MCP/main.swift →
-    // AgentBridgeServer → CLIBridgeBackend), which builds its own CLIRequest and
-    // does not go through this switch. Unreachable from this binary; present
-    // only for the compiler's exhaustiveness check on the shared `CLICommand`
-    // enum. [decision: H-3]
+case .say, .ask, .confirm, .requestInput, .registerSession, .submitCall, .getCall:
+    // H-3/AVB-5/AVB-6/AVB-7: the `speak` CLI tool's flag parser above only recognizes
+    // --start/--stop/--status — say/ask/confirm/requestInput/registerSession/
+    // submitCall/getCall are reached exclusively via the MCP agent-bridge tool layer
+    // (Speak/MCP/main.swift → AgentBridgeServer → CLIBridgeBackend), which builds its
+    // own CLIRequest and does not go through this switch. Unreachable from this
+    // binary; present only for the compiler's exhaustiveness check on the shared
+    // `CLICommand` enum. [decision: H-3]
     fail("say/ask/confirm/requestInput are not available via the speak CLI tool — use the MCP agent bridge instead.")
 }
 

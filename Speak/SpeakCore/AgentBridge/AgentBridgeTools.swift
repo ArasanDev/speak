@@ -177,6 +177,63 @@ public enum AgentBridgeTools {
         "additionalProperties": false
     ]
 
+    // MARK: - AVB-7 (specs/avb7-durable-calls-design.md)
+
+    /// Unlike every other tool's `sessionId` (optional, advisory), durable calls
+    /// REQUIRE a registered session — this is deliberately a different
+    /// description from `sessionIdDescription` above. [decision: AVB-7]
+    private static let durableCallSessionIdProperty: JSONValue = [
+        "type": "string",
+        "description": "Required. The sessionId returned by speak_register_session. Call speak_register_session first — unlike other tools, this one fails without a registered session."
+    ]
+
+    public static let submitCallInputSchema: JSONValue = [
+        "type": "object",
+        "properties": [
+            "requestId": ["type": "string", "description": "Caller-supplied identifier for this request."],
+            "idempotencyKey": [
+                "type": "string",
+                "description": .string(
+                    "Optional. A duplicate submission with the same key while the original is still " +
+                    "non-terminal returns the ORIGINAL call instead of creating a second one ('duplicate': true)."
+                )
+            ],
+            "prompt": ["type": "string", "description": "The question or statement to present in the inbox."],
+            "mode": [
+                "type": "string",
+                "enum": ["freeform", "choice", "approval"],
+                "description": "freeform: any answer. choice: match one of 'choices'. approval: yes/no."
+            ],
+            "choices": [
+                "type": "array",
+                "items": ["type": "string"],
+                "description": "Required, non-empty, when mode is 'choice'."
+            ],
+            "consequence": ["type": "string", "description": "Optional human-readable statement of what answering implies."],
+            "spokenSummary": ["type": "string", "description": "Reserved for a future spoken-announcement policy. Not currently spoken — this tool never opens the mic."],
+            "urgency": [
+                "type": "string",
+                "enum": ["low", "normal", "high"],
+                "description": "A hint only — never overrides the human's local attention policy or ordering."
+            ],
+            "expiresInSeconds": [
+                "type": "number",
+                "description": "Seconds until this call expires if the human never engages it. Defaults to 24 hours when omitted."
+            ],
+            "sessionId": durableCallSessionIdProperty
+        ],
+        "required": ["requestId", "prompt", "mode", "sessionId"]
+    ]
+
+    public static let getCallInputSchema: JSONValue = [
+        "type": "object",
+        "properties": [
+            "callId": ["type": "string", "description": "The callId returned by speak_submit_call."],
+            "sessionId": durableCallSessionIdProperty
+        ],
+        "required": ["callId", "sessionId"]
+    ]
+
     public static let all: [MCPTool] = [
         MCPTool(
             name: "speak_register_session",
@@ -231,6 +288,21 @@ public enum AgentBridgeTools {
             description: "Report whether speak.app is running and its current mic/engine state, so an " +
                 "agent can degrade gracefully.",
             inputSchema: statusInputSchema
+        ),
+        MCPTool(
+            name: "speak_submit_call",
+            description: "Durably submit a question to the human's local inbox — no mic opens, no HUD, " +
+                "returns immediately. The human answers on their own time from the Dashboard inbox " +
+                "(by voice) or declines/dismisses it. Poll speak_get_call for the result. Requires " +
+                "speak_register_session first.",
+            inputSchema: submitCallInputSchema
+        ),
+        MCPTool(
+            name: "speak_get_call",
+            description: "Poll the current state of a call submitted via speak_submit_call: pending, " +
+                "presented, or a terminal outcome (answered/declined/cancelled/timedOut/expired). No " +
+                "server-side wait — poll on your own interval. Requires speak_register_session first.",
+            inputSchema: getCallInputSchema
         )
     ]
 }

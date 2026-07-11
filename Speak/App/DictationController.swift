@@ -63,6 +63,42 @@ private final class NullHistoryStore: HistoryStoring, @unchecked Sendable {
     func export() throws -> String { "[]" }
 }
 
+// MARK: - NullAgentCallStore
+
+/// AVB-7: a no-op `AgentCallStoring` used when `AgentCallStore`'s SQLite open
+/// fails. Mirrors `NullHistoryStore`'s degradation shape — the durable-call
+/// surface is silently disabled for the session rather than crashing the app;
+/// `speak_request_input`'s own round-trip is entirely unaffected (its durable
+/// side effect is a best-effort write that swallows errors already).
+private actor NullAgentCallStore: AgentCallStoring {
+    func submit(_ submission: AgentCallSubmission) async throws -> AgentCallSubmitResult {
+        throw SpeakError.unknown("AgentCallStore unavailable")
+    }
+    func get(id: UUID, requestingSessionId: String?) async throws -> AgentCall? { nil }
+    func pendingAndPresented() async throws -> [AgentCall] { [] }
+    func markPresented(id: UUID) async throws {}
+    @discardableResult
+    func resolve(id: UUID, outcome: HumanResponseOutcome) async throws -> Bool { false }
+    func expireOverdue(now: Date) async throws {}
+}
+
+/// Open the production `AgentCallStore`, falling back to `NullAgentCallStore`
+/// on failure. A free function (not a method) so `DictationController`'s own
+/// class body stays under SwiftLint's `type_body_length` cap — pure code
+/// motion, no behavior change, matching this file's existing precedent
+/// (`applyAppearance`/`rebindExtraBindings` moved to an extension for the
+/// same reason).
+private func makeAgentCallStore() -> any AgentCallStoring {
+    do {
+        return try AgentCallStore.makeProductionStore()
+    } catch {
+        SpeakLog.storage.error(
+            "DictationController: AgentCallStore open failed — durable calls disabled. \(error.localizedDescription, privacy: .public)"
+        )
+        return NullAgentCallStore()
+    }
+}
+
 // MARK: - DictationController
 
 @Observable
@@ -128,6 +164,11 @@ final class DictationController: CLICommandHandler {
     /// and AVB-7 can reuse it); this instance is owned here, alongside the
     /// rest of the CLI-handler state. [decision: AVB-6]
     let agentSessionRegistry = AgentSessionRegistry()
+
+    /// AVB-7: durable-call store backing speak_submit_call/speak_get_call, the
+    /// request_input adapter's side effect, and the inbox pane. Falls back to a
+    /// no-op store on open failure, mirroring `historyStore`.
+    let agentCallStore: any AgentCallStoring
 
     /// The most recent finished transcript (cleaned if available, else raw). Drives the
     /// "Paste Last Transcript" menu item (Wispr's Ctrl+Cmd+V re-paste); empty until the
@@ -349,6 +390,8 @@ final class DictationController: CLICommandHandler {
             historyStore = NullHistoryStore()
         }
         self.historyStore = historyStore
+
+        self.agentCallStore = makeAgentCallStore()
 
         engine = SpeakEngine(
             transcriber: defaultTranscriber(for: store),
@@ -612,7 +655,7 @@ final class DictationController: CLICommandHandler {
         // `--stop`, and `--status` can drive this running instance.
         // Called AFTER the XCTestConfigurationFilePath early-return in AppDelegate
         // ensures the port is never opened during test-host runs.
-        cliPortServer.register(handler: self)
+        registerCLIPortAndSweepAgentCalls()
     }
 
     // MARK: - Window presentation (delegates to WindowPresenter)
@@ -839,6 +882,23 @@ extension DictationController {
 
     /// Apply the theme to NSApplication.shared.appearance based on the AppTheme
     /// setting. Moved here for [lint] type_body_length — pure code motion.
+    /// Registers the CLI port and runs the AVB-7 recovery sweep (any call whose
+    /// `expiresAt` passed while the app was closed becomes `.expired`, not stuck
+    /// `.pending` forever). Bundled into one call from `startMonitoring()` and
+    /// moved here for [lint] type_body_length — pure code motion, no behavior change.
+    func registerCLIPortAndSweepAgentCalls() {
+        cliPortServer.register(handler: self)
+        Task { [agentCallStore] in
+            do {
+                try await agentCallStore.expireOverdue(now: Date())
+            } catch {
+                SpeakLog.storage.error(
+                    "DictationController: AgentCallStore.expireOverdue on launch failed — \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
+    }
+
     func applyAppearance(_ theme: AppTheme) {
         let appearance: NSAppearance? = {
             switch theme {

@@ -22,6 +22,13 @@ final class StatusBarController: NSObject {
     private let controller: DictationController
     private var iconObserverTask: Task<Void, Never>?
 
+    /// AVB-7 (specs/avb7-durable-calls-design.md): count of non-terminal
+    /// `AgentCall`s, polled on a coarse timer (matches the inbox pane's own
+    /// polling — no push-style live updates in this slice). Drives a small
+    /// badge overlay on the menubar icon. [decision: AVB-7]
+    private var agentInboxCount: Int = 0
+    private var agentInboxPollTask: Task<Void, Never>?
+
     init(controller: DictationController) {
         self.controller = controller
 
@@ -36,6 +43,28 @@ final class StatusBarController: NSObject {
 
         // Start observing icon changes.
         startObservingIcon()
+        startPollingAgentInbox()
+    }
+
+    deinit {
+        agentInboxPollTask?.cancel()
+    }
+
+    /// Poll `agentCallStore.pendingAndPresented().count` on a coarse interval
+    /// and redraw the badge on change. [decision: AVB-7]
+    private func startPollingAgentInbox() {
+        agentInboxPollTask?.cancel()
+        agentInboxPollTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self else { break }
+                let count = (try? await self.controller.agentCallStore.pendingAndPresented().count) ?? 0
+                if count != self.agentInboxCount {
+                    self.agentInboxCount = count
+                    self.updateIcon()
+                }
+                try? await Task.sleep(nanoseconds: 10_000_000_000)
+            }
+        }
     }
 
     /// Configure the status item button for click handling.
@@ -53,19 +82,57 @@ final class StatusBarController: NSObject {
 
         let (symbolName, color, isTemplate) = iconPresentation(for: controller.icon)
 
+        var image: NSImage?
         if isTemplate {
             // Idle state: use template rendering (auto-inverting on the menubar).
-            button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
-            button.image?.isTemplate = true
+            image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+            image?.isTemplate = true
         } else {
             // Active states: use tinted rendering.
             if let baseImage = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-                // Create a tinted copy of the image using the specified color.
-                let tintedImage = tintImage(baseImage, with: color)
-                button.image = tintedImage
-                button.image?.isTemplate = false
+                image = tintImage(baseImage, with: color)
+                image?.isTemplate = false
             }
         }
+
+        if agentInboxCount > 0, let image {
+            // AVB-7: overlay a small count badge. Plain styling — FE-3 will
+            // restyle once the design-token system lands. [decision: AVB-7]
+            button.image = badgedImage(image, count: agentInboxCount)
+        } else {
+            button.image = image
+        }
+    }
+
+    /// Draw a small red count badge in the top-right corner of `base`.
+    /// [decision: AVB-7 — plain styling, FE-3 restyles later]
+    private func badgedImage(_ base: NSImage, count: Int) -> NSImage {
+        let size = base.size
+        let result = NSImage(size: size)
+        result.lockFocus()
+        base.draw(in: NSRect(origin: .zero, size: size))
+
+        let badgeDiameter: CGFloat = max(size.width, size.height) * 0.55
+        let badgeOrigin = NSPoint(x: size.width - badgeDiameter * 0.7, y: size.height - badgeDiameter * 0.7)
+        let badgeRect = NSRect(x: badgeOrigin.x, y: badgeOrigin.y, width: badgeDiameter, height: badgeDiameter)
+        NSColor.systemRed.setFill()
+        NSBezierPath(ovalIn: badgeRect).fill()
+
+        let label = count > 9 ? "9+" : "\(count)"
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: badgeDiameter * 0.62, weight: .bold),
+            .foregroundColor: NSColor.white
+        ]
+        let labelSize = label.size(withAttributes: attributes)
+        let labelOrigin = NSPoint(
+            x: badgeRect.midX - labelSize.width / 2,
+            y: badgeRect.midY - labelSize.height / 2
+        )
+        label.draw(at: labelOrigin, withAttributes: attributes)
+
+        result.unlockFocus()
+        result.isTemplate = false
+        return result
     }
 
     /// Tint an NSImage with the specified color.
@@ -205,6 +272,16 @@ final class StatusBarController: NSObject {
         aiItem.target = self
         aiItem.action = #selector(handleOpenAIStudio)
         menu.addItem(aiItem)
+
+        // AVB-7: Agent Inbox. Opens the dashboard; deep-linking straight to the
+        // Agent Inbox pane is left for a follow-up (same TODO shape as AI Studio
+        // below — `showDashboard()` doesn't yet expose an `initialSection` hook).
+        let inboxTitle = agentInboxCount > 0 ? "Agent Inbox (\(agentInboxCount))…" : "Agent Inbox…"
+        let inboxItem = NSMenuItem()
+        inboxItem.title = inboxTitle
+        inboxItem.target = self
+        inboxItem.action = #selector(handleOpenSpeak)
+        menu.addItem(inboxItem)
 
         // History.
         let historyItem = NSMenuItem()

@@ -186,4 +186,54 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
             return .failure(.transportError("speak_register_session", String(describing: error)))
         }
     }
+
+    // MARK: - AVB-7 durable calls
+
+    public func submitCall(
+        _ args: SubmitCallArguments
+    ) async -> Result<BridgeOutcome<AgentCallSubmitOutcome>, BridgeUnavailable> {
+        let request = CLIRequest(
+            cmd: .submitCall,
+            requestId: args.requestId,
+            idempotencyKey: args.idempotencyKey,
+            prompt: args.prompt,
+            mode: args.mode,
+            choices: args.choices,
+            consequence: args.consequence,
+            spokenSummary: args.spokenSummary,
+            sessionId: args.sessionId,
+            urgency: args.urgency,
+            expiresInSeconds: args.expiresInSeconds
+        )
+        do {
+            let reply = try transport.send(request, timeoutSeconds: CLIContract.sendTimeoutSeconds + 5)
+            guard reply.ok else {
+                return .failure(BridgeUnavailable(reply.error ?? "speak_submit_call reported an error"))
+            }
+            guard let call = reply.agentCall else {
+                return .failure(.transportError("speak_submit_call", "reply missing 'agentCall' field"))
+            }
+            let outcome = AgentCallSubmitOutcome(call: call, duplicate: reply.duplicateSubmission ?? false)
+            return .success(BridgeOutcome(outcome, sessionNote: reply.sessionNote))
+        } catch CLITransportError.portNotFound {
+            return .failure(.appNotRunning)
+        } catch {
+            return .failure(.transportError("speak_submit_call", String(describing: error)))
+        }
+    }
+
+    public func getCall(callId: UUID, sessionId: String?) async -> Result<BridgeOutcome<AgentCall?>, BridgeUnavailable> {
+        let request = CLIRequest(cmd: .getCall, sessionId: sessionId, callId: callId.uuidString)
+        do {
+            let reply = try transport.send(request, timeoutSeconds: CLIContract.sendTimeoutSeconds + 5)
+            guard reply.ok else {
+                return .failure(BridgeUnavailable(reply.error ?? "speak_get_call reported an error"))
+            }
+            return .success(BridgeOutcome(reply.agentCall, sessionNote: reply.sessionNote))
+        } catch CLITransportError.portNotFound {
+            return .failure(.appNotRunning)
+        } catch {
+            return .failure(.transportError("speak_get_call", String(describing: error)))
+        }
+    }
 }

@@ -192,6 +192,56 @@ final class CLIContractTests: XCTestCase {
         XCTAssertNil(decoded.confirmed)
     }
 
+    // MARK: - AVB-7 durable-call wire
+
+    func testRequestEncodeDecodeSubmitCall() throws {
+        let request = CLIRequest(
+            cmd: .submitCall, requestId: "r1", idempotencyKey: "k1", prompt: "deploy?", mode: .approval,
+            sessionId: "sess-1", urgency: .high, expiresInSeconds: 3600
+        )
+        let data = try request.encode()
+        let decoded = try CLIRequest.decode(data)
+        XCTAssertEqual(decoded.cmd, .submitCall)
+        XCTAssertEqual(decoded.requestId, "r1")
+        XCTAssertEqual(decoded.idempotencyKey, "k1")
+        XCTAssertEqual(decoded.mode, .approval)
+        XCTAssertEqual(decoded.urgency, .high)
+        XCTAssertEqual(decoded.expiresInSeconds, 3600)
+    }
+
+    func testRequestEncodeDecodeGetCall() throws {
+        let callId = UUID().uuidString
+        let request = CLIRequest(cmd: .getCall, sessionId: "sess-1", callId: callId)
+        let data = try request.encode()
+        let decoded = try CLIRequest.decode(data)
+        XCTAssertEqual(decoded.cmd, .getCall)
+        XCTAssertEqual(decoded.callId, callId)
+        XCTAssertEqual(decoded.sessionId, "sess-1")
+    }
+
+    func testReplyCallSubmittedRoundTrip() throws {
+        let call = AgentCall(
+            id: UUID(), sessionId: "sess-1", requestId: "r1", idempotencyKey: nil, prompt: "p",
+            mode: .freeform, choices: [], consequence: nil, spokenSummary: nil, urgency: .normal,
+            state: .pending, createdAt: Date(), expiresAt: Date().addingTimeInterval(86_400)
+        )
+        let reply = CLIReply.callSubmitted(call, duplicate: false)
+        let data = try reply.encode()
+        let decoded = try CLIReply.decode(data)
+        XCTAssertTrue(decoded.ok)
+        XCTAssertEqual(decoded.agentCall?.id, call.id)
+        XCTAssertEqual(decoded.duplicateSubmission, false)
+    }
+
+    func testReplyCallStatusNilRoundTrip() throws {
+        // nil = not found / isolation mismatch — still ok:true, never an error.
+        let reply = CLIReply.callStatus(nil)
+        let data = try reply.encode()
+        let decoded = try CLIReply.decode(data)
+        XCTAssertTrue(decoded.ok)
+        XCTAssertNil(decoded.agentCall)
+    }
+
     // MARK: - CLIState from MenubarIcon
 
     func testCLIStateFromIdle() {
@@ -443,13 +493,14 @@ private func idempotencyDecision(command: CLICommand, icon: MenubarIcon) -> Idem
     case .status:
         return .read
 
-    case .say, .ask, .confirm, .requestInput, .registerSession:
-        // H-3/AVB-5/AVB-6: say/ask/confirm/requestInput/registerSession are not gated
-        // by this idempotency table — say is always dispatched (no icon precondition);
-        // ask/confirm/requestInput/registerSession are handled by the dedicated
-        // run-loop pump paths in `CLIPortServer.handleAskOrConfirm`/
-        // `handleRequestInput`/`handleRegisterSession`, not the `.dispatch`/`.noOp`/
-        // `.read` decision this pure mirror models.
+    case .say, .ask, .confirm, .requestInput, .registerSession, .submitCall, .getCall:
+        // H-3/AVB-5/AVB-6/AVB-7: say/ask/confirm/requestInput/registerSession/
+        // submitCall/getCall are not gated by this idempotency table — say is
+        // always dispatched (no icon precondition); the rest are handled by the
+        // dedicated run-loop pump paths in `CLIPortServer.handleAskOrConfirm`/
+        // `handleRequestInput`/`handleRegisterSession`/`handleSubmitCall`/
+        // `handleGetCall`, not the `.dispatch`/`.noOp`/`.read` decision this pure
+        // mirror models.
         return .read
     }
 }

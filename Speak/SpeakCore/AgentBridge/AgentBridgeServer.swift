@@ -169,6 +169,12 @@ public actor AgentBridgeServer {
         case "speak_request_input":
             return await runRequestInputTool(call, sessionId: sessionId)
 
+        case "speak_submit_call":
+            return await runSubmitCallTool(call, sessionId: sessionId)
+
+        case "speak_get_call":
+            return await runGetCallTool(call, sessionId: sessionId)
+
         default:
             // Unreachable: handleToolsCall already checked membership in
             // AgentBridgeTools.all before calling runTool.
@@ -334,6 +340,100 @@ public actor AgentBridgeServer {
         case .busy:
             fields["outcome"] = .string("busy")
         }
+        if let sessionNote { fields["sessionNote"] = .string(sessionNote) }
+        let data = (try? JSONEncoder().encode(JSONValue.object(fields))) ?? Data()
+        let jsonString = String(data: data, encoding: .utf8) ?? "{}"
+        return .text(jsonString)
+    }
+
+    // MARK: - AVB-7 speak_submit_call / speak_get_call
+
+    private func runSubmitCallTool(_ call: MCPToolCallRequest, sessionId: String?) async -> MCPToolCallResult {
+        guard let sessionId, !sessionId.isEmpty else {
+            return .error("speak_submit_call requires a 'sessionId' — call speak_register_session first.")
+        }
+        guard let requestId = call.arguments["requestId"]?.stringValue, !requestId.isEmpty else {
+            return .error("speak_submit_call requires a non-empty 'requestId' argument.")
+        }
+        guard let prompt = call.arguments["prompt"]?.stringValue, !prompt.isEmpty else {
+            return .error("speak_submit_call requires a non-empty 'prompt' argument.")
+        }
+        guard let modeRaw = call.arguments["mode"]?.stringValue, let mode = RequestInputMode(rawValue: modeRaw) else {
+            return .error("speak_submit_call 'mode' must be one of freeform, choice, approval.")
+        }
+        let choices = call.arguments["choices"]?.arrayValue?.compactMap { $0.stringValue } ?? []
+        if mode == .choice, choices.isEmpty {
+            return .error("speak_submit_call mode 'choice' requires a non-empty 'choices' array.")
+        }
+        let urgency = call.arguments["urgency"]?.stringValue.flatMap(AgentCallUrgency.init(rawValue:)) ?? .normal
+        // [decision: AVB-7 orchestrator amendment 1] Never nil past this point —
+        // an abandoned agent must not leave an immortal pending call in the inbox.
+        let expiresInSeconds = call.arguments["expiresInSeconds"]?.doubleValue
+            ?? AgentCallDefaults.defaultExpirySeconds
+
+        let args = SubmitCallArguments(
+            requestId: requestId,
+            idempotencyKey: call.arguments["idempotencyKey"]?.stringValue,
+            prompt: prompt,
+            mode: mode,
+            choices: choices,
+            consequence: call.arguments["consequence"]?.stringValue,
+            spokenSummary: call.arguments["spokenSummary"]?.stringValue,
+            urgency: urgency,
+            expiresInSeconds: expiresInSeconds,
+            sessionId: sessionId
+        )
+        switch await backend.submitCall(args) {
+        case .success(let outcome):
+            return Self.renderSubmitCall(outcome.value, sessionNote: outcome.sessionNote)
+        case .failure(let reason):
+            return .error(reason.description)
+        }
+    }
+
+    private func runGetCallTool(_ call: MCPToolCallRequest, sessionId: String?) async -> MCPToolCallResult {
+        guard let sessionId, !sessionId.isEmpty else {
+            return .error("speak_get_call requires a 'sessionId' — call speak_register_session first.")
+        }
+        guard let callIdString = call.arguments["callId"]?.stringValue, let callId = UUID(uuidString: callIdString) else {
+            return .error("speak_get_call requires a valid 'callId' argument.")
+        }
+        switch await backend.getCall(callId: callId, sessionId: sessionId) {
+        case .success(let outcome):
+            guard let agentCall = outcome.value else {
+                return .error("speak_get_call: no such call for this session.")
+            }
+            return Self.renderAgentCall(agentCall, extraFields: [:], sessionNote: outcome.sessionNote)
+        case .failure(let reason):
+            return .error(reason.description)
+        }
+    }
+
+    private static func renderSubmitCall(_ outcome: AgentCallSubmitOutcome, sessionNote: String?) -> MCPToolCallResult {
+        renderAgentCall(outcome.call, extraFields: ["duplicate": .bool(outcome.duplicate)], sessionNote: sessionNote)
+    }
+
+    /// Shared `{callId, state, ...}` JSON rendering for both `speak_submit_call`
+    /// and `speak_get_call` — one shape for both tools, matching
+    /// `renderRequestInput`'s "no schema-generation library" posture.
+    /// [decision: AVB-7]
+    private static func renderAgentCall(
+        _ agentCall: AgentCall, extraFields: [String: JSONValue], sessionNote: String?
+    ) -> MCPToolCallResult {
+        var fields: [String: JSONValue] = [
+            "callId": .string(agentCall.id.uuidString),
+            "state": .string(agentCall.state.rawValue)
+        ]
+        if let response = agentCall.response {
+            switch response {
+            case .answered(let text, let choice):
+                if let text { fields["text"] = .string(text) }
+                if let choice { fields["choice"] = .string(choice) }
+            default:
+                break
+            }
+        }
+        for (key, value) in extraFields { fields[key] = value }
         if let sessionNote { fields["sessionNote"] = .string(sessionNote) }
         let data = (try? JSONEncoder().encode(JSONValue.object(fields))) ?? Data()
         let jsonString = String(data: data, encoding: .utf8) ?? "{}"

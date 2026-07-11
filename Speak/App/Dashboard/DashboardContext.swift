@@ -61,6 +61,22 @@ struct DashboardContext {
     /// `DictationController.rebindHotkey(_:)`. Nil in preview contexts.
     var rebindHotkey: ((HotkeyBinding) -> Void)?
 
+    /// AVB-7 (specs/avb7-durable-calls-design.md): the durable-call store backing
+    /// the Agent Inbox pane and the menubar badge count. Nil only in preview
+    /// contexts. [decision: AVB-7]
+    var agentCallStore: (any AgentCallStoring)?
+
+    /// AVB-7: "Answer by voice" row action — routes through
+    /// `DictationController.answerAgentCallByVoice(_:)` (the same capture path
+    /// `speak_request_input` uses). Nil in preview contexts.
+    var answerAgentCallByVoice: ((AgentCall) async -> HumanResponseOutcome)?
+
+    /// AVB-7: "Decline" row action (no mic). Nil in preview contexts.
+    var declineAgentCall: ((UUID) async -> Void)?
+
+    /// AVB-7: "Dismiss" row action (no mic). Nil in preview contexts.
+    var dismissAgentCall: ((UUID) async -> Void)?
+
     /// Explicit init with optional engine/permission manager/publisher (P11-c).
     /// Previews can create a minimal context without these dependencies.
     init(
@@ -73,7 +89,11 @@ struct DashboardContext {
         speakEngine: SpeakEngine? = nil,
         permissionManager: PermissionManager? = nil,
         dictationCompletedPublisher: AnyPublisher<Void, Never>? = nil,
-        rebindHotkey: ((HotkeyBinding) -> Void)? = nil
+        rebindHotkey: ((HotkeyBinding) -> Void)? = nil,
+        agentCallStore: (any AgentCallStoring)? = nil,
+        answerAgentCallByVoice: ((AgentCall) async -> HumanResponseOutcome)? = nil,
+        declineAgentCall: ((UUID) async -> Void)? = nil,
+        dismissAgentCall: ((UUID) async -> Void)? = nil
     ) {
         self.settingsStore = settingsStore
         self.historyStore = historyStore
@@ -85,5 +105,9 @@ struct DashboardContext {
         self.permissionManager = permissionManager
         self.dictationCompletedPublisher = dictationCompletedPublisher
         self.rebindHotkey = rebindHotkey
+        self.agentCallStore = agentCallStore
+        self.answerAgentCallByVoice = answerAgentCallByVoice
+        self.declineAgentCall = declineAgentCall
+        self.dismissAgentCall = dismissAgentCall
     }
 }

@@ -125,7 +125,17 @@ final class WindowPresenter {
             speakEngine: dictationController?.engine,
             permissionManager: permissionManager,
             dictationCompletedPublisher: dictationController?.dictationCompletedPublisher,
-            rebindHotkey: { [weak self] binding in self?.dictationController?.rebindHotkey(binding) }
+            rebindHotkey: { [weak self] binding in self?.dictationController?.rebindHotkey(binding) },
+            agentCallStore: dictationController?.agentCallStore,
+            answerAgentCallByVoice: { [weak self] call in
+                await self?.dictationController?.answerAgentCallByVoice(call) ?? .cancelled
+            },
+            declineAgentCall: { [weak self] callId in
+                await self?.dictationController?.declineAgentCall(callId)
+            },
+            dismissAgentCall: { [weak self] callId in
+                await self?.dictationController?.dismissAgentCall(callId)
+            }
         )
         let controller = DashboardWindowController(context: context)
         dashboardController = controller

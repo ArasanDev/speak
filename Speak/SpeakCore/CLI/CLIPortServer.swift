@@ -103,6 +103,46 @@ public protocol CLICommandHandler: AnyObject {
         workingDirectory: String?,
         requestedCapabilities: [String]
     ) async -> (sessionId: String, capabilities: [String])
+
+    // MARK: - AVB-7 (specs/avb7-durable-calls-design.md)
+
+    /// `speak_submit_call`: durably record a new `AgentCall` — no mic, no pump,
+    /// fast return. Requires a known-registered `sessionId`; `.unregistered` when
+    /// absent or not found in the registry (never a silent proceed, unlike the
+    /// advisory `sessionNote` other tools attach). [decision: AVB-7]
+    func cliSubmitCall(_ args: SubmitCallArguments) async -> CLISubmitCallOutcome
+
+    /// `speak_get_call`: read-only poll of one `AgentCall`'s current state.
+    /// Requires a known-registered `sessionId`; a session mismatch or unknown id
+    /// reads as `.call(nil)`, never revealing existence. [decision: AVB-7]
+    func cliGetCall(sessionId: String?, callId: UUID) async -> CLIGetCallOutcome
+}
+
+// MARK: - AVB-7 durable-call outcomes
+
+/// Outcome of `CLICommandHandler.cliSubmitCall`. `.unregistered` is distinct from
+/// every `AgentCallSubmitResult` case — it never reaches the store at all.
+/// [decision: AVB-7]
+public enum CLISubmitCallOutcome: Sendable, Equatable {
+    case unregistered
+    case created(AgentCall)
+    /// The existing (already-fetched) call for a duplicate (sessionId, idempotencyKey)
+    /// submission — carries the full call so the wire reply needs no follow-up fetch.
+    case duplicate(AgentCall)
+    /// An internal store failure unrelated to registration (e.g. SQLite error, or
+    /// the practically-unreachable "duplicate row vanished before lookup" case).
+    /// Distinct from `.unregistered` so the reply text never wrongly tells the
+    /// caller to register a session. [decision: AVB-7]
+    case internalError(String)
+}
+
+/// Outcome of `CLICommandHandler.cliGetCall`. `.unregistered` (no/unknown
+/// sessionId) is distinct from `.call(nil)` (registered caller, but the id
+/// doesn't exist or belongs to another session — isolation, not an error).
+/// [decision: AVB-7]
+public enum CLIGetCallOutcome: Sendable, Equatable {
+    case unregistered
+    case call(AgentCall?)
 }
 
 // MARK: - H-3 async command outcomes
@@ -288,6 +328,12 @@ public final class CLIPortServer {
         if request.cmd == .registerSession {
             return CLIPortServer.encodeReply(handleRegisterSession(request, handler: cmdHandler))
         }
+        if request.cmd == .submitCall {
+            return CLIPortServer.encodeReply(handleSubmitCall(request, handler: cmdHandler))
+        }
+        if request.cmd == .getCall {
+            return CLIPortServer.encodeReply(handleGetCall(request, handler: cmdHandler))
+        }
 
         // AVB-6: resolve the optional sessionId note (if any) before the
         // synchronous dispatch below — `cliTouchSession` is an actor call and
@@ -354,9 +400,9 @@ public final class CLIPortServer {
                 SpeakLog.cli.info("CLIPortServer: say dispatched.")
                 return .accepted(sessionNote: sessionNote)
 
-            case .ask, .confirm, .requestInput, .registerSession:
+            case .ask, .confirm, .requestInput, .registerSession, .submitCall, .getCall:
                 // Handled above, before this closure — unreachable here.
-                return .failure("internal: ask/confirm/requestInput/registerSession routed incorrectly")
+                return .failure("internal: ask/confirm/requestInput/registerSession/submitCall/getCall routed incorrectly")
             }
         }
 
@@ -525,6 +571,92 @@ public final class CLIPortServer {
             return .failure("speak_register_session did not complete")
         }
         return .registered(sessionId: result.sessionId, capabilities: result.capabilities)
+    }
+
+    // MARK: - AVB-7 submitCall / getCall dispatch
+
+    /// Validate and dispatch a `submitCall` request. Reuses the exact
+    /// Task-plus-pump primitive `handleRegisterSession` already uses (5 s hard
+    /// deadline) — neither this nor `handleGetCall` waits on speech, so both
+    /// resolve within the pump's first poll slice in practice.
+    /// [decision: AVB-7 orchestrator amendment 2]
+    private func handleSubmitCall(_ request: CLIRequest, handler: any CLICommandHandler) -> CLIReply {
+        guard let requestId = request.requestId, !requestId.isEmpty else {
+            return .failure("submitCall requires a non-empty requestId")
+        }
+        guard let prompt = request.prompt, !prompt.isEmpty else {
+            return .failure("submitCall requires a non-empty prompt")
+        }
+        guard let mode = request.mode else {
+            return .failure("submitCall requires a mode (freeform, choice, or approval)")
+        }
+        let choices = request.choices ?? []
+        if mode == .choice, choices.isEmpty {
+            return .failure("submitCall mode 'choice' requires a non-empty 'choices' array")
+        }
+        let urgency = request.urgency ?? .normal
+        // Defense in depth: never nil past this point, even if a non-standard
+        // caller reaches this wire path without going through AgentBridgeServer's
+        // own default-applying parse. [decision: AVB-7]
+        let expiresInSeconds = request.expiresInSeconds ?? AgentCallDefaults.defaultExpirySeconds
+
+        let args = SubmitCallArguments(
+            requestId: requestId,
+            idempotencyKey: request.idempotencyKey,
+            prompt: prompt,
+            mode: mode,
+            choices: choices,
+            consequence: request.consequence,
+            spokenSummary: request.spokenSummary,
+            urgency: urgency,
+            expiresInSeconds: expiresInSeconds,
+            sessionId: request.sessionId
+        )
+        let box = CLIPendingResultBox<CLISubmitCallOutcome>()
+        Task { @MainActor in
+            let outcome = await handler.cliSubmitCall(args)
+            box.set(outcome)
+        }
+        guard let outcome = CLIPortServer.pumpUntilResult(timeoutSeconds: 5.0, poll: box.get) else {
+            SpeakLog.cli.error("CLIPortServer: submitCall pump exhausted without a result.")
+            return .failure("speak_submit_call did not complete")
+        }
+        switch outcome {
+        case .unregistered:
+            return .failure(
+                "register a session first (speak_register_session) before using speak_submit_call.")
+        case .created(let call):
+            return .callSubmitted(call, duplicate: false)
+        case .duplicate(let call):
+            return .callSubmitted(call, duplicate: true)
+        case .internalError(let message):
+            return .failure("speak_submit_call failed: \(message)")
+        }
+    }
+
+    /// Validate and dispatch a `getCall` request. Same pump shape as `handleSubmitCall`.
+    /// [decision: AVB-7]
+    private func handleGetCall(_ request: CLIRequest, handler: any CLICommandHandler) -> CLIReply {
+        guard let callIdString = request.callId, let callId = UUID(uuidString: callIdString) else {
+            return .failure("getCall requires a valid 'callId'")
+        }
+
+        let box = CLIPendingResultBox<CLIGetCallOutcome>()
+        Task { @MainActor in
+            let outcome = await handler.cliGetCall(sessionId: request.sessionId, callId: callId)
+            box.set(outcome)
+        }
+        guard let outcome = CLIPortServer.pumpUntilResult(timeoutSeconds: 5.0, poll: box.get) else {
+            SpeakLog.cli.error("CLIPortServer: getCall pump exhausted without a result.")
+            return .failure("speak_get_call did not complete")
+        }
+        switch outcome {
+        case .unregistered:
+            return .failure(
+                "register a session first (speak_register_session) before using speak_get_call.")
+        case .call(let call):
+            return .callStatus(call)
+        }
     }
 
     /// Resolve the optional "unregistered session" note for a request that

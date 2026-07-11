@@ -112,6 +112,13 @@ public enum CLICommand: String, Codable, Sendable {
     /// like `.ask`/`.confirm`/`.requestInput` (no mic, no human round-trip).
     /// [decision: AVB-6]
     case registerSession
+    /// AVB-7 (specs/avb7-durable-calls-design.md): `speak_submit_call`. Fast,
+    /// no mic, no pump — a direct actor read/write on `AgentCallStore`, replied
+    /// inline. [decision: AVB-7]
+    case submitCall
+    /// AVB-7: `speak_get_call`. Same shape as `.submitCall` — no server-side wait,
+    /// caller polls on its own interval. [decision: AVB-7]
+    case getCall
 }
 
 /// The JSON envelope wrapping a `CLICommand` over the wire.
@@ -169,6 +176,19 @@ public struct CLIRequest: Codable, Sendable {
     /// `capabilities` is the intersection with what speak supports.
     public let requestedCapabilities: [String]?
 
+    // MARK: - AVB-7 durable-call fields
+
+    /// `getCall`: the id of the `AgentCall` to look up.
+    public let callId: String?
+    /// `submitCall`: caller-supplied urgency hint (never authority over presentation).
+    public let urgency: AgentCallUrgency?
+    /// `submitCall`: relative expiry window in seconds from submission time. Always
+    /// concrete (never nil) when the request originates from `speak_submit_call` —
+    /// the MCP tool layer applies `AgentCallDefaults.defaultExpirySeconds` before
+    /// this field is populated. `nil` only for the internal `requestInput` durable
+    /// side effect, which never goes over this wire path. [decision: AVB-7]
+    public let expiresInSeconds: Double?
+
     public init(cmd: CLICommand, text: String? = nil, interrupt: Bool? = nil,
                 question: String? = nil, timeout: Double? = nil,
                 requestId: String? = nil, idempotencyKey: String? = nil,
@@ -176,7 +196,9 @@ public struct CLIRequest: Codable, Sendable {
                 choices: [String]? = nil, consequence: String? = nil,
                 spokenSummary: String? = nil, sessionId: String? = nil,
                 provider: String? = nil, label: String? = nil,
-                workingDirectory: String? = nil, requestedCapabilities: [String]? = nil) {
+                workingDirectory: String? = nil, requestedCapabilities: [String]? = nil,
+                callId: String? = nil, urgency: AgentCallUrgency? = nil,
+                expiresInSeconds: Double? = nil) {
         self.cmd = cmd
         self.text = text
         self.interrupt = interrupt
@@ -194,6 +216,9 @@ public struct CLIRequest: Codable, Sendable {
         self.label = label
         self.workingDirectory = workingDirectory
         self.requestedCapabilities = requestedCapabilities
+        self.callId = callId
+        self.urgency = urgency
+        self.expiresInSeconds = expiresInSeconds
     }
 }
 
@@ -247,6 +272,19 @@ public struct CLIReply: Codable, Sendable {
     /// (compatibility first). `nil` when no `sessionId` was supplied, or when
     /// it was supplied and recognized. [decision: AVB-6]
     public let sessionNote: String?
+
+    // MARK: - AVB-7 durable-call fields
+
+    /// Present in `submitCall`/`getCall` replies: the `AgentCall` — freshly created
+    /// or the existing duplicate for `submitCall`; the looked-up call (or `nil` for
+    /// not-found/isolation-mismatch, never an error) for `getCall`. Shared,
+    /// Codable, not re-encoded across the MCP-process ↔ app-process boundary.
+    /// [decision: AVB-7]
+    public let agentCall: AgentCall?
+    /// Present in `submitCall` replies only: `true` when this call was NOT newly
+    /// created — the (sessionId, idempotencyKey) pair already had a live call, and
+    /// `agentCall` carries the EXISTING one. [decision: AVB-7]
+    public let duplicateSubmission: Bool?
 
     // MARK: - Factory helpers
 
@@ -315,7 +353,8 @@ public struct CLIReply: Codable, Sendable {
                 answer: String? = nil, confirmed: Bool? = nil,
                 outcome: String? = nil, choice: String? = nil,
                 sessionId: String? = nil, capabilities: [String]? = nil,
-                sessionNote: String? = nil) {
+                sessionNote: String? = nil,
+                agentCall: AgentCall? = nil, duplicateSubmission: Bool? = nil) {
         self.ok = ok
         self.error = error
         self.state = state
@@ -327,6 +366,20 @@ public struct CLIReply: Codable, Sendable {
         self.sessionId = sessionId
         self.capabilities = capabilities
         self.sessionNote = sessionNote
+        self.agentCall = agentCall
+        self.duplicateSubmission = duplicateSubmission
+    }
+
+    /// `submitCall` reply carrying the created (or, on a duplicate submission,
+    /// existing) `AgentCall`. [decision: AVB-7]
+    public static func callSubmitted(_ call: AgentCall, duplicate: Bool) -> CLIReply {
+        CLIReply(ok: true, error: nil, state: nil, binding: nil, agentCall: call, duplicateSubmission: duplicate)
+    }
+
+    /// `getCall` reply carrying the looked-up `AgentCall`, or `nil` for
+    /// not-found/isolation-mismatch (never an error — spec §8). [decision: AVB-7]
+    public static func callStatus(_ call: AgentCall?) -> CLIReply {
+        CLIReply(ok: true, error: nil, state: nil, binding: nil, agentCall: call)
     }
 
     /// Decode a `requestInput` reply's `outcome`/`answer`/`choice` fields back

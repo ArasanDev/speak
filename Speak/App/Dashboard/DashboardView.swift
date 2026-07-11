@@ -83,6 +83,7 @@ struct DashboardView: View {
         case .transforms: TransformsPaneView(context: context)
         case .scratchpad: ScratchpadPaneView(context: context)
         case .history:    HistoryPaneView(context: context)
+        case .agentInbox: AgentInboxPaneView(context: context)
         case .privacy:    PrivacyPaneView(context: context)
         case .settings:   SettingsPaneView(context: context)
         }
