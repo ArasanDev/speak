@@ -19,6 +19,7 @@
 //   These tests cover the persistence layer and factory logic — [verified] by the
 //   test suite. The Settings window UI rendering is [deferred — human verification].
 
+import CoreGraphics
 @testable import SpeakCore
 import XCTest
 
@@ -534,5 +535,57 @@ final class SettingsStoreVoiceTests: XCTestCase {
         let reloaded = freshStore(on: defaults)
         XCTAssertTrue(reloaded.readbackEnabled,
             "readbackEnabled=true must survive a SettingsStore reload on the same defaults.")
+    }
+
+    // MARK: - petEnabled / petPositions (FE-1)
+
+    func testPetEnabledDefaultIsFalse() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertFalse(store.petEnabled,
+            "petEnabled default must be false — Pip is opt-in until dogfooded, zero regression for existing users.")
+    }
+
+    func testPetEnabledTrueRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.petEnabled = true
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertTrue(reloaded.petEnabled,
+            "petEnabled=true must survive a SettingsStore reload on the same defaults.")
+    }
+
+    func testPetPositionsDefaultIsEmpty() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertTrue(store.petPositions.isEmpty,
+            "petPositions default must be empty — no display has a saved position yet.")
+    }
+
+    func testPetPositionsRoundTrip() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        let positions: [String: CGPoint] = [
+            "DISPLAY-UUID-1": CGPoint(x: 100, y: 200),
+            "DISPLAY-UUID-2": CGPoint(x: 1300, y: 8)
+        ]
+        store.petPositions = positions
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.petPositions, positions,
+            "petPositions must survive a SettingsStore reload on the same defaults, including multi-display entries.")
+    }
+
+    func testPetPositionsUpdateForOneDisplayPreservesOthers() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.petPositions = ["A": CGPoint(x: 1, y: 1), "B": CGPoint(x: 2, y: 2)]
+
+        var updated = store.petPositions
+        updated["A"] = CGPoint(x: 99, y: 99)
+        store.petPositions = updated
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.petPositions["A"], CGPoint(x: 99, y: 99))
+        XCTAssertEqual(reloaded.petPositions["B"], CGPoint(x: 2, y: 2))
     }
 }

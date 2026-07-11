@@ -190,6 +190,8 @@ private struct GeneralSettingsTab: View {
 
             HUDStyleSection(store: store)
 
+            PetSection(store: store)
+
             Section {
                 Picker("Paste Mode", selection: Binding(
                     get: { store.pasteMode },

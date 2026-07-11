@@ -327,6 +327,9 @@ final class DictationController: CLICommandHandler {
 
     let permissionManager: PermissionManager
 
+    // MARK: - FE-1: Pip (wiring in `DictationController+Pet.swift`, [lint] type_body_length)
+    var petWiring = PetWiring()
+
     // MARK: - Init
 
     init() {
@@ -419,6 +422,10 @@ final class DictationController: CLICommandHandler {
 
         // Start observing future appearance theme changes from SettingsView.
         startObservingAppearance()
+
+        // FE-1: Pip is opt-in (`petEnabled` default false). Implementation in
+        // `DictationController+Pet.swift` ([lint] type_body_length).
+        configurePetPanel()
     }
 
     // MARK: - Trigger-mode observation
