@@ -371,5 +371,5 @@ func petReduceMotionOpacity(state: PetState, time: TimeInterval, reduceMotion: B
     }
     let phase = (time.truncatingRemainder(dividingBy: cycle)) / cycle
     let wave = (sin(phase * 2 * .pi) + 1) / 2          // 0…1
-    return 0.55 + 0.15 * wave                          // 0.55…0.70
+    return min(0.70, max(0.55, 0.55 + 0.15 * wave))    // clamp: 0.55 + 0.15·1.0 can exceed 0.70 by one ulp
 }

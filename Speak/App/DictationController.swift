@@ -862,9 +862,14 @@ final class DictationController: CLICommandHandler {
         }
     }
 
-#if DEBUG
-    // MARK: - Debug helpers
+}
 
+#if DEBUG
+// MARK: - Debug helpers
+//
+// [lint] In an extension (not the class body) to keep `DictationController`
+// under SwiftLint's `type_body_length` cap — pure code motion.
+extension DictationController {
     /// Force the menubar icon to a specific state, held indefinitely.
     /// Used by `--debug-open menubar-icon-<state>` for visual color verification.
     /// Never compiled into release builds.
@@ -874,8 +879,8 @@ final class DictationController: CLICommandHandler {
             "DictationController: [DEBUG] icon forced to .\(String(describing: state), privacy: .public)"
         )
     }
-#endif
 }
+#endif
 
 // MARK: - Extra-bindings observation (V01-5)
 //
