@@ -7,12 +7,56 @@
 
 ## Current phase
 
-**Loop #50 (2026-07-11) — AVB-5 SHIPPED (`e7afc48`): `speak_request_input`
-structured input workflow with typed outcomes. One item open before AVB-5 is
-done per spec §6: the live agent question-response round trip (needs the human
-at the mic against a relaunched app + reinstalled bridge).**
+**Loop #51 (2026-07-11) — THREE SLICES SHIPPED in one orchestrated day:
+AVB-6 sessions (`9cff623`), AVB-7 durable calls + inbox (`d245dcc`), and FE-1
+design tokens + Pip the pet (`973514e`, fixes `20e55a2`). Frontend identity is
+now a frozen spec (`specs/frontend-identity.md`). Still open: the AVB-5 live
+question-response round trip (needs the human at the mic).**
 
 ### What changed this loop (read before doing anything)
+-29. **FE-1 design tokens + Pip the pet (2026-07-11, merge `973514e` +
+   `20e55a2`).** Contract: `specs/frontend-identity.md` (orchestrator-authored,
+   incl. the research-informed "Animation soul" amendment, `2289030`).
+   - `Speak/App/DesignSystem/` — `SpeakColors` (two-temperature palette:
+     warm=human `humanAmber`/`onAir`, cool=agent `agentViolet`; onAir iff mic
+     capturing is a HARD rule), `SpeakTypography` (NY/SF Pro/SF Mono roles),
+     `SpeakMotion` (signal-mapped durations, Reduce Motion fallbacks).
+   - `Speak/App/Pet/` — Pip: five-bar waveform creature in a non-activating
+     all-Spaces `NSPanel`; `PetState.resolve()` is the single source of truth
+     (priority: listening > speaking > attention > agentWorking > processing >
+     idle > dormant) and the displayed state converges to it unconditionally
+     every tick (review fix: a transition-graph gate could freeze a stale
+     `onAir` — graph is now advisory/log-only; exhaustive 32-case test pins
+     onAir-iff-capturing). Drag + edge-snap with per-display-UUID persistence
+     (review fix: resolve the panel's ACTUAL screen, never `NSScreen.main`,
+     which is always primary for a non-key panel). Click = the one true
+     `DictationController.beginDictation()` path; Pip can never open the mic
+     itself. `attention` state is the AVB-7 inbox badge (stub provider until
+     wired). `petEnabled` default false (opt-in this slice).
+   - Reduce Motion: heights static, 0.55–0.70 opacity breath pulse (clamped —
+     fp ulp overshoot caught by tests post-merge).
+   - Reviewed FIX-FIRST → fixed → SHIP. `[deferred — needs human]`: live
+     multi-monitor drag dogfood; visual taste pass on Pip in situ.
+-28. **AVB-7 durable Agent Calls + local inbox (2026-07-11, `d245dcc`).**
+   Design doc: `specs/avb7-durable-calls-design.md`. New tools
+   `speak_submit_call` / `speak_get_call` (wire: additive `.submitCall`/
+   `.getCall` CLI commands, short-held Task+pump). `AgentCallStore` SQLite
+   actor: CAS state machine (pending→presented→answered/declined/cancelled/
+   expired/superseded), exactly-one-winner resolve, session isolation
+   (mismatch reads as not-found). Registration-gated: submit/get refuse
+   unregistered sessions. Menubar badge (10s poll) + minimal Agent Inbox
+   dashboard pane (FE-3 restyles later); voice-answer path reuses
+   `beginDictation()`/`RequestInputExtractor`. Review FIX-FIRST → fixed →
+   gates green: (1) lazy sweep-then-read expiry inside `get()`/
+   `pendingAndPresented()` — no immortal pending calls in an always-on app;
+   (2) nil-session idempotency via U+E000 sentinel (SQL NULL never collides;
+   NUL-byte sentinel would truncate in `sqlite3_column_text` — caught by
+   tests). 24h default expiry applied at tool-arg-parse time.
+-27. **AVB-6 session registration (2026-07-11, `9cff623`).**
+   `speak_register_session` + `AgentSessionRegistry` actor;
+   `sessionId` threaded through all tools via `BridgeOutcome` advisory notes
+   (unregistered sessionId = note, not failure — enforcement is a later
+   policy slice, EXCEPT AVB-7 tools which hard-require registration).
 -26. **AVB-5 `speak_request_input` (2026-07-11, `e7afc48`).** Orchestrated:
    Fable orchestrator + 1 Sonnet 5 implementer + 1 Sonnet 5 adversarial
    reviewer; orchestrator independently re-ran every gate before commit.
