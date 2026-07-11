@@ -27,6 +27,7 @@
 //   All UserDefaults keys live in `Keys` to avoid typos and make the key
 //   namespace discoverable. There are no magic strings elsewhere in this file.
 
+import CoreGraphics
 import Foundation
 import Observation
 import os
@@ -144,6 +145,8 @@ public final class SettingsStore: @unchecked Sendable {
         static let hudStyle              = "speak.settings.hudStyle"
         static let voiceActionsEnabled   = "speak.settings.voiceActionsEnabled"
         static let voiceActionsPrefix    = "speak.settings.voiceActionsPrefix"
+        static let petEnabled            = "speak.settings.petEnabled"
+        static let petPositions          = "speak.settings.petPositions"
         static let readbackEnabled       = "speak.settings.readbackEnabled"
     }
 
@@ -702,6 +705,47 @@ extension SettingsStore {
         set {
             withMutation(keyPath: \.readbackEnabled) {
                 defaults.set(newValue, forKey: Keys.readbackEnabled)
+            }
+        }
+    }
+
+    // MARK: - Pip (FE-1, specs/frontend-identity.md §5)
+
+    /// Master toggle for Pip, the persistent floating pet panel. Default
+    /// `false` — opt-in until dogfooded, zero regression for existing users
+    /// (spec §5: "petEnabled in SettingsStore, default false this slice").
+    public var petEnabled: Bool {
+        get {
+            access(keyPath: \.petEnabled)
+            return defaults.bool(forKey: Keys.petEnabled)
+        }
+        set {
+            withMutation(keyPath: \.petEnabled) {
+                defaults.set(newValue, forKey: Keys.petEnabled)
+            }
+        }
+    }
+
+    /// Pip's last dragged-to position, keyed by display UUID (spec §5:
+    /// "position persisted per display UUID in SettingsStore"). JSON-encoded,
+    /// same pattern as `cleanupEngine`/`sttEngine` — `CGPoint` is `Codable` on
+    /// Apple platforms so no custom coding is needed.
+    public var petPositions: [String: CGPoint] {
+        get {
+            access(keyPath: \.petPositions)
+            guard let data = defaults.data(forKey: Keys.petPositions),
+                  let decoded = try? JSONDecoder().decode([String: CGPoint].self, from: data) else {
+                return [:]
+            }
+            return decoded
+        }
+        set {
+            withMutation(keyPath: \.petPositions) {
+                if let data = try? JSONEncoder().encode(newValue) {
+                    defaults.set(data, forKey: Keys.petPositions)
+                } else {
+                    SpeakLog.storage.error("SettingsStore: failed to encode petPositions — value not persisted.")
+                }
             }
         }
     }
