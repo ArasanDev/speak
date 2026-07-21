@@ -7,6 +7,13 @@
 
 ## Current phase
 
+**Loop #59 (2026-07-22) — Dual-Mode Sidebar Isolation COMPLETE (commit `4bbcae2`).**
+- Resolved double-sidebar visual clutter in `DashboardView.swift`:
+  - In **Agent Workspace Mode** (`appMode == .workspace`), `NavigationSplitView`'s sidebar is hidden, letting `WorkspaceMainView` fill the entire window with its single Slack Channel Sidebar.
+  - In **Dictation Engine Mode** (`appMode == .dictation`), `NavigationSplitView` renders the Dictation Engine Sidebar (`Home`, `Insights`, `Dictionary`, `Snippets`, `Settings`).
+- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
+- Re-built and launched fresh `Speak.app` (PID 60322).
+
 **Loop #58 (2026-07-22) — Full Slack Replacement Architecture & Features COMPLETE (commit `ee18954`).**
 - Implemented **Quick Switcher & Spotlight Search (`Cmd+K`)** in `QuickSwitcherModalView.swift`:
   - Instant spotlight search overlay to jump across channels (`#general`, `#core-engine`), agents (`@Claude`, `@builder-qa`), and SQLite messages.
