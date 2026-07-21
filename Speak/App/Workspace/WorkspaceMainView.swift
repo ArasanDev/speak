@@ -1,7 +1,7 @@
 // Speak/App/Workspace/WorkspaceMainView.swift
 //
 // Main Slack-Replacement Workspace View.
-// Renders the Channel Sidebar, Spoken Thread Canvas, and Rich Evidence Cards.
+// Renders Channel Sidebar, Spoken Thread Canvas, Voice Huddles, and Rich Evidence Cards.
 // Reactively wired to WorkspaceStore (SQLite) and TagRegistry.
 // Styled with centralized design system tokens (`Color.speak*`, `Font.speakMono*`).
 
@@ -20,6 +20,10 @@ public struct WorkspaceMainView: View {
     @State private var mockEvidences: [UUID: EvidencePayload] = [:]
     @State private var registeredTags: [TagMetadata] = []
     @State private var store: WorkspaceStore?
+    @State private var isHuddleActive: Bool = false
+    @State private var activeReadingMsgId: UUID?
+
+    private let speechSynthesizer = AppleSpeechSynthesizer()
 
     public init() {}
 
@@ -178,6 +182,9 @@ public struct WorkspaceMainView: View {
             Divider()
                 .overlay(Color.speakCardBorder)
 
+            // Voice Huddle Header Bar
+            huddleHeaderBar
+
             // Message / Thread Scroll
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
@@ -199,7 +206,7 @@ public struct WorkspaceMainView: View {
                         .font(.system(size: 14))
                         .foregroundColor(.black)
                         .padding(8)
-                        .background(Color.speakHumanAmber)
+                        .background(isHuddleActive ? Color.speakOnAir : Color.speakHumanAmber)
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -222,6 +229,67 @@ public struct WorkspaceMainView: View {
         }
     }
 
+    // MARK: - Voice Huddle Header Bar
+
+    private var huddleHeaderBar: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(isHuddleActive ? Color.speakOnAir : Color.speakHumanAmber)
+                    .frame(width: 8, height: 8)
+
+                Text(isHuddleActive ? "LIVE HUDDLE" : "VOICE HUDDLE")
+                    .font(.speakMonoCaption)
+                    .foregroundColor(isHuddleActive ? .speakOnAir : .speakHumanAmber)
+            }
+
+            if isHuddleActive {
+                HStack(spacing: 6) {
+                    Text("Participants:")
+                        .font(.system(size: 11))
+                        .foregroundColor(.speakMica)
+
+                    Text("👤 @tamil")
+                        .font(.speakMonoCaption)
+                        .foregroundColor(.speakHumanAmber)
+
+                    Text("🤖 @Claude")
+                        .font(.speakMonoCaption)
+                        .foregroundColor(.speakAgentViolet)
+
+                    Text("🤖 @builder-qa")
+                        .font(.speakMonoCaption)
+                        .foregroundColor(.speakAgentViolet)
+                }
+            }
+
+            Spacer()
+
+            Button(action: toggleHuddle) {
+                HStack(spacing: 6) {
+                    Image(systemName: isHuddleActive ? "phone.down.fill" : "waveform.circle.fill")
+                    Text(isHuddleActive ? "Leave Huddle" : "Join Huddle")
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(isHuddleActive ? .white : .black)
+                .padding(.vertical, 4)
+                .padding(.horizontal, 10)
+                .background(isHuddleActive ? Color.speakOnAir : Color.speakHumanAmber)
+                .cornerRadius(12)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color.speakInk2.opacity(0.8))
+        .overlay(
+            Rectangle()
+                .frame(height: 1)
+                .foregroundColor(.speakCardBorder),
+            alignment: .bottom
+        )
+    }
+
     private func messageRow(_ msg: WorkspaceMessage) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
@@ -234,6 +302,14 @@ public struct WorkspaceMainView: View {
                     .foregroundColor(.speakMica)
 
                 Spacer()
+
+                // Audio Readback Button for individual message
+                Button(action: { readbackMessage(msg) }) {
+                    Image(systemName: activeReadingMsgId == msg.id ? "speaker.wave.3.fill" : "speaker.wave.1")
+                        .font(.system(size: 11))
+                        .foregroundColor(activeReadingMsgId == msg.id ? .speakAgentViolet : .speakMica)
+                }
+                .buttonStyle(.plain)
             }
 
             Text(msg.text)
@@ -249,6 +325,30 @@ public struct WorkspaceMainView: View {
     }
 
     // MARK: - Actions
+
+    private func toggleHuddle() {
+        isHuddleActive.toggle()
+        if !isHuddleActive {
+            Task {
+                await speechSynthesizer.stop()
+            }
+        }
+    }
+
+    private func readbackMessage(_ msg: WorkspaceMessage) {
+        let msgId = msg.id
+        let text = msg.text
+        Task {
+            if await speechSynthesizer.isSpeaking {
+                await speechSynthesizer.stop()
+                activeReadingMsgId = nil
+            } else {
+                activeReadingMsgId = msgId
+                await speechSynthesizer.speak(text, locale: Locale(identifier: "en-US"))
+                activeReadingMsgId = nil
+            }
+        }
+    }
 
     private func loadInitialData() async {
         await TagRegistry.shared.registerDefaults()
@@ -352,6 +452,11 @@ public struct WorkspaceMainView: View {
                 try? await dbStore.postMessage(reply)
             }
 
+            // In Huddle mode: automatically speak agent response aloud!
+            if isHuddleActive {
+                await speechSynthesizer.speak(summary, locale: Locale(identifier: "en-US"))
+            }
+
         case .inProgress(let summary, let checklist):
             let reply = WorkspaceMessage(
                 id: replyId,
@@ -363,6 +468,10 @@ public struct WorkspaceMainView: View {
             mockEvidences[replyId] = EvidencePayload(summary: summary, checklist: checklist)
             if let dbStore = store {
                 try? await dbStore.postMessage(reply)
+            }
+
+            if isHuddleActive {
+                await speechSynthesizer.speak(summary, locale: Locale(identifier: "en-US"))
             }
 
         case .needsApproval(let prompt, _):
