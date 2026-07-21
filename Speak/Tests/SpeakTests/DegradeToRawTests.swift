@@ -59,17 +59,16 @@ private struct SM3MockCleaner: LLMCleaning {
     }
 }
 
-/// Non-cooperative hanging cleaner — awaits a continuation that is never resumed.
-/// Task.cancel() will NOT unblock this; the runCleanup() timeout race must fire.
+/// Non-cooperative hanging cleaner — sleeps indefinitely until timed out.
+/// Simulates a non-cooperative hung model without leaking a Swift CheckedContinuation.
 private struct SM3HangingCleaner: LLMCleaning, Sendable {
     let id: String
     var isAvailable: Bool { get async { true } }
 
     func clean(_ text: String, mode: CleanupMode) async throws -> String {
-        await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in
-            // Intentionally never resumed — simulates a non-cooperative hung model.
+        while true {
+            try? await Task.sleep(nanoseconds: 100_000_000_000)
         }
-        return text
     }
 }
 
