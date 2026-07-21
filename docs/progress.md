@@ -7,6 +7,13 @@
 
 ## Current phase
 
+**Loop #56 (2026-07-22) — Centralized Slack Theme & Dual-Mode Header UI COMPLETE (commit `37940ca`).**
+- Centralized UI design system tokens in `SpeakColors.swift` with Slack-inspired theme colors (`speakSidebarBg`, `speakSidebarActiveBg`, `speakTagBadgeBg`, `speakTagBadgeFg`, `speakCardBorder`).
+- Embedded centered `TopSegmentedBarView` at the top of `DashboardView.swift` to seamlessly switch between **⚡ Dictation Engine** (Mode 1) and **💬 Agent Workspace** (Mode 2).
+- Restyled `WorkspaceMainView` and `EvidenceCardView` using canonical `Color.speak*` and `Font.speakMono*` tokens.
+- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
+- Re-built and launched fresh `Speak.app` (PID 35180).
+
 **Loop #55 (2026-07-22) — STT Finalization Watchdog Bug Fix COMPLETE (commit `47b8cfd`).**
 - Identified and resolved the root cause of voice dictation failures:
   - Commit `047743a` introduced a strict 1.5-second `withThrowingTaskGroup` watchdog during `AppleSpeechTranscriber` finalization, which prematurely threw `transcriberUnavailable("STT finalization timed out")` on multi-word dictations when SpeechAnalyzer flush took >1.5s.
