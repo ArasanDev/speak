@@ -7,6 +7,15 @@
 
 ## Current phase
 
+**Loop #61 (2026-07-22) — Emoji Reactions & Agent Action Triggers COMPLETE (commit `9878ff6`).**
+- Implemented Slack-style hover Emoji Reaction Bar (👀, ✅, 🎙️, 🚀) in `WorkspaceMainView.swift`:
+  - 👀: Dispatches automatic code inspection turn to `@Claude`.
+  - 🎙️: Triggers on-device TTS verbal audio readback via `AppleSpeechSynthesizer`.
+  - 🚀: Triggers build and test audit workflow to `@builder-qa`.
+  - Displays applied emoji reaction counters on message rows.
+- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
+- Re-built and launched fresh `Speak.app` (PID 66206).
+
 **Loop #60 (2026-07-22) — Master 90% Roadmap, Channel Creation, DMs & Approval Cards COMPLETE (commit `901576e`).**
 - Created the Master 90% Workspace Feature Index in `specs/workspace-90-percent-roadmap.md`.
 - Implemented **Channel Creation Modal** (`NewChannelModalView.swift`) and wired channel creation reactively to `WorkspaceStore` (SQLite).
