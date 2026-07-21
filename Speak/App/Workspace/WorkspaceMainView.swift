@@ -1,7 +1,8 @@
 // Speak/App/Workspace/WorkspaceMainView.swift
 //
 // Main Slack-Replacement Workspace View.
-// Renders Channel Sidebar, Direct Messages (DMs), Spoken Thread Canvas, Voice Huddles, Quick Switcher (Cmd+K), and Pinned Channel Canvas.
+// Renders Channel Sidebar, Direct Messages (DMs), Spoken Thread Canvas, Voice Huddles,
+// Quick Switcher (Cmd+K), Channel Canvas, and Emoji Reaction Bar (👀, ✅, 🎙️, 🚀).
 // Reactively wired to WorkspaceStore (SQLite) and TagRegistry.
 // Styled with centralized design system tokens (`Color.speak*`, `Font.speakMono*`).
 
@@ -18,6 +19,7 @@ public struct WorkspaceMainView: View {
     ]
     @State private var messages: [WorkspaceMessage] = []
     @State private var mockEvidences: [UUID: EvidencePayload] = [:]
+    @State private var messageReactions: [UUID: [String: Int]] = [:]
     @State private var registeredTags: [TagMetadata] = []
     @State private var store: WorkspaceStore?
     @State private var isHuddleActive: Bool = false
@@ -369,18 +371,43 @@ public struct WorkspaceMainView: View {
 
                 Spacer()
 
-                // Audio Readback Button for individual message
-                Button(action: { readbackMessage(msg) }) {
-                    Image(systemName: activeReadingMsgId == msg.id ? "speaker.wave.3.fill" : "speaker.wave.1")
-                        .font(.system(size: 11))
-                        .foregroundColor(activeReadingMsgId == msg.id ? .speakAgentViolet : .speakMica)
+                // Hover Emoji Action Bar
+                HStack(spacing: 6) {
+                    Button("👀") { handleEmojiTrigger("👀", on: msg) }
+                    Button("✅") { handleEmojiTrigger("✅", on: msg) }
+                    Button("🎙️") { handleEmojiTrigger("🎙️", on: msg) }
+                    Button("🚀") { handleEmojiTrigger("🚀", on: msg) }
                 }
+                .font(.system(size: 11))
                 .buttonStyle(.plain)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.speakInk2)
+                .cornerRadius(6)
             }
 
             Text(msg.text)
                 .font(.speakMonoBody)
                 .foregroundColor(.speakBone)
+
+            // Applied Emoji Badges
+            if let reactions = messageReactions[msg.id], !reactions.isEmpty {
+                HStack(spacing: 4) {
+                    ForEach(Array(reactions.keys), id: \.self) { emoji in
+                        HStack(spacing: 2) {
+                            Text(emoji)
+                                .font(.system(size: 11))
+                            Text("\(reactions[emoji] ?? 1)")
+                                .font(.speakMonoCaption)
+                                .foregroundColor(.speakMica)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.speakTagBadgeBg)
+                        .cornerRadius(4)
+                    }
+                }
+            }
 
             // Evidence Card if present
             if let evidence = mockEvidences[msg.id] {
@@ -391,6 +418,52 @@ public struct WorkspaceMainView: View {
     }
 
     // MARK: - Actions
+
+    private func handleEmojiTrigger(_ emoji: String, on msg: WorkspaceMessage) {
+        var current = messageReactions[msg.id] ?? [:]
+        current[emoji] = (current[emoji] ?? 0) + 1
+        messageReactions[msg.id] = current
+
+        switch emoji {
+        case "👀":
+            // Trigger Agent Code Inspection turn
+            let inspectTurn = WorkspaceMessage(
+                channelId: selectedChannelId,
+                senderTag: "@tamil",
+                text: "Tag @Claude inspect message context: '\(msg.text)'"
+            )
+            messages.append(inspectTurn)
+            Task {
+                if let adapter = await TagRegistry.shared.lookup(tagName: "@Claude") {
+                    let outcome = try? await adapter.handleTurn(prompt: inspectTurn.text, sessionId: nil)
+                    if let outcome {
+                        await handleAdapterOutcome(outcome, targetTag: "@Claude")
+                    }
+                }
+            }
+        case "🎙️":
+            // Trigger verbal TTS readback
+            readbackMessage(msg)
+        case "🚀":
+            // Trigger build/deploy action turn
+            let deployTurn = WorkspaceMessage(
+                channelId: selectedChannelId,
+                senderTag: "@tamil",
+                text: "Tag @builder-qa run verify-moat and test audit"
+            )
+            messages.append(deployTurn)
+            Task {
+                if let adapter = await TagRegistry.shared.lookup(tagName: "@builder-qa") {
+                    let outcome = try? await adapter.handleTurn(prompt: deployTurn.text, sessionId: nil)
+                    if let outcome {
+                        await handleAdapterOutcome(outcome, targetTag: "@builder-qa")
+                    }
+                }
+            }
+        default:
+            break
+        }
+    }
 
     private func createNewChannel(name: String, topic: String) {
         let newCh = Channel(id: name, name: name, topic: topic)
