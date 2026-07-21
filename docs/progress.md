@@ -7,6 +7,14 @@
 
 ## Current phase
 
+**Loop #63 (2026-07-22) — CodeDiffInspectorView & Rich Evidence Cards COMPLETE (commit `6caa6ed`).**
+- Built `CodeDiffInspectorView.swift` and integrated line-by-line syntax-highlighted code diff inspection into `EvidenceCardView.swift`:
+  - Highlights additions (`+`) in green (`Color.speakDelivered`), deletions (`-`) in red (`Color.speakOnAir`), and neutral lines in Monaco font.
+  - Interactive expand/collapse toggle showing total line counts per diff block.
+- Supported all 5 task checklist statuses (`.pending`, `.inProgress`, `.done`, `.blocked`, `.failed`).
+- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
+- Re-built and launched fresh `Speak.app` (PID 76914).
+
 **Loop #62 (2026-07-22) — Pronged Action Trigger System COMPLETE (commit `9f540fb`).**
 - Replaced legacy text-chat emojis with the **Pronged Action Trigger System** in `WorkspaceMainView.swift`:
   - `⚡ Run`: Executes terminal shell action via `@terminal`.
