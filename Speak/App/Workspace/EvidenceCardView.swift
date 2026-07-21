@@ -1,6 +1,7 @@
 // Speak/App/Workspace/EvidenceCardView.swift
 //
 // SwiftUI renderer for Rich Media Evidence Cards returned by tagged agents and plugins.
+// Integrates line-by-line syntax-highlighted CodeDiffInspectorView.
 // Uses centralized design system tokens (`Color.speak*`, `Font.speakMono*`).
 
 import SpeakCore
@@ -41,26 +42,11 @@ public struct EvidenceCardView: View {
                 .cornerRadius(6)
             }
 
-            // Code Patch Diffs
+            // Interactive Code Patch Diffs
             if !payload.diffs.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     ForEach(payload.diffs, id: \.file) { diff in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Image(systemName: "doc.text")
-                                    .font(.system(size: 11))
-                                Text(diff.file)
-                                    .font(.speakMonoCaption)
-                            }
-                            .foregroundColor(.speakMica)
-
-                            Text(diff.patch)
-                                .font(.speakMonoCaption)
-                                .padding(6)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.black.opacity(0.3))
-                                .cornerRadius(4)
-                        }
+                        CodeDiffInspectorView(file: diff.file, patch: diff.patch)
                     }
                 }
             }
@@ -100,30 +86,25 @@ public struct EvidenceCardView: View {
     @ViewBuilder
     private func statusIcon(for status: TaskChecklistStatus) -> some View {
         switch status {
-        case .done:
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(.speakDelivered)
-                .font(.system(size: 12))
-
-        case .inProgress:
-            Image(systemName: "progress.indicator")
-                .foregroundColor(.speakAgentViolet)
-                .font(.system(size: 12))
-
-        case .blocked:
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.speakHumanAmber)
-                .font(.system(size: 12))
-
-        case .failed:
-            Image(systemName: "xmark.circle.fill")
-                .foregroundColor(.speakOnAir)
-                .font(.system(size: 12))
-
         case .pending:
             Image(systemName: "circle")
+                .font(.system(size: 11))
                 .foregroundColor(.speakMica)
-                .font(.system(size: 12))
+        case .inProgress:
+            ProgressView()
+                .controlSize(.small)
+        case .done:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 11))
+                .foregroundColor(.speakDelivered)
+        case .blocked:
+            Image(systemName: "exclamationmark.octagon.fill")
+                .font(.system(size: 11))
+                .foregroundColor(.speakHumanAmber)
+        case .failed:
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 11))
+                .foregroundColor(.speakOnAir)
         }
     }
 }
