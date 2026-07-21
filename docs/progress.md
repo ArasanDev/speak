@@ -7,6 +7,16 @@
 
 ## Current phase
 
+**Loop #58 (2026-07-22) — Full Slack Replacement Architecture & Features COMPLETE (commit `ee18954`).**
+- Implemented **Quick Switcher & Spotlight Search (`Cmd+K`)** in `QuickSwitcherModalView.swift`:
+  - Instant spotlight search overlay to jump across channels (`#general`, `#core-engine`), agents (`@Claude`, `@builder-qa`), and SQLite messages.
+- Implemented **Pinned Channel Canvas** in `ChannelCanvasView.swift`:
+  - Persistent side-sheet displaying pinned specs, live task checklists, and quick action shortcuts (`make test`, `verify-moat`).
+- Restyled **Agent Inbox** in `AgentInboxPaneView.swift`:
+  - Adopted `Color.speak*` design system tokens for durable agent call approvals and voice answer buttons.
+- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
+- Re-built and launched fresh `Speak.app` (PID 49279).
+
 **Loop #57 (2026-07-22) — Human-Agent Voice Huddles & Verbal Readbacks COMPLETE (commit `33b28ab`).**
 - Created the Slack Inspiration Matrix in `specs/slack-full-inspiration-matrix.md`.
 - Implemented **Voice Huddles** (`huddleHeaderBar`) inside `WorkspaceMainView.swift`:
