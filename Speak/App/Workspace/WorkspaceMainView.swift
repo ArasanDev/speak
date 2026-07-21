@@ -1,7 +1,7 @@
 // Speak/App/Workspace/WorkspaceMainView.swift
 //
 // Main Slack-Replacement Workspace View.
-// Renders Channel Sidebar, Spoken Thread Canvas, Voice Huddles, Quick Switcher (Cmd+K), and Channel Canvas.
+// Renders Channel Sidebar, Direct Messages (DMs), Spoken Thread Canvas, Voice Huddles, Quick Switcher (Cmd+K), and Pinned Channel Canvas.
 // Reactively wired to WorkspaceStore (SQLite) and TagRegistry.
 // Styled with centralized design system tokens (`Color.speak*`, `Font.speakMono*`).
 
@@ -23,6 +23,7 @@ public struct WorkspaceMainView: View {
     @State private var isHuddleActive: Bool = false
     @State private var isCanvasPresented: Bool = true
     @State private var isQuickSwitcherPresented: Bool = false
+    @State private var isNewChannelModalPresented: Bool = false
     @State private var activeReadingMsgId: UUID?
 
     private let speechSynthesizer = AppleSpeechSynthesizer()
@@ -32,7 +33,7 @@ public struct WorkspaceMainView: View {
     public var body: some View {
         ZStack {
             HSplitView {
-                // Left Sidebar: Channels & Agent Roster
+                // Left Sidebar: Channels, Plugins & Agent Roster DMs
                 sidebarView
                     .frame(minWidth: 200, maxWidth: 240)
 
@@ -53,6 +54,13 @@ public struct WorkspaceMainView: View {
             if isQuickSwitcherPresented {
                 QuickSwitcherModalView(isPresented: $isQuickSwitcherPresented) { targetCh in
                     selectedChannelId = targetCh
+                }
+            }
+
+            // Create New Channel Modal
+            if isNewChannelModalPresented {
+                NewChannelModalView(isPresented: $isNewChannelModalPresented) { name, topic in
+                    createNewChannel(name: name, topic: topic)
                 }
             }
         }
@@ -94,9 +102,20 @@ public struct WorkspaceMainView: View {
 
             // Channels Header
             VStack(alignment: .leading, spacing: 8) {
-                Text("CHANNELS")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.speakMica)
+                HStack {
+                    Text("CHANNELS")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.speakMica)
+
+                    Spacer()
+
+                    Button(action: { isNewChannelModalPresented = true }) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.speakMica)
+                    }
+                    .buttonStyle(.plain)
+                }
 
                 ForEach(channels) { channel in
                     Button(action: { selectedChannelId = channel.id }) {
@@ -121,6 +140,20 @@ public struct WorkspaceMainView: View {
             Divider()
                 .overlay(Color.speakCardBorder)
 
+            // Direct Messages (DMs)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("DIRECT MESSAGES")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.speakMica)
+
+                dmRow(tag: "@Claude", name: "Claude Code CLI", isOnline: true)
+                dmRow(tag: "@builder-qa", name: "Moat Audit Agent", isOnline: true)
+                dmRow(tag: "@terminal", name: "Terminal Runner", isOnline: true)
+            }
+
+            Divider()
+                .overlay(Color.speakCardBorder)
+
             // Spoken Plugins as Tags
             VStack(alignment: .leading, spacing: 8) {
                 Text("PLUGINS (@TAGS)")
@@ -138,30 +171,31 @@ public struct WorkspaceMainView: View {
                 }
             }
 
-            Divider()
-                .overlay(Color.speakCardBorder)
-
-            // Agent Roster
-            VStack(alignment: .leading, spacing: 8) {
-                Text("AGENT ROSTER")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.speakMica)
-
-                let agentTags = registeredTags.filter { $0.tagKind == .agent }
-                if agentTags.isEmpty {
-                    agentRow(tag: "@Claude", status: "Active (Claude Code)", isOnline: true)
-                    agentRow(tag: "@builder-qa", status: "Running Moat Audit", isOnline: true)
-                } else {
-                    ForEach(agentTags) { tagMeta in
-                        agentRow(tag: tagMeta.tagName, status: tagMeta.description, isOnline: true)
-                    }
-                }
-            }
-
             Spacer()
         }
         .padding(12)
         .background(Color.speakSidebarBg)
+    }
+
+    private func dmRow(tag: String, name: String, isOnline: Bool) -> some View {
+        Button(action: { selectedChannelId = "general" }) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(isOnline ? Color.speakDelivered : Color.speakMica)
+                    .frame(width: 6, height: 6)
+                Text(tag)
+                    .font(.speakMonoCaption)
+                    .foregroundColor(.speakBone)
+                Spacer()
+                Text(name)
+                    .font(.system(size: 10))
+                    .foregroundColor(.speakMica)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+        }
+        .buttonStyle(.plain)
     }
 
     private func iconForKind(_ kind: TagKind) -> String {
@@ -182,24 +216,6 @@ public struct WorkspaceMainView: View {
                 .font(.speakMonoCaption)
                 .foregroundColor(.speakTagBadgeFg)
             Spacer()
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-    }
-
-    private func agentRow(tag: String, status: String, isOnline: Bool) -> some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(isOnline ? Color.speakDelivered : Color.speakMica)
-                .frame(width: 6, height: 6)
-            Text(tag)
-                .font(.speakMonoCaption)
-                .foregroundColor(.speakBone)
-            Spacer()
-            Text(status)
-                .font(.system(size: 10))
-                .foregroundColor(.speakMica)
-                .lineLimit(1)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
@@ -375,6 +391,17 @@ public struct WorkspaceMainView: View {
     }
 
     // MARK: - Actions
+
+    private func createNewChannel(name: String, topic: String) {
+        let newCh = Channel(id: name, name: name, topic: topic)
+        channels.append(newCh)
+        selectedChannelId = name
+        Task {
+            if let dbStore = store {
+                try? await dbStore.createChannel(newCh)
+            }
+        }
+    }
 
     private func toggleHuddle() {
         isHuddleActive.toggle()
