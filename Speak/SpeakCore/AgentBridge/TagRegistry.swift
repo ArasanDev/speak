@@ -30,6 +30,14 @@ public actor TagRegistry {
 
     public init() {}
 
+    /// Registers standard built-in tag adapters (@Claude, @terminal, @builder-qa, @github).
+    public func registerDefaults() {
+        register(DefaultClaudeTagAdapter())
+        register(DefaultTerminalTagAdapter())
+        register(DefaultBuilderQATagAdapter())
+        register(DefaultGitHubTagAdapter())
+    }
+
     /// Normalizes a tag string to canonical lowercase `@name` format.
     public static func normalizeTagName(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

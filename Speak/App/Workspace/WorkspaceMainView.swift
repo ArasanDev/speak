@@ -2,6 +2,7 @@
 //
 // Main Slack-Replacement Workspace View.
 // Renders the Channel Sidebar, Spoken Thread Canvas, and Rich Evidence Cards.
+// Reactively wired to WorkspaceStore (SQLite) and TagRegistry.
 
 import SpeakCore
 import SwiftUI
@@ -16,6 +17,8 @@ public struct WorkspaceMainView: View {
     ]
     @State private var messages: [WorkspaceMessage] = []
     @State private var mockEvidences: [UUID: EvidencePayload] = [:]
+    @State private var registeredTags: [TagMetadata] = []
+    @State private var store: WorkspaceStore?
 
     public init() {}
 
@@ -29,8 +32,13 @@ public struct WorkspaceMainView: View {
             canvasView
                 .frame(minWidth: 400)
         }
-        .onAppear {
-            loadInitialData()
+        .task {
+            await loadInitialData()
+        }
+        .onChange(of: selectedChannelId) { newChannelId in
+            Task {
+                await reloadMessages(for: newChannelId)
+            }
         }
     }
 
@@ -70,9 +78,15 @@ public struct WorkspaceMainView: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(.secondary)
 
-                pluginRow(tag: "@terminal", icon: "terminal.fill", label: "Terminal Execution")
-                pluginRow(tag: "@github", icon: "arrow.triangle.pull", label: "GitHub Integration")
-                pluginRow(tag: "@xcode", icon: "hammer.fill", label: "Xcode Automation")
+                let pluginTags = registeredTags.filter { $0.tagKind == .plugin }
+                if pluginTags.isEmpty {
+                    pluginRow(tag: "@terminal", icon: "terminal.fill", label: "Terminal Execution")
+                    pluginRow(tag: "@github", icon: "arrow.triangle.pull", label: "GitHub Integration")
+                } else {
+                    ForEach(pluginTags) { tagMeta in
+                        pluginRow(tag: tagMeta.tagName, icon: iconForKind(tagMeta.tagKind), label: tagMeta.description)
+                    }
+                }
             }
 
             Divider()
@@ -83,15 +97,30 @@ public struct WorkspaceMainView: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(.secondary)
 
-                agentRow(tag: "@Claude", status: "Active (Claude Code)", isOnline: true)
-                agentRow(tag: "@codex", status: "Idle", isOnline: true)
-                agentRow(tag: "@builder-qa", status: "Running Moat Audit", isOnline: true)
+                let agentTags = registeredTags.filter { $0.tagKind == .agent }
+                if agentTags.isEmpty {
+                    agentRow(tag: "@Claude", status: "Active (Claude Code)", isOnline: true)
+                    agentRow(tag: "@builder-qa", status: "Running Moat Audit", isOnline: true)
+                } else {
+                    ForEach(agentTags) { tagMeta in
+                        agentRow(tag: tagMeta.tagName, status: tagMeta.description, isOnline: true)
+                    }
+                }
             }
 
             Spacer()
         }
         .padding(12)
         .background(Color(NSColor.controlBackgroundColor))
+    }
+
+    private func iconForKind(_ kind: TagKind) -> String {
+        switch kind {
+        case .agent: return "person.badge.shield.checkmark.fill"
+        case .plugin: return "terminal.fill"
+        case .team: return "person.3.fill"
+        case .scope: return "globe"
+        }
     }
 
     private func pluginRow(tag: String, icon: String, label: String) -> some View {
@@ -119,6 +148,7 @@ public struct WorkspaceMainView: View {
             Text(status)
                 .font(.system(size: 10))
                 .foregroundColor(.secondary)
+                .lineLimit(1)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
@@ -208,55 +238,140 @@ public struct WorkspaceMainView: View {
 
     // MARK: - Actions
 
-    private func loadInitialData() {
-        let id1 = UUID()
-        let id2 = UUID()
+    private func loadInitialData() async {
+        await TagRegistry.shared.registerDefaults()
+        registeredTags = await TagRegistry.shared.allTags()
 
-        messages = [
-            WorkspaceMessage(id: id1, channelId: "general", senderTag: "@tamil", text: "Tag @Claude review AudioCapture tap safety and tag @terminal run make test"),
-            WorkspaceMessage(id: id2, channelId: "general", senderTag: "@Claude", text: "Inspected AudioCapture.swift. Added input.removeTap guard and verified with test suite.")
-        ]
-
-        mockEvidences[id2] = EvidencePayload(
-            summary: "AudioCapture tap safety patch applied & verified.",
-            checklist: [
-                TaskChecklistItem(id: "t1", title: "Inspect AudioCapture.swift line 89", status: .done),
-                TaskChecklistItem(id: "t2", title: "Add removeTap(onBus: bus) guard", status: .done),
-                TaskChecklistItem(id: "t3", title: "Run XCTest & verify-moat audit", status: .done)
-            ],
-            diffs: [
-                CodeDiffBlock(file: "AudioCapture.swift", patch: "+ input.removeTap(onBus: bus)\n  input.installTap(onBus: bus...)")
+        do {
+            let dbStore = try WorkspaceStore.makeProductionStore()
+            self.store = dbStore
+            let fetchedChannels = try await dbStore.fetchChannels()
+            if !fetchedChannels.isEmpty {
+                self.channels = fetchedChannels
+            }
+            await reloadMessages(for: selectedChannelId)
+        } catch {
+            // Fallback seed data if database is initialized for the first time
+            let id1 = UUID()
+            let id2 = UUID()
+            messages = [
+                WorkspaceMessage(id: id1, channelId: "general", senderTag: "@tamil", text: "Tag @Claude review AudioCapture tap safety and tag @terminal run make test"),
+                WorkspaceMessage(id: id2, channelId: "general", senderTag: "@Claude", text: "Inspected AudioCapture.swift. Added input.removeTap guard and verified with test suite.")
             ]
-        )
+            mockEvidences[id2] = EvidencePayload(
+                summary: "AudioCapture tap safety patch applied & verified.",
+                checklist: [
+                    TaskChecklistItem(id: "t1", title: "Inspect AudioCapture.swift line 89", status: .done),
+                    TaskChecklistItem(id: "t2", title: "Add removeTap(onBus: bus) guard", status: .done),
+                    TaskChecklistItem(id: "t3", title: "Run XCTest & verify-moat audit", status: .done)
+                ],
+                diffs: [
+                    CodeDiffBlock(file: "AudioCapture.swift", patch: "+ input.removeTap(onBus: bus)\n  input.installTap(onBus: bus...)")
+                ]
+            )
+        }
+    }
+
+    private func reloadMessages(for channelId: String) async {
+        guard let dbStore = store else { return }
+        do {
+            let msgs = try await dbStore.fetchMessages(channelId: channelId)
+            if !msgs.isEmpty {
+                self.messages = msgs
+            }
+        } catch {
+            // Keep current in-memory messages on error
+        }
     }
 
     private func sendMessage() {
-        guard !inputText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-        let newMsg = WorkspaceMessage(channelId: selectedChannelId, senderTag: "@tamil", text: inputText)
+        let textToSend = inputText.trimmingCharacters(in: .whitespaces)
+        guard !textToSend.isEmpty else { return }
+
+        let newMsg = WorkspaceMessage(channelId: selectedChannelId, senderTag: "@tamil", text: textToSend)
         messages.append(newMsg)
-        let textToSend = inputText
         inputText = ""
 
-        // Extract tags and simulate dynamic agent response
-        let extractedTags = VoiceCommandParser.extractTags(from: textToSend)
-        if !extractedTags.isEmpty {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                let targetTag = extractedTags[0].tag
-                let replyId = UUID()
-                let reply = WorkspaceMessage(
-                    id: replyId,
-                    channelId: selectedChannelId,
-                    senderTag: targetTag,
-                    text: "Received turn for \(targetTag). Executing requested task..."
-                )
-                messages.append(reply)
-                mockEvidences[replyId] = EvidencePayload(
-                    summary: "Executed action for \(targetTag).",
-                    checklist: [
-                        TaskChecklistItem(id: "c1", title: "Parsed turn parameters", status: .done),
-                        TaskChecklistItem(id: "c2", title: "Executing plugin task...", status: .inProgress)
-                    ]
-                )
+        Task {
+            if let dbStore = store {
+                try? await dbStore.postMessage(newMsg)
+            }
+
+            // Extract tags and execute matching adapter
+            let extractedTags = VoiceCommandParser.extractTags(from: textToSend)
+            for tagMention in extractedTags {
+                if let adapter = await TagRegistry.shared.lookup(tagName: tagMention.tag) {
+                    do {
+                        let outcome = try await adapter.handleTurn(prompt: textToSend, sessionId: nil)
+                        await handleAdapterOutcome(outcome, targetTag: tagMention.tag)
+                    } catch {
+                        let replyId = UUID()
+                        let errReply = WorkspaceMessage(
+                            id: replyId,
+                            channelId: selectedChannelId,
+                            senderTag: tagMention.tag,
+                            text: "Execution failed: \(error.localizedDescription)"
+                        )
+                        messages.append(errReply)
+                        if let dbStore = store {
+                            try? await dbStore.postMessage(errReply)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func handleAdapterOutcome(_ outcome: TagTurnOutcome, targetTag: String) async {
+        let replyId = UUID()
+        switch outcome {
+        case .completed(let summary, let evidence):
+            let reply = WorkspaceMessage(
+                id: replyId,
+                channelId: selectedChannelId,
+                senderTag: targetTag,
+                text: summary
+            )
+            messages.append(reply)
+            if let evidence = evidence {
+                mockEvidences[replyId] = evidence
+            }
+            if let dbStore = store {
+                try? await dbStore.postMessage(reply)
+            }
+        case .inProgress(let summary, let checklist):
+            let reply = WorkspaceMessage(
+                id: replyId,
+                channelId: selectedChannelId,
+                senderTag: targetTag,
+                text: summary
+            )
+            messages.append(reply)
+            mockEvidences[replyId] = EvidencePayload(summary: summary, checklist: checklist)
+            if let dbStore = store {
+                try? await dbStore.postMessage(reply)
+            }
+        case .needsApproval(let prompt, _):
+            let reply = WorkspaceMessage(
+                id: replyId,
+                channelId: selectedChannelId,
+                senderTag: targetTag,
+                text: "Approval requested: \(prompt)"
+            )
+            messages.append(reply)
+            if let dbStore = store {
+                try? await dbStore.postMessage(reply)
+            }
+        case .failed(let errorMsg):
+            let reply = WorkspaceMessage(
+                id: replyId,
+                channelId: selectedChannelId,
+                senderTag: targetTag,
+                text: "Failed: \(errorMsg)"
+            )
+            messages.append(reply)
+            if let dbStore = store {
+                try? await dbStore.postMessage(reply)
             }
         }
     }

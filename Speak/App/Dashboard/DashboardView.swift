@@ -75,6 +75,7 @@ struct DashboardView: View {
     private func detail(for section: DashboardSection) -> some View {
         switch section {
         case .home:       HomePaneView(context: context)
+        case .workspace:  WorkspaceMainView()
         case .aiStudio:   AIStudioPaneView(context: context)
         case .insights:   InsightsPaneView(context: context)
         case .dictionary: DictionaryPaneView(context: context)
