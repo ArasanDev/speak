@@ -7,11 +7,15 @@
 
 ## Current phase
 
-**Loop #52 (2026-07-21) — Base Hardening (Actor Deadlock & Duplicate Tap fixes) COMPLETE.**
-- Hardened audio capture by calling `input.removeTap(onBus: bus)` before `installTap` in `AudioCapture.swift` to avoid Objective-C duplicate-tap crashes.
-- Implemented a 1.5s structured watchdog timeout around `resultsTask.value` in `AppleSpeechTranscriber.swift` to prevent SpeechAnalyzer finalization from deadlocking the `SpeakEngine` actor on empty/silent audio feeds.
-- Full test suite passed (269 XCTests passed), including latency benchmarks (`L_partial` p50=152.8ms, local raw-pipeline median=1ms).
-- Moat verification passed (7/7 audits).
+**Loop #53 (2026-07-21) — Human-Agent Workspace & Plugin-as-Tag System COMPLETE (commit `b287f3b`).**
+- Designed and built the local-first Slack Replacement Workspace architecture:
+  - Domain: `TagRegistry` (thread-safe actor tracking `@Claude`, `@terminal`, `@github`), `PluginTagAdapter` protocol, `EvidencePayload` for Rich Media Cards.
+  - Storage: `WorkspaceStore` SQLite actor database for Channels (`#general`, `#core-engine`), Spoken Threads, and Evidence Cards.
+  - Parser: Extended `VoiceCommandParser` (`VoiceCommandParser+Tags.swift`) to parse spoken/typed `@tag` mentions (`@agent`, `@team`, `@channel`).
+  - UI: Built Dual-Mode interface (`AppMode.swift`, `TopSegmentedBarView.swift`, `WorkspaceMainView.swift`, `EvidenceCardView.swift`).
+- All 269 XCTests passed in 33 suites.
+- Moat audit passed 7/7 privacy checks.
+- Merged feature branch to `master` (commit `b287f3b`). Live binary running on PID 28942.
 
 **Loop #51 (2026-07-11) — THREE SLICES SHIPPED in one orchestrated day:
 AVB-6 sessions (`9cff623`), AVB-7 durable calls + inbox (`d245dcc`), and FE-1
