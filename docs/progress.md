@@ -7,6 +7,15 @@
 
 ## Current phase
 
+**Loop #64 (2026-07-22) — User Profile Modal & Full Screen UI Polish COMPLETE (commit `519e47e`).**
+- Built `UserProfileModalView.swift` and wired trigger button in `WorkspaceMainView.swift`:
+  - Consistent borders using `Color.speakCardBorder` (`#23272F`).
+  - Smooth transitions (`.easeInOut(duration: 0.2)`).
+  - Intuitive navigation & minimal full-screen responsive layout.
+  - Displays user profile handle (`👤 @tamil`), role, privacy moat metrics (100% Offline, Zero Egress), and active tag roster.
+- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
+- Re-built and launched fresh `Speak.app` (PID 82761).
+
 **Loop #63 (2026-07-22) — CodeDiffInspectorView & Rich Evidence Cards COMPLETE (commit `6caa6ed`).**
 - Built `CodeDiffInspectorView.swift` and integrated line-by-line syntax-highlighted code diff inspection into `EvidenceCardView.swift`:
   - Highlights additions (`+`) in green (`Color.speakDelivered`), deletions (`-`) in red (`Color.speakOnAir`), and neutral lines in Monaco font.
