@@ -1,7 +1,7 @@
 // Speak/App/Workspace/WorkspaceMainView.swift
 //
 // Main Slack-Replacement Workspace View.
-// Renders Channel Sidebar, Spoken Thread Canvas, Voice Huddles, and Rich Evidence Cards.
+// Renders Channel Sidebar, Spoken Thread Canvas, Voice Huddles, Quick Switcher (Cmd+K), and Channel Canvas.
 // Reactively wired to WorkspaceStore (SQLite) and TagRegistry.
 // Styled with centralized design system tokens (`Color.speak*`, `Font.speakMono*`).
 
@@ -21,6 +21,8 @@ public struct WorkspaceMainView: View {
     @State private var registeredTags: [TagMetadata] = []
     @State private var store: WorkspaceStore?
     @State private var isHuddleActive: Bool = false
+    @State private var isCanvasPresented: Bool = true
+    @State private var isQuickSwitcherPresented: Bool = false
     @State private var activeReadingMsgId: UUID?
 
     private let speechSynthesizer = AppleSpeechSynthesizer()
@@ -28,14 +30,31 @@ public struct WorkspaceMainView: View {
     public init() {}
 
     public var body: some View {
-        HSplitView {
-            // Left Sidebar: Channels & Agent Roster
-            sidebarView
-                .frame(minWidth: 210, maxWidth: 260)
+        ZStack {
+            HSplitView {
+                // Left Sidebar: Channels & Agent Roster
+                sidebarView
+                    .frame(minWidth: 200, maxWidth: 240)
 
-            // Main Canvas: Thread Feed & Input
-            canvasView
-                .frame(minWidth: 440)
+                // Main Canvas: Thread Feed & Input Bar
+                HStack(spacing: 0) {
+                    canvasView
+                        .frame(minWidth: 400)
+
+                    if isCanvasPresented {
+                        ChannelCanvasView(channelId: selectedChannelId) {
+                            isCanvasPresented = false
+                        }
+                    }
+                }
+            }
+
+            // Quick Switcher Modal Overlay (Cmd+K)
+            if isQuickSwitcherPresented {
+                QuickSwitcherModalView(isPresented: $isQuickSwitcherPresented) { targetCh in
+                    selectedChannelId = targetCh
+                }
+            }
         }
         .task {
             await loadInitialData()
@@ -51,6 +70,28 @@ public struct WorkspaceMainView: View {
 
     private var sidebarView: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // Quick Search Button (Cmd+K)
+            Button(action: { isQuickSwitcherPresented = true }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 12))
+                    Text("Search or jump...")
+                        .font(.system(size: 12))
+                    Spacer()
+                    Text("⌘K")
+                        .font(.speakMonoCaption)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
+                        .background(Color.speakInk2)
+                        .cornerRadius(4)
+                }
+                .foregroundColor(.speakMica)
+                .padding(8)
+                .background(Color.speakInk2)
+                .cornerRadius(6)
+            }
+            .buttonStyle(.plain)
+
             // Channels Header
             VStack(alignment: .leading, spacing: 8) {
                 Text("CHANNELS")
@@ -173,7 +214,16 @@ public struct WorkspaceMainView: View {
                 Text("# \(selectedChannelId)")
                     .font(.system(size: 15, weight: .bold))
                     .foregroundColor(.speakBone)
+
                 Spacer()
+
+                // Toggle Canvas Button
+                Button(action: { isCanvasPresented.toggle() }) {
+                    Image(systemName: isCanvasPresented ? "doc.richtext.fill" : "doc.richtext")
+                        .font(.system(size: 14))
+                        .foregroundColor(isCanvasPresented ? .speakAgentViolet : .speakMica)
+                }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)

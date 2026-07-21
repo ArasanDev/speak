@@ -4,13 +4,7 @@
 // non-terminal `AgentCall`s (prompt, urgency, elapsed time, mode). Per row:
 // Answer by voice (routes through the SAME capture path `speak_request_input`
 // uses), Decline, Dismiss.
-//
-// [decision: AVB-7 cut line] Minimal, plain styling — `Speak/App/DesignSystem/`
-// does not exist on master yet (FE-3 is building the token system in a
-// worktree). This pane intentionally does NOT create or depend on those
-// tokens; FE-3 restyles it once merged. Poll-on-appear + a coarse timer is
-// the whole refresh story this slice needs (no push-style live updates,
-// per the design doc's deferral list).
+// Styled with centralized design system tokens (`Color.speak*`, `Font.speakMono*`).
 
 import SpeakCore
 import SwiftUI
@@ -27,12 +21,12 @@ struct AgentInboxPaneView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PaneHeader(title: "Agent Inbox", subtitle: "Questions submitted by AI agents, waiting for you.")
+            PaneHeader(title: "Agent Inbox", subtitle: "Questions submitted by AI agents, waiting for your approval.")
 
             if let errorMessage {
                 Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.speakMonoCaption)
+                    .foregroundColor(.speakOnAir)
                     .padding(.horizontal)
             }
 
@@ -77,7 +71,6 @@ struct AgentInboxPaneView: View {
     private func startPolling() {
         refreshTask?.cancel()
         refreshTask = Task {
-            // Coarse timer — no push-style live updates in this slice.
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
                 guard !Task.isCancelled else { break }
@@ -115,51 +108,74 @@ private struct AgentCallRow: View {
     let onDismiss: () async -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(call.prompt)
-                    .font(.body)
+                    .font(.speakMonoBody)
+                    .foregroundColor(.speakBone)
                     .lineLimit(2)
                 Spacer()
                 urgencyBadge
             }
+
             HStack(spacing: 8) {
                 Text(call.mode.rawValue.capitalized)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.speakMonoCaption)
+                    .foregroundColor(.speakAgentViolet)
+
                 Text("·")
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.speakMica)
+
                 Text(call.createdAt, style: .relative)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.speakMonoCaption)
+                    .foregroundColor(.speakMica)
             }
-            HStack(spacing: 8) {
-                Button("Answer by voice") {
-                    Task { await onAnswerByVoice() }
+
+            HStack(spacing: 10) {
+                Button(action: { Task { await onAnswerByVoice() } }) {
+                    Label("Answer by voice", systemImage: "mic.fill")
+                        .font(.system(size: 11, weight: .semibold))
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(.speakHumanAmber)
                 .disabled(isBusy)
+
                 Button("Decline") {
                     Task { await onDecline() }
                 }
+                .buttonStyle(.bordered)
+                .tint(.speakOnAir)
                 .disabled(isBusy)
+
                 Button("Dismiss") {
                     Task { await onDismiss() }
                 }
+                .buttonStyle(.plain)
+                .foregroundColor(.speakMica)
                 .disabled(isBusy)
+
                 if isBusy {
                     ProgressView().controlSize(.small)
                 }
             }
         }
+        .padding(10)
+        .background(Color.speakInk2)
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.speakCardBorder, lineWidth: 1)
+        )
         .padding(.vertical, 4)
     }
 
     private var urgencyBadge: some View {
         Text(call.urgency.rawValue.capitalized)
-            .font(.caption2)
-            .padding(.horizontal, 6)
+            .font(.speakMonoCaption)
+            .padding(.horizontal, 8)
             .padding(.vertical, 2)
-            .background(Color.secondary.opacity(0.15))
+            .background(call.urgency == .high ? Color.speakOnAir.opacity(0.2) : Color.speakAgentViolet.opacity(0.15))
+            .foregroundColor(call.urgency == .high ? .speakOnAir : .speakAgentViolet)
             .clipShape(Capsule())
     }
 }
