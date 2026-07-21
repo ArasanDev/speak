@@ -7,6 +7,16 @@
 
 ## Current phase
 
+**Loop #57 (2026-07-22) — Human-Agent Voice Huddles & Verbal Readbacks COMPLETE (commit `33b28ab`).**
+- Created the Slack Inspiration Matrix in `specs/slack-full-inspiration-matrix.md`.
+- Implemented **Voice Huddles** (`huddleHeaderBar`) inside `WorkspaceMainView.swift`:
+  - Drop-in live audio huddle room (`Join Huddle` / `Leave Huddle`).
+  - Active participant roster display (`👤 @tamil`, `🤖 @Claude`, `🤖 @builder-qa`).
+  - Automatic verbal speech readback of agent replies during Huddles via `AppleSpeechSynthesizer` (`AVSpeechSynthesizer`).
+  - Per-message 🔊 speaker buttons to trigger on-demand TTS readback for any message in thread history.
+- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
+- Re-built and launched fresh `Speak.app` (PID 44836).
+
 **Loop #56 (2026-07-22) — Centralized Slack Theme & Dual-Mode Header UI COMPLETE (commit `37940ca`).**
 - Centralized UI design system tokens in `SpeakColors.swift` with Slack-inspired theme colors (`speakSidebarBg`, `speakSidebarActiveBg`, `speakTagBadgeBg`, `speakTagBadgeFg`, `speakCardBorder`).
 - Embedded centered `TopSegmentedBarView` at the top of `DashboardView.swift` to seamlessly switch between **⚡ Dictation Engine** (Mode 1) and **💬 Agent Workspace** (Mode 2).
