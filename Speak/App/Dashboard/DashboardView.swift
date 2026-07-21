@@ -1,12 +1,13 @@
 // App/Dashboard/DashboardView.swift
 //
 // The full-window dashboard: a NavigationSplitView with the sidebar IA from
-// `DashboardSection`. This is the Phase-2 UI spine (acceleration-plan.md Wave A) — the
-// daily-open home that every v1 feature plugs into as a sidebar item.
+// `DashboardSection`.
 //
-// ROUTING: the detail column switches on the selected `DashboardSection` and hands each
-// pane the shared `DashboardContext`. Includes TopSegmentedBarView at top center for
-// dual-mode toggling between Dictation Engine and Agent Workspace.
+// DUAL-MODE SIDEBAR ISOLATION RULE:
+// When in Agent Workspace Mode (appMode == .workspace), the Dictation NavigationSplitView
+// sidebar is hidden, allowing WorkspaceMainView to fill the entire window with its single
+// Slack Channel Sidebar. When in Dictation Engine Mode (appMode == .dictation),
+// NavigationSplitView renders the Dictation Engine Sidebar.
 
 import SpeakCore
 import SwiftUI
@@ -33,32 +34,43 @@ struct DashboardView: View {
             // Top-center segmented bar for dual-mode switching
             TopSegmentedBarView(currentMode: $appMode)
 
-            NavigationSplitView {
-                VStack(spacing: 0) {
-                    List(DashboardSection.mainSections, selection: $selection) { section in
-                        Label(section.title, systemImage: section.systemImage)
-                            .tag(section)
-                    }
-                    .listStyle(.sidebar)
-
-                    Divider()
-
-                    List([DashboardSection.settings], selection: $selection) { section in
-                        Label(section.title, systemImage: section.systemImage)
-                            .tag(section)
-                    }
-                    .listStyle(.sidebar)
-                    .frame(height: 40)
-                    .scrollDisabled(true)
-                }
-                .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
-            } detail: {
-                detailContent
+            if appMode == .workspace {
+                // Workspace Mode: WorkspaceMainView fills the entire window with its single Slack Channel Sidebar!
+                WorkspaceMainView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .navigationTitle(appMode == .workspace ? "Agent Workspace" : selection.title)
+            } else {
+                // Dictation Engine Mode: NavigationSplitView renders the Dictation Engine Sidebar
+                NavigationSplitView {
+                    VStack(spacing: 0) {
+                        List(DashboardSection.mainSections.filter { $0 != .workspace }, selection: $selection) { section in
+                            Label(section.title, systemImage: section.systemImage)
+                                .tag(section)
+                        }
+                        .listStyle(.sidebar)
+
+                        Divider()
+                            .overlay(Color.speakCardBorder)
+
+                        List([DashboardSection.settings], selection: $selection) { section in
+                            Label(section.title, systemImage: section.systemImage)
+                                .tag(section)
+                        }
+                        .listStyle(.sidebar)
+                        .frame(height: 40)
+                        .scrollDisabled(true)
+                    }
+                    .background(Color.speakSidebarBg)
+                    .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
+                } detail: {
+                    detail(for: selection)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.speakInk)
+                        .navigationTitle(selection.title)
+                }
             }
         }
         .frame(minWidth: 840, minHeight: 560)
+        .background(Color.speakInk)
         .onChange(of: appMode) { newMode in
             if newMode == .workspace {
                 selection = .workspace
@@ -76,15 +88,6 @@ struct DashboardView: View {
     }
 
     // MARK: - Detail routing
-
-    @ViewBuilder
-    private var detailContent: some View {
-        if appMode == .workspace {
-            WorkspaceMainView()
-        } else {
-            detail(for: selection)
-        }
-    }
 
     @ViewBuilder
     private func detail(for section: DashboardSection) -> some View {
