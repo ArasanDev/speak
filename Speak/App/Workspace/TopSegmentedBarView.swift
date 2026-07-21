@@ -12,7 +12,9 @@ public struct TopSegmentedBarView: View {
     }
 
     public var body: some View {
-        HStack(spacing: 0) {
+        HStack {
+            Spacer()
+
             Picker("App Mode", selection: $currentMode) {
                 ForEach(AppMode.allCases) { mode in
                     Label(mode.rawValue, systemImage: mode.iconName)
@@ -20,12 +22,18 @@ public struct TopSegmentedBarView: View {
                 }
             }
             .pickerStyle(.segmented)
-            .frame(maxWidth: 360)
+            .frame(width: 320)
 
             Spacer()
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color(NSColor.windowBackgroundColor))
+        .background(Color.speakInk)
+        .overlay(
+            Rectangle()
+                .frame(height: 1)
+                .foregroundColor(.speakCardBorder),
+            alignment: .bottom
+        )
     }
 }

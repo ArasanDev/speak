@@ -3,6 +3,7 @@
 // Main Slack-Replacement Workspace View.
 // Renders the Channel Sidebar, Spoken Thread Canvas, and Rich Evidence Cards.
 // Reactively wired to WorkspaceStore (SQLite) and TagRegistry.
+// Styled with centralized design system tokens (`Color.speak*`, `Font.speakMono*`).
 
 import SpeakCore
 import SwiftUI
@@ -26,11 +27,11 @@ public struct WorkspaceMainView: View {
         HSplitView {
             // Left Sidebar: Channels & Agent Roster
             sidebarView
-                .frame(minWidth: 200, maxWidth: 260)
+                .frame(minWidth: 210, maxWidth: 260)
 
             // Main Canvas: Thread Feed & Input
             canvasView
-                .frame(minWidth: 400)
+                .frame(minWidth: 440)
         }
         .task {
             await loadInitialData()
@@ -50,20 +51,22 @@ public struct WorkspaceMainView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("CHANNELS")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.speakMica)
 
                 ForEach(channels) { channel in
                     Button(action: { selectedChannelId = channel.id }) {
                         HStack {
                             Image(systemName: "number")
                                 .font(.system(size: 12))
+                                .foregroundColor(.speakMica)
                             Text(channel.name)
                                 .font(.system(size: 13, weight: selectedChannelId == channel.id ? .semibold : .regular))
+                                .foregroundColor(.speakBone)
                             Spacer()
                         }
-                        .padding(.vertical, 4)
-                        .padding(.horizontal, 8)
-                        .background(selectedChannelId == channel.id ? Color.accentColor.opacity(0.15) : Color.clear)
+                        .padding(.vertical, 5)
+                        .padding(.horizontal, 10)
+                        .background(selectedChannelId == channel.id ? Color.speakSidebarActiveBg : Color.clear)
                         .cornerRadius(6)
                     }
                     .buttonStyle(.plain)
@@ -71,12 +74,13 @@ public struct WorkspaceMainView: View {
             }
 
             Divider()
+                .overlay(Color.speakCardBorder)
 
             // Spoken Plugins as Tags
             VStack(alignment: .leading, spacing: 8) {
                 Text("PLUGINS (@TAGS)")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.speakMica)
 
                 let pluginTags = registeredTags.filter { $0.tagKind == .plugin }
                 if pluginTags.isEmpty {
@@ -90,12 +94,13 @@ public struct WorkspaceMainView: View {
             }
 
             Divider()
+                .overlay(Color.speakCardBorder)
 
             // Agent Roster
             VStack(alignment: .leading, spacing: 8) {
                 Text("AGENT ROSTER")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.speakMica)
 
                 let agentTags = registeredTags.filter { $0.tagKind == .agent }
                 if agentTags.isEmpty {
@@ -111,7 +116,7 @@ public struct WorkspaceMainView: View {
             Spacer()
         }
         .padding(12)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(Color.speakSidebarBg)
     }
 
     private func iconForKind(_ kind: TagKind) -> String {
@@ -127,10 +132,10 @@ public struct WorkspaceMainView: View {
         HStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 11))
-                .foregroundColor(.secondary)
+                .foregroundColor(.speakMica)
             Text(tag)
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                .foregroundColor(.accentColor)
+                .font(.speakMonoCaption)
+                .foregroundColor(.speakTagBadgeFg)
             Spacer()
         }
         .padding(.horizontal, 8)
@@ -140,14 +145,15 @@ public struct WorkspaceMainView: View {
     private func agentRow(tag: String, status: String, isOnline: Bool) -> some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(isOnline ? Color.green : Color.gray)
+                .fill(isOnline ? Color.speakDelivered : Color.speakMica)
                 .frame(width: 6, height: 6)
             Text(tag)
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .font(.speakMonoCaption)
+                .foregroundColor(.speakBone)
             Spacer()
             Text(status)
                 .font(.system(size: 10))
-                .foregroundColor(.secondary)
+                .foregroundColor(.speakMica)
                 .lineLimit(1)
         }
         .padding(.horizontal, 8)
@@ -162,13 +168,15 @@ public struct WorkspaceMainView: View {
             HStack {
                 Text("# \(selectedChannelId)")
                     .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.speakBone)
                 Spacer()
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(Color(NSColor.windowBackgroundColor))
+            .background(Color.speakInk)
 
             Divider()
+                .overlay(Color.speakCardBorder)
 
             // Message / Thread Scroll
             ScrollView {
@@ -179,17 +187,19 @@ public struct WorkspaceMainView: View {
                 }
                 .padding(16)
             }
+            .background(Color.speakInk)
 
             Divider()
+                .overlay(Color.speakCardBorder)
 
             // Spoken Turn Input Bar
             HStack(spacing: 10) {
                 Button(action: handleVoiceRecord) {
                     Image(systemName: "mic.fill")
                         .font(.system(size: 14))
-                        .foregroundColor(.white)
+                        .foregroundColor(.black)
                         .padding(8)
-                        .background(Color.accentColor)
+                        .background(Color.speakHumanAmber)
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -197,7 +207,7 @@ public struct WorkspaceMainView: View {
                 TextField("Type or speak a message... (e.g. Tag @Claude check tap guard)", text: $inputText)
                     .textFieldStyle(.plain)
                     .padding(8)
-                    .background(Color.secondary.opacity(0.1))
+                    .background(Color.speakInk2)
                     .cornerRadius(8)
                     .onSubmit {
                         sendMessage()
@@ -205,9 +215,10 @@ public struct WorkspaceMainView: View {
 
                 Button("Send", action: sendMessage)
                     .buttonStyle(.borderedProminent)
+                    .tint(.speakAgentViolet)
             }
             .padding(12)
-            .background(Color(NSColor.windowBackgroundColor))
+            .background(Color.speakInk)
         }
     }
 
@@ -215,18 +226,19 @@ public struct WorkspaceMainView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Text(msg.senderTag)
-                    .font(.system(size: 12, weight: .bold, design: .monospaced))
-                    .foregroundColor(msg.senderTag.hasPrefix("@") && msg.senderTag != "@tamil" ? .accentColor : .primary)
+                    .font(.speakMonoCaption)
+                    .foregroundColor(msg.senderTag.hasPrefix("@") && msg.senderTag != "@tamil" ? .speakAgentViolet : .speakHumanAmber)
 
                 Text(msg.createdAt, style: .time)
                     .font(.system(size: 10))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.speakMica)
 
                 Spacer()
             }
 
             Text(msg.text)
-                .font(.system(size: 13))
+                .font(.speakMonoBody)
+                .foregroundColor(.speakBone)
 
             // Evidence Card if present
             if let evidence = mockEvidences[msg.id] {
@@ -339,6 +351,7 @@ public struct WorkspaceMainView: View {
             if let dbStore = store {
                 try? await dbStore.postMessage(reply)
             }
+
         case .inProgress(let summary, let checklist):
             let reply = WorkspaceMessage(
                 id: replyId,
@@ -351,6 +364,7 @@ public struct WorkspaceMainView: View {
             if let dbStore = store {
                 try? await dbStore.postMessage(reply)
             }
+
         case .needsApproval(let prompt, _):
             let reply = WorkspaceMessage(
                 id: replyId,
@@ -362,6 +376,7 @@ public struct WorkspaceMainView: View {
             if let dbStore = store {
                 try? await dbStore.postMessage(reply)
             }
+
         case .failed(let errorMsg):
             let reply = WorkspaceMessage(
                 id: replyId,

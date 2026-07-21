@@ -74,6 +74,26 @@ public extension Color {
     /// Terminal success ONLY: pasted, answered, completed. Not a general
     /// "positive" indicator. [decision: spec §2, #5FBF8F]
     static let speakDelivered = Color(red: 0x5F / 255, green: 0xBF / 255, blue: 0x8F / 255)
+
+    // MARK: - Workspace & Slack-Inspired Identity Tokens
+
+    /// Channel Sidebar background — deep ink in dark mode, light slate in light mode.
+    static let speakSidebarBg = Color(
+        light: Color(red: 0xF3 / 255, green: 0xF2 / 255, blue: 0xEE / 255),
+        dark: Color(red: 0x12 / 255, green: 0x14 / 255, blue: 0x18 / 255)
+    )
+
+    /// Active channel item highlight.
+    static let speakSidebarActiveBg = Color.speakAgentViolet.opacity(0.18)
+
+    /// Tag mention badge background (@Claude, @terminal).
+    static let speakTagBadgeBg = Color.speakAgentViolet.opacity(0.15)
+
+    /// Tag mention badge text color.
+    static let speakTagBadgeFg = Color.speakAgentViolet
+
+    /// Card & Container subtle border.
+    static let speakCardBorder = Color.speakMica.opacity(0.25)
 }
 
 // MARK: - Light/dark color helper

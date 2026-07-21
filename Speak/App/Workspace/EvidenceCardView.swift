@@ -1,7 +1,7 @@
 // Speak/App/Workspace/EvidenceCardView.swift
 //
 // SwiftUI renderer for Rich Media Evidence Cards returned by tagged agents and plugins.
-// Renders dynamic task checklists, code patch diffs, and media attachment previews.
+// Uses centralized design system tokens (`Color.speak*`, `Font.speakMono*`).
 
 import SpeakCore
 import SwiftUI
@@ -18,7 +18,7 @@ public struct EvidenceCardView: View {
             // Summary Header
             Text(payload.summary)
                 .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.primary)
+                .foregroundColor(.speakBone)
 
             // Dynamic Task Checklist
             if !payload.checklist.isEmpty {
@@ -26,16 +26,18 @@ public struct EvidenceCardView: View {
                     ForEach(payload.checklist) { item in
                         HStack(spacing: 8) {
                             statusIcon(for: item.status)
+
                             Text(item.title)
-                                .font(.system(size: 12))
-                                .foregroundColor(item.status == .done ? .secondary : .primary)
+                                .font(.speakMonoCaption)
+                                .foregroundColor(item.status == .done ? .speakMica : .speakBone)
                                 .strikethrough(item.status == .done)
+
                             Spacer()
                         }
                     }
                 }
                 .padding(8)
-                .background(Color.secondary.opacity(0.08))
+                .background(Color.speakInk.opacity(0.4))
                 .cornerRadius(6)
             }
 
@@ -48,15 +50,15 @@ public struct EvidenceCardView: View {
                                 Image(systemName: "doc.text")
                                     .font(.system(size: 11))
                                 Text(diff.file)
-                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                    .font(.speakMonoCaption)
                             }
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.speakMica)
 
                             Text(diff.patch)
-                                .font(.system(size: 11, design: .monospaced))
+                                .font(.speakMonoCaption)
                                 .padding(6)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.black.opacity(0.15))
+                                .background(Color.black.opacity(0.3))
                                 .cornerRadius(4)
                         }
                     }
@@ -68,27 +70,29 @@ public struct EvidenceCardView: View {
                 HStack(spacing: 12) {
                     if !payload.images.isEmpty {
                         Label("\(payload.images.count) Images", systemImage: "photo")
-                            .font(.system(size: 11))
-                            .foregroundColor(.accentColor)
+                            .font(.speakMonoCaption)
+                            .foregroundColor(.speakAgentViolet)
                     }
+
                     if !payload.videos.isEmpty {
                         Label("\(payload.videos.count) Videos", systemImage: "film")
-                            .font(.system(size: 11))
-                            .foregroundColor(.accentColor)
+                            .font(.speakMonoCaption)
+                            .foregroundColor(.speakAgentViolet)
                     }
+
                     if payload.audioPath != nil {
                         Label("Audio Summary", systemImage: "waveform")
-                            .font(.system(size: 11))
-                            .foregroundColor(.accentColor)
+                            .font(.speakMonoCaption)
+                            .foregroundColor(.speakHumanAmber)
                     }
                 }
             }
         }
         .padding(12)
-        .background(Color.primary.opacity(0.04))
+        .background(Color.speakInk2)
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                .stroke(Color.speakCardBorder, lineWidth: 1)
         )
         .cornerRadius(8)
     }
@@ -98,23 +102,27 @@ public struct EvidenceCardView: View {
         switch status {
         case .done:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(.green)
+                .foregroundColor(.speakDelivered)
                 .font(.system(size: 12))
+
         case .inProgress:
             Image(systemName: "progress.indicator")
-                .foregroundColor(.blue)
+                .foregroundColor(.speakAgentViolet)
                 .font(.system(size: 12))
+
         case .blocked:
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.orange)
+                .foregroundColor(.speakHumanAmber)
                 .font(.system(size: 12))
+
         case .failed:
             Image(systemName: "xmark.circle.fill")
-                .foregroundColor(.red)
+                .foregroundColor(.speakOnAir)
                 .font(.system(size: 12))
+
         case .pending:
             Image(systemName: "circle")
-                .foregroundColor(.gray)
+                .foregroundColor(.speakMica)
                 .font(.system(size: 12))
         }
     }

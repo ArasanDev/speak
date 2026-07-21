@@ -5,13 +5,8 @@
 // daily-open home that every v1 feature plugs into as a sidebar item.
 //
 // ROUTING: the detail column switches on the selected `DashboardSection` and hands each
-// pane the shared `DashboardContext`. Pane bodies are owned by their specialists; this
-// file owns only the frame + routing and is intentionally STABLE so per-pane work never
-// collides here.
-//
-// CHROME vs CONTENT (design system): the sidebar/labels use the system UI font; panes
-// render *content + data* in Monaco via the theme tokens. The split view itself is plain
-// AppKit chrome.
+// pane the shared `DashboardContext`. Includes TopSegmentedBarView at top center for
+// dual-mode toggling between Dictation Engine and Agent Workspace.
 
 import SpeakCore
 import SwiftUI
@@ -22,9 +17,11 @@ struct DashboardView: View {
 
     let context: DashboardContext
 
-    /// The selected sidebar section. Seeded from `initialSection` (defaults to Home);
-    /// the debug dashboard target uses this to open straight to a pane for verification.
+    /// The selected sidebar section. Seeded from `initialSection` (defaults to Home).
     @State private var selection: DashboardSection
+
+    /// Top-center mode selection (Dictation Engine vs Agent Workspace).
+    @State private var appMode: AppMode = .workspace
 
     init(context: DashboardContext, initialSection: DashboardSection = .home) {
         self.context = context
@@ -32,44 +29,62 @@ struct DashboardView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            // [task #33] Selection-driven sidebar: the detail column switches on `selection`
-            // (see `detail(for: selection)`). A `NavigationLink(value:)` row here has no
-            // `.navigationDestination` and captures the tap, so `selection` never updated and
-            // panes never switched. Plain `.tag`-ged rows let `List(selection:)` drive it.
-            //
-            // [decision: Settings pinned to the bottom] Two independent `List(selection:)`
-            // instances share the same `$selection` binding — either can drive it. The main
-            // list scrolls; the Settings row below the divider never does, matching the
-            // System Settings / Slack / VS Code convention of anchoring Settings at the
-            // bottom regardless of how many sections the main list grows to.
-            VStack(spacing: 0) {
-                List(DashboardSection.mainSections, selection: $selection) { section in
-                    Label(section.title, systemImage: section.systemImage)
-                        .tag(section)
-                }
-                .listStyle(.sidebar)
+        VStack(spacing: 0) {
+            // Top-center segmented bar for dual-mode switching
+            TopSegmentedBarView(currentMode: $appMode)
 
-                Divider()
+            NavigationSplitView {
+                VStack(spacing: 0) {
+                    List(DashboardSection.mainSections, selection: $selection) { section in
+                        Label(section.title, systemImage: section.systemImage)
+                            .tag(section)
+                    }
+                    .listStyle(.sidebar)
 
-                List([DashboardSection.settings], selection: $selection) { section in
-                    Label(section.title, systemImage: section.systemImage)
-                        .tag(section)
+                    Divider()
+
+                    List([DashboardSection.settings], selection: $selection) { section in
+                        Label(section.title, systemImage: section.systemImage)
+                            .tag(section)
+                    }
+                    .listStyle(.sidebar)
+                    .frame(height: 40)
+                    .scrollDisabled(true)
                 }
-                .listStyle(.sidebar)
-                .frame(height: 40)
-                .scrollDisabled(true)
+                .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
+            } detail: {
+                detailContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .navigationTitle(appMode == .workspace ? "Agent Workspace" : selection.title)
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
-        } detail: {
-            detail(for: selection)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .navigationTitle(selection.title)
         }
-        .frame(minWidth: 760, minHeight: 520)
+        .frame(minWidth: 840, minHeight: 560)
+        .onChange(of: appMode) { newMode in
+            if newMode == .workspace {
+                selection = .workspace
+            } else if selection == .workspace {
+                selection = .home
+            }
+        }
+        .onChange(of: selection) { newSelection in
+            if newSelection == .workspace {
+                appMode = .workspace
+            } else {
+                appMode = .dictation
+            }
+        }
     }
 
     // MARK: - Detail routing
+
+    @ViewBuilder
+    private var detailContent: some View {
+        if appMode == .workspace {
+            WorkspaceMainView()
+        } else {
+            detail(for: selection)
+        }
+    }
 
     @ViewBuilder
     private func detail(for section: DashboardSection) -> some View {
