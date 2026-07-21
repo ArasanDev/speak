@@ -7,6 +7,13 @@
 
 ## Current phase
 
+**Loop #54 (2026-07-22) — Workspace Integration & Default Tag Adapters COMPLETE (commit `4070588`).**
+- Deepened `WorkspaceMainView` integration:
+  - Reactively wired `WorkspaceMainView` to `WorkspaceStore` (SQLite database) and `TagRegistry`.
+  - Added built-in default tag adapters (`DefaultClaudeTagAdapter`, `DefaultTerminalTagAdapter`, `DefaultBuilderQATagAdapter`, `DefaultGitHubTagAdapter`).
+  - Added `.workspace` section to `DashboardSection` and `DashboardView`, exposing the Agent Workspace directly inside the main Dashboard split navigation.
+- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
+
 **Loop #53 (2026-07-21) — Human-Agent Workspace & Plugin-as-Tag System COMPLETE (commit `b287f3b`).**
 - Designed and built the local-first Slack Replacement Workspace architecture:
   - Domain: `TagRegistry` (thread-safe actor tracking `@Claude`, `@terminal`, `@github`), `PluginTagAdapter` protocol, `EvidencePayload` for Rich Media Cards.
