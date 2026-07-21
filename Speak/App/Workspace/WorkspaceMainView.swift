@@ -2,7 +2,7 @@
 //
 // Main Slack-Replacement Workspace View.
 // Renders Channel Sidebar, Direct Messages (DMs), Spoken Thread Canvas, Voice Huddles,
-// Quick Switcher (Cmd+K), Channel Canvas, and Emoji Reaction Bar (👀, ✅, 🎙️, 🚀).
+// Quick Switcher (Cmd+K), Channel Canvas, and the Pronged Action Trigger System (⚡ Run, 🔍 Inspect, 🛡️ Audit, 🗣️ Speak).
 // Reactively wired to WorkspaceStore (SQLite) and TagRegistry.
 // Styled with centralized design system tokens (`Color.speak*`, `Font.speakMono*`).
 
@@ -19,7 +19,7 @@ public struct WorkspaceMainView: View {
     ]
     @State private var messages: [WorkspaceMessage] = []
     @State private var mockEvidences: [UUID: EvidencePayload] = [:]
-    @State private var messageReactions: [UUID: [String: Int]] = [:]
+    @State private var activeProngs: [UUID: Set<String>] = [:]
     @State private var registeredTags: [TagMetadata] = []
     @State private var store: WorkspaceStore?
     @State private var isHuddleActive: Bool = false
@@ -371,40 +371,30 @@ public struct WorkspaceMainView: View {
 
                 Spacer()
 
-                // Hover Emoji Action Bar
+                // Pronged Action Trigger Bar (Agent Directives)
                 HStack(spacing: 6) {
-                    Button("👀") { handleEmojiTrigger("👀", on: msg) }
-                    Button("✅") { handleEmojiTrigger("✅", on: msg) }
-                    Button("🎙️") { handleEmojiTrigger("🎙️", on: msg) }
-                    Button("🚀") { handleEmojiTrigger("🚀", on: msg) }
+                    prongButton(label: "⚡ Run", action: { handleProngTrigger("Run", on: msg) })
+                    prongButton(label: "🔍 Inspect", action: { handleProngTrigger("Inspect", on: msg) })
+                    prongButton(label: "🛡️ Audit", action: { handleProngTrigger("Audit", on: msg) })
+                    prongButton(label: "🗣️ Speak", action: { handleProngTrigger("Speak", on: msg) })
                 }
-                .font(.system(size: 11))
-                .buttonStyle(.plain)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Color.speakInk2)
-                .cornerRadius(6)
             }
 
             Text(msg.text)
                 .font(.speakMonoBody)
                 .foregroundColor(.speakBone)
 
-            // Applied Emoji Badges
-            if let reactions = messageReactions[msg.id], !reactions.isEmpty {
+            // Applied Active Prong Directive Badges
+            if let prongs = activeProngs[msg.id], !prongs.isEmpty {
                 HStack(spacing: 4) {
-                    ForEach(Array(reactions.keys), id: \.self) { emoji in
-                        HStack(spacing: 2) {
-                            Text(emoji)
-                                .font(.system(size: 11))
-                            Text("\(reactions[emoji] ?? 1)")
-                                .font(.speakMonoCaption)
-                                .foregroundColor(.speakMica)
-                        }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.speakTagBadgeBg)
-                        .cornerRadius(4)
+                    ForEach(Array(prongs), id: \.self) { prong in
+                        Text("Prong: \(prong)")
+                            .font(.speakMonoCaption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.speakTagBadgeBg)
+                            .foregroundColor(.speakAgentViolet)
+                            .cornerRadius(4)
                     }
                 }
             }
@@ -417,15 +407,28 @@ public struct WorkspaceMainView: View {
         }
     }
 
+    private func prongButton(label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.speakMonoCaption)
+                .foregroundColor(.speakMica)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.speakInk2)
+                .cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Actions
 
-    private func handleEmojiTrigger(_ emoji: String, on msg: WorkspaceMessage) {
-        var current = messageReactions[msg.id] ?? [:]
-        current[emoji] = (current[emoji] ?? 0) + 1
-        messageReactions[msg.id] = current
+    private func handleProngTrigger(_ prong: String, on msg: WorkspaceMessage) {
+        var current = activeProngs[msg.id] ?? []
+        current.insert(prong)
+        activeProngs[msg.id] = current
 
-        switch emoji {
-        case "👀":
+        switch prong {
+        case "Inspect":
             // Trigger Agent Code Inspection turn
             let inspectTurn = WorkspaceMessage(
                 channelId: selectedChannelId,
@@ -441,22 +444,38 @@ public struct WorkspaceMainView: View {
                     }
                 }
             }
-        case "🎙️":
+        case "Speak":
             // Trigger verbal TTS readback
             readbackMessage(msg)
-        case "🚀":
-            // Trigger build/deploy action turn
-            let deployTurn = WorkspaceMessage(
+        case "Audit":
+            // Trigger build and privacy moat audit
+            let auditTurn = WorkspaceMessage(
                 channelId: selectedChannelId,
                 senderTag: "@tamil",
                 text: "Tag @builder-qa run verify-moat and test audit"
             )
-            messages.append(deployTurn)
+            messages.append(auditTurn)
             Task {
                 if let adapter = await TagRegistry.shared.lookup(tagName: "@builder-qa") {
-                    let outcome = try? await adapter.handleTurn(prompt: deployTurn.text, sessionId: nil)
+                    let outcome = try? await adapter.handleTurn(prompt: auditTurn.text, sessionId: nil)
                     if let outcome {
                         await handleAdapterOutcome(outcome, targetTag: "@builder-qa")
+                    }
+                }
+            }
+        case "Run":
+            // Trigger terminal shell command execution
+            let runTurn = WorkspaceMessage(
+                channelId: selectedChannelId,
+                senderTag: "@tamil",
+                text: "Tag @terminal execute `make test`"
+            )
+            messages.append(runTurn)
+            Task {
+                if let adapter = await TagRegistry.shared.lookup(tagName: "@terminal") {
+                    let outcome = try? await adapter.handleTurn(prompt: runTurn.text, sessionId: nil)
+                    if let outcome {
+                        await handleAdapterOutcome(outcome, targetTag: "@terminal")
                     }
                 }
             }
