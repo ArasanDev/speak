@@ -66,9 +66,10 @@ private struct SM3HangingCleaner: LLMCleaning, Sendable {
     var isAvailable: Bool { get async { true } }
 
     func clean(_ text: String, mode: CleanupMode) async throws -> String {
-        while true {
-            try? await Task.sleep(nanoseconds: 100_000_000_000)
+        while !Task.isCancelled {
+            try await Task.sleep(nanoseconds: 100_000_000)
         }
+        throw CancellationError()
     }
 }
 
