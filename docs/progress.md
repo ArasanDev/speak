@@ -7,6 +7,12 @@
 
 ## Current phase
 
+**Loop #55 (2026-07-22) — STT Finalization Watchdog Bug Fix COMPLETE (commit `47b8cfd`).**
+- Identified and resolved the root cause of voice dictation failures:
+  - Commit `047743a` introduced a strict 1.5-second `withThrowingTaskGroup` watchdog during `AppleSpeechTranscriber` finalization, which prematurely threw `transcriberUnavailable("STT finalization timed out")` on multi-word dictations when SpeechAnalyzer flush took >1.5s.
+  - Replaced rigid throwing watchdog with a non-throwing 10-second `withTaskGroup` window that cancels gracefully upon result completion and safely releases resources without aborting captured dictations.
+- Re-launched fresh `Speak.app` (PID 26001). Verified CLI dictation start/stop flow and live OSLog processing.
+
 **Loop #54 (2026-07-22) — Workspace Integration & Default Tag Adapters COMPLETE (commit `4070588`).**
 - Deepened `WorkspaceMainView` integration:
   - Reactively wired `WorkspaceMainView` to `WorkspaceStore` (SQLite database) and `TagRegistry`.
