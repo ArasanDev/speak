@@ -296,8 +296,18 @@ private struct Session: Sendable {
             try await analyzer.finalizeAndFinishThroughEndOfInput()
             SpeakLog.stt.info("Analyzer finalized; awaiting remaining results.")
 
-            // Step 4: Drain remaining results (resultsTask exits because results closed).
-            _ = try await resultsTask.value
+            // Step 4: Drain remaining results with a 1.5s watchdog to avoid silent deadlocks.
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    _ = try await resultsTask.value
+                }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 1_500_000_000)
+                    throw SpeakError.transcriberUnavailable("STT finalization timed out")
+                }
+                try await group.next()
+                group.cancelAll()
+            }
             SpeakLog.stt.info("Transcription session completed normally.")
         } catch {
             await state.cancelAll(analyzer: analyzer)

@@ -87,6 +87,7 @@ public final class AudioCapture: @unchecked Sendable {
         // can return it. We rebuild it each `start()` call.
         self.pendingLevelStream = levelStream
 
+        input.removeTap(onBus: bus)
         input.installTap(onBus: bus, bufferSize: Constants.tapBufferSize, format: inputFormat) { buffer, _ in
             // W2.1: Compute RMS from the input buffer (pre-conversion) and yield to
             // the level stream. Runs on the audio render thread — only captures

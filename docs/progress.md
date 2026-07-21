@@ -7,6 +7,12 @@
 
 ## Current phase
 
+**Loop #52 (2026-07-21) — Base Hardening (Actor Deadlock & Duplicate Tap fixes) COMPLETE.**
+- Hardened audio capture by calling `input.removeTap(onBus: bus)` before `installTap` in `AudioCapture.swift` to avoid Objective-C duplicate-tap crashes.
+- Implemented a 1.5s structured watchdog timeout around `resultsTask.value` in `AppleSpeechTranscriber.swift` to prevent SpeechAnalyzer finalization from deadlocking the `SpeakEngine` actor on empty/silent audio feeds.
+- Full test suite passed (269 XCTests passed), including latency benchmarks (`L_partial` p50=152.8ms, local raw-pipeline median=1ms).
+- Moat verification passed (7/7 audits).
+
 **Loop #51 (2026-07-11) — THREE SLICES SHIPPED in one orchestrated day:
 AVB-6 sessions (`9cff623`), AVB-7 durable calls + inbox (`d245dcc`), and FE-1
 design tokens + Pip the pet (`973514e`, fixes `20e55a2`). Frontend identity is
