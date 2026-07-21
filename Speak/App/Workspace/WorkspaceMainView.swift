@@ -2,7 +2,7 @@
 //
 // Main Slack-Replacement Workspace View.
 // Renders Channel Sidebar, Direct Messages (DMs), Spoken Thread Canvas, Voice Huddles,
-// Quick Switcher (Cmd+K), Channel Canvas, and the Pronged Action Trigger System (⚡ Run, 🔍 Inspect, 🛡️ Audit, 🗣️ Speak).
+// Quick Switcher (Cmd+K), Channel Canvas, User Profile Modal, and Pronged Action Triggers (⚡ Run, 🔍 Inspect, 🛡️ Audit, 🗣️ Speak).
 // Reactively wired to WorkspaceStore (SQLite) and TagRegistry.
 // Styled with centralized design system tokens (`Color.speak*`, `Font.speakMono*`).
 
@@ -26,6 +26,7 @@ public struct WorkspaceMainView: View {
     @State private var isCanvasPresented: Bool = true
     @State private var isQuickSwitcherPresented: Bool = false
     @State private var isNewChannelModalPresented: Bool = false
+    @State private var isUserProfilePresented: Bool = false
     @State private var activeReadingMsgId: UUID?
 
     private let speechSynthesizer = AppleSpeechSynthesizer()
@@ -65,6 +66,11 @@ public struct WorkspaceMainView: View {
                     createNewChannel(name: name, topic: topic)
                 }
             }
+
+            // User Profile Modal Overlay
+            if isUserProfilePresented {
+                UserProfileModalView(isPresented: $isUserProfilePresented)
+            }
         }
         .task {
             await loadInitialData()
@@ -80,6 +86,37 @@ public struct WorkspaceMainView: View {
 
     private var sidebarView: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // User Profile Header Button
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isUserProfilePresented = true
+                }
+            }) {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color.speakHumanAmber)
+                        .frame(width: 8, height: 8)
+
+                    Text("👤 @tamil")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.speakBone)
+
+                    Spacer()
+
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 11))
+                        .foregroundColor(.speakMica)
+                }
+                .padding(8)
+                .background(Color.speakInk2)
+                .cornerRadius(6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.speakCardBorder, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+
             // Quick Search Button (Cmd+K)
             Button(action: { isQuickSwitcherPresented = true }) {
                 HStack(spacing: 8) {
