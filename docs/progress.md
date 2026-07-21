@@ -7,6 +7,14 @@
 
 ## Current phase
 
+**Loop #60 (2026-07-22) — Master 90% Roadmap, Channel Creation, DMs & Approval Cards COMPLETE (commit `901576e`).**
+- Created the Master 90% Workspace Feature Index in `specs/workspace-90-percent-roadmap.md`.
+- Implemented **Channel Creation Modal** (`NewChannelModalView.swift`) and wired channel creation reactively to `WorkspaceStore` (SQLite).
+- Implemented **Direct Messages (DMs)** section in the channel sidebar for 1-on-1 private agent conversations (`@Claude`, `@builder-qa`, `@terminal`).
+- Implemented **Interactive Approval Cards** (`ApprovalCardView.swift`) for mutating/high-risk agent execution requests with interactive **[Approve Action]** and **[Decline]** buttons.
+- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
+- Re-built and launched fresh `Speak.app` (PID 64879).
+
 **Loop #59 (2026-07-22) — Dual-Mode Sidebar Isolation COMPLETE (commit `4bbcae2`).**
 - Resolved double-sidebar visual clutter in `DashboardView.swift`:
   - In **Agent Workspace Mode** (`appMode == .workspace`), `NavigationSplitView`'s sidebar is hidden, letting `WorkspaceMainView` fill the entire window with its single Slack Channel Sidebar.
