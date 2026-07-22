@@ -53,8 +53,10 @@ public actor TagRegistry {
         switch normalized {
         case "@team", "@engineers", "@all-agents":
             return ["@Claude", "@builder-qa", "@terminal"]
+
         case "@qa":
             return ["@builder-qa", "@terminal"]
+
         default:
             return [normalized]
         }
