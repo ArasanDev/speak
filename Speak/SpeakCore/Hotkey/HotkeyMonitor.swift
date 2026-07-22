@@ -285,7 +285,10 @@ public final class HotkeyMonitor: @unchecked Sendable {
     public func start() {
         lock.withLock {
             armingDesired = true
-            wasTrusted = false  // Force watchdog to attempt building tap immediately if trusted
+            // Do NOT reset wasTrusted here — that would suppress the edge
+            // trigger on the very next watchdog tick (nowTrusted=true &&
+            // wasTrustedPrev=false only fires once on the trusted edge).
+            // wasTrusted is reset by stop() so stop()→start() re-arms correctly.
         }
         // Wake the run loop so the watchdog timer fires ASAP instead of waiting
         // for the next 100ms interval.
@@ -444,13 +447,19 @@ public final class HotkeyMonitor: @unchecked Sendable {
         let currentlyArmed = lock.withLock { isArmed }
 
         if !currentlyArmed && shouldArm {
-            // Check AX trust without prompting.
+            // Check AX trust without prompting. Safe at 100ms cadence — no prompt shown.
             let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: false] as CFDictionary
             let nowTrusted = AXIsProcessTrustedWithOptions(opts)
             let wasTrustedPrev = lock.withLock { wasTrusted }
 
+            // Build the tap ONLY on the untrusted→trusted rising edge, not on every tick.
+            // This prevents continuous detector.reset() calls (100ms) that wipe the first
+            // tap of a double-tap gesture before the second press arrives.
+            // start() does NOT reset wasTrusted, so the first tick after app launch sees:
+            //   wasTrustedPrev=false (initial) + nowTrusted=true → edge fires, tap built.
+            // stop()+start() resets wasTrusted in stop(), so the edge fires again cleanly.
             if nowTrusted && !wasTrustedPrev {
-                SpeakLog.hotkey.info("HotkeyMonitor: AX trust active — building tap (re-arm).")
+                SpeakLog.hotkey.info("HotkeyMonitor watchdog: AX trust rising edge — building tap.")
                 buildTap()
             }
             lock.withLock { wasTrusted = nowTrusted }
@@ -480,17 +489,22 @@ public final class HotkeyMonitor: @unchecked Sendable {
         }
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
 
-        // Attempt cgSessionEventTap first (standard user-space accessibility tap),
-        // falling back to cghidEventTap if nil.
+        // [verified original]: .cghidEventTap is the HID device level — it intercepts
+        // ALL modifier key events (flagsChanged) regardless of which app has focus,
+        // and works with Accessibility permission on non-root macOS user sessions.
+        // It was the original working implementation before AVB-21/22 changes broke it.
+        // .cgAnnotatedSessionEventTap is the session-level fallback: it receives events
+        // after the HID dispatch, still before apps see them, and works on all macOS
+        // user sessions with AX permission.
         let createdPort = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
+            tap: .cghidEventTap,
             place: .headInsertEventTap,
             options: .listenOnly,
             eventsOfInterest: mask,
             callback: HotkeyMonitor.tapCallback,
             userInfo: selfPtr
         ) ?? CGEvent.tapCreate(
-            tap: .cghidEventTap,
+            tap: .cgAnnotatedSessionEventTap,
             place: .headInsertEventTap,
             options: .listenOnly,
             eventsOfInterest: mask,
@@ -502,6 +516,7 @@ public final class HotkeyMonitor: @unchecked Sendable {
             SpeakLog.hotkey.error("HotkeyMonitor: CGEvent.tapCreate returned nil — AX may have been revoked.")
             lock.withLock {
                 isArmed = false
+                wasTrusted = false  // force re-check on next watchdog tick
             }
             return
         }
