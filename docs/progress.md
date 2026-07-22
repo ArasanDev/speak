@@ -7,6 +7,12 @@
 
 ## Current phase
 
+**Loop #72 (2026-07-22) — Flexible Command Double-Tap Keycode Matching COMPLETE (commit `6f89641`).**
+- Fixed issue where double-pressing Right Command was strict on keycode 54 vs 55:
+  - Added `isMatchingBoundKey(eventKeyCode:bindingKeyCode:)` in `HotkeyDetection.swift` to match both Left Command (55) and Right Command (54), as well as Left Option (58) and Right Option (61).
+  - Updated `HotkeyMonitor.swift` handle loop so double-pressing either Command key triggers the Command hotkey seamlessly.
+- Build succeeded (`make build`), moat audit passed 7/7 privacy checks (`make verify-moat`), fresh app running on PID 35647.
+
 **Loop #71 (2026-07-22) — Right Command Double-Tap Event Tap Tap-Location & Reset Loop Fixed COMPLETE (commit `fd79add`).**
 - Discovered and resolved root cause of non-responsive double-press Right Command hotkey:
   - `buildTap()` previously specified `.cghidEventTap` exclusively, which returns `nil` on non-root macOS user sessions. Added `.cgSessionEventTap` primary with `.cghidEventTap` fallback.
