@@ -168,10 +168,10 @@ public actor WorkspaceStore {
         return results
     }
 
-    // MARK: - Messages API
+    // MARK: - Messages API & Search
 
     public func postMessage(_ msg: WorkspaceMessage) throws {
-        let sql = "INSERT INTO messages (id, channelId, threadId, senderTag, text, createdAt) VALUES (?, ?, ?, ?, ?, ?);"
+        let sql = "INSERT OR REPLACE INTO messages (id, channelId, threadId, senderTag, text, createdAt) VALUES (?, ?, ?, ?, ?, ?);"
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
             throw SpeakError.unknown("Failed to prepare postMessage statement")
@@ -213,6 +213,31 @@ public actor WorkspaceStore {
         if let threadId = threadId {
             sqlite3_bind_text(stmt, 2, threadId.uuidString, -1, sqliteTransientDestructor)
         }
+
+        var results: [WorkspaceMessage] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let id = UUID(uuidString: String(cString: sqlite3_column_text(stmt, 0))) else { continue }
+            let chanId = String(cString: sqlite3_column_text(stmt, 1))
+            let thId = sqlite3_column_type(stmt, 2) == SQLITE_NULL ? nil : UUID(uuidString: String(cString: sqlite3_column_text(stmt, 2)))
+            let sender = String(cString: sqlite3_column_text(stmt, 3))
+            let text = String(cString: sqlite3_column_text(stmt, 4))
+            let createdAt = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 5))
+            results.append(WorkspaceMessage(id: id, channelId: chanId, threadId: thId, senderTag: sender, text: text, createdAt: createdAt))
+        }
+        return results
+    }
+
+    public func searchMessagesFTS(query: String) throws -> [WorkspaceMessage] {
+        let cleanQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanQuery.isEmpty else { return [] }
+        let sql = "SELECT id, channelId, threadId, senderTag, text, createdAt FROM messages WHERE text LIKE ? ORDER BY createdAt DESC LIMIT 20;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw SpeakError.unknown("Failed to prepare searchMessagesFTS statement")
+        }
+        defer { sqlite3_finalize(stmt) }
+        let pattern = "%\(cleanQuery)%"
+        sqlite3_bind_text(stmt, 1, pattern, -1, sqliteTransientDestructor)
 
         var results: [WorkspaceMessage] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
