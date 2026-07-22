@@ -7,6 +7,12 @@
 
 ## Current phase
 
+**Loop #71 (2026-07-22) — Right Command Double-Tap Event Tap Tap-Location & Reset Loop Fixed COMPLETE (commit `fd79add`).**
+- Discovered and resolved root cause of non-responsive double-press Right Command hotkey:
+  - `buildTap()` previously specified `.cghidEventTap` exclusively, which returns `nil` on non-root macOS user sessions. Added `.cgSessionEventTap` primary with `.cghidEventTap` fallback.
+  - Restored `nowTrusted && !wasTrustedPrev` rising-edge condition in `watchdogTick()` to prevent the 100ms watchdog timer from continuously calling `buildTap()` (which was calling `detector.reset()` every 100ms and wiping out the first tap of the double-tap).
+- Build succeeded (`make build`), moat audit passed 7/7 privacy checks (`make verify-moat`), fresh app running on PID 33100.
+
 **Loop #70 (2026-07-22) — Right Command Hotkey Arming Bug Resolved COMPLETE (commit `7fb7795`).**
 - Fixed issue where double-pressing Right Command (keyCode 54) was not triggering dictation:
   - In `HotkeyMonitor.swift`, `watchdogTick()` had a false-to-true edge guard (`!wasTrustedPrev`) preventing `buildTap()` from running if Accessibility trust was already recorded before `start()` was called.
