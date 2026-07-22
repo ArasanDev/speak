@@ -51,8 +51,14 @@ public final class AudioCapture: @unchecked Sendable {
     private var levelsContinuation: AsyncStream<Double>.Continuation?
     /// Holds the level `AsyncStream` between `start()` and the caller's `startLevelStream()` call.
     private var pendingLevelStream: AsyncStream<Double>?
+    /// Observer for hardware configuration changes (device plug/unplug, Bluetooth route changes).
+    private var configObserver: (any NSObjectProtocol)?
 
     public init() {}
+
+    deinit {
+        stop()
+    }
 
     /// Starts capture and returns a stream of 16 kHz mono PCM buffers.
     /// The stream finishes when `stop()` is called.
@@ -87,14 +93,49 @@ public final class AudioCapture: @unchecked Sendable {
         // can return it. We rebuild it each `start()` call.
         self.pendingLevelStream = levelStream
 
+        // Thread-safe state capture for tap callback & dynamic format re-sync.
+        // We use an atomic lock box so format changes on audio thread don't race.
+        let stateLock = NSLock()
+        var currentConverter: AVAudioConverter = converter
+        let currentContinuation = continuation
+        let currentLevelsContinuation = levelsContinuation
+
         input.removeTap(onBus: bus)
         input.installTap(onBus: bus, bufferSize: Constants.tapBufferSize, format: inputFormat) { buffer, _ in
-            // W2.1: Compute RMS from the input buffer (pre-conversion) and yield to
-            // the level stream. Runs on the audio render thread — only captures
-            // Sendable values (the continuation, immutable buffer data).
             let rms = Self.rmsLevel(buffer: buffer)
-            levelsContinuation.yield(rms)
-            Self.convert(buffer, to: targetFormat, using: converter, yielding: continuation)
+            currentLevelsContinuation.yield(rms)
+
+            // Dynamic format re-sync: if device sample rate changed mid-stream
+            // (e.g. Bluetooth profile switch from 48kHz to 16kHz SCO), rebuild converter on the fly.
+            let activeConv: AVAudioConverter
+            stateLock.lock()
+            if buffer.format.sampleRate != currentConverter.inputFormat.sampleRate ||
+               buffer.format.channelCount != currentConverter.inputFormat.channelCount {
+                if let newConv = AVAudioConverter(from: buffer.format, to: targetFormat) {
+                    currentConverter = newConv
+                    SpeakLog.audio.info("AudioCapture: dynamic format re-sync to \(buffer.format.sampleRate, privacy: .public)Hz")
+                }
+            }
+            activeConv = currentConverter
+            stateLock.unlock()
+
+            Self.convert(buffer, to: targetFormat, using: activeConv, yielding: currentContinuation)
+        }
+
+        // Register for engine configuration changes (Bluetooth headphones connect/disconnect).
+        if configObserver == nil {
+            configObserver = NotificationCenter.default.addObserver(
+                forName: .AVAudioEngineConfigurationChange,
+                object: engine,
+                queue: nil
+            ) { [weak self] _ in
+                guard let self else { return }
+                SpeakLog.audio.info("AudioCapture: AVAudioEngineConfigurationChange received — re-syncing input format.")
+                // Engine paused/reconfigured by OS — restart if running.
+                if self.engine.isRunning == false {
+                    try? self.engine.start()
+                }
+            }
         }
 
         engine.prepare()
@@ -130,6 +171,10 @@ public final class AudioCapture: @unchecked Sendable {
 
     /// Stops capture, removes the tap, and finishes the stream. Idempotent.
     public func stop() {
+        if let observer = configObserver {
+            NotificationCenter.default.removeObserver(observer)
+            configObserver = nil
+        }
         engine.inputNode.removeTap(onBus: bus)
         if engine.isRunning { engine.stop() }
         continuation?.finish()

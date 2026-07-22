@@ -78,7 +78,7 @@ generate:
 ## build: produce a runnable Speak.app (signed per Signing.xcconfig — cert if
 ##        `make dev-cert` has been run, else ad-hoc)
 build: generate
-	$(XCB) build
+	@$(XCB) build 2>&1 | bash scripts/pretty-output.sh build
 
 ## dev-cert: ONE-TIME setup. Creates the stable self-signed signing identity AND writes
 ##           the git-ignored Signing.local.xcconfig that points the build at it — so BOTH
@@ -101,7 +101,7 @@ reset-permissions:
 
 ## test: run the unit test suite (SpeakTests)
 test: generate
-	$(XCB) test
+	@$(XCB) test 2>&1 | bash scripts/pretty-output.sh test
 
 ## eval: run the small-models eval harness (live Foundation Models scoring)
 ## Uses the Eval scheme which bakes SPEAK_EVAL=1 into the test-action environment

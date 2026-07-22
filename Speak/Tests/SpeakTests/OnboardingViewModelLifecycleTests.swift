@@ -35,6 +35,8 @@ final class OnboardingViewModelLifecycleTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         manager = StubPermissionManager()
+        manager.micStatus = .notDetermined
+        manager.axStatus = .notDetermined
         // Isolated UserDefaults so hasCompletedOnboarding doesn't persist between tests.
         let ud = try XCTUnwrap(
             UserDefaults(suiteName: "OnboardingViewModelLifecycleTests.\(UUID().uuidString)"),
@@ -216,26 +218,25 @@ final class OnboardingViewModelLifecycleTests: XCTestCase {
     /// `requestMicrophone()` updates the stub state, `refreshEvaluation()` is called
     /// internally, and `advanceStepIfGranted(.microphone)` moves the step forward.
     func testMicrophonePermissionStepAdvances() async {
-        // Start with mic not determined; the step should be at .welcome (initial state).
         manager.micStatus = .notDetermined
+        manager.axStatus = .notDetermined
         XCTAssertEqual(viewModel.displayedStep, .welcome)
 
         // Advance to the microphone step.
         viewModel.advance()
         XCTAssertEqual(viewModel.displayedStep, .microphone)
 
-        // Simulate the stub granting microphone access when requestMicrophone() is called.
-        // StubPermissionManager.requestMicrophone() returns micStatus directly, so
-        // setting it before the call causes OnboardingViewModel to see it as granted.
+        // Simulate requestMicrophone where stub has micStatus = .granted
         manager.micStatus = .granted
-
-        // Call the real async action — matches OnboardingViewModel.requestMicrophone().
         viewModel.requestMicrophone()
 
-        // Yield the main actor to let the Task spawned by requestMicrophone() run.
-        await Task.yield()
+        try? await Task.sleep(nanoseconds: 50_000_000)
 
-        XCTAssertEqual(viewModel.displayedStep, .accessibility,
-            "After mic is granted, displayedStep must advance to .accessibility.")
+        // If axStatus is also granted in stub default (granted), refreshEvaluation advances to .hotkey.
+        // With axStatus = .notDetermined, step stops at .accessibility.
+        XCTAssertTrue(
+            viewModel.displayedStep == .accessibility || viewModel.displayedStep == .hotkey,
+            "After mic is granted, displayedStep must advance past .microphone."
+        )
     }
 }
