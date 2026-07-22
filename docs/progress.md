@@ -7,6 +7,12 @@
 
 ## Current phase
 
+**Loop #65 (2026-07-22) — Master Next Workstreams Index & SQLite FTS5 Engine COMPLETE (commit `e1624d3`).**
+- Authored the Master Next Workstreams Index in `specs/next_topics_and_workstreams_master_index.md`.
+- Implemented **SQLite FTS5 Full-Text Search Query Engine** in `WorkspaceStore.swift` (`searchMessagesFTS`).
+- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
+- Re-built and launched fresh `Speak.app` (PID 22499).
+
 **Loop #64 (2026-07-22) — User Profile Modal & Full Screen UI Polish COMPLETE (commit `519e47e`).**
 - Built `UserProfileModalView.swift` and wired trigger button in `WorkspaceMainView.swift`:
   - Consistent borders using `Color.speakCardBorder` (`#23272F`).
