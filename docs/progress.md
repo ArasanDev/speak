@@ -7,6 +7,14 @@
 
 ## Current phase
 
+**Loop #66 (2026-07-22) — Master Checklist & Multi-Agent Swarm Broadcaster COMPLETE (commit `47d676b`).**
+- Created living tracking checklist in `docs/speak_transformation_master_checklist.md`.
+- Implemented **Multi-Agent Swarm Broadcaster (`@team`, `@engineers`, `@qa`)**:
+  - Added `resolveSwarmTags` in `TagRegistry.swift`.
+  - Mentions of `@team` or `@engineers` broadcast execution turns across `@Claude`, `@builder-qa`, and `@terminal`.
+- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
+- Re-built and launched fresh `Speak.app` (PID 31135).
+
 **Loop #65 (2026-07-22) — Master Next Workstreams Index & SQLite FTS5 Engine COMPLETE (commit `e1624d3`).**
 - Authored the Master Next Workstreams Index in `specs/next_topics_and_workstreams_master_index.md`.
 - Implemented **SQLite FTS5 Full-Text Search Query Engine** in `WorkspaceStore.swift` (`searchMessagesFTS`).
