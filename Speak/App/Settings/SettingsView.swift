@@ -330,6 +330,48 @@ private struct HotkeyInputSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section {
+                HStack {
+                    Text("Accessibility Permission")
+                    Spacer()
+                    if controller.permissionManager.status(.accessibility) == .granted {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text("Granted & Active")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text("Missing / Disabled")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Button("Open Privacy & Security \u{2192} Accessibility\u{2026}") {
+                    let urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+                    if let url = URL(string: urlString) {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+
+                Button("Re-check & Re-arm Hotkey Tap") {
+                    controller.monitor.start()
+                }
+                .font(.caption)
+            } header: {
+                Text("System Permissions")
+            } footer: {
+                Text("If speak is already toggled ON in System Settings but not responding, tap 'Re-check & Re-arm' or toggle the switch OFF and ON in System Settings to refresh macOS TCC.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             ExtraBindingsSection(store: store, controller: controller)
         }
         .formStyle(.grouped)
