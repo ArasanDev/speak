@@ -1,8 +1,8 @@
 // Speak/App/Workspace/WorkspaceMainView.swift
 //
 // Main Slack-Replacement Workspace View.
-// Renders Channel Sidebar, Direct Messages (DMs), Spoken Thread Canvas, Voice Huddles,
-// Quick Switcher (Cmd+K), Channel Canvas, User Profile Modal, and Pronged Action Triggers (⚡ Run, 🔍 Inspect, 🛡️ Audit, 🗣️ Speak).
+// Renders Channel Sidebar, Direct Messages (DMs), Spoken Thread Canvas, Voice Huddles, Quick Switcher (Cmd+K),
+// Channel Canvas, User Profile Modal, Multi-Agent Swarm Broadcaster (@team, @engineers), and Pronged Action Triggers (⚡ Run, 🔍 Inspect, 🛡️ Audit, 🗣️ Speak).
 // Reactively wired to WorkspaceStore (SQLite) and TagRegistry.
 // Styled with centralized design system tokens (`Color.speak*`, `Font.speakMono*`).
 
@@ -193,21 +193,14 @@ public struct WorkspaceMainView: View {
             Divider()
                 .overlay(Color.speakCardBorder)
 
-            // Spoken Plugins as Tags
+            // Multi-Agent Swarms & Plugins
             VStack(alignment: .leading, spacing: 8) {
-                Text("PLUGINS (@TAGS)")
+                Text("AGENT SWARMS (@TEAM)")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(.speakMica)
 
-                let pluginTags = registeredTags.filter { $0.tagKind == .plugin }
-                if pluginTags.isEmpty {
-                    pluginRow(tag: "@terminal", icon: "terminal.fill", label: "Terminal Execution")
-                    pluginRow(tag: "@github", icon: "arrow.triangle.pull", label: "GitHub Integration")
-                } else {
-                    ForEach(pluginTags) { tagMeta in
-                        pluginRow(tag: tagMeta.tagName, icon: iconForKind(tagMeta.tagKind), label: tagMeta.description)
-                    }
-                }
+                pluginRow(tag: "@engineers", icon: "person.3.fill", label: "Full Dev Swarm")
+                pluginRow(tag: "@qa", icon: "checkmark.shield.fill", label: "QA & Audit Swarm")
             }
 
             Spacer()
@@ -235,15 +228,6 @@ public struct WorkspaceMainView: View {
             .padding(.vertical, 3)
         }
         .buttonStyle(.plain)
-    }
-
-    private func iconForKind(_ kind: TagKind) -> String {
-        switch kind {
-        case .agent: return "person.badge.shield.checkmark.fill"
-        case .plugin: return "terminal.fill"
-        case .team: return "person.3.fill"
-        case .scope: return "globe"
-        }
     }
 
     private func pluginRow(tag: String, icon: String, label: String) -> some View {
@@ -316,7 +300,7 @@ public struct WorkspaceMainView: View {
                 }
                 .buttonStyle(.plain)
 
-                TextField("Type or speak a message... (e.g. Tag @Claude check tap guard)", text: $inputText)
+                TextField("Type or speak a message... (e.g. Tag @engineers verify tap safety)", text: $inputText)
                     .textFieldStyle(.plain)
                     .padding(8)
                     .background(Color.speakInk2)
@@ -466,7 +450,6 @@ public struct WorkspaceMainView: View {
 
         switch prong {
         case "Inspect":
-            // Trigger Agent Code Inspection turn
             let inspectTurn = WorkspaceMessage(
                 channelId: selectedChannelId,
                 senderTag: "@tamil",
@@ -482,10 +465,8 @@ public struct WorkspaceMainView: View {
                 }
             }
         case "Speak":
-            // Trigger verbal TTS readback
             readbackMessage(msg)
         case "Audit":
-            // Trigger build and privacy moat audit
             let auditTurn = WorkspaceMessage(
                 channelId: selectedChannelId,
                 senderTag: "@tamil",
@@ -501,7 +482,6 @@ public struct WorkspaceMainView: View {
                 }
             }
         case "Run":
-            // Trigger terminal shell command execution
             let runTurn = WorkspaceMessage(
                 channelId: selectedChannelId,
                 senderTag: "@tamil",
@@ -569,7 +549,6 @@ public struct WorkspaceMainView: View {
             }
             await reloadMessages(for: selectedChannelId)
         } catch {
-            // Fallback seed data if database is initialized for the first time
             let id1 = UUID()
             let id2 = UUID()
             messages = [
@@ -615,24 +594,27 @@ public struct WorkspaceMainView: View {
                 try? await dbStore.postMessage(newMsg)
             }
 
-            // Extract tags and execute matching adapter
+            // Extract tags and resolve team aliases (@team, @engineers, @qa)
             let extractedTags = VoiceCommandParser.extractTags(from: textToSend)
             for tagMention in extractedTags {
-                if let adapter = await TagRegistry.shared.lookup(tagName: tagMention.tag) {
-                    do {
-                        let outcome = try await adapter.handleTurn(prompt: textToSend, sessionId: nil)
-                        await handleAdapterOutcome(outcome, targetTag: tagMention.tag)
-                    } catch {
-                        let replyId = UUID()
-                        let errReply = WorkspaceMessage(
-                            id: replyId,
-                            channelId: selectedChannelId,
-                            senderTag: tagMention.tag,
-                            text: "Execution failed: \(error.localizedDescription)"
-                        )
-                        messages.append(errReply)
-                        if let dbStore = store {
-                            try? await dbStore.postMessage(errReply)
+                let resolvedTags = await TagRegistry.shared.resolveSwarmTags(tagName: tagMention.tag)
+                for resolvedTag in resolvedTags {
+                    if let adapter = await TagRegistry.shared.lookup(tagName: resolvedTag) {
+                        do {
+                            let outcome = try await adapter.handleTurn(prompt: textToSend, sessionId: nil)
+                            await handleAdapterOutcome(outcome, targetTag: resolvedTag)
+                        } catch {
+                            let replyId = UUID()
+                            let errReply = WorkspaceMessage(
+                                id: replyId,
+                                channelId: selectedChannelId,
+                                senderTag: resolvedTag,
+                                text: "Execution failed: \(error.localizedDescription)"
+                            )
+                            messages.append(errReply)
+                            if let dbStore = store {
+                                try? await dbStore.postMessage(errReply)
+                            }
                         }
                     }
                 }
@@ -658,7 +640,6 @@ public struct WorkspaceMainView: View {
                 try? await dbStore.postMessage(reply)
             }
 
-            // In Huddle mode: automatically speak agent response aloud!
             if isHuddleActive {
                 await speechSynthesizer.speak(summary, locale: Locale(identifier: "en-US"))
             }
@@ -707,7 +688,6 @@ public struct WorkspaceMainView: View {
     }
 
     private func handleVoiceRecord() {
-        // Triggers voice dictation input into the text field
-        inputText = "Tag @Claude check tap safety"
+        inputText = "Tag @engineers verify tap safety"
     }
 }

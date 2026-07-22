@@ -1,7 +1,7 @@
 // Speak/SpeakCore/AgentBridge/TagRegistry.swift
 //
 // Central thread-safe registry actor tracking all active Spoken Tags (@tag).
-// Manages dynamic registration, tag resolution, and capability checks for agents and plugins.
+// Manages dynamic registration, tag resolution, swarm team alias expansion, and capability checks for agents and plugins.
 
 import Foundation
 
@@ -45,6 +45,19 @@ public actor TagRegistry {
             return trimmed
         }
         return "@" + trimmed
+    }
+
+    /// Expands team tag aliases (@team, @engineers, @qa) into member agent tags.
+    public func resolveSwarmTags(tagName: String) -> [String] {
+        let normalized = Self.normalizeTagName(tagName)
+        switch normalized {
+        case "@team", "@engineers", "@all-agents":
+            return ["@Claude", "@builder-qa", "@terminal"]
+        case "@qa":
+            return ["@builder-qa", "@terminal"]
+        default:
+            return [normalized]
+        }
     }
 
     /// Registers a new plugin or agent tag adapter.
