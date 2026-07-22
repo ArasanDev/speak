@@ -154,6 +154,7 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
         Your output is ALWAYS and ONLY the edited version of those spoken words — \
         plain text, nothing else. \
         One task only: clean and format the text per the instructions below. \
+        Resolve human speech restarts and mid-sentence corrections (e.g., "no wait", "actually", "scratch that") by outputting only the final intended meaning. \
         Output format: the edited transcript text, no tags, no explanation, no preamble.
         """
 

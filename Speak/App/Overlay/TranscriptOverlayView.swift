@@ -508,18 +508,25 @@ struct TranscriptOverlayView: View {
             Text("Listening\u{2026}")
                 .font(.speakMonoBody)
                 .foregroundStyle(.secondary)
-                .lineLimit(3)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(4)
+                .frame(maxWidth: .infinity, maxHeight: 88, alignment: .topLeading)
                 .accessibilityLabel("Listening for speech")
                 .accessibilityAddTraits(.updatesFrequently)
         } else {
-            Text(model.partialText)
-                .font(.speakMonoBody)
-                .foregroundStyle(.primary)
-                .lineLimit(3)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel(model.partialText)
-                .accessibilityAddTraits(.updatesFrequently)
+            ScrollViewReader { _ in
+                ScrollView(.vertical, showsIndicators: false) {
+                    Text(model.partialText)
+                        .font(.speakMonoBody)
+                        .foregroundStyle(.primary)
+                        .lineLimit(4)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentTransition(.interpolate)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: 88, alignment: .topLeading)
+            .accessibilityLabel(model.partialText)
+            .accessibilityAddTraits(.updatesFrequently)
         }
     }
 
