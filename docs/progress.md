@@ -7,6 +7,13 @@
 
 ## Current phase
 
+**Loop #68 (2026-07-22) — Dynamic Custom Agent & Swarm XCTest Suites COMPLETE (commit `0fbf023`).**
+- Created two new dedicated XCTest suites:
+  - `WorkspaceFTSAndCustomAgentTests.swift`: Tests SQLite FTS search query matching, `CustomAgentDefinition` lowercasing, and `DynamicCustomTagAdapter.handleTurn` outcome generation.
+  - `TagRegistrySwarmTests.swift`: Tests multi-agent swarm tag resolution (`@team`, `@engineers`, `@qa`), case-insensitivity, and dynamic `registerCustomAgent` lifecycle.
+- Executed XCTest suites via subagents — all tests passed with 0 failures (`** TEST SUCCEEDED **`).
+- Moat audit passed 7/7 privacy checks. Re-built and launched fresh `Speak.app` (PID 3617).
+
 **Loop #67 (2026-07-22) — Dynamic Custom Agent Definition & Hackable Product Surface COMPLETE (commit `512405f`).**
 - Built `CustomAgentDefinition.swift` & `DynamicCustomTagAdapter` in `SpeakCore/AgentBridge/`:
   - Enables developers to dynamically define custom `@tag` agents, system prompts, and custom shell execution scripts without touching core code.
