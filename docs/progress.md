@@ -7,6 +7,13 @@
 
 ## Current phase
 
+**Loop #73 (2026-07-22) — System Permissions Status & Re-arm Troubleshooter Card Added COMPLETE (commit `ce8b27d`).**
+- Added a dedicated **System Permissions** section to `SettingsView` (Hotkey & Input tab):
+  - Displays live status: `🟢 Granted & Active` vs `⚠️ Missing / Disabled`.
+  - Includes direct 1-click deep-link button to macOS `System Settings → Privacy & Security → Accessibility`.
+  - Includes a `Re-check & Re-arm Hotkey Tap` button to clear stale macOS TCC records and re-arm `HotkeyMonitor` on demand without needing an app restart.
+- Build succeeded (`make build`), moat audit passed 7/7 privacy checks (`make verify-moat`), fresh app running on PID 37392.
+
 **Loop #72 (2026-07-22) — Flexible Command Double-Tap Keycode Matching COMPLETE (commit `6f89641`).**
 - Fixed issue where double-pressing Right Command was strict on keycode 54 vs 55:
   - Added `isMatchingBoundKey(eventKeyCode:bindingKeyCode:)` in `HotkeyDetection.swift` to match both Left Command (55) and Right Command (54), as well as Left Option (58) and Right Option (61).
