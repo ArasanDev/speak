@@ -7,6 +7,12 @@
 
 ## Current phase
 
+**Loop #70 (2026-07-22) — Right Command Hotkey Arming Bug Resolved COMPLETE (commit `7fb7795`).**
+- Fixed issue where double-pressing Right Command (keyCode 54) was not triggering dictation:
+  - In `HotkeyMonitor.swift`, `watchdogTick()` had a false-to-true edge guard (`!wasTrustedPrev`) preventing `buildTap()` from running if Accessibility trust was already recorded before `start()` was called.
+  - Removed `!wasTrustedPrev` condition from `watchdogTick()` and reset `wasTrusted = false` inside `start()`, ensuring the `CGEventTap` is built and armed immediately whenever `!isArmed && armingDesired && nowTrusted`.
+- Build succeeded (`make build`), moat audit passed 7/7 privacy checks (`make verify-moat`), fresh app running on PID 9894.
+
 **Loop #69 (2026-07-22) — Onboarding Accessibility Permission Hanging Bug Resolved COMPLETE (commit `731da77`).**
 - Fixed onboarding window hanging on `"Waiting for permission..."` during Accessibility setup:
   - Added `NSApplication.didBecomeActiveNotification` observer to `OnboardingViewModel` so returning from System Settings instantly triggers `refreshEvaluation()`.
