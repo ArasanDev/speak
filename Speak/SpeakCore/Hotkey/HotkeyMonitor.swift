@@ -669,7 +669,7 @@ public final class HotkeyMonitor: @unchecked Sendable {
         // updateBinding() on the main thread can't tear this multi-field read.
         let currentBinding = binding
         let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
-        guard keyCode == currentBinding.keyCode else { return }
+        guard isMatchingBoundKey(eventKeyCode: keyCode, bindingKeyCode: currentBinding.keyCode) else { return }
 
         // Determine whether the bound key is down using its specific modifier flag.
         // `modifierMask(forKeyCode:)` maps keyCode → CGEventFlags bit.

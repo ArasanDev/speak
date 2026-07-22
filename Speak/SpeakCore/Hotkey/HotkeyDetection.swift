@@ -17,6 +17,23 @@ import Foundation
 
 // MARK: - Modifier mask helper
 
+/// Checks whether an incoming event's keyCode matches the bound keyCode,
+/// treating Left/Right Command and Left/Right Option as matching pairs.
+public func isMatchingBoundKey(eventKeyCode: Int, bindingKeyCode: Int) -> Bool {
+    if eventKeyCode == bindingKeyCode { return true }
+    if (bindingKeyCode == Int(kVK_RightCommand) || bindingKeyCode == Int(kVK_Command)) &&
+       (eventKeyCode == Int(kVK_RightCommand) || eventKeyCode == Int(kVK_Command)) {
+        return true
+    }
+    if (bindingKeyCode == Int(kVK_RightOption) || bindingKeyCode == Int(kVK_Option)) &&
+       (eventKeyCode == Int(kVK_RightOption) || eventKeyCode == Int(kVK_Option)) {
+        return true
+    }
+    return false
+}
+
+/// Returns the CGEventFlags bit that is SET when the key with `keyCode` is
+
 /// Returns the CGEventFlags bit that is SET when the key with `keyCode` is
 /// held down, as observed on a `CGEventType.flagsChanged` event.
 ///
