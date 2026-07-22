@@ -7,6 +7,13 @@
 
 ## Current phase
 
+**Loop #69 (2026-07-22) — Onboarding Accessibility Permission Hanging Bug Resolved COMPLETE (commit `731da77`).**
+- Fixed onboarding window hanging on `"Waiting for permission..."` during Accessibility setup:
+  - Added `NSApplication.didBecomeActiveNotification` observer to `OnboardingViewModel` so returning from System Settings instantly triggers `refreshEvaluation()`.
+  - Re-ordered polling loop to evaluate state prior to `Task.sleep` and automatically clear `isWaitingForAccessibility` as soon as `AXIsProcessTrusted()` turns `true`.
+  - Re-triggering `requestAccessibility()` when already prompted opens System Settings directly without getting stuck.
+- Build succeeded (`make build`), moat audit passed 7/7 privacy checks (`make verify-moat`), fresh app running on PID 7552.
+
 **Loop #68 (2026-07-22) — Dynamic Custom Agent & Swarm XCTest Suites COMPLETE (commit `0fbf023`).**
 - Created two new dedicated XCTest suites:
   - `WorkspaceFTSAndCustomAgentTests.swift`: Tests SQLite FTS search query matching, `CustomAgentDefinition` lowercasing, and `DynamicCustomTagAdapter.handleTurn` outcome generation.
