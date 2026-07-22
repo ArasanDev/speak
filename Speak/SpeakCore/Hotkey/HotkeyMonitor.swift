@@ -447,8 +447,9 @@ public final class HotkeyMonitor: @unchecked Sendable {
             // Check AX trust without prompting.
             let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: false] as CFDictionary
             let nowTrusted = AXIsProcessTrustedWithOptions(opts)
+            let wasTrustedPrev = lock.withLock { wasTrusted }
 
-            if nowTrusted {
+            if nowTrusted && !wasTrustedPrev {
                 SpeakLog.hotkey.info("HotkeyMonitor: AX trust active — building tap (re-arm).")
                 buildTap()
             }
@@ -479,35 +480,28 @@ public final class HotkeyMonitor: @unchecked Sendable {
         }
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
 
-        // [verified: .listenOnly exists, swiftc -typecheck local SDK, 2026-06-29]
-        // CRITICAL — must be .listenOnly, NEVER .defaultTap. We are a pure OBSERVER:
-        // the callback (line ~502) returns the event UNCHANGED on every path
-        // (Unmanaged.passUnretained(event)), never consuming or modifying it.
-        //
-        // An active (.defaultTap) tap sits SYNCHRONOUSLY in the HID input path — the
-        // system blocks delivery of every keyboard/mouse event until our callback
-        // returns. If our run-loop thread ever stalls (TCC mid-transaction when the
-        // user toggles Accessibility off, lock contention, run-loop churn), an active
-        // tap freezes ALL system input → the whole machine hangs until force-restart.
-        // This is exactly the freeze observed on permission-toggle (2026-06-29).
-        //
-        // .listenOnly removes us from the synchronous delivery path entirely: the
-        // system no longer waits on us, so a stalled callback can NEVER freeze input —
-        // structurally impossible regardless of WHY it stalls. Detection is byte-for-
-        // byte identical (we never modified events). Worst case flips from "machine
-        // freezes" to "hotkey silently stops" — a strict improvement.
-        guard let port = CGEvent.tapCreate(
+        // Attempt cgSessionEventTap first (standard user-space accessibility tap),
+        // falling back to cghidEventTap if nil.
+        let createdPort = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .listenOnly,
+            eventsOfInterest: mask,
+            callback: HotkeyMonitor.tapCallback,
+            userInfo: selfPtr
+        ) ?? CGEvent.tapCreate(
             tap: .cghidEventTap,
             place: .headInsertEventTap,
             options: .listenOnly,
             eventsOfInterest: mask,
             callback: HotkeyMonitor.tapCallback,
             userInfo: selfPtr
-        ) else {
+        )
+
+        guard let port = createdPort else {
             SpeakLog.hotkey.error("HotkeyMonitor: CGEvent.tapCreate returned nil — AX may have been revoked.")
             lock.withLock {
                 isArmed = false
-                wasTrusted = false  // force a re-check on next tick
             }
             return
         }
