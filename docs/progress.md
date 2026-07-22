@@ -7,6 +7,13 @@
 
 ## Current phase
 
+**Loop #67 (2026-07-22) — Dynamic Custom Agent Definition & Hackable Product Surface COMPLETE (commit `512405f`).**
+- Built `CustomAgentDefinition.swift` & `DynamicCustomTagAdapter` in `SpeakCore/AgentBridge/`:
+  - Enables developers to dynamically define custom `@tag` agents, system prompts, and custom shell execution scripts without touching core code.
+- Added `registerCustomAgent` to `TagRegistry.swift`.
+- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
+- Re-built and launched fresh `Speak.app` (PID 36049).
+
 **Loop #66 (2026-07-22) — Master Checklist & Multi-Agent Swarm Broadcaster COMPLETE (commit `47d676b`).**
 - Created living tracking checklist in `docs/speak_transformation_master_checklist.md`.
 - Implemented **Multi-Agent Swarm Broadcaster (`@team`, `@engineers`, `@qa`)**:
