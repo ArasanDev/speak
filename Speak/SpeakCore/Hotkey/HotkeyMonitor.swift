@@ -285,6 +285,7 @@ public final class HotkeyMonitor: @unchecked Sendable {
     public func start() {
         lock.withLock {
             armingDesired = true
+            wasTrusted = false  // Force watchdog to attempt building tap immediately if trusted
         }
         // Wake the run loop so the watchdog timer fires ASAP instead of waiting
         // for the next 100ms interval.
@@ -444,14 +445,11 @@ public final class HotkeyMonitor: @unchecked Sendable {
 
         if !currentlyArmed && shouldArm {
             // Check AX trust without prompting.
-            // [verified: AXIsProcessTrustedWithOptions with kAXTrustedCheckOptionPrompt:false
-            //  queries silently — no prompt — so safe to call at 100ms cadence, 2026-06-21].
             let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: false] as CFDictionary
             let nowTrusted = AXIsProcessTrustedWithOptions(opts)
-            let wasTrustedPrev = lock.withLock { wasTrusted }
 
-            if nowTrusted && !wasTrustedPrev {
-                SpeakLog.hotkey.info("HotkeyMonitor: AX trust granted — building tap (re-arm).")
+            if nowTrusted {
+                SpeakLog.hotkey.info("HotkeyMonitor: AX trust active — building tap (re-arm).")
                 buildTap()
             }
             lock.withLock { wasTrusted = nowTrusted }
