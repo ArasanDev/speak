@@ -186,7 +186,7 @@ public final class SettingsStore: @unchecked Sendable {
             // surprise cost to shipping it on by default — the toggle exists purely
             // to let a user hide the button, not to gate a background behavior.
             Keys.readbackEnabled: true,
-            Keys.petEnabled: true
+            Keys.petEnabled: false
         ])
         // Enum defaults are handled via `?? fallback` at the getter level because
         // Codable JSON cannot be registered as a `[String: Any]` literal.
@@ -719,7 +719,7 @@ extension SettingsStore {
     public var petEnabled: Bool {
         get {
             access(keyPath: \.petEnabled)
-            return defaults.object(forKey: Keys.petEnabled) as? Bool ?? true
+            return defaults.object(forKey: Keys.petEnabled) as? Bool ?? false
         }
         set {
             withMutation(keyPath: \.petEnabled) {
