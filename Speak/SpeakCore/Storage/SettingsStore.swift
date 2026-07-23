@@ -185,7 +185,8 @@ public final class SettingsStore: @unchecked Sendable {
             // user presses it (no audio plays unprompted), so there is no privacy/
             // surprise cost to shipping it on by default — the toggle exists purely
             // to let a user hide the button, not to gate a background behavior.
-            Keys.readbackEnabled: true
+            Keys.readbackEnabled: true,
+            Keys.petEnabled: true
         ])
         // Enum defaults are handled via `?? fallback` at the getter level because
         // Codable JSON cannot be registered as a `[String: Any]` literal.
@@ -640,6 +641,9 @@ public final class SettingsStore: @unchecked Sendable {
         withMutation(keyPath: \.readbackEnabled) {
             defaults.set(true, forKey: Keys.readbackEnabled)
         }
+        withMutation(keyPath: \.petEnabled) {
+            defaults.set(true, forKey: Keys.petEnabled)
+        }
 
         SpeakLog.storage.info("SettingsStore reset to defaults")
     }
@@ -709,15 +713,13 @@ extension SettingsStore {
         }
     }
 
-    // MARK: - Pip (FE-1, specs/frontend-identity.md §5)
-
-    /// Master toggle for Pip, the persistent floating pet panel. Default
-    /// `false` — opt-in until dogfooded, zero regression for existing users
-    /// (spec §5: "petEnabled in SettingsStore, default false this slice").
+    /// FE-1: Pip the pet enabled state. Controls whether the floating 56x36pt
+    /// edge-snapping mascot lozenge (`PetPanelController`) is visible.
+    /// Defaults to `true` (always-on companion).
     public var petEnabled: Bool {
         get {
             access(keyPath: \.petEnabled)
-            return defaults.bool(forKey: Keys.petEnabled)
+            return defaults.object(forKey: Keys.petEnabled) as? Bool ?? true
         }
         set {
             withMutation(keyPath: \.petEnabled) {

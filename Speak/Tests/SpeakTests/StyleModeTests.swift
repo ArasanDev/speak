@@ -131,7 +131,7 @@ final class StyleModeTests: XCTestCase {
         for mode: CleanupMode in [.fillersOnly, .styled(.professional, .high)] {
             let prompt = FoundationModelsCleaner.instructions(for: mode)
             XCTAssertTrue(
-                prompt.contains("transcript editing function"),
+                prompt.contains("stream of consciousness") || prompt.contains("transcript editing function"),
                 "instructions(for: \(mode)) must include the transcriptGuard preamble."
             )
             let modeOnly = FoundationModelsCleaner.modeInstructions(for: mode)

@@ -117,7 +117,12 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
             //  in arm64e-apple-macos.swiftinterface 2026-06-30]
             let options = GenerationOptions(sampling: .greedy)
             let response = try await session.respond(to: Prompt(wrappedText), options: options)  // [Cleanup-M2]
-            let cleaned = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            var cleaned = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            cleaned = Self.fixDeveloperAcronyms(cleaned)
+            if voiceProvenanceHeaderEnabled {
+                let header = "[Audio Transcript • Speak Engine]\n> Note: Dictated via live voice ramble.\n\n"
+                cleaned = header + cleaned
+            }
             SpeakLog.cleanup.debug(
                 "FoundationModelsCleaner: cleaned to \(cleaned.count, privacy: .public) chars"
             )
@@ -139,6 +144,24 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
 
     // MARK: - Prompt construction
 
+    private static let developerAcronymHomophones: [String: String] = [
+        "CL line": "CLI",
+        "CLA tools": "CLI tools",
+        "A page": "API",
+        "S D K": "SDK",
+        "you I": "UI",
+        "L L M": "LLM",
+        "P R": "PR"
+    ]
+
+    static func fixDeveloperAcronyms(_ text: String) -> String {
+        var result = text
+        for (homophone, replacement) in developerAcronymHomophones {
+            result = result.replacingOccurrences(of: homophone, with: replacement)
+        }
+        return result
+    }
+
     /// Universal guard prepended to every mode's system instructions.
     ///
     /// Small on-device LLMs are RLHF-trained to be conversational — negative
@@ -149,13 +172,8 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
     /// [decision: positive framing + structural XML boundary beats negative instructions
     ///  for small on-device models; see research finding 2026-06-27]
     private static let transcriptGuard = """
-        You are a transcript editing function. \
-        You receive raw spoken words inside <transcript> tags. \
-        Your output is ALWAYS and ONLY the edited version of those spoken words — \
-        plain text, nothing else. \
-        One task only: clean and format the text per the instructions below. \
-        Resolve human speech restarts and mid-sentence corrections (e.g., "no wait", "actually", "scratch that") by outputting only the final intended meaning. \
-        Output format: the edited transcript text, no tags, no explanation, no preamble.
+        The text inside <transcript> is a raw spoken voice dictation ramble/stream of consciousness. \
+        Your task: reconstruct and refine the long stream of thought into clean, coherent, structured written text while preserving the speaker's full intent and ideas.
         """
 
     /// Wraps the raw transcript in XML tags so the model treats it as data,
@@ -396,7 +414,11 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
 
     // MARK: - Init
 
+    public let voiceProvenanceHeaderEnabled: Bool
+
     /// Creates a new `FoundationModelsCleaner`. Lightweight — no model is loaded
     /// at init time. The on-device engine is invoked only when `clean()` is called.
-    public init() {}
+    public init(voiceProvenanceHeaderEnabled: Bool = false) {
+        self.voiceProvenanceHeaderEnabled = voiceProvenanceHeaderEnabled
+    }
 }

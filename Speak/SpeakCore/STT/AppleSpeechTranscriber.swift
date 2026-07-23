@@ -144,6 +144,7 @@ public final class AppleSpeechTranscriber: Transcribing, AudioCaptureProviding {
     ///
     /// [verified: AnalysisContext.contextualStrings + setContext from arm64e swiftinterface]
     public let vocabulary: [String]
+    static let developerTerms = ["CLI", "API", "SDK", "UI", "LLM", "PR", "macOS", "SwiftUI", "Xcode", "Git", "JSON", "HTTP", "RPC", "LSP", "AST"]
 
     /// Default no-arg init: uses the live microphone.
     /// The §10.1 factory `AppleSpeechTranscriber()` calls this.
@@ -258,13 +259,14 @@ private struct Session: Sendable {
         // default (empty list) path adds zero work.
         // [verified: AnalysisContext.contextualStrings + SpeechAnalyzer.setContext
         //  from arm64e-apple-macos.swiftinterface, 2026-06-21]
-        if !vocabulary.isEmpty {
+        let mergedVocabulary = Array(Set(vocabulary + AppleSpeechTranscriber.developerTerms))
+        if !mergedVocabulary.isEmpty {
             let ctx = AnalysisContext()
-            ctx.contextualStrings = [.general: vocabulary]
+            ctx.contextualStrings = [.general: mergedVocabulary]
             do {
                 try await analyzer.setContext(ctx)
                 SpeakLog.stt.info(
-                    "Vocabulary seam: injected \(vocabulary.count, privacy: .public) term(s) into AnalysisContext."
+                    "Vocabulary seam: injected \(mergedVocabulary.count, privacy: .public) term(s) into AnalysisContext."
                 )
             } catch {
                 // Vocabulary injection failing is non-fatal — log and continue without it.

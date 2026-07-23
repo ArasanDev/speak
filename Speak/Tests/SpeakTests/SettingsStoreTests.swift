@@ -539,10 +539,10 @@ final class SettingsStoreVoiceTests: XCTestCase {
 
     // MARK: - petEnabled / petPositions (FE-1)
 
-    func testPetEnabledDefaultIsFalse() throws {
+    func testPetEnabledDefaultIsTrue() throws {
         let store = freshStore(on: try makeIsolatedDefaults())
-        XCTAssertFalse(store.petEnabled,
-            "petEnabled default must be false — Pip is opt-in until dogfooded, zero regression for existing users.")
+        XCTAssertTrue(store.petEnabled,
+            "petEnabled default must be true — Pip is active as the desktop companion.")
     }
 
     func testPetEnabledTrueRoundTrips() throws {

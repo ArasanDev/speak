@@ -38,31 +38,30 @@ struct PetView: View {
     @State private var stateEnteredAt: TimeInterval = Date().timeIntervalSinceReferenceDate
 
     // Form constants (spec §5).
-    private static let capsuleSize = CGSize(width: 56, height: 36)
+    private static let robotSize = CGSize(width: 64, height: 60)
     private static let hoverScale: CGFloat = 1.15
     private static let barWidth: CGFloat = 3
-    private static let barGap: CGFloat = 3
-    private static let barMinHeight: CGFloat = 4
-    private static let barMaxHeight: CGFloat = 22
+    private static let barGap: CGFloat = 2
+    private static let barMinHeight: CGFloat = 2
+    private static let barMaxHeight: CGFloat = 14
     private static let barCount = 5
-    private static let tallyDotSize: CGFloat = 5
-    private static let cornerRadius: CGFloat = 18
-    // 60fps, matching `AmbientOrbView` — a single small decorative Canvas
-    // redraw at this size is negligible cost. [decision: FE-1, mirrors H-UI]
     private static let frameInterval: TimeInterval = 1.0 / 60.0
+
+    private var cloudColor: Color { Color(red: 0.35, green: 0.5, blue: 0.95) }
+    private var screenColor: Color { Color(red: 0.08, green: 0.1, blue: 0.2) }
+    private var cyanGlow: Color { Color(red: 0.2, green: 0.85, blue: 1.0) }
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            capsuleBody
-            tallyDot
+            robotBody
         }
-        .frame(width: Self.capsuleSize.width, height: Self.capsuleSize.height)
+        .frame(width: Self.robotSize.width, height: Self.robotSize.height)
         .scaleEffect(isHovering ? Self.hoverScale : 1.0)
         .animation(SpeakMotion.micro(reduceMotion: reduceMotion), value: isHovering)
         .overlay(alignment: .leading) {
             if isHovering {
                 statusLozenge
-                    .offset(x: Self.capsuleSize.width * Self.hoverScale + 6)
+                    .offset(x: Self.robotSize.width * Self.hoverScale + 6)
                     .transition(.opacity)
             }
         }
@@ -72,25 +71,76 @@ struct PetView: View {
         }
     }
 
-    // MARK: - Capsule + bars
+    // MARK: - Robot Body
 
-    private var capsuleBody: some View {
-        ZStack {
-            Capsule(style: .continuous)
-                .fill(Color.speakInk2.opacity(0.92))
-                .overlay(
-                    Capsule(style: .continuous)
-                        .strokeBorder(Color.speakMica, lineWidth: 0.5)
-                )
-            barsCanvas
+    private var robotBody: some View {
+        VStack(spacing: -4) {
+            // Head
+            ZStack {
+                Image(systemName: "cloud.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(cloudColor)
+                    .frame(height: 44)
+                
+                // Screen face
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(screenColor)
+                    .frame(width: 34, height: 20)
+                    .overlay(faceContent)
+            }
+            
+            // Chest
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(cloudColor)
+                    .frame(width: 36, height: 16)
+                
+                chestEmblem
+            }
         }
     }
 
+    @ViewBuilder
+    private var faceContent: some View {
+        switch state {
+        case .dormant:
+            Text("(u u)")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(Color.gray.opacity(0.8))
+        case .listening, .processing, .agentWorking, .idle:
+            barsCanvas
+        case .speaking:
+            speakingFace
+        case .attention:
+            Text("(! !)")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(cyanGlow)
+                .shadow(color: cyanGlow, radius: 2)
+        }
+    }
+
+    private var speakingFace: some View {
+        TimelineView(.animation(minimumInterval: 0.3)) { timeline in
+            let tick = Int(timeline.date.timeIntervalSince1970 * 2) % 2 == 0
+            HStack(spacing: 1) {
+                Text(">")
+                Text("_").opacity(tick ? 1 : 0)
+            }
+            .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .foregroundStyle(cyanGlow)
+            .shadow(color: cyanGlow, radius: 3)
+        }
+    }
+
+    private var chestEmblem: some View {
+        Text(">_")
+            .font(.system(size: 8, weight: .bold, design: .monospaced))
+            .foregroundStyle(state == .attention ? cyanGlow : Color.white.opacity(0.6))
+            .shadow(color: state == .attention ? cyanGlow : .clear, radius: 3)
+    }
+
     private var barsCanvas: some View {
-        // Paused only when Reduce Motion is on AND nothing time-driven remains
-        // to render: live levels need frames regardless, and (review fix,
-        // 2026-07-11) the idle/dormant Reduce-Motion opacity PULSE needs
-        // frames too — spec §4: "Pip's breath becomes a slow opacity pulse."
         TimelineView(.animation(
             minimumInterval: Self.frameInterval,
             paused: reduceMotion && level == 0 && state != .idle && state != .dormant
@@ -116,12 +166,11 @@ struct PetView: View {
             reduceMotion: reduceMotion,
             enteredStateAt: stateEnteredAt
         )
-        // Reduce Motion (spec §4): the breath becomes a slow OPACITY pulse —
-        // bar heights stay static (see petBarHeights), but the bars' opacity
-        // modulates on the same cycle. 1.0 (no-op) outside idle/dormant or
-        // when motion is not reduced.
         let pulse = petReduceMotionOpacity(state: state, time: time, reduceMotion: reduceMotion)
-        let color = petBarColor(for: state).opacity(pulse)
+        // Ensure the bars are cyan during .listening as requested. We can just use cyanGlow.
+        let isCyanState = (state == .listening || state == .attention || state == .speaking)
+        let baseColor = isCyanState ? cyanGlow : petBarColor(for: state)
+        let color = baseColor.opacity(pulse)
         for (index, height) in heights.enumerated() {
             let x = CGFloat(index) * (Self.barWidth + Self.barGap)
             let rect = CGRect(
@@ -131,19 +180,6 @@ struct PetView: View {
                 height: height
             )
             context.fill(Path(roundedRect: rect, cornerRadius: Self.barWidth / 2), with: .color(color))
-        }
-    }
-
-    // MARK: - Tally dot (spec §5: onAir when mic open, agentViolet when agent
-    // speaking/waiting, hidden otherwise)
-
-    @ViewBuilder
-    private var tallyDot: some View {
-        if let color = petTallyDotColor(for: state) {
-            Circle()
-                .fill(color)
-                .frame(width: Self.tallyDotSize, height: Self.tallyDotSize)
-                .offset(x: -2, y: 2)
         }
     }
 

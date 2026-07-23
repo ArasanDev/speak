@@ -478,13 +478,13 @@ final class PetPanelController {
     /// Copy voice per spec §7: plain verbs, sentence case.
     private static func statusText(for state: PetState, attentionCount: Int) -> String {
         switch state {
-        case .dormant: return "Pip is asleep"
+        case .dormant: return "Pet is asleep"
         case .idle: return "Ready"
-        case .listening: return "Listening"
-        case .processing: return "Cleaning up"
+        case .listening: return "Pet is listening"
+        case .processing: return "Pet is processing transcript"
         case .agentWorking: return "Agent working"
-        case .attention: return attentionCount == 1 ? "1 agent waiting" : "\(attentionCount) agents waiting"
-        case .speaking: return "Agent speaking"
+        case .attention: return "Pet needs attention (\(attentionCount) queued)"
+        case .speaking: return "Pet is speaking"
         }
     }
 

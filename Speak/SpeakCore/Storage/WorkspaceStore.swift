@@ -64,13 +64,7 @@ public actor WorkspaceStore {
             throw SpeakError.unknown("Failed to open WorkspaceStore at \(databaseURL.path): \(errmsg)")
         }
         self.db = db
-        try setupSchema()
-    }
-
-    deinit {
-        if let db = db {
-            sqlite3_close(db)
-        }
+        try Self.setupSchema(db: db)
     }
 
     public static func makeProductionStore() throws -> WorkspaceStore {
@@ -83,7 +77,7 @@ public actor WorkspaceStore {
         return try WorkspaceStore(databaseURL: dbURL)
     }
 
-    private func setupSchema() throws {
+    private static func setupSchema(db: OpaquePointer?) throws {
         let sql = """
         CREATE TABLE IF NOT EXISTS channels (
             id TEXT PRIMARY KEY NOT NULL,
@@ -109,9 +103,6 @@ public actor WorkspaceStore {
             sqlite3_free(errmsg)
             throw SpeakError.unknown("WorkspaceStore schema setup failed: \(msg)")
         }
-
-        // Insert default #general channel if empty
-        try createDefaultChannelIfNeeded()
     }
 
     private func createDefaultChannelIfNeeded() throws {
@@ -197,7 +188,7 @@ public actor WorkspaceStore {
 
     public func fetchMessages(channelId: String, threadId: UUID? = nil) throws -> [WorkspaceMessage] {
         let sql: String
-        if let threadId = threadId {
+        if threadId != nil {
             sql = "SELECT id, channelId, threadId, senderTag, text, createdAt FROM messages WHERE channelId = ? AND threadId = ? ORDER BY createdAt ASC;"
         } else {
             sql = "SELECT id, channelId, threadId, senderTag, text, createdAt FROM messages WHERE channelId = ? AND threadId IS NULL ORDER BY createdAt ASC;"
@@ -210,8 +201,8 @@ public actor WorkspaceStore {
         defer { sqlite3_finalize(stmt) }
 
         sqlite3_bind_text(stmt, 1, channelId, -1, sqliteTransientDestructor)
-        if let threadId = threadId {
-            sqlite3_bind_text(stmt, 2, threadId.uuidString, -1, sqliteTransientDestructor)
+        if let targetThreadId = threadId {
+            sqlite3_bind_text(stmt, 2, targetThreadId.uuidString, -1, sqliteTransientDestructor)
         }
 
         var results: [WorkspaceMessage] = []

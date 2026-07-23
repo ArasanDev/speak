@@ -71,7 +71,7 @@ public actor AgentCallStore: AgentCallStoring {
     ///     and drive `expireOverdue(now:)` with an explicit instant; `submit`'s
     ///     `createdAt` uses this clock too so a single fake-clock test double
     ///     controls both. Defaults to `Date.init`.
-    public init(databaseURL: URL, now: @escaping @Sendable () -> Date = Date.init) throws {
+    public init(databaseURL: URL, now: @escaping @Sendable () -> Date = { Date() }) throws {
         self.now = now
         let path = databaseURL.path
         guard sqlite3_open_v2(

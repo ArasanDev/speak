@@ -30,7 +30,7 @@ public actor AgentSessionRegistry {
     private let now: @Sendable () -> Date
 
     /// - Parameter now: injectable clock for staleness tests.
-    public init(now: @escaping @Sendable () -> Date = Date.init) {
+    public init(now: @escaping @Sendable () -> Date = { Date() }) {
         self.now = now
     }
 
