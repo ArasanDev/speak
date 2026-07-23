@@ -117,9 +117,9 @@ final class HotkeyBindingCodableTests: XCTestCase {
         XCTAssertEqual(HotkeyBinding.defaultBinding.keyCode, 54)
     }
 
-    func testDefaultBindingWindowIs400ms() {
-        // 0.4 s = benchmark.md §7 [decision]; tune at P13
-        XCTAssertEqual(HotkeyBinding.defaultBinding.doubleTapWindow, 0.4, accuracy: 1e-9)
+    func testDefaultBindingWindowIs500ms() {
+        // 0.5 s ergonomic human double-tap window
+        XCTAssertEqual(HotkeyBinding.defaultBinding.doubleTapWindow, 0.5, accuracy: 1e-9)
     }
 
     func testDefaultBindingTriggerIsDoubleTap() {

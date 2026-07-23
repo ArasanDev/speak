@@ -105,7 +105,7 @@ extension HotkeyBinding {
         keyCode: Int(kVK_RightCommand), // 0x36 = 54 [verified: swiftc + SDK, 2026-06-21]
         modifiers: [],
         trigger: .doubleTap,
-        doubleTapWindow: 0.4 // benchmark.md §7 [decision]; tune at P13
+        doubleTapWindow: 0.5 // benchmark.md §7 [decision]; ergonomic 0.5s window for human double-tap
     )
 
     /// Fn binding (selectable): double-tap Fn → start, next single-tap → stop.
@@ -117,7 +117,7 @@ extension HotkeyBinding {
         keyCode: Int(kVK_Function), // 0x3F = 63 [verified]
         modifiers: [],
         trigger: .doubleTap,
-        doubleTapWindow: 0.4
+        doubleTapWindow: 0.5
     )
 
     // MARK: - Display helpers
