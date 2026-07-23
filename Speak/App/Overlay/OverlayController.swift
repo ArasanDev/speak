@@ -273,7 +273,9 @@ final class OverlayController {
         overlayModel.perDictationTone = .neutral
         overlayModel.perDictationLength = .preserve
         overlayModel.onKnobChanged = nil
-        overlayModel.onCancel = nil
+        overlayModel.onCancel = { [weak self] in
+            self?.cancelImmediate()
+        }
         overlayModel.onReclean = nil
         overlayModel.onReadback = nil              // [H-2] reset alongside onReclean — same lifetime
         overlayModel.customInstructions = ""       // P-Code v2: reset per-dictation prompt addition

@@ -463,6 +463,7 @@ struct TranscriptOverlayView: View {
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
             customizeButton
+            closeButton
         }
     }
 
@@ -482,6 +483,19 @@ struct TranscriptOverlayView: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Customize the prompt for this dictation")
         .accessibilityAddTraits(model.isCodingPanelOpen ? [.isSelected, .isButton] : .isButton)
+    }
+
+    private var closeButton: some View {
+        Button {
+            model.onCancel?()
+        } label: {
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary.opacity(0.8))
+        }
+        .buttonStyle(.plain)
+        .help("Cancel dictation and hide overlay")
+        .accessibilityLabel("Cancel dictation")
     }
 
     // [decision P-Code v2] The PE-3.2 pin-suggestion row (`pinPromptRow`) and the PE-3c
@@ -537,6 +551,8 @@ struct TranscriptOverlayView: View {
             Text(model.isCleaningUp ? "Cleaning up\u{2026}" : "Pasting\u{2026}")
                 .font(.speakMonoBody)
                 .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            closeButton
         }
         .padding(.horizontal, SpeakSpacing.md)
         .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)
@@ -616,6 +632,7 @@ struct TranscriptOverlayView: View {
                     .foregroundStyle(Color.secondary.opacity(0.7))
             }
             Spacer(minLength: 0)
+            closeButton
         }
         .padding(.horizontal, SpeakSpacing.md)
         .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)
