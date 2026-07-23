@@ -153,11 +153,11 @@ func noUnspokenIdentifiers(output: String, spoken: String) -> Bool {
 ///
 /// Fixtures can declare multiple checks (e.g. `["startsWithCapital", "noTrailingPeriod"]`).
 /// A fixture passes format checks iff ALL its checks pass.
-public struct FormatCheck {
+public struct FormatCheck: Sendable {
     public let name: String
-    public let predicate: (String) -> Bool
+    public let predicate: @Sendable (String) -> Bool
 
-    public init(_ name: String, check: @escaping (String) -> Bool) {
+    public init(_ name: String, check: @escaping @Sendable (String) -> Bool) {
         self.name = name
         self.predicate = check
     }

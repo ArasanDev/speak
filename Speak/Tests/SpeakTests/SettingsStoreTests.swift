@@ -39,7 +39,7 @@ final class SettingsStoreTests: XCTestCase {
             "UserDefaults(suiteName:) returned nil — this should be impossible for a UUID-based name."
         )
         addTeardownBlock {
-            ud.removePersistentDomain(forName: name)
+            UserDefaults.standard.removePersistentDomain(forName: name)
         }
         return ud
     }

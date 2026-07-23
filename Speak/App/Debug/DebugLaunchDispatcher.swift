@@ -427,9 +427,7 @@ final class DebugLaunchDispatcher {
     /// Keeps a reference alive for the app lifetime without global mutable state.
     /// Uses an actor-isolated store so this is data-race-free.
     private func keepAlive(_ object: AnyObject) {
-        Task {
-            await DebugObjectStore.shared.retain(object)
-        }
+        DebugObjectStore.shared.retain(object)
     }
 }
 
@@ -484,7 +482,8 @@ private final class DebugSeededHistoryStore: HistoryStoring, @unchecked Sendable
 /// Actor that retains DEBUG-lifecycle objects (window controllers, panels) for
 /// the process lifetime without using global mutable state.
 /// [decision: actor-isolated array — data-race-safe; avoids any global `var`]
-private actor DebugObjectStore {
+@MainActor
+private final class DebugObjectStore {
     static let shared = DebugObjectStore()
     private var objects: [AnyObject] = []
 

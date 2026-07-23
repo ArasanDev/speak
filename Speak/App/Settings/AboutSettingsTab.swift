@@ -69,3 +69,36 @@ struct AboutSettingsTab: View {
         .padding(SpeakSpacing.lg)
     }
 }
+
+// MARK: - Preview
+
+#if DEBUG
+#Preview("Settings — About") {
+    AboutSettingsTab()
+        .frame(minWidth: 760, minHeight: 520)
+}
+#endif
+
+/// A single privacy guarantee row: icon + title + detail.
+struct PrivacyGuaranteeRow: View {
+    let icon: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: SpeakSpacing.md) {
+            Image(systemName: icon)
+                .font(.system(size: 18))
+                .foregroundStyle(.green)
+                .frame(width: 24)  // [decision: 24pt icon column width = 3× SpeakSpacing.sm]
+            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                Text(title)
+                    .font(.speakMonoBody)
+                Text(detail)
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+

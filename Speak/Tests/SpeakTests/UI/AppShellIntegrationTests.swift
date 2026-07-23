@@ -210,7 +210,7 @@ final class AppShellIntegrationTests: XCTestCase {
         XCTAssertEqual(settings.language.identifier, "en-US",
             "Settings starts with en-US locale.")
 
-        let engine = try SpeakEngine(
+        let engine = SpeakEngine(
             transcriber: NullTranscriber(),
             history: history,
             settings: settings
@@ -221,7 +221,7 @@ final class AppShellIntegrationTests: XCTestCase {
 
         // Create a new session — it should pick up the changed language
         // (Since language is read at newSession() time, this verifies the latching rule.)
-        let session = await engine.newSession()
+        _ = await engine.newSession()
 
         // The session is created; no direct way to inspect the language it captured
         // without calling start(). This test documents the expected behavior:

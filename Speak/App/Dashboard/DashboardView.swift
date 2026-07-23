@@ -21,9 +21,6 @@ struct DashboardView: View {
     /// The selected sidebar section. Seeded from `initialSection` (defaults to Home).
     @State private var selection: DashboardSection
 
-    /// Top-center mode selection (Dictation Engine vs Agent Workspace).
-    @State private var appMode: AppMode = .workspace
-
     init(context: DashboardContext, initialSection: DashboardSection = .home) {
         self.context = context
         _selection = State(initialValue: initialSection)
@@ -32,7 +29,7 @@ struct DashboardView: View {
     var body: some View {
         NavigationSplitView {
             VStack(spacing: 0) {
-                List(DashboardSection.mainSections.filter { $0 != .workspace }, selection: $selection) { section in
+                List(DashboardSection.mainSections, selection: $selection) { section in
                     Label(section.title, systemImage: section.systemImage)
                         .tag(section)
                 }
@@ -67,7 +64,6 @@ struct DashboardView: View {
     private func detail(for section: DashboardSection) -> some View {
         switch section {
         case .home:       HomePaneView(context: context)
-        case .workspace:  WorkspaceMainView()
         case .aiStudio:   AIStudioPaneView(context: context)
         case .insights:   InsightsPaneView(context: context)
         case .dictionary: DictionaryPaneView(context: context)

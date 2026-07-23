@@ -69,6 +69,7 @@ private final class FirstMouseHostingView<Content: View>: NSHostingView<Content>
 // MARK: - Panel subclass
 
 /// A floating, non-activating window that hosts the live recording HUD.
+@MainActor
 final class TranscriptOverlayPanel: NSPanel {
 
     // MARK: - Constants
@@ -88,7 +89,7 @@ final class TranscriptOverlayPanel: NSPanel {
     /// Token returned by `NotificationCenter.addObserver(forName:...)`. Stored so
     /// we can remove it in `deinit` and avoid a leak. [decision: block-based observer
     ///  with [weak self] capture; removed in deinit per macOS notification best practice.]
-    private var screenChangeObserver: (any NSObjectProtocol)?
+    nonisolated(unsafe) private var screenChangeObserver: (any NSObjectProtocol)?
 
     // MARK: - Init
 
@@ -156,7 +157,9 @@ final class TranscriptOverlayPanel: NSPanel {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.reposition()
+            MainActor.assumeIsolated {
+                self?.reposition()
+            }
         }
     }
 

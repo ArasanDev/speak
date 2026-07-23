@@ -80,7 +80,7 @@
 // bestAvailableAudioFormat returns 16kHz mono Int16 interleaved on this device.
 // P2 outputs 16kHz mono Float32 non-interleaved. An AVAudioConverter bridges them.
 
-import AVFoundation
+@preconcurrency import AVFoundation
 import os
 import Speech
 
@@ -144,7 +144,10 @@ public final class AppleSpeechTranscriber: Transcribing, AudioCaptureProviding {
     ///
     /// [verified: AnalysisContext.contextualStrings + setContext from arm64e swiftinterface]
     public let vocabulary: [String]
-    static let developerTerms = ["CLI", "API", "SDK", "UI", "LLM", "PR", "macOS", "SwiftUI", "Xcode", "Git", "JSON", "HTTP", "RPC", "LSP", "AST"]
+    static let developerTerms = [
+        "CLI", "API", "SDK", "UI", "LLM", "PR", "macOS", "SwiftUI", "Xcode", "Git",
+        "JSON", "HTTP", "RPC", "LSP", "AST", "FTS5", "SQLite", "SQLite3", "SQL", "gRPC", "REST", "iOS"
+    ]
 
     /// Default no-arg init: uses the live microphone.
     /// The §10.1 factory `AppleSpeechTranscriber()` calls this.
@@ -438,49 +441,52 @@ private struct Session: Sendable {
         analyzerFormat: AVAudioFormat,
         inputCont: AsyncStream<AnalyzerInput>.Continuation
     ) -> Task<Void, Never> {
-        let p2Format = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: AudioCapture.Constants.targetSampleRate,
-            channels: AudioCapture.Constants.targetChannels,
-            interleaved: false
-        )
-        // Build converter only when format dimensions differ.
-        // [verified at runtime] P2=Float32 non-interleaved; analyzer=Int16 interleaved.
-        // STT P3: Log format details on converter-init failure so a nil result
-        // (incompatible formats) is never silent. If the converter is nil and the
-        // formats differ, yield the unconverted buffer as a best-effort fallback and
-        // log a warning so the mismatch is visible in Console.
-        // [verified: AVAudioConverter(from:to:) returns nil on incompatible formats]
-        let converter: AVAudioConverter? = {
-            guard let src = p2Format else {
-                SpeakLog.stt.error(
-                    "STT bridge: could not build P2 source format (Float32 \(AudioCapture.Constants.targetSampleRate, privacy: .public)Hz mono) — will pass raw buffers to analyzer."
-                )
-                return nil
-            }
-            let identical = src.sampleRate == analyzerFormat.sampleRate
-                && src.channelCount == analyzerFormat.channelCount
-                && src.commonFormat == analyzerFormat.commonFormat
-                && src.isInterleaved == analyzerFormat.isInterleaved
-            guard !identical else { return nil }
-            if let conv = AVAudioConverter(from: src, to: analyzerFormat) {
-                return conv
-            }
-            // Converter init failed — log the format mismatch so it is diagnosable.
-            SpeakLog.stt.error("""
-                STT bridge: AVAudioConverter init failed. \
-                src=\(src.sampleRate, privacy: .public)Hz \
-                fmt=\(src.commonFormat.rawValue, privacy: .public) \
-                interleaved=\(src.isInterleaved, privacy: .public) → \
-                dst=\(analyzerFormat.sampleRate, privacy: .public)Hz \
-                fmt=\(analyzerFormat.commonFormat.rawValue, privacy: .public) \
-                interleaved=\(analyzerFormat.isInterleaved, privacy: .public). \
-                Passing raw P2 buffers to analyzer; transcription quality may degrade.
-                """)
-            return nil
-        }()
+        struct SendableFormat: @unchecked Sendable { let format: AVAudioFormat }
+        let targetFmt = SendableFormat(format: analyzerFormat)
+        struct SendableContinuation: @unchecked Sendable { let cont: AsyncStream<AnalyzerInput>.Continuation }
+        let targetCont = SendableContinuation(cont: inputCont)
+        struct SendableStream: @unchecked Sendable { let stream: AsyncStream<AVAudioPCMBuffer> }
+        let targetStream = SendableStream(stream: bufferStream)
 
         return Task<Void, Never>(priority: .userInitiated) {
+            let analyzerFormat = targetFmt.format
+            let inputCont = targetCont.cont
+            let bufferStream = targetStream.stream
+            let p2Format = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: AudioCapture.Constants.targetSampleRate,
+                channels: AudioCapture.Constants.targetChannels,
+                interleaved: false
+            )
+            let converter: AVAudioConverter? = {
+                guard let src = p2Format else {
+                    SpeakLog.stt.error(
+                        "STT bridge: could not build P2 source format (Float32 \(AudioCapture.Constants.targetSampleRate, privacy: .public)Hz mono) — will pass raw buffers to analyzer."
+                    )
+                    return nil
+                }
+                let identical = src.sampleRate == analyzerFormat.sampleRate
+                    && src.channelCount == analyzerFormat.channelCount
+                    && src.commonFormat == analyzerFormat.commonFormat
+                    && src.isInterleaved == analyzerFormat.isInterleaved
+                guard !identical else { return nil }
+                if let conv = AVAudioConverter(from: src, to: analyzerFormat) {
+                    return conv
+                }
+                // Converter init failed — log the format mismatch so it is diagnosable.
+                SpeakLog.stt.error("""
+                    STT bridge: AVAudioConverter init failed. \
+                    src=\(src.sampleRate, privacy: .public)Hz \
+                    fmt=\(src.commonFormat.rawValue, privacy: .public) \
+                    interleaved=\(src.isInterleaved, privacy: .public) → \
+                    dst=\(analyzerFormat.sampleRate, privacy: .public)Hz \
+                    fmt=\(analyzerFormat.commonFormat.rawValue, privacy: .public) \
+                    interleaved=\(analyzerFormat.isInterleaved, privacy: .public). \
+                    Passing raw P2 buffers to analyzer; transcription quality may degrade.
+                    """)
+                return nil
+            }()
+
             for await pcmBuffer in bufferStream {
                 let target: AVAudioPCMBuffer
                 if let conv = converter,
@@ -531,16 +537,22 @@ private struct Session: Sendable {
               let output = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity)
         else { return nil }
 
-        var supplied = false
+        final class InputBox: @unchecked Sendable {
+            var supplied = false
+            let buffer: AVAudioPCMBuffer
+            init(buffer: AVAudioPCMBuffer) { self.buffer = buffer }
+        }
+
+        let box = InputBox(buffer: buffer)
         var convError: NSError?
         let status = converter.convert(to: output, error: &convError) { _, inputStatus in
-            if supplied {
+            if box.supplied {
                 inputStatus.pointee = .noDataNow
                 return nil
             }
-            supplied = true
+            box.supplied = true
             inputStatus.pointee = .haveData
-            return buffer
+            return box.buffer
         }
         if let err = convError {
             SpeakLog.stt.error(
@@ -548,7 +560,7 @@ private struct Session: Sendable {
             )
             return nil
         }
-        guard status != .error, output.frameLength > 0 else { return nil }
+        guard status != AVAudioConverterOutputStatus.error, output.frameLength > 0 else { return nil }
         return output
     }
 }

@@ -28,6 +28,16 @@ public struct TextDiffResolver: Sendable {
         let rawWords = raw.split(separator: " ").map { String($0) }
         let cleanedWords = cleaned.split(separator: " ").map { String($0) }
         
+        if rawWords.isEmpty && cleanedWords.isEmpty {
+            return []
+        }
+        if rawWords.isEmpty {
+            return cleanedWords.map { DiffToken(text: $0, state: .inserted) }
+        }
+        if cleanedWords.isEmpty {
+            return rawWords.map { DiffToken(text: $0, state: .canceled) }
+        }
+        
         var lcsLength = Array(repeating: Array(repeating: 0, count: cleanedWords.count + 1), count: rawWords.count + 1)
         
         for i in 1...rawWords.count {

@@ -51,13 +51,12 @@ private final class GatedTranscriber: Transcribing, @unchecked Sendable {
     }
 
     func stop() async {
-        lock.lock(); _stopCount += 1; lock.unlock()
+        lock.withLock { _stopCount += 1 }
         gate.signal()  // releasing the gate lets the stream finish
     }
 
     func stopCallCount() -> Int {
-        lock.lock(); defer { lock.unlock() }
-        return _stopCount
+        lock.withLock { _stopCount }
     }
 }
 
@@ -261,7 +260,7 @@ final class EmptyTranscriptTests: XCTestCase {
     ) throws -> SpeakEngine {
         let suiteName = "SessionIntegrityTests.EmptyTranscript.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
         let settings = SettingsStore(defaults: defaults)
         settings.cleanupEnabled = false  // no cleaner — empty-transcript path is independent of cleanup
         return SpeakEngine(
@@ -367,7 +366,7 @@ final class ReentrantBeginDictationTests: XCTestCase {
     private func makeEngine(transcriber: any Transcribing) throws -> SpeakEngine {
         let suiteName = "SessionIntegrityTests.ReentrantBegin.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
         let settings = SettingsStore(defaults: defaults)
         return SpeakEngine(
             transcriber: transcriber,
@@ -500,7 +499,7 @@ final class EndDictationErrorBranchTests: XCTestCase {
     ) throws -> SpeakEngine {
         let suiteName = "EndDictationError.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
         let settings = SettingsStore(defaults: defaults)
         settings.cleanupEnabled = false
         return SpeakEngine(

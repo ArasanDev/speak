@@ -68,7 +68,7 @@ final class SpeakEngineLanguageTests: XCTestCase {
             UserDefaults(suiteName: suiteName),
             "UserDefaults(suiteName:) returned nil for '\(suiteName)'"
         )
-        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
         return SettingsStore(defaults: defaults)
     }
 

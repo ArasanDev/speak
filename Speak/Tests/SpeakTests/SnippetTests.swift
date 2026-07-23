@@ -59,7 +59,7 @@ final class SnippetTests: XCTestCase {
     private func makeStore() throws -> SnippetStore {
         let name = "SnippetTests.\(UUID().uuidString)"
         let ud = try XCTUnwrap(UserDefaults(suiteName: name))
-        addTeardownBlock { ud.removePersistentDomain(forName: name) }
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: name) }
         return SnippetStore(defaults: ud)
     }
 

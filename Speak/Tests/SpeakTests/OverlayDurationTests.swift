@@ -6,6 +6,7 @@
 @testable import Speak
 import XCTest
 
+@MainActor
 final class OverlayDurationTests: XCTestCase {
 
     func testDurationLabel_formatsMinutesAndSeconds() {

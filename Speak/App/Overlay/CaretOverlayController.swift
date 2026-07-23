@@ -63,8 +63,7 @@ struct CaretOverlayView: View {
     @ViewBuilder
     private var bodyText: some View {
         if model.isProcessing {
-            Text(displayText)
-            + Text(" \u{27F3}").font(.system(size: 11)).foregroundStyle(.tertiary)
+            Text("\(Text(displayText))\(Text(" \u{27F3}").font(.system(size: 11)).foregroundStyle(.tertiary))")
         } else {
             Text(displayText)
         }

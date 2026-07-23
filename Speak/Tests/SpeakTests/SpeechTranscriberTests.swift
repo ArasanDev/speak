@@ -16,7 +16,7 @@
 //   chunk only — "testing" is dropped because synthetic `say` speech transcribes
 //   it inconsistently (observed: "cased"); the digits are stable.
 
-import AVFoundation
+@preconcurrency import AVFoundation
 @testable import SpeakCore
 import Speech
 import XCTest

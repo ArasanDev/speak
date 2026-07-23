@@ -238,7 +238,7 @@ public struct CleanupDiffView: View {
         let first = renderSegment(segments[0])
         return segments.dropFirst().reduce(first) { acc, seg in
             // Add a space before each segment to restore word separation.
-            acc + Text(" ") + renderSegment(seg)
+            Text("\(acc) \(renderSegment(seg))")
         }
     }
 

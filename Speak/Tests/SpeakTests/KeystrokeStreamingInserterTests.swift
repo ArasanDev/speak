@@ -14,7 +14,7 @@ import XCTest
 @testable import SpeakCore
 
 /// Thread-safe wrapper for test event recording
-final class EventRecorder: Sendable {
+final class EventRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var _events: [CGEvent] = []
 
@@ -36,7 +36,7 @@ final class EventRecorder: Sendable {
 }
 
 /// Thread-safe counter for test recordings
-final class CounterRecorder: Sendable {
+final class CounterRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var _count: Int = 0
 

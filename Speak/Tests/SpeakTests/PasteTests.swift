@@ -145,7 +145,7 @@ final class PasteTests: XCTestCase {
         try await Task.sleep(nanoseconds: 50_000_000)
         _ = try await session.stop()
 
-        let insertCalls = await inserter.snapshot()
+        let insertCalls = inserter.snapshot()
         XCTAssertEqual(insertCalls.count, 1, "insert() must be called exactly once")
         XCTAssertEqual(insertCalls.first, "Hello, world.",
                        "insert() must receive cleanedText when cleanup succeeds")
@@ -165,7 +165,7 @@ final class PasteTests: XCTestCase {
         try await Task.sleep(nanoseconds: 50_000_000)
         _ = try await session.stop()
 
-        let insertCalls = await inserter.snapshot()
+        let insertCalls = inserter.snapshot()
         XCTAssertEqual(insertCalls.count, 1, "insert() must be called exactly once")
         XCTAssertEqual(insertCalls.first, "raw dictation text",
                        "insert() must receive rawText when cleanup is off (cleaner=nil)")
@@ -193,7 +193,7 @@ final class PasteTests: XCTestCase {
         XCTAssertNil(result.cleanedText, "Unavailable cleanup → cleanedText must be nil")
 
         // Inserter must receive rawText (cleanedText ?? rawText = nil ?? rawText)
-        let insertCalls = await inserter.snapshot()
+        let insertCalls = inserter.snapshot()
         XCTAssertEqual(insertCalls.count, 1, "insert() must be called exactly once")
         XCTAssertEqual(insertCalls.first, "raw text fallback",
                        "insert() must receive rawText when cleanup is unavailable")
@@ -214,7 +214,7 @@ final class PasteTests: XCTestCase {
         do {
             _ = try await session.stop()
             XCTFail("stop() must throw when insert() throws")
-        } catch let SpeakError.pasteboardBusy {
+        } catch SpeakError.pasteboardBusy {
             // Expected — paste failure surfaces as pasteboardBusy.
         } catch {
             XCTFail("Expected SpeakError.pasteboardBusy, got \(error)")
@@ -241,7 +241,7 @@ final class PasteTests: XCTestCase {
         do {
             _ = try await session.stop()
             XCTFail("stop() must throw when insert() throws a generic error")
-        } catch let SpeakError.pasteboardBusy {
+        } catch SpeakError.pasteboardBusy {
             // Expected — generic paste errors are mapped to .pasteboardBusy.
         } catch {
             XCTFail("Expected SpeakError.pasteboardBusy, got \(error)")

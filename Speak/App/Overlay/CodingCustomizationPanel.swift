@@ -52,6 +52,7 @@ import SwiftUI
 
 /// A floating, non-activating, dynamically-sized window hosting the prompt-customization
 /// (P-Code) surface opened from the base HUD's single button.
+@MainActor
 final class CodingCustomizationPanel: NSPanel {
 
     // MARK: - Constants
@@ -74,7 +75,7 @@ final class CodingCustomizationPanel: NSPanel {
     // MARK: - Internals
 
     /// Token for the resize observer; removed in `deinit`.
-    private var resizeObserver: (any NSObjectProtocol)?
+    nonisolated(unsafe) private var resizeObserver: (any NSObjectProtocol)?
 
     /// The base HUD panel's frame this panel is anchored above. Recorded at
     /// `show(anchoredAbove:)` and reused by `reanchor()` on every resize.
@@ -120,7 +121,9 @@ final class CodingCustomizationPanel: NSPanel {
             object: self,
             queue: .main
         ) { [weak self] _ in
-            self?.reanchor()
+            MainActor.assumeIsolated {
+                self?.reanchor()
+            }
         }
     }
 

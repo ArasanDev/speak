@@ -23,7 +23,7 @@ final class StyleModeTests: XCTestCase {
         let name = "StyleModeTests.\(UUID().uuidString)"
         let ud = try XCTUnwrap(UserDefaults(suiteName: name),
                                "UserDefaults(suiteName:) returned nil for a UUID name — impossible.")
-        addTeardownBlock { ud.removePersistentDomain(forName: name) }
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: name) }
         return ud
     }
 

@@ -85,20 +85,21 @@ final class SpeakEngineIntegrationTests: XCTestCase {
     /// Waits for the first `isFinal` chunk on `stream`, timing out after 30 seconds.
     /// The 30-second value [decision] is generous CI headroom for the 1.3s fixture.
     private func waitForFinalChunk(_ stream: AsyncStream<TranscriptChunk>) async -> Bool {
-        var finalSeen = false
-        let waitTask = Task {
+        final class BoolBox: @unchecked Sendable { var value = false }
+        let box = BoolBox()
+        let waitTask = Task<Void, Never> {
             for await chunk in stream where chunk.isFinal {
-                finalSeen = true
+                box.value = true
                 return
             }
         }
-        let timeoutTask = Task {
+        let timeoutTask = Task<Void, Never> {
             try? await Task.sleep(for: .seconds(30))
             waitTask.cancel()
         }
         await waitTask.value
         timeoutTask.cancel()
-        return finalSeen
+        return box.value
     }
 
     /// Asserts the fixture's expected words appear in `text` (case-insensitive).
@@ -132,7 +133,7 @@ final class SpeakEngineIntegrationTests: XCTestCase {
             UserDefaults(suiteName: suiteName),
             "UserDefaults(suiteName:) returned nil for '\(suiteName)' — UUID names cannot be invalid."
         )
-        addTeardownBlock { testDefaults.removePersistentDomain(forName: suiteName) }
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
         let testSettings = SettingsStore(defaults: testDefaults)
         testSettings.cleanupEnabled = true   // exercise FM-unavailable path, not toggle-off
         testSettings.streamingMode = .off    // disable keystroke streaming for this test

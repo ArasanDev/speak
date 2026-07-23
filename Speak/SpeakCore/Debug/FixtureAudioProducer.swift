@@ -14,7 +14,7 @@
 //   [decision: source-tree-relative path for dev builds; moat-safe since DEBUG only]
 
 #if DEBUG
-import AVFoundation
+@preconcurrency import AVFoundation
 import os
 
 // MARK: - FixtureAudioProducer

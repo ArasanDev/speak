@@ -59,7 +59,7 @@ public actor AgentCallStore: AgentCallStoring {
 
     // MARK: - State (actor-isolated)
 
-    private var db: OpaquePointer?
+    nonisolated(unsafe) private var db: OpaquePointer?
     private let now: @Sendable () -> Date
 
     // MARK: - Init / deinit

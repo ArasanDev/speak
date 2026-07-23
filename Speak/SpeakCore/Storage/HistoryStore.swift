@@ -44,7 +44,7 @@ public actor HistoryStore: HistoryStoring {
 
     // MARK: - State (actor-isolated)
 
-    private var db: OpaquePointer?
+    nonisolated(unsafe) private var db: OpaquePointer?
 
     // Capacity guard: the maximum number of entries to keep. Oldest are
     // trimmed on every `save`. Traces to benchmark.md §7 [decision].

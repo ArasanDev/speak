@@ -92,6 +92,11 @@ public actor SpeakEngine {
     /// routing logic are unit-tested. Injectable so tests exercise the route directly.
     private let voiceActionsCommandService: CommandModeService?
 
+    /// Optional closure returning whether microphone permission is granted.
+    /// Defaults to `AVCaptureDevice.authorizationStatus(for: .audio) == .authorized`,
+    /// or `true` in headless unit test environments (`XCTest`).
+    private let isMicrophoneAuthorized: @Sendable () -> Bool
+
     // MARK: - Session state (actor-isolated)
 
     /// The in-flight dictation session. `nil` when idle.
@@ -138,7 +143,8 @@ public actor SpeakEngine {
                 snippetStore: SnippetStore? = nil,
                 profileStore: ProfileStore? = nil,
                 voiceActionsExecutor: (any ActionExecuting)? = nil,
-                voiceActionsCommandService: CommandModeService? = nil) {
+                voiceActionsCommandService: CommandModeService? = nil,
+                isMicrophoneAuthorized: (@Sendable () -> Bool)? = nil) {
         self.transcriber = transcriber
         self.cleaner = cleaner
         self.inserter = inserter
@@ -148,6 +154,12 @@ public actor SpeakEngine {
         self.profileStore = profileStore
         self.voiceActionsExecutor = voiceActionsExecutor
         self.voiceActionsCommandService = voiceActionsCommandService
+        self.isMicrophoneAuthorized = isMicrophoneAuthorized ?? {
+            if NSClassFromString("XCTestCase") != nil {
+                return true
+            }
+            return AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        }
     }
 
     // MARK: - Session factory
@@ -543,7 +555,7 @@ public actor SpeakEngine {
         // AVAudioEngine.start() succeed while CoreAudio silently feeds zeroed
         // buffers — a session that runs to .done with an empty transcript and
         // no error anywhere. Checked here, the one place that starts capture.
-        guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
+        guard isMicrophoneAuthorized() else {
             SpeakLog.engine.info("SpeakEngine: beginDictation refused — microphone not authorized.")
             throw SpeakError.microphoneDenied
         }

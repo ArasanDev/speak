@@ -23,49 +23,52 @@ final class ShortcutsCLIExecutorTests: XCTestCase {
 
     /// Writes an executable fixture script that mimics the `shortcuts` CLI's
     /// argument/output/exit-code shape, and returns its path.
-    private func makeFixtureScript(in dir: URL) throws -> String {
+    private static func makeFixtureScript(in dir: URL) throws -> String {
         let script = """
-        #!/bin/sh
-        case "$1" in
-          list)
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        CMD="${1:-}"
+
+        if [ "$CMD" = "list" ]; then
             echo "Good Morning"
             echo "Wind Down"
-            ;;
-          run)
-            case "$2" in
-              "Good Morning")
+            exit 0
+        fi
+
+        if [ "$CMD" = "run" ]; then
+            NAME="${2:-}"
+            if [ "$NAME" = "Good Morning" ]; then
                 echo "ran good morning"
                 exit 0
-                ;;
-              "Broken Shortcut")
-                echo "something went wrong" 1>&2
+            fi
+            if [ "$NAME" = "Broken Shortcut" ]; then
+                echo "something went wrong" >&2
                 exit 1
-                ;;
-              "Slow Shortcut")
+            fi
+            if [ "$NAME" = "Slow Shortcut" ]; then
                 sleep 5
+                echo "done sleeping"
                 exit 0
-                ;;
-              "Ignores Sigterm")
+            fi
+            if [ "$NAME" = "Ignores Sigterm" ]; then
                 trap '' TERM
                 sleep 30
+                echo "done sleeping past sigterm"
                 exit 0
-                ;;
-              "Huge Output")
-                yes "x" | head -c 5000000
+            fi
+            if [ "$NAME" = "Huge Output" ]; then
+                python3 -c "import sys; sys.stdout.write('x' * 5000000)"
                 exit 0
-                ;;
-              *)
-                echo "no shortcut named $2" 1>&2
-                exit 1
-                ;;
-            esac
-            ;;
-          *)
+            fi
+            echo "unknown shortcut: $NAME" >&2
             exit 2
-            ;;
-        esac
+        fi
+
+        echo "usage: script list | run <name>" >&2
+        exit 1
         """
-        let url = dir.appendingPathComponent("fixture-shortcuts.sh")
+        let url = dir.appendingPathComponent("fake-shortcuts.sh")
         try script.write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
         return url.path
@@ -75,7 +78,7 @@ final class ShortcutsCLIExecutorTests: XCTestCase {
 
     func testListActionNames_parsesStdoutLines() async throws {
         try await TestStorage.withTempDir { dir in
-            let path = try self.makeFixtureScript(in: dir)
+            let path = try Self.makeFixtureScript(in: dir)
             let executor = ShortcutsCLIExecutor(executablePath: path)
 
             let names = await executor.listActionNames()
@@ -88,7 +91,7 @@ final class ShortcutsCLIExecutorTests: XCTestCase {
 
     func testRun_success_returnsOutput() async throws {
         try await TestStorage.withTempDir { dir in
-            let path = try self.makeFixtureScript(in: dir)
+            let path = try Self.makeFixtureScript(in: dir)
             let executor = ShortcutsCLIExecutor(executablePath: path)
 
             let result = await executor.run(named: "Good Morning")
@@ -104,7 +107,7 @@ final class ShortcutsCLIExecutorTests: XCTestCase {
 
     func testRun_nonzeroExit_returnsFailedWithStderrDetail() async throws {
         try await TestStorage.withTempDir { dir in
-            let path = try self.makeFixtureScript(in: dir)
+            let path = try Self.makeFixtureScript(in: dir)
             let executor = ShortcutsCLIExecutor(executablePath: path)
 
             let result = await executor.run(named: "Broken Shortcut")
@@ -118,7 +121,7 @@ final class ShortcutsCLIExecutorTests: XCTestCase {
 
     func testRun_unknownName_returnsFailed() async throws {
         try await TestStorage.withTempDir { dir in
-            let path = try self.makeFixtureScript(in: dir)
+            let path = try Self.makeFixtureScript(in: dir)
             let executor = ShortcutsCLIExecutor(executablePath: path)
 
             let result = await executor.run(named: "Does Not Exist")
@@ -145,7 +148,7 @@ final class ShortcutsCLIExecutorTests: XCTestCase {
 
     func testRun_hangingProcess_terminatesAfterTimeoutInsteadOfHanging() async throws {
         try await TestStorage.withTempDir { dir in
-            let path = try self.makeFixtureScript(in: dir)
+            let path = try Self.makeFixtureScript(in: dir)
             // Fixture's "Slow Shortcut" sleeps 5s; a 0.3s timeout must terminate it
             // well before that, proving the watchdog (not the sleep) resolves the call.
             let executor = ShortcutsCLIExecutor(executablePath: path, timeout: 0.3)
@@ -166,7 +169,7 @@ final class ShortcutsCLIExecutorTests: XCTestCase {
     /// still resolve, via the SIGKILL escalation, rather than hanging forever.
     func testRun_processIgnoringSigterm_resolvesViaSigkillEscalation() async throws {
         try await TestStorage.withTempDir { dir in
-            let path = try self.makeFixtureScript(in: dir)
+            let path = try Self.makeFixtureScript(in: dir)
             // timeout: SIGTERM fires at 0.2s (ignored by fixture); killGrace: 0.2s
             // more before SIGKILL. Bounded well under the fixture's 30s sleep.
             let executor = ShortcutsCLIExecutor(executablePath: path, timeout: 0.2, killGrace: 0.2)
@@ -186,7 +189,7 @@ final class ShortcutsCLIExecutorTests: XCTestCase {
 
     func testRun_largeStdout_doesNotDeadlockAndCapturesFullOutput() async throws {
         try await TestStorage.withTempDir { dir in
-            let path = try self.makeFixtureScript(in: dir)
+            let path = try Self.makeFixtureScript(in: dir)
             let executor = ShortcutsCLIExecutor(executablePath: path)
 
             let result = await executor.run(named: "Huge Output")

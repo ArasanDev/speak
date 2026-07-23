@@ -74,7 +74,9 @@ public final class ChannelGateway: ChannelGatewayManaging, ObservableObject {
             payloadText: text
         )
 
-        SpeakLog.agentBridge.info("ChannelGateway: dispatched voice turn (\(text.count, privacy: .public) chars) to channel '\(channel.id, privacy: .public)' [repo: \(channel.repoPath ?? "none", privacy: .public)].")
+        SpeakLog.agentBridge.info(
+            "ChannelGateway: dispatched voice turn (\(text.count, privacy: .public) chars) to channel '\(channel.id, privacy: .public)' [repo: \(channel.repoPath ?? "none", privacy: .public)]."
+        )
         _ = envelope // Payload delivered over IPC/MCP bridge channel
         return true
     }

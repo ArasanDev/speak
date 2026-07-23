@@ -96,7 +96,7 @@ final class ProfileOverrideTests: XCTestCase {
             UserDefaults(suiteName: suiteName),
             "UserDefaults(suiteName:) returned nil"
         )
-        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
         return SettingsStore(defaults: defaults)
     }
 

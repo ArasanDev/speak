@@ -102,7 +102,7 @@ final class ProfileWiringTests: XCTestCase {
     private func makeEngine() throws -> SpeakEngine {
         let name = "ProfileWiringTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
-        addTeardownBlock { defaults.removePersistentDomain(forName: name) }
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: name) }
         // Defaults: cleanupEnabled == true, cleanupLevel == .medium → cleaner runs.
         let settings = SettingsStore(defaults: defaults)
         return SpeakEngine(
@@ -180,7 +180,7 @@ final class ProfileWiringTests: XCTestCase {
     private func makeEngine(perAppContextEnabled: Bool) throws -> SpeakEngine {
         let name = "ProfileWiringTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
-        addTeardownBlock { defaults.removePersistentDomain(forName: name) }
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: name) }
         let settings = SettingsStore(defaults: defaults)
         settings.perAppContextEnabled = perAppContextEnabled
         return SpeakEngine(

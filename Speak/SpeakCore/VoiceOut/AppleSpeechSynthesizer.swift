@@ -40,7 +40,7 @@ import Foundation
 /// Forwards `AVSpeechSynthesizerDelegate` callbacks (which arrive off the
 /// `AppleSpeechSynthesizer` actor, on whatever thread AVFoundation chooses)
 /// into the actor via a `@Sendable` closure captured at init.
-private final class SpeechSynthesizerDelegateBridge: NSObject, AVSpeechSynthesizerDelegate {
+private final class SpeechSynthesizerDelegateBridge: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable {
     /// Fired on `didFinish` (utterance played to completion) or `didCancel`
     /// (cut short by `stopSpeaking(at:)`) — both mean "this utterance is over."
     var onUtteranceEnded: (@Sendable () -> Void)?

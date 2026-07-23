@@ -151,7 +151,25 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
         "S D K": "SDK",
         "you I": "UI",
         "L L M": "LLM",
-        "P R": "PR"
+        "P R": "PR",
+        "F T S 5": "FTS5",
+        "FTS 5": "FTS5",
+        "fts 5": "FTS5",
+        "fts5": "FTS5",
+        "Fts5": "FTS5",
+        "sequel light": "SQLite",
+        "sql lite": "SQLite",
+        "sqlite": "SQLite",
+        "Sqlite": "SQLite",
+        "sqlite3": "SQLite3",
+        "Sqlite3": "SQLite3",
+        "sql lite 3": "SQLite3",
+        "cli": "CLI",
+        "api": "API",
+        "sdk": "SDK",
+        "ui": "UI",
+        "llm": "LLM",
+        "pr": "PR"
     ]
 
     static func fixDeveloperAcronyms(_ text: String) -> String {

@@ -48,7 +48,7 @@ public struct WorkspaceMessage: Codable, Sendable, Equatable, Identifiable {
 
 /// Actor managing the workspace database (`workspace.sqlite`).
 public actor WorkspaceStore {
-    private var db: OpaquePointer?
+    nonisolated(unsafe) private var db: OpaquePointer?
 
     public init(databaseURL: URL) throws {
         var dbHandle: OpaquePointer?
@@ -65,6 +65,13 @@ public actor WorkspaceStore {
         }
         self.db = db
         try Self.setupSchema(db: db)
+        try Self.createDefaultChannelIfNeeded(db: db)
+    }
+
+    deinit {
+        if let db {
+            sqlite3_close_v2(db)
+        }
     }
 
     public static func makeProductionStore() throws -> WorkspaceStore {
@@ -105,17 +112,21 @@ public actor WorkspaceStore {
         }
     }
 
-    private func createDefaultChannelIfNeeded() throws {
-        let channels = try fetchChannels()
+    private static func createDefaultChannelIfNeeded(db: OpaquePointer?) throws {
+        let channels = try fetchChannels(db: db)
         if channels.isEmpty {
             let general = Channel(id: "general", name: "general", topic: "Default workspace channel", isPrivate: false)
-            try createChannel(general)
+            try createChannel(general, db: db)
         }
     }
 
     // MARK: - Channels API
 
     public func createChannel(_ channel: Channel) throws {
+        try Self.createChannel(channel, db: db)
+    }
+
+    private static func createChannel(_ channel: Channel, db: OpaquePointer?) throws {
         let sql = "INSERT OR REPLACE INTO channels (id, name, topic, isPrivate, createdAt) VALUES (?, ?, ?, ?, ?);"
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
@@ -140,6 +151,10 @@ public actor WorkspaceStore {
     }
 
     public func fetchChannels() throws -> [Channel] {
+        try Self.fetchChannels(db: db)
+    }
+
+    private static func fetchChannels(db: OpaquePointer?) throws -> [Channel] {
         let sql = "SELECT id, name, topic, isPrivate, createdAt FROM channels ORDER BY name ASC;"
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {

@@ -10,7 +10,7 @@ final class ScratchpadTests: XCTestCase {
     private func makeDefaults() throws -> (UserDefaults, String) {
         let name = "ScratchpadTests.\(UUID().uuidString)"
         let ud = try XCTUnwrap(UserDefaults(suiteName: name))
-        addTeardownBlock { ud.removePersistentDomain(forName: name) }
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: name) }
         return (ud, name)
     }
 

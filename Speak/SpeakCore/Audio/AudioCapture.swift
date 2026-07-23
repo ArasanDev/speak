@@ -18,7 +18,7 @@
 //   transcriber). The level computation is isolated to `Self.rmsLevel(buffer:)`,
 //   a pure static helper that touches only immutable buffer data. [decision W2.1]
 
-import AVFoundation
+@preconcurrency import AVFoundation
 import os
 
 public final class AudioCapture: @unchecked Sendable {
@@ -229,16 +229,22 @@ public final class AudioCapture: @unchecked Sendable {
             return
         }
 
-        var supplied = false
+        final class InputBox: @unchecked Sendable {
+            var supplied = false
+            let buffer: AVAudioPCMBuffer
+            init(buffer: AVAudioPCMBuffer) { self.buffer = buffer }
+        }
+
+        let box = InputBox(buffer: buffer)
         var conversionError: NSError?
         let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
-            if supplied {
+            if box.supplied {
                 inputStatus.pointee = .noDataNow
                 return nil
             }
-            supplied = true
+            box.supplied = true
             inputStatus.pointee = .haveData
-            return buffer
+            return box.buffer
         }
 
         if let conversionError {

@@ -38,12 +38,10 @@ import SpeakCore
 
 /// Write a line to stdout.
 private func emit(_ message: String) {
-    var output = message + "\n"
+    let output = message + "\n"
     if let data = output.data(using: .utf8) {
         FileHandle.standardOutput.write(data)
     }
-    // Prevent compiler warning about unused variable in the (unlikely) non-UTF8 case.
-    _ = output
 }
 
 /// Write a line to stderr and exit with code 1.

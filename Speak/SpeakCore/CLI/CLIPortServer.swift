@@ -28,6 +28,7 @@
 //   This matches the Escape-handler guard at DictationController:307 and reuses
 //   the same private beginDictation/endDictation path. [decision: W2.3]
 
+@preconcurrency import CoreFoundation
 import Foundation
 import os
 
@@ -174,12 +175,13 @@ public enum CLIConfirmOutcome: Sendable, Equatable {
 /// Ownership: one instance per app lifetime, retained by `DictationController`.
 /// `invalidate()` is called on deinit and when monitoring stops (not currently
 /// used — the app terminates instead).
+@MainActor
 public final class CLIPortServer {
 
     // MARK: - Private state
 
-    private var port: CFMessagePort?
-    private var runLoopSource: CFRunLoopSource?
+    nonisolated(unsafe) private var port: CFMessagePort?
+    nonisolated(unsafe) private var runLoopSource: CFRunLoopSource?
 
     // Unretained reference used by the C callback.
     // The server lives for the app lifetime; the weak reference is a belt-
@@ -251,10 +253,7 @@ public final class CLIPortServer {
         )
     }
 
-    /// Invalidate the port and remove it from the run loop.
-    ///
-    /// Called automatically on deinit.
-    public func invalidate() {
+    public nonisolated func invalidate() {
         if let source = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)  // [validation-fix C6]
             runLoopSource = nil
@@ -281,16 +280,18 @@ public final class CLIPortServer {
         guard let info else {
             return CLIPortServer.encodeReply(.failure("internal: nil context"))
         }
+        let requestData: Data? = data.map { ($0 as Data) }
         let server = Unmanaged<CLIPortServer>.fromOpaque(info).takeUnretainedValue()
-        return server.handle(data: data as Data?)
+        return MainActor.assumeIsolated {
+            server.handle(data: requestData)
+        }
     }
 
     // MARK: - Dispatch logic
 
     /// Decode the incoming request and build a reply.
     ///
-    /// Called on the main thread. Reads `handler.icon` via `MainActor.assumeIsolated`
-    /// (we are already on main — see scheduling above).
+    /// Called on the main thread. Reads `handler.icon` (we are already on main — see scheduling above).
     private func handle(data: Data?) -> Unmanaged<CFData>? {
         guard let data else {
             SpeakLog.cli.error("CLIPortServer: received nil data — returning failure reply.")
@@ -313,12 +314,7 @@ public final class CLIPortServer {
         }
 
         // ask/confirm need to pump a nested run loop while an async round-trip
-        // completes — see `pumpUntilResult(timeoutSeconds:poll:)` below. That pump
-        // must happen OUTSIDE `MainActor.assumeIsolated`'s synchronous closure (a
-        // nested run-loop turn can re-enter this very callback, e.g. for a `status`
-        // poll from another CLI invocation, and `assumeIsolated` closures must not
-        // recursively re-enter). We special-case ask/confirm before the closure.
-        // [decision: H-3]
+        // completes — see `pumpUntilResult(timeoutSeconds:poll:)` below.
         if request.cmd == .ask || request.cmd == .confirm {
             return CLIPortServer.encodeReply(handleAskOrConfirm(request, handler: cmdHandler))
         }
@@ -337,73 +333,71 @@ public final class CLIPortServer {
 
         // AVB-6: resolve the optional sessionId note (if any) before the
         // synchronous dispatch below — `cliTouchSession` is an actor call and
-        // cannot be awaited from inside `MainActor.assumeIsolated`'s closure.
+        // cannot be awaited from inside a synchronous method.
         // `nil` when the request carries no sessionId, matching "absent →
         // exactly today's behavior." [decision: AVB-6]
         let sessionNote = CLIPortServer.pumpedSessionNote(sessionId: request.sessionId, handler: cmdHandler)
 
-        // We are on the main thread; the MainActor is available.
         // Read handler state synchronously for status; dispatch Tasks for start/stop/say.
-        let reply: CLIReply = MainActor.assumeIsolated {
-            switch request.cmd {
+        let reply: CLIReply
+        switch request.cmd {
 
-            case .status:
-                // Synchronous: read live state and reply inline.
-                let state = CLIState(from: cmdHandler.icon)
-                let binding = cmdHandler.currentHotkeyDisplayString
-                SpeakLog.cli.info("CLIPortServer: status — state=\(state.rawValue, privacy: .public)")
-                SpeakLog.cli.info("CLIPortServer: status — binding=\(binding, privacy: .public)")
-                return .status(state: state, binding: binding, sessionNote: sessionNote)
+        case .status:
+            // Synchronous: read live state and reply inline.
+            let state = CLIState(from: cmdHandler.icon)
+            let binding = cmdHandler.currentHotkeyDisplayString
+            SpeakLog.cli.info("CLIPortServer: status — state=\(state.rawValue, privacy: .public)")
+            SpeakLog.cli.info("CLIPortServer: status — binding=\(binding, privacy: .public)")
+            reply = .status(state: state, binding: binding, sessionNote: sessionNote)
 
-            case .start:
-                // Idempotency gate: only dispatch if idle.
-                // If already listening or processing, reply ok=true (the user's
-                // desired state — recording — is already true or in flight).
-                // [decision: W2.3 — accept-ack; transition is async]
-                guard cmdHandler.icon == .idle else {
-                    let iconDescription = String(describing: cmdHandler.icon)
-                    SpeakLog.cli.info(
-                        "CLIPortServer: --start ignored — not idle (icon=\(iconDescription, privacy: .public))"
-                    )
-                    return .accepted()  // already in desired or transitional state
-                }
-                cmdHandler.cliBeginDictation()
-                SpeakLog.cli.info("CLIPortServer: --start dispatched.")
-                return .accepted()
-
-            case .stop:
-                // Idempotency gate: only dispatch if listening.
-                // If already idle/processing/done, reply ok=true — no work needed.
-                // [decision: W2.3 — accept-ack; transition is async]
-                guard cmdHandler.icon == .listening else {
-                    let iconDescription = String(describing: cmdHandler.icon)
-                    SpeakLog.cli.info(
-                        "CLIPortServer: --stop ignored — not listening (icon=\(iconDescription, privacy: .public))"
-                    )
-                    return .accepted()  // already stopped or in transition
-                }
-                cmdHandler.cliEndDictation()
-                SpeakLog.cli.info("CLIPortServer: --stop dispatched.")
-                return .accepted()
-
-            case .say:
-                // Accept-ack, mirrors start/stop: the port replies immediately;
-                // `cliSay` dispatches a Task internally and does not block this
-                // callback on full speech playback. `interrupt` (handled inside
-                // `cliSay`) is how the caller avoids overlap rather than the port
-                // waiting for the previous utterance to finish. [decision: H-3]
-                guard let text = request.text, !text.isEmpty else {
-                    SpeakLog.cli.error("CLIPortServer: say ignored — empty/missing text.")
-                    return .failure("say requires non-empty text")
-                }
-                cmdHandler.cliSay(text: text, interrupt: request.interrupt ?? false)
-                SpeakLog.cli.info("CLIPortServer: say dispatched.")
-                return .accepted(sessionNote: sessionNote)
-
-            case .ask, .confirm, .requestInput, .registerSession, .submitCall, .getCall:
-                // Handled above, before this closure — unreachable here.
-                return .failure("internal: ask/confirm/requestInput/registerSession/submitCall/getCall routed incorrectly")
+        case .start:
+            // Idempotency gate: only dispatch if idle.
+            // If already listening or processing, reply ok=true (the user's
+            // desired state — recording — is already true or in flight).
+            // [decision: W2.3 — accept-ack; transition is async]
+            guard cmdHandler.icon == .idle else {
+                let iconDescription = String(describing: cmdHandler.icon)
+                SpeakLog.cli.info(
+                    "CLIPortServer: --start ignored — not idle (icon=\(iconDescription, privacy: .public))"
+                )
+                return CLIPortServer.encodeReply(.accepted())  // already in desired or transitional state
             }
+            cmdHandler.cliBeginDictation()
+            SpeakLog.cli.info("CLIPortServer: --start dispatched.")
+            reply = .accepted()
+
+        case .stop:
+            // Idempotency gate: only dispatch if listening.
+            // If already idle/processing/done, reply ok=true — no work needed.
+            // [decision: W2.3 — accept-ack; transition is async]
+            guard cmdHandler.icon == .listening else {
+                let iconDescription = String(describing: cmdHandler.icon)
+                SpeakLog.cli.info(
+                    "CLIPortServer: --stop ignored — not listening (icon=\(iconDescription, privacy: .public))"
+                )
+                return CLIPortServer.encodeReply(.accepted())  // already stopped or in transition
+            }
+            cmdHandler.cliEndDictation()
+            SpeakLog.cli.info("CLIPortServer: --stop dispatched.")
+            reply = .accepted()
+
+        case .say:
+            // Accept-ack, mirrors start/stop: the port replies immediately;
+            // `cliSay` dispatches a Task internally and does not block this
+            // callback on full speech playback. `interrupt` (handled inside
+            // `cliSay`) is how the caller avoids overlap rather than the port
+            // waiting for the previous utterance to finish. [decision: H-3]
+            guard let text = request.text, !text.isEmpty else {
+                SpeakLog.cli.error("CLIPortServer: say ignored — empty/missing text.")
+                return CLIPortServer.encodeReply(.failure("say requires non-empty text"))
+            }
+            cmdHandler.cliSay(text: text, interrupt: request.interrupt ?? false)
+            SpeakLog.cli.info("CLIPortServer: say dispatched.")
+            reply = .accepted(sessionNote: sessionNote)
+
+        case .ask, .confirm, .requestInput, .registerSession, .submitCall, .getCall:
+            // Handled above, before this switch — unreachable here.
+            reply = .failure("internal: ask/confirm/requestInput/registerSession/submitCall/getCall routed incorrectly")
         }
 
         return CLIPortServer.encodeReply(reply)

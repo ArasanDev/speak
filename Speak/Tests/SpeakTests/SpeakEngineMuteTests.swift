@@ -65,7 +65,7 @@ final class SpeakEngineMuteTests: XCTestCase {
     private func makeEngine(transcriber: RecordingTranscriber) throws -> SpeakEngine {
         let suiteName = "SpeakEngineMuteTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
         let settings = SettingsStore(defaults: defaults)
         return SpeakEngine(
             transcriber: transcriber,

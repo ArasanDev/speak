@@ -67,13 +67,12 @@ final class VoiceActionsPipelineTests: XCTestCase {
         }
         func listActionNames() async -> [String] { catalog }
         func run(named name: String) async -> ActionExecutionResult {
-            lock.lock(); _ranNames.append(name); lock.unlock()
+            lock.withLock { _ranNames.append(name) }
             return result
         }
-        var ranNames: [String] { lock.lock(); defer { lock.unlock() }; return _ranNames }
+        var ranNames: [String] { lock.withLock { _ranNames } }
     }
 
-    /// Mock selection for CommandModeService (mirrors VoiceActionsCoordinatorTests).
     private final class MockSelection: SelectionAccessing, @unchecked Sendable {
         var selected: String?
         private(set) var replacedWith: String?
@@ -82,7 +81,7 @@ final class VoiceActionsPipelineTests: XCTestCase {
         func replaceSelectedText(with text: String) throws { replacedWith = text }
     }
 
-    private final class MockCleaner: LLMCleaning, @unchecked Sendable {
+    fileprivate final class MockCleaner: LLMCleaning, @unchecked Sendable {
         let id = "mock-cleaner"
         var isAvailable: Bool { get async { true } }
         func clean(_ text: String, mode: CleanupMode) async throws -> String { "\(text) [cleaned]" }
@@ -232,7 +231,7 @@ final class VoiceActionsPipelineTests: XCTestCase {
     private func makeSettings(voiceActionsEnabled: Bool = true) throws -> SettingsStore {
         let suiteName = "VoiceActionsPipelineTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
         let settings = SettingsStore(defaults: defaults)
         settings.voiceActionsEnabled = voiceActionsEnabled
         settings.voiceActionsPrefix = "hey speak"

@@ -29,7 +29,7 @@ final class SettingsStoreRoundTripTests: XCTestCase {
             "UserDefaults(suiteName:) returned nil — UUID-based name must always succeed."
         )
         addTeardownBlock {
-            ud.removePersistentDomain(forName: name)
+            UserDefaults.standard.removePersistentDomain(forName: name)
         }
         return ud
     }

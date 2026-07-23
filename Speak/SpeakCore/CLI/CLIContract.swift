@@ -53,6 +53,7 @@
 //   `CLITransport` is a thin seam so the CLI tool can inject a stub in unit tests.
 //   `CFMessagePortTransport` is the production client — synchronous request/reply.
 
+@preconcurrency import CoreFoundation
 import Foundation
 
 // MARK: - Port name
@@ -67,7 +68,7 @@ import Foundation
 public enum CLIContract {
     /// Port name: "com.speak.app.cli"
     /// Traces to: PRODUCT_BUNDLE_IDENTIFIER in project.yml ("com.speak.app") + ".cli"
-    public static let portName: CFString = "com.speak.app.cli" as CFString
+    nonisolated(unsafe) public static let portName: CFString = "com.speak.app.cli" as CFString
 
     /// Timeout in seconds for a synchronous CFMessagePort request.
     /// 3 s is generous for a same-user mach port that either answers immediately or
