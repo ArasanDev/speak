@@ -216,12 +216,11 @@ private struct PermissionStepView: View {
                         // Primary button: disabled in the "waiting" state so the user
                         // cannot tap again and trigger a second TCC dialog. The label
                         // communicates that we're waiting, not broken.
-                        Button(isWaiting ? "Waiting for permission\u{2026}" : actionLabel) {
+                        Button(isWaiting ? "Open System Settings / Check Permission" : actionLabel) {
                             onAction()
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
-                        .disabled(isWaiting)
 
                         // Open System Settings link — always enabled for
                         // Accessibility and Input Monitoring steps, so the user
