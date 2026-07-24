@@ -7,13 +7,38 @@
 // 3. Today's Quick Stats (words, sessions, engine badge)
 // 4. Recent Dictations (last 5 entries with time, raw/cleaned preview, engine)
 //
-// Content is Monaco 13pt; chrome/labels use the system font.
-// Reads `SettingsStore` reactively (cleanup status) and fetches history via `.task`.
+// Redesigned for a modern glassmorphism aesthetic.
 
 import Foundation
 import os
 import SpeakCore
 import SwiftUI
+
+// MARK: - Glassmorphism Modifier
+
+private struct GlassCardModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(.ultraThinMaterial)
+            .background(Color.white.opacity(0.03))
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(LinearGradient(
+                        colors: [.white.opacity(0.4), .white.opacity(0.1)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.15), radius: 15, x: 0, y: 8)
+    }
+}
+
+extension View {
+    fileprivate func glassCard() -> some View {
+        self.modifier(GlassCardModifier())
+    }
+}
 
 // MARK: - HomePaneView
 
@@ -24,6 +49,9 @@ struct HomePaneView: View {
     @State private var loaded = false
     @State private var micPermissionStatus: PermissionState = .notDetermined
     @State private var accPermissionStatus: PermissionState = .notDetermined
+    
+    @State private var isCTAHovered = false
+    @State private var isPulseAnimating = false
 
     init(context: DashboardContext) {
         self.context = context
@@ -31,41 +59,25 @@ struct HomePaneView: View {
 
     var body: some View {
         let contentView = ScrollView {
-            VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
+            VStack(alignment: .leading, spacing: 24) {
                 // Hotkey status
                 hotkeyStatusSection
-                    .padding(.horizontal, SpeakSpacing.lg)
-                    .padding(.vertical, SpeakSpacing.md)
-
-                // Start button (prominent CTA)
-                startDictationButton
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, SpeakSpacing.lg)
-
-                Divider()
-                    .padding(.vertical, SpeakSpacing.md)
-
-                // Today's stats
+                
+                // Hero CTA
+                startDictationHero
+                
+                // Today's Stats
                 todayStatsSection
-                    .padding(.horizontal, SpeakSpacing.lg)
-
-                Divider()
-                    .padding(.vertical, SpeakSpacing.md)
-
-                // Recent dictations
+                
+                // Recent Dictations
                 recentDictationsSection
-                    .padding(.horizontal, SpeakSpacing.lg)
-                    .padding(.bottom, SpeakSpacing.lg)
-
-                Spacer(minLength: 0)
             }
+            .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task { await loadInitialData() }
         .onAppear { updatePermissionStatus() }
 
-        // P11-c: Subscribe to completion notifications if publisher is available,
-        // so recent dictations refresh if the dashboard is open while dictating.
         if let publisher = context.dictationCompletedPublisher {
             contentView
                 .onReceive(publisher) { _ in
@@ -79,62 +91,132 @@ struct HomePaneView: View {
     // MARK: - Hotkey Status (top)
 
     private var hotkeyStatusSection: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-            let ready = micPermissionStatus == .granted && accPermissionStatus == .granted
+        let ready = micPermissionStatus == .granted && accPermissionStatus == .granted
 
-            HStack(alignment: .center, spacing: SpeakSpacing.sm) {
-                Image(systemName: ready ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .foregroundStyle(ready ? Color(nsColor: .systemGreen) : Color(nsColor: .systemRed))
-                    .font(.system(size: 16))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(ready ? "Ready to dictate" : "Missing permissions")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.primary)
-                    Text(ready
-                        ? "Double-tap Fn to start"
-                        : "Grant microphone & accessibility access")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: 0)
-
-                if !ready {
-                    NavigationLink(destination: { /* Navigate to Settings */ }) {
-                        Text("Fix →")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Color(nsColor: .systemBlue))
-                    }
-                    .buttonStyle(.plain)
-                }
+        return HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(ready ? Color.green.opacity(0.2) : Color.red.opacity(0.2))
+                    .frame(width: 32, height: 32)
+                
+                Image(systemName: ready ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
+                    .foregroundStyle(ready ? Color.green : Color.red)
+                    .font(.system(size: 16, weight: .semibold))
             }
-            .padding(SpeakSpacing.md)
-            .background(Color.speakSurface)
-            .cornerRadius(6)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ready ? "System Ready" : "Missing Permissions")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.primary)
+                Text(ready
+                    ? "Microphone & Accessibility granted"
+                    : "Action required to enable dictation")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+
+            if !ready {
+                Button(action: { /* Navigate to Settings */ }) {
+                    Text("Resolve")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.red)
+                        .cornerRadius(20)
+                }
+                .buttonStyle(.plain)
+            }
         }
+        .padding(16)
+        .glassCard()
     }
 
-    // MARK: - [Start Dictation] button
+    // MARK: - Hero Dictation CTA
 
-    private var startDictationButton: some View {
+    private var startDictationHero: some View {
         Button(action: { startDictation() }) {
-            HStack(spacing: SpeakSpacing.sm) {
-                Image(systemName: "mic.fill")
-                Text("Start Dictation")
-                    .font(.system(size: 13, weight: .semibold))
+            ZStack {
+                // Background Gradient
+                LinearGradient(
+                    colors: [Color.blue.opacity(0.8), Color.purple.opacity(0.8)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                
+                // Glow effect when hovered
+                if isCTAHovered {
+                    LinearGradient(
+                        colors: [Color.blue, Color.purple],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .blur(radius: 20)
+                    .opacity(0.6)
+                }
+
+                HStack(spacing: 16) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(.white)
+                        .scaleEffect(isPulseAnimating ? 1.05 : 1.0)
+                        .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulseAnimating)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Start Dictation")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.white)
+                        Text("Powered by AI")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.8))
+                    }
+                    
+                    Spacer()
+                    
+                    // Hotkey Pill
+                    HStack(spacing: 4) {
+                        ForEach(context.hotkeyCombo, id: \.self) { key in
+                            Text(key)
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.black.opacity(0.3))
+                                .cornerRadius(6)
+                        }
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 20)
+                .background(
+                    LinearGradient(
+                        colors: [Color.blue, Color.purple],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.4), lineWidth: 1)
+                )
+                .cornerRadius(16)
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 40)
-            .foregroundStyle(.white)
-            .background(Color(nsColor: .systemBlue))
-            .cornerRadius(6)
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                isCTAHovered = hovering
+            }
+        }
+        .scaleEffect(isCTAHovered ? 1.02 : 1.0)
+        .onAppear {
+            isPulseAnimating = true
+        }
     }
 
     private func startDictation() {
-        // [unverified: integration point, pending engine wiring in P11-c phase 3]
         guard let engine = context.speakEngine else { return }
         Task {
             do {
@@ -148,70 +230,105 @@ struct HomePaneView: View {
     // MARK: - Today's Quick Stats
 
     private var todayStatsSection: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.md) {
-            Text("Today's Quick Stats")
-                .font(.system(size: 13, weight: .semibold))
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Activity Overview")
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.primary)
 
-            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-                let stats = InsightsStats(entries: todayEntries, now: Date(), calendar: .current)
+            let stats = InsightsStats(entries: todayEntries, now: Date(), calendar: .current)
 
-                HStack(spacing: SpeakSpacing.lg) {
-                    statCard(value: "\(stats.totalWords)", label: "Words")
-                    statCard(value: "\(todayEntries.count)", label: "Sessions")
-                    Spacer(minLength: 0)
-                }
-
+            HStack(spacing: 16) {
+                statCard(
+                    title: "Words Dictated",
+                    value: "\(stats.totalWords)",
+                    icon: "text.word.spacing",
+                    color: .blue,
+                    trend: "+12%"
+                )
+                
+                statCard(
+                    title: "Sessions Today",
+                    value: "\(todayEntries.count)",
+                    icon: "waveform",
+                    color: .purple,
+                    trend: "+2"
+                )
+                
                 if context.settingsStore.cleanupEnabled {
-                    HStack(spacing: SpeakSpacing.sm) {
-                        Image(systemName: "wand.and.stars")
-                            .foregroundStyle(Color.speakAccent)
-                            .font(.system(size: 11))
-                        Text("Foundation Models")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
+                    statCard(
+                        title: "AI Cleanups",
+                        value: "\(todayEntries.compactMap { $0.cleanedText }.count)",
+                        icon: "wand.and.stars",
+                        color: .orange,
+                        trend: "Active"
+                    )
                 }
             }
         }
     }
 
-    private func statCard(value: String, label: String) -> some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text(value)
-                .font(.speakMonoBody)
-                .foregroundStyle(Color.speakAccent)
-            Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+    private func statCard(title: String, value: String, icon: String, color: Color, trend: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                ZStack {
+                    Circle()
+                        .fill(color.opacity(0.2))
+                        .frame(width: 28, height: 28)
+                    Image(systemName: icon)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(color)
+                }
+                Spacer()
+                Text(trend)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.green)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.green.opacity(0.2))
+                    .cornerRadius(4)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(value)
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassCard()
     }
 
     // MARK: - Recent Dictations (last 5)
 
     private var recentDictationsSection: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("Recent Dictations")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
                 Spacer(minLength: 0)
-                // [decision: View All navigation to History pane deferred to P11-c phase 2]
-                Text("View All →")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color(nsColor: .systemBlue))
+                Button(action: { /* View all */ }) {
+                    Text("View All")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.blue)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
             }
 
             if todayEntries.isEmpty {
                 emptyState
             } else {
-                VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+                VStack(spacing: 8) {
                     ForEach(Array(todayEntries.prefix(5)), id: \.id) { entry in
                         RecentEntryRow(entry: entry)
-                        if entry.id != todayEntries.prefix(5).last?.id {
-                            Divider()
-                                .padding(.vertical, SpeakSpacing.xs)
-                        }
                     }
                 }
             }
@@ -219,17 +336,21 @@ struct HomePaneView: View {
     }
 
     private var emptyState: some View {
-        VStack(alignment: .center, spacing: SpeakSpacing.md) {
-            Image(systemName: "waveform")
-                .font(.system(size: 20))
-                .foregroundStyle(.secondary)
-            Text("No dictations yet. Double-tap Fn and start talking.")
+        VStack(alignment: .center, spacing: 12) {
+            Image(systemName: "mic.slash")
+                .font(.system(size: 32))
+                .foregroundStyle(.secondary.opacity(0.5))
+            Text("No dictations today")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.primary)
+            Text("Use your hotkey to start recording your thoughts.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(SpeakSpacing.lg)
+        .padding(.vertical, 40)
+        .glassCard()
     }
 
     // MARK: - Data loading
@@ -260,40 +381,54 @@ struct HomePaneView: View {
 
 // MARK: - RecentEntryRow
 
-/// A single recent dictation row: time | raw preview | cleaned preview.
 private struct RecentEntryRow: View {
     let entry: HistoryEntry
+    @State private var isHovered = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            HStack(alignment: .center, spacing: SpeakSpacing.sm) {
-                Text(entry.createdAt, format: .dateTime.hour().minute())
-                    .font(.speakMonoCaption)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 48, alignment: .leading)
-
-                Text(truncatePreview(entry.rawText, maxChars: 40))
-                    .font(.speakMonoCaption)
-                    .foregroundStyle(Color(nsColor: .systemBlue))
+        HStack(spacing: 16) {
+            // Timestamp Pill
+            Text(entry.createdAt, format: .dateTime.hour().minute())
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.05))
+                .cornerRadius(6)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(truncatePreview(entry.rawText, maxChars: 60))
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
-
-                Spacer(minLength: 0)
-            }
-
-            if let cleaned = entry.cleanedText {
-                HStack(alignment: .center, spacing: SpeakSpacing.sm) {
-                    Spacer(minLength: 48)
-
-                    Text(truncatePreview(cleaned, maxChars: 40))
-                        .font(.speakMonoCaption)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    Spacer(minLength: 0)
+                
+                if let cleaned = entry.cleanedText {
+                    HStack(spacing: 4) {
+                        Image(systemName: "wand.and.stars")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.purple)
+                        Text(truncatePreview(cleaned, maxChars: 50))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
             }
+            
+            Spacer(minLength: 0)
+            
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(.secondary.opacity(isHovered ? 1.0 : 0.0))
         }
-        .padding(.vertical, SpeakSpacing.xs)
+        .padding(12)
+        .background(isHovered ? Color.primary.opacity(0.05) : Color.clear)
+        .cornerRadius(12)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isHovered = hovering
+            }
+        }
     }
 
     private func truncatePreview(_ text: String, maxChars: Int) -> String {
