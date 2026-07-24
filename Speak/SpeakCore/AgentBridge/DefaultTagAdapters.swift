@@ -21,7 +21,7 @@ public struct DefaultClaudeTagAdapter: PluginTagAdapter {
                 TaskChecklistItem(id: "t3", title: "Applied code modifications", status: .done)
             ],
             diffs: [
-                CodeDiffBlock(file: "WorkspaceStore.swift", patch: "+ // Handled by @Claude")
+                CodeDiffBlock(file: "SpeakEngine.swift", patch: "+ // Handled by @Claude")
             ]
         )
         return .completed(summary: "Claude finished: \(prompt)", evidence: evidence)

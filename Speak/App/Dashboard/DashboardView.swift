@@ -2,12 +2,6 @@
 //
 // The full-window dashboard: a NavigationSplitView with the sidebar IA from
 // `DashboardSection`.
-//
-// DUAL-MODE SIDEBAR ISOLATION RULE:
-// When in Agent Workspace Mode (appMode == .workspace), the Dictation NavigationSplitView
-// sidebar is hidden, allowing WorkspaceMainView to fill the entire window with its single
-// Slack Channel Sidebar. When in Dictation Engine Mode (appMode == .dictation),
-// NavigationSplitView renders the Dictation Engine Sidebar.
 
 import SpeakCore
 import SwiftUI

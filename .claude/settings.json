@@ -1,4 +1,7 @@
 {
+  "env": {
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "175000"
+  },
   "permissions": {
     "allow": [
       "Bash(make:*)",
