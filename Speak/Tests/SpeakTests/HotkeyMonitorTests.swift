@@ -27,6 +27,7 @@
 // is deferred to the W1.3 human gate. Green tests here prove the pure
 // detector + mapping logic only.
 
+import Carbon.HIToolbox
 @testable import SpeakCore
 import XCTest
 

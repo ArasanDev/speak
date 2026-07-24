@@ -531,52 +531,6 @@ public final class SettingsStore: @unchecked Sendable {
         }
     }
 
-    // MARK: - HUD style (overlay visual style, H-UI)
-
-    /// Visual style for the floating recording HUD. Default: `.classic`.
-    ///
-    /// Read live by `OverlayRootView` (via `@Observable` tracking) so toggling
-    /// this in Settings swaps the HUD content immediately — no relaunch and no
-    /// panel recreation. [decision H-UI: opt-in, classic stays the default]
-    public var hudStyle: HUDStyle {
-        get {
-            access(keyPath: \.hudStyle)
-            let raw = defaults.string(forKey: Keys.hudStyle) ?? HUDStyle.classic.rawValue
-            return HUDStyle(rawValue: raw) ?? .classic
-        }
-        set {
-            withMutation(keyPath: \.hudStyle) {
-                defaults.set(newValue.rawValue, forKey: Keys.hudStyle)
-            }
-        }
-    }
-
-    // MARK: - Per-app context awareness (V01-3, profile-native)
-
-    /// Whether the frontmost app influences which profile runs the cleanup pass
-    /// (`ProfileResolver` matching against each profile's `targetApps`).
-    ///
-    /// `true` (default): dictating in Xcode/Terminal → `Agent`, Slack/Messages →
-    /// `Chat`, Mail/browsers → `Write`, unmatched apps → the global default.
-    /// `false`: `SpeakEngine.newSession()` ignores the frontmost app entirely and
-    /// always resolves to the global default profile — reproducing the
-    /// no-app-context baseline exactly, regardless of which app is frontmost.
-    ///
-    /// [decision V01-3] A toggle, not a removal: per-app matching is the shipped
-    /// default (it has been live since PE-1), but users who find it surprising
-    /// (e.g. dictating a code snippet's prose description in Xcode) can turn it off.
-    public var perAppContextEnabled: Bool {
-        get {
-            access(keyPath: \.perAppContextEnabled)
-            return defaults.bool(forKey: Keys.perAppContextEnabled)
-        }
-        set {
-            withMutation(keyPath: \.perAppContextEnabled) {
-                defaults.set(newValue, forKey: Keys.perAppContextEnabled)
-            }
-        }
-    }
-
     // MARK: - Voice Actions (H-1) & VoiceOut (H-2) — see extension below ([lint] type_body_length)
 
     // MARK: - Reset to defaults
@@ -675,6 +629,37 @@ public final class SettingsStore: @unchecked Sendable {
 // type_body_length cap — pure code motion, same file so the @Observable
 // macro's access/withMutation members remain reachable.
 extension SettingsStore {
+    // MARK: - HUD style (overlay visual style, H-UI)
+
+    /// Visual style for the floating recording HUD. Default: `.classic`.
+    public var hudStyle: HUDStyle {
+        get {
+            access(keyPath: \.hudStyle)
+            let raw = defaults.string(forKey: Keys.hudStyle) ?? HUDStyle.classic.rawValue
+            return HUDStyle(rawValue: raw) ?? .classic
+        }
+        set {
+            withMutation(keyPath: \.hudStyle) {
+                defaults.set(newValue.rawValue, forKey: Keys.hudStyle)
+            }
+        }
+    }
+
+    // MARK: - Per-app context awareness (V01-3, profile-native)
+
+    /// Whether the frontmost app influences which profile runs the cleanup pass
+    public var perAppContextEnabled: Bool {
+        get {
+            access(keyPath: \.perAppContextEnabled)
+            return defaults.bool(forKey: Keys.perAppContextEnabled)
+        }
+        set {
+            withMutation(keyPath: \.perAppContextEnabled) {
+                defaults.set(newValue, forKey: Keys.perAppContextEnabled)
+            }
+        }
+    }
+
     // MARK: - Voice Actions (H-1, specs/horizon-voice-os.md Pillar 1)
 
     /// Master toggle for Voice Actions (the intent router: dictation vs command

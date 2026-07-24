@@ -4,14 +4,6 @@
 // global hotkey monitor (architecture.md §6, roadmap P5).
 //
 // Moved from HotkeyMonitor.swift (pure-data seam; no CGEventTap dependency).
-//
-// --- Default binding change (W1.1) ---
-// Default is now double-tap Right-Command (keyCode 54) instead of Fn (63).
-// Rationale: Fn is contested by macOS system dictation; Right-⌘ is rarely
-// used in chords (chord shortcuts use left ⌘); same flagsChanged path, lowest-
-// risk change. Fn stays selectable; when selected the 40 ms FnDebouncer
-// (HotkeyDetection.swift) filters the OS dictation burst.
-// [decision: next-iteration-plan.md §2, 2026-06-21]
 
 import Carbon.HIToolbox
 import CoreGraphics
@@ -33,18 +25,6 @@ public enum HotkeyEvent: Sendable {
 public struct HotkeyBinding: Codable, Sendable {
 
     /// How the hotkey activates dictation.
-    ///
-    /// - `doubleTap`: double-tap Fn (toggle) — the default. Two presses within
-    ///   `doubleTapWindow` start a hands-free session; the next single press stops it.
-    ///   Implemented by `DoubleTapDetector`.
-    /// - `hold`: push-to-talk. Fn press → startCapture; Fn release → stopCapture.
-    ///   No minimum-hold guard in Phase B [decision: an accidental short tap yields a
-    ///   near-empty recording — acceptable; a min-hold timer can come in a later phase].
-    ///   Implemented by `holdEdge(isFnDown:wasDown:)`.
-    ///
-    /// `.singleTapToggle` was planned but never implemented; it was removed in Phase B
-    /// to keep the enum honest. Persisted payloads containing it decode to `nil` (via
-    /// `try?` in `UserDefaultsBindingStore.load()`) and fall back to the default binding.
     public enum Trigger: String, Codable, Sendable {
         case doubleTap
         case hold
@@ -94,27 +74,16 @@ public struct HotkeyBinding: Codable, Sendable {
 
 extension HotkeyBinding {
     /// The default binding: double-tap Right-Command → start, next single-tap → stop.
-    ///
-    /// Changed from Fn (kVK_Function = 63) in W1.1 [decision: next-iteration-plan.md §2,
-    /// 2026-06-21]. Right-Command (kVK_RightCommand = 54) avoids the macOS system-
-    /// dictation conflict; chord shortcuts use the left ⌘, so keycode 54 rarely fires.
-    ///
-    /// kVK_RightCommand = 0x36 = 54 [verified: swiftc + macOS 26 SDK, 2026-06-21].
-    /// Window = 0.4 s (benchmark.md §7 [decision]).
     public static let defaultBinding = HotkeyBinding(
-        keyCode: Int(kVK_RightCommand), // 0x36 = 54 [verified: swiftc + SDK, 2026-06-21]
+        keyCode: Int(kVK_RightCommand),
         modifiers: [],
         trigger: .doubleTap,
-        doubleTapWindow: 0.5 // benchmark.md §7 [decision]; ergonomic 0.5s window for human double-tap
+        doubleTapWindow: 0.5
     )
 
     /// Fn binding (selectable): double-tap Fn → start, next single-tap → stop.
-    /// kVK_Function = 0x3F = 63 [verified: Carbon/HIToolbox].
-    /// The FnDebouncer (40 ms) is applied in HotkeyMonitor.handle() when this
-    /// binding is active to filter the OS-internal Fn-dictation burst
-    /// [decision: VoiceInk pattern, benchmark.md §7].
     public static let fnBinding = HotkeyBinding(
-        keyCode: Int(kVK_Function), // 0x3F = 63 [verified]
+        keyCode: Int(kVK_Function),
         modifiers: [],
         trigger: .doubleTap,
         doubleTapWindow: 0.5
@@ -122,37 +91,42 @@ extension HotkeyBinding {
 
     // MARK: - Display helpers
 
+    /// Whether this binding uses a standalone modifier key.
+    public var isModifierOnly: Bool {
+        isModifierOnlyKey(keyCode)
+    }
+
     /// The primary key symbol for this binding, rendered as a short keycap label.
-    ///
-    /// Used by `DictationController.currentHotkeyCombo()` to build the keycap
-    /// array the dashboard and onboarding consume. The onboarding agent reads
-    /// this instead of hard-coding "Fn".
     public var keySymbol: String {
-        switch keyCode {
-        case Int(kVK_Function):     return "Fn"
-        case Int(kVK_RightCommand): return "⌘"    // right ⌘ keycap
-        case Int(kVK_Command):      return "⌘"    // left ⌘ keycap
-        default:                    return "⌘"    // fallback
+        symbolForKeyCode(keyCode)
+    }
+
+    /// The list of modifier symbols for this binding (in ⌃ ⌥ ⇧ ⌘ order).
+    public var modifierSymbols: [String] {
+        var result: [String] = []
+        if modifiers.contains(.maskControl) { result.append("⌃") }
+        if modifiers.contains(.maskAlternate) { result.append("⌥") }
+        if modifiers.contains(.maskShift) { result.append("⇧") }
+        if modifiers.contains(.maskCommand) { result.append("⌘") }
+        return result
+    }
+
+    /// The list of keycap labels representing the hotkey visually.
+    public var keycapLabels: [String] {
+        if isModifierOnly {
+            let sym = keySymbol
+            return trigger == .doubleTap ? [sym, sym] : [sym]
+        } else {
+            var labels = modifierSymbols
+            labels.append(keySymbol)
+            return labels
         }
     }
 
     /// A human-readable label describing the full binding gesture.
-    ///
-    /// Examples:
-    ///   double-tap Right-Command  → "⌘⌘ Right Command"
-    ///   double-tap Fn             → "Fn ×2"
-    ///   hold Right-Command        → "⌘ Right Command (hold)"
-    ///   hold Fn                   → "Fn (hold)"
-    ///
-    /// For Fn, `keySymbol` equals `keyName` ("Fn"), so the hold format uses
-    /// `keyName` directly (not `"\(keySymbol) \(keyName) (hold)"` which would
-    /// produce "Fn Fn (hold)").
-    ///
-    /// Consumed by onboarding/settings agents instead of hard-coding "Fn".
     public var displayString: String {
         switch keyCode {
         case Int(kVK_Function):
-            // Fn is its own symbol; avoid "Fn Fn ×2" or "Fn Fn (hold)".
             return trigger == .doubleTap ? "Fn ×2" : "Fn (hold)"
 
         case Int(kVK_RightCommand):
@@ -161,15 +135,33 @@ extension HotkeyBinding {
         case Int(kVK_Command):
             return trigger == .doubleTap ? "⌘⌘ Command" : "⌘ Command (hold)"
 
+        case Int(kVK_RightOption):
+            return trigger == .doubleTap ? "⌥⌥ Right Option" : "⌥ Right Option (hold)"
+
+        case Int(kVK_Option):
+            return trigger == .doubleTap ? "⌥⌥ Option" : "⌥ Option (hold)"
+
+        case Int(kVK_RightControl):
+            return trigger == .doubleTap ? "⌃⌃ Right Control" : "⌃ Right Control (hold)"
+
+        case Int(kVK_Control):
+            return trigger == .doubleTap ? "⌃⌃ Control" : "⌃ Control (hold)"
+
+        case Int(kVK_RightShift):
+            return trigger == .doubleTap ? "⇧⇧ Right Shift" : "⇧ Shift (hold)"
+
+        case Int(kVK_Shift):
+            return trigger == .doubleTap ? "⇧⇧ Shift" : "⇧ Shift (hold)"
+
         default:
+            let modStr = modifierSymbols.joined()
             let sym = keySymbol
-            return trigger == .doubleTap ? "\(sym)\(sym) Key \(keyCode)" : "\(sym) Key \(keyCode) (hold)"
+            let combo = modStr + sym
+            return trigger == .hold ? "\(combo) (hold)" : combo
         }
     }
 
     /// Return a new binding identical to `self` but with a different trigger.
-    /// Used by `DictationController` to apply a `SettingsStore.triggerMode` change
-    /// without losing the user's configured key, modifiers, or window.
     public func with(trigger newTrigger: Trigger) -> HotkeyBinding {
         HotkeyBinding(
             keyCode: keyCode,
@@ -177,5 +169,99 @@ extension HotkeyBinding {
             trigger: newTrigger,
             doubleTapWindow: doubleTapWindow
         )
+    }
+}
+
+/// Helper function to map a key code to a printable key symbol.
+public func symbolForKeyCode(_ keyCode: Int) -> String {
+    switch keyCode {
+    case Int(kVK_Function):                         return "Fn"
+    case Int(kVK_RightCommand), Int(kVK_Command): return "⌘"
+    case Int(kVK_RightOption), Int(kVK_Option):    return "⌥"
+    case Int(kVK_RightControl), Int(kVK_Control):  return "⌃"
+    case Int(kVK_RightShift), Int(kVK_Shift):      return "⇧"
+    case Int(kVK_Space):        return "Space"
+    case Int(kVK_Return):       return "Return"
+    case Int(kVK_Tab):          return "Tab"
+    case Int(kVK_Delete):       return "Delete"
+    case Int(kVK_Escape):       return "Esc"
+    case Int(kVK_UpArrow):      return "↑"
+    case Int(kVK_DownArrow):    return "↓"
+    case Int(kVK_LeftArrow):    return "←"
+    case Int(kVK_RightArrow):   return "→"
+    case 0: return "A"
+    case 1: return "S"
+    case 2: return "D"
+    case 3: return "F"
+    case 4: return "H"
+    case 5: return "G"
+    case 6: return "Z"
+    case 7: return "X"
+    case 8: return "C"
+    case 9: return "V"
+    case 11: return "B"
+    case 12: return "Q"
+    case 13: return "W"
+    case 14: return "E"
+    case 15: return "R"
+    case 16: return "Y"
+    case 17: return "T"
+    case 18: return "1"
+    case 19: return "2"
+    case 20: return "3"
+    case 21: return "4"
+    case 22: return "6"
+    case 23: return "5"
+    case 24: return "="
+    case 25: return "9"
+    case 26: return "7"
+    case 27: return "-"
+    case 28: return "8"
+    case 29: return "0"
+    case 30: return "]"
+    case 31: return "O"
+    case 32: return "U"
+    case 33: return "["
+    case 34: return "I"
+    case 35: return "P"
+    case 37: return "L"
+    case 38: return "J"
+    case 39: return "'"
+    case 40: return "K"
+    case 41: return ";"
+    case 42: return "\\"
+    case 43: return ","
+    case 44: return "/"
+    case 45: return "N"
+    case 46: return "M"
+    case 47: return "."
+    case 50: return "`"
+    case 122: return "F1"
+    case 120: return "F2"
+    case 99:  return "F3"
+    case 118: return "F4"
+    case 96:  return "F5"
+    case 97:  return "F6"
+    case 98:  return "F7"
+    case 100: return "F8"
+    case 101: return "F9"
+    case 109: return "F10"
+    case 103: return "F11"
+    case 111: return "F12"
+    default: return "Key \(keyCode)"
+    }
+}
+
+/// Helper function to check whether a key code represents a standalone modifier.
+public func isModifierOnlyKey(_ keyCode: Int) -> Bool {
+    switch keyCode {
+    case Int(kVK_Function),
+         Int(kVK_RightCommand), Int(kVK_Command),
+         Int(kVK_RightOption), Int(kVK_Option),
+         Int(kVK_RightShift), Int(kVK_Shift),
+         Int(kVK_RightControl), Int(kVK_Control):
+        return true
+    default:
+        return false
     }
 }

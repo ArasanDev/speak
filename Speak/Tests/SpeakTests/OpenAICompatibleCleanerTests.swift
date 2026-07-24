@@ -124,8 +124,11 @@ final class OpenAICompatibleCleanerTests: XCTestCase {
         let keychain = LLMKeychainStore(service: service)
         do {
             try keychain.save(key: "sarvam-test-key", forAccount: ProviderPreset.sarvamLLM.id)
-        } catch let err as LLMKeychainError {
-            throw XCTSkip("Keychain access unavailable in headless test session: \(err)")
+            guard (try? keychain.readKey(account: ProviderPreset.sarvamLLM.id)) == "sarvam-test-key" else {
+                throw XCTSkip("Keychain storage readback failed in headless test session")
+            }
+        } catch {
+            throw XCTSkip("Keychain access unavailable in headless test session: \(error)")
         }
         defer { try? keychain.deleteKey(account: ProviderPreset.sarvamLLM.id) }
 
@@ -148,8 +151,11 @@ final class OpenAICompatibleCleanerTests: XCTestCase {
         let keychain = LLMKeychainStore(service: service)
         do {
             try keychain.save(key: "sk-test-key", forAccount: ProviderPreset.openAI.id)
-        } catch let err as LLMKeychainError {
-            throw XCTSkip("Keychain access unavailable in headless test session: \(err)")
+            guard (try? keychain.readKey(account: ProviderPreset.openAI.id)) == "sk-test-key" else {
+                throw XCTSkip("Keychain storage readback failed in headless test session")
+            }
+        } catch {
+            throw XCTSkip("Keychain access unavailable in headless test session: \(error)")
         }
         defer { try? keychain.deleteKey(account: ProviderPreset.openAI.id) }
 
@@ -200,7 +206,14 @@ final class OpenAICompatibleCleanerTests: XCTestCase {
     func testUnauthorizedResponseMapsToLlmCleanupFailed() async throws {
         let service = "com.speak.tests.llm.\(UUID().uuidString)"
         let keychain = LLMKeychainStore(service: service)
-        try keychain.save(key: "bad-key", forAccount: ProviderPreset.groq.id)
+        do {
+            try keychain.save(key: "bad-key", forAccount: ProviderPreset.groq.id)
+            guard (try? keychain.readKey(account: ProviderPreset.groq.id)) == "bad-key" else {
+                throw XCTSkip("Keychain storage readback failed in headless test session")
+            }
+        } catch {
+            throw XCTSkip("Keychain access unavailable in headless test session: \(error)")
+        }
         defer { try? keychain.deleteKey(account: ProviderPreset.groq.id) }
 
         StubURLProtocol.handler = { _ in (401, [:], Data()) }
@@ -250,8 +263,11 @@ final class OpenAICompatibleCleanerTests: XCTestCase {
         let keychain = LLMKeychainStore(service: service)
         do {
             try keychain.save(key: "key", forAccount: ProviderPreset.openAI.id)
-        } catch let err as LLMKeychainError {
-            throw XCTSkip("Keychain storage not accessible in headless test runner: \(err)")
+            guard (try? keychain.readKey(account: ProviderPreset.openAI.id)) == "key" else {
+                throw XCTSkip("Keychain storage readback failed in headless test runner")
+            }
+        } catch {
+            throw XCTSkip("Keychain storage not accessible in headless test runner: \(error)")
         }
         defer { try? keychain.deleteKey(account: ProviderPreset.openAI.id) }
 

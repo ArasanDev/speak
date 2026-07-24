@@ -134,7 +134,7 @@ private struct VoiceTTSConfigSection: View {
     let context: DashboardContext
 
     @State private var availableVoices: [AVSpeechSynthesisVoice] = []
-    @State private var testText: String = "Hello! Welcome to Speak Voice AI Studio. Ready for high quality local speech synthesis."
+    @State private var testText: String = "Hello, welcome to Speak Voice AI Studio. Ready for high quality local speech synthesis."
     @State private var isSpeaking: Bool = false
     @State private var activeSynth: AppleSpeechSynthesizer?
 
