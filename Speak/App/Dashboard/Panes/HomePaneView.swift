@@ -21,9 +21,9 @@ private struct GlassCardModifier: ViewModifier {
         content
             .background(.ultraThinMaterial)
             .background(Color.white.opacity(0.03))
-            .cornerRadius(16)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(LinearGradient(
                         colors: [.white.opacity(0.4), .white.opacity(0.1)],
                         startPoint: .topLeading,
@@ -125,7 +125,7 @@ struct HomePaneView: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(Color.red)
-                        .cornerRadius(20)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -184,7 +184,7 @@ struct HomePaneView: View {
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
                                 .background(Color.black.opacity(0.3))
-                                .cornerRadius(6)
+                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         }
                     }
                 }
@@ -198,10 +198,10 @@ struct HomePaneView: View {
                     )
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .stroke(Color.white.opacity(0.4), lineWidth: 1)
                 )
-                .cornerRadius(16)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
         }
         .buttonStyle(.plain)
@@ -285,7 +285,7 @@ struct HomePaneView: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(Color.green.opacity(0.2))
-                    .cornerRadius(4)
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             }
             
             VStack(alignment: .leading, spacing: 4) {
@@ -318,7 +318,7 @@ struct HomePaneView: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
                         .background(Color.blue.opacity(0.1))
-                        .cornerRadius(6)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -394,7 +394,7 @@ private struct RecentEntryRow: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(Color.primary.opacity(0.05))
-                .cornerRadius(6)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(truncatePreview(entry.rawText, maxChars: 60))
@@ -423,7 +423,7 @@ private struct RecentEntryRow: View {
         }
         .padding(12)
         .background(isHovered ? Color.primary.opacity(0.05) : Color.clear)
-        .cornerRadius(12)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.2)) {
                 isHovered = hovering
