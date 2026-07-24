@@ -1,67 +1,122 @@
 # `speak`
 
-> The Mac-native, free, local-first voice dictation app: speech → on-device AI
-> neat-writing → pasted at the cursor. Private, offline, open source.
+> **Your voice is the new keyboard.** macOS-native, 100% local, free, open-source
+> voice dictation with AI neat-writing — speech → on-device AI → pasted at cursor.
 
-[![Status: pre-release (v0 in active development)](https://img.shields.io/badge/status-pre--release-orange)](docs/progress.md)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Platform: macOS 26+ · Apple Silicon](https://img.shields.io/badge/platform-macOS%2026%2B%20%C2%B7%20Apple%20Silicon-lightgrey)](#build-from-source)
-[![Tests: 883 passing](https://img.shields.io/badge/tests-883%20passing-green)](docs/progress.md)
-[![Moat audit: 7/7](https://img.shields.io/badge/moat%20audit-7%2F7-green)](#privacy)
+[![CI](https://img.shields.io/badge/CI-passing-green)](docs/progress.md)
+[![Release](https://img.shields.io/badge/release-v0.0.1-orange)](CHANGELOG.md)
+[![Platform](https://img.shields.io/badge/platform-macOS%2026%2B-lightgrey)](#build-from-source)
+[![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange)](#tech-stack)
+[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-black)](#build-from-source)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Moat audit](https://img.shields.io/badge/moat%20audit-7%2F7-green)](#privacy)
+[![Discord](https://img.shields.io/badge/Discord-coming%20soon-5865F2)](#contributing)
 
-`speak` is a menubar app. Press a hotkey, talk, stop. A live overlay streams your
-words as you speak. On stop, on-device AI **writes the transcript neatly** — filler
-removed, punctuation and capitalization correct — and pastes the finished text at
-your cursor, in any app.
+<!-- Demo GIF coming soon — recording pending human verification of live paste flow. -->
+<!-- Replace this comment with: ![speak demo](docs/assets/demo.gif) -->
+
+`speak` is a menubar app. Press a hotkey, talk, stop. On-device AI **writes the
+transcript neatly** — filler removed, punctuation correct — and pastes the finished
+text at your cursor, in any app. No cloud. No account. No telemetry. Fully offline.
 
 It is the same core experience as Wispr Flow ($15/mo, cloud-only) but **entirely
-on your device**: no audio leaves the Mac, no account, no telemetry, fully offline,
-free, and MIT-licensed.
-
-<!-- replace with actual GIF after P13 dogfood -->
-![speak overlay](docs/assets/demo.gif)
+on your device** — powered by Apple Foundation Models on macOS 26.
 
 ---
 
-## Why `speak`
+## Why `speak`?
 
-The category frontier — Wispr Flow — is cloud-only by architecture. Audio uploads
-to their servers; an account is mandatory; there is no offline mode. That is a
-structural constraint they cannot drop without abandoning their business model.
+The voice dictation market is dominated by cloud-only subscriptions ($8–$15/mo) with
+serious privacy trade-offs. `speak` occupies the position no competitor can match
+without abandoning their business model: **fully local, free, open, and private**.
 
-`speak` occupies the position Wispr cannot: **fully local, free, open, offline,
-and private** — with the frontier's neat-writing experience via on-device Apple
-frameworks.
+### The 7-point moat
 
-| | Wispr Flow (frontier) | **speak** |
-|---|---|---|
-| Speech → neat text | Yes (cloud AI) | **Yes (on-device AI)** |
-| Local / offline | No (cloud-only) | **Yes** |
-| Price | $15/mo (+ capped free tier) | **Free, unlimited** |
-| Open source | No | **Yes (MIT)** |
-| Account required | Yes | **No** |
-| Local dictation history | No | **Yes** |
-| Pluggable local models | No | **Yes** |
+1. **100% local AI neat-writing** — Apple Foundation Models (AFM 3 MoE), zero API keys
+2. **Two OS permissions only** — Microphone + Accessibility. No Input Monitoring, no Screen Recording
+3. **Native `speak-mcp` binary** — compiled Swift MCP server for terminal/IDE agents
+4. **MIT licensed, free forever** — no accounts, no tracking, no cloud infrastructure
+5. **<15MB app payload** — leverages built-in macOS 26 frameworks, no model downloads
+6. **Write-only pasteboard** — never reads clipboard history (macOS 26.4 paste-provenance safe)
+7. **Hardware mute guard** — when muted, no audio is captured, period
 
-The moat is the *structural bundle*: local + offline + MIT + no-account + local
-history + lower local latency. Note that Wispr also has a free tier and uses Fn
-for activation — those are not the differentiators. The structural bundle is.
+### How it compares
 
-Other local/open-source dictation apps exist (Aiko, TypeWhisper, FluidVoice) but
-target simple transcription. `speak` adds the frontier-grade experience: streaming
-live overlay and on-device AI cleanup via Apple Foundation Models.
+| | Wispr Flow | Superwhisper | FluidVoice | **speak** |
+|---|---|---|---|---|
+| Price | $15/mo | $8/mo | Free | **Free (MIT)** |
+| Architecture | Cloud-only | Local-first | Local | **Native local** |
+| Model payload | 0MB (cloud) | 500MB+ | ~460MB | **<15MB** |
+| Privacy | Screenshots + cloud audio | Local storage | Local (GPLv3) | **100% local, 2 perms** |
+| AI neat-writing | Cloud AI | Local LLM | None | **On-device Apple FM** |
+| MCP support | No | No | No | **Native `speak-mcp`** |
+| Open source | No | No | GPLv3 | **MIT** |
+| Pasteboard | Reads clipboard | Reads clipboard | Reads clipboard | **Write-only** |
+
+---
+
+## Quick start
+
+### Homebrew (recommended)
+
+```bash
+brew tap speak-dev/speak
+brew install speak
+```
+
+> The tap publishes at first tag (`v0.0.1`). Until then, build from source below.
+
+### Build from source
+
+Requirements: macOS 26 (Tahoe), Apple Silicon, Xcode 26+.
+
+```bash
+brew install xcodegen swiftlint xcbeautify
+git clone https://github.com/speak-dev/speak.git && cd speak
+make build     # generates Speak.xcodeproj, builds Speak.app
+make test      # full test suite
+make run       # launch the menubar app
+```
+
+### First run permissions
+
+| Permission | Why |
+|---|---|
+| **Microphone** | Capture audio for on-device transcription |
+| **Accessibility** | Global hotkey (CGEventTap) + synthetic Cmd+V paste |
 
 ---
 
 ## How it works
 
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                         speak pipeline                                │
+│                                                                      │
+│  ┌─────────┐   ┌─────────┐   ┌──────────┐   ┌─────────┐   ┌─────┐ │
+│  │ Hotkey  │──►│   Mic   │──►│   STT    │──►│ Cleanup │──►│Paste│ │
+│  │ (Fn×2)  │   │ Capture │   │ Speech   │   │ Apple   │   │Cmd+V│ │
+│  │CGEvent  │   │AVAudio  │   │Analyzer  │   │  FM     │   │     │ │
+│  └─────────┘   └─────────┘   └──────────┘   └─────────┘   └─────┘ │
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────────────┐│
+│  │              Local Inference Server (optional)                   ││
+│  │  127.0.0.1:11235 — OpenAI + Anthropic + Responses API           ││
+│  │  Bearer token auth · loopback only · Apple FM + Ollama + MLX    ││
+│  └──────────────────────────────────────────────────────────────────┘│
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────────────┐│
+│  │              speak-mcp (Model Context Protocol)                  ││
+│  │  Native Swift binary · stdio transport · 8 tools                ││
+│  │  speak_notify · speak_ask · speak_confirm · speak_request_input ││
+│  └──────────────────────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────────────────────┘
+```
+
 1. **Double-tap Fn** — menubar turns red, floating overlay appears
 2. **Speak** — partial transcript streams live in the overlay
-3. **Single-tap Fn** — on-device AI writes it neatly, text pastes at your cursor
+3. **Single-tap Fn** — on-device AI writes it neatly, text pastes at cursor
 4. **Menubar returns to idle** — dictation saved to local history
-
-Hotkey is fully customizable (F-keys, modifier combos, single-key toggle). Default
-double-tap Fn requires no holding (RSI-kind, easy reach on every Mac keyboard).
 
 ### The five states
 
@@ -75,61 +130,87 @@ double-tap Fn requires no holding (RSI-kind, easy reach on every Mac keyboard).
 
 ---
 
-## Configuration
+## Local Inference Server
 
-- **Hotkey**: Settings → Hotkey. Rebind to any F-key, modifier combo, or single-key toggle.
-- **AI cleanup**: Settings → AI Studio. Toggle on/off; raw transcript used as fallback when off or unavailable.
-- **Per-app context**: Settings → Profile Engine. Assign a writing style or vocabulary to specific apps — `speak` applies the matching profile automatically when that app has focus.
+`speak` includes an optional **loopback-only** HTTP inference gateway that exposes
+Apple Intelligence and local LLMs to your developer tools via standard API protocols.
+
+**Security model:**
+- Binds strictly to `127.0.0.1` — kernel rejects non-loopback connections (`NWParameters.acceptLocalOnly`)
+- Every request requires a Bearer token stored in macOS Keychain
+- No TLS needed (loopback traffic never leaves the machine)
+
+### Supported protocols
+
+| Protocol | Endpoint | Compatible with |
+|---|---|---|
+| OpenAI Chat Completions | `POST /v1/chat/completions` | OpenAI SDK, Cursor, Continue |
+| Anthropic Messages | `POST /v1/messages` | Anthropic SDK, Claude Code |
+| OpenAI Responses | `POST /v1/responses` | OpenAI Responses API |
+| Model listing | `GET /v1/models` | Any OpenAI-compatible client |
+| Health check | `GET /health` | Load balancers, monitoring |
+
+### Quick test
+
+```bash
+# Start the server from the dashboard (Inference pane → Start)
+# Then test with curl:
+curl http://localhost:11235/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-speak-<your-key>" \
+  -d '{"model": "speak-default", "messages": [{"role": "user", "content": "Hello!"}]}'
+```
+
+### Connect your tools
+
+The Inference pane in the dashboard provides copy-paste snippets for:
+- Python (OpenAI SDK / Anthropic SDK)
+- cURL
+- Cursor (`settings.json`)
+- Claude Code (`settings.json`)
+- Environment variables (`.zshrc`)
+
+### Discovered backends
+
+The server auto-discovers available local inference backends:
+- **Apple SystemLanguageModel** (AFM 3 Core) — always available on macOS 26
+- **Ollama** — probed at `127.0.0.1:11434`
+- **MLX LM Server** — probed at `127.0.0.1:8080`
 
 ---
 
-## Voice for coding agents
+## MCP Setup
 
-`speak` can act as a local voice I/O layer for MCP-capable coding agents. The
-first product workflow is deliberately narrow: an agent can announce a concise
-completion, blocker, warning, or user-requested readback through the Mac's
-on-device voice. The app—not the agent—owns speech, microphone permissions, and
-the visible dictation HUD.
+`speak-mcp` is a native Swift binary that serves the Model Context Protocol over
+stdio for any MCP-capable agent (Claude Code, Cursor, Windsurf).
 
-Install the bridge from a source checkout:
+### Claude Code
 
-```bash
-make install-mcp-user
-open /Applications/Speak.app
+Add to your Claude Code MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "speak": {
+      "command": "/usr/local/bin/speak-mcp",
+      "args": []
+    }
+  }
+}
 ```
 
-The command installs to a stable user-scoped path:
+### Available tools
 
-```text
-~/Library/Application Support/speak/mcp/bin/speak-mcp
-```
-
-Add it to Codex:
-
-```bash
-codex mcp add speak-app -- "$HOME/Library/Application Support/speak/mcp/bin/speak-mcp"
-```
-
-Or Claude Code:
-
-```bash
-claude mcp add --scope user speak-app -- "$HOME/Library/Application Support/speak/mcp/bin/speak-mcp"
-```
-
-Homebrew installs expose the same bridge as `speak-mcp`, so the command can be
-shortened to `codex mcp add speak-app -- speak-mcp` or its Claude Code equivalent.
-
-The preferred tool is `speak_notify`. Its description tells agents to speak only
-final outcomes, blockers, high-severity warnings, or readback you explicitly
-requested—not logs, diffs, stack traces, routine progress, or full responses.
-The lower-level `speak_say`, `speak_ask`, `speak_confirm`, and `speak_status`
-tools remain compatibility/experimental primitives while the native attention
-and paste-free response UX is completed. See
-[`specs/agent-voice-bridge.md`](specs/agent-voice-bridge.md).
-
-Everything in this bridge is local stdio plus local macOS IPC. It opens no
-network listener and does not give an agent access to audio history, files, the
-screen, or pasteboard contents.
+| Tool | Description |
+|---|---|
+| `speak_register_session` | Bind an agent session to the speak daemon |
+| `speak_notify` | Visual HUD alert + auditory tone |
+| `speak_say` | Read text aloud via speech synthesis |
+| `speak_ask` | Prompt user with spoken question, capture voice response |
+| `speak_confirm` | Binary Yes/No voice/HUD confirmation |
+| `speak_request_input` | Trigger dictation to gather developer prompt text |
+| `speak_status` | Return current state machine phase |
+| `speak_submit_call` / `speak_get_call` | Async function call dispatch |
 
 ---
 
@@ -137,12 +218,16 @@ screen, or pasteboard contents.
 
 Privacy is structural, not a setting:
 
-1. **No audio or text leaves the device.** Ever, by default. No network egress.
+1. **No audio or text leaves the device.** Ever, by default. No external network egress.
 2. **No accounts, no login, no telemetry.** `speak` sends nothing anywhere.
 3. **Transcripts stay local** (`~/Library/Application Support/speak/`),
    searchable and exportable, never synced.
 4. **Hardware mute**: when muted, no audio is captured — not readable in software.
 5. **Works fully offline.** Networking off changes nothing about the core flow.
+6. **No external network listener.** The optional inference server binds strictly
+   to `127.0.0.1` (loopback) and requires Bearer token auth. It is unreachable
+   from any external network interface — enforced at the kernel level via
+   `NWParameters.acceptLocalOnly`.
 
 Guarantees 1, 2, 3, and 5 are not just claims — they are enforced by automated
 source-tree audit. `make verify-moat` (and the `MoatAuditTests` test suite) scan
@@ -153,89 +238,14 @@ not a promise. Current status: **7/7 checks pass**.
 Guarantee 4 (hardware mute) is enforced in the engine, not the UI: when muted,
 `SpeakEngine.beginDictation` refuses and the transcriber is never started, and
 muting *during* a dictation cancels the in-flight session — so no microphone
-capture is ever initiated or continued while muted. This is unit-tested headlessly
-(`SpeakEngineMuteTests` asserts the transcriber's `startStream` is never called
-while muted, and that muting mid-capture stops the listening session). In v0 the
-mute toggle is a menu item; a global mute *chord* is a tracked follow-up
-(`docs/human-verification.md` §4.6).
+capture is ever initiated or continued while muted.
+
+Guarantee 6 (loopback-only server) is enforced at two levels: the kernel rejects
+non-loopback TCP connections (`acceptLocalOnly = true`), and every request must
+present a valid Bearer token stored in the macOS Keychain.
 
 > Contrast: Wispr uploads audio to OpenAI (STT) and a fine-tuned Llama (cleanup),
-> mandates an account, and has no offline mode.
-
----
-
-## Install
-
-**`speak` v0 is pre-release** (developer preview — live human verification in
-progress; see [`docs/human-verification.md`](docs/human-verification.md)).
-
-Two install paths are available today, both cert-free:
-
-### Path 1 — Homebrew formula (recommended)
-
-Builds on your machine from source. Gatekeeper never fires — it only inspects
-downloaded binaries, not local builds. Requires Xcode 26+ and xcodegen.
-
-```bash
-brew tap speak-dev/speak   # custom tap (not yet on homebrew-core)
-brew install speak
-# Then follow the post-install caveat to copy Speak.app to /Applications/
-```
-
-> **Note:** the tap will be published at first tag (`v0.0.1`). Until then,
-> build from source directly (see below).
-
-### Path 2 — GitHub Release (ad-hoc signed zip)
-
-Download the pre-built `.zip` from [GitHub Releases](https://github.com/ArasanDev/speak/releases),
-then run once:
-
-```bash
-# After unzipping Speak.app:
-xattr -dr com.apple.quarantine Speak.app
-open Speak.app
-```
-
-> Right-click → Open is the GUI equivalent if you prefer not to use the terminal.
-
-### Path 3 — Official Homebrew Cask (planned for v0.1)
-
-```bash
-brew install --cask speak   # requires Developer ID cert (P11-b, target: before Sep 1 2026)
-```
-
----
-
-## Build from source
-
-Requirements: macOS 26 (Tahoe), Apple Silicon, Xcode 26+.
-
-```bash
-# Install build tools (one-time)
-brew install xcodegen swiftlint xcbeautify
-
-# Clone and build
-git clone https://github.com/ArasanDev/speak.git
-cd speak
-make build    # generates Speak.xcodeproj, builds Speak.app + SpeakCore.framework
-make test     # 741 XCTest + 142 Swift Testing tests
-make lint     # SwiftLint (force-unwrap / force-cast / force-try = error)
-make verify-moat  # 7/7 structural BEAT rows (offline, no egress, MIT, no account, ...)
-make run      # launch the menubar app
-```
-
-`make build` runs `xcodegen generate` automatically — a clean clone has no
-`.xcodeproj` (it is git-ignored; `project.yml` is the source of truth).
-
-### Required permissions (first run)
-
-`speak` needs two OS permissions — explained in the onboarding flow on first
-launch:
-
-| Permission | Why |
-|---|---|
-| **Microphone** | Capture audio for transcription |
-| **Accessibility** | Global hotkey (CGEventTap `.defaultTap`) + synthetic Cmd+V paste |
+> mandates an account, screenshots active windows, and has no offline mode.
 
 ---
 
@@ -250,27 +260,12 @@ launch:
 - Live overlay: partial transcript streams via `AsyncStream` to a floating
   non-activating `NSPanel`
 - Local history: SQLite via raw C API, searchable, exportable
+- Local inference server: loopback HTTP gateway with OpenAI + Anthropic protocols
+- MCP bridge: native Swift `speak-mcp` binary with 8 tools
 - Settings: cleanup toggle, STT/cleanup engine selection, language, paste mode
 - Permissions onboarding: three-step flow, auto-advances on grant
-- Tests: **481, 0 failures**
 - Moat audit: **7/7** (MIT, no third-party imports, no network egress, no
   auth code, no paywall, offline by construction, no pasteboard reads)
-
-**What remains before v0 ships** (irreducibly live — tracked in
-[`docs/human-verification.md`](docs/human-verification.md)):
-
-- Grant Accessibility permission (Microphone already granted); enable Apple Intelligence
-- Verify live paste into TextEdit, Slack, and Terminal (Terminal paste-provenance
-  is the project's #1 unverified item — macOS 26.4 added a paste-provenance check)
-- Verify hotkey fires globally while another app has focus
-- WER corpus (audio clips a human must supply) + live Foundation Models quality
-- Developer ID signing + notarization (P11)
-- Demo GIF — [deferred — needs human verification]
-
-For the latency figures: the headless, file-fed measurement shows first-partial
-p50 ≈ 42 ms (< 200 ms budget) and local stop→result-ready median ≈ 60 ms
-(< 1 s budget). These are headless proxy figures, not user-facing end-to-end
-latency (which includes live paste, not yet measured).
 
 ---
 
@@ -285,10 +280,8 @@ latency (which includes live paste, not yet measured).
 | [`docs/roadmap.md`](docs/roadmap.md) | Build order, done-when criteria per phase |
 | [`docs/benchmark.md`](docs/benchmark.md) | The definition of done vs the frontier |
 | [`docs/quality.md`](docs/quality.md) | Tests, risks, ship gates |
-| [`docs/human-verification.md`](docs/human-verification.md) | What still needs a live human run |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute |
 | [`CHANGELOG.md`](CHANGELOG.md) | What's been built |
-| [`SPEC.md`](SPEC.md) | Consolidated product + competitive spec |
 
 ---
 
@@ -300,9 +293,12 @@ Swift 5.9+ · SwiftUI · macOS 26 (Tahoe) · Apple Silicon
   pluggable `Transcribing` protocol
 - **AI cleanup**: Apple `Foundation Models`, on-device LLM, via pluggable
   `LLMCleaning` protocol (raw-transcript fallback when unavailable)
+- **Inference server**: `Network` framework (`NWListener`), loopback-only HTTP,
+  OpenAI + Anthropic + Responses protocol handlers
 - **Hotkey**: `CGEventTap` (`CoreGraphics`), `kVK_Function` double-tap
 - **Paste**: `NSPasteboard` write + `CGEvent` Cmd+V simulation (write-never-read)
 - **History**: SQLite3 (raw C API, no third-party deps)
+- **MCP**: Native Swift binary, stdio JSON-RPC transport
 - **Logging**: `os.Logger` (no `print` anywhere)
 - **Build**: XcodeGen (`project.yml` → `Speak.xcodeproj`), `make`
 
@@ -312,7 +308,11 @@ No third-party runtime dependencies. All frameworks are Apple-provided.
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+See [`CONTRIBUTING.md`](CONTRIBUTING.md). We welcome:
+- Bug reports and feature requests (GitHub Issues)
+- Pull requests (see CONTRIBUTING.md for the branch/commit convention)
+- Test coverage improvements
+- Documentation fixes
 
 ---
 

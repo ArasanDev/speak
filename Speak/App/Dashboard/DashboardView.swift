@@ -173,6 +173,7 @@ struct DashboardView: View {
         case .style:      StylePaneView(context: context)
         case .transforms: TransformsPaneView(context: context)
         case .scratchpad: ScratchpadPaneView(context: context)
+        case .inference:  InferencePaneView(context: context)
         case .history:    HistoryPaneView(context: context)
         case .agentInbox: AgentInboxPaneView(context: context)
         case .mcpAgents:  MCPAgentPaneView(context: context)
