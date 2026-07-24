@@ -10,6 +10,27 @@ import SwiftUI
 
 struct DashboardView: View {
 
+    private struct SidebarToggleButton: View {
+        let action: () -> Void
+        @State private var isHovering = false
+        
+        var body: some View {
+            Button(action: action) {
+                Image(systemName: "sidebar.left")
+                    .font(.system(size: 15))
+                    .foregroundColor(.secondary)
+                    .frame(width: 26, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .background(Color.primary.opacity(isHovering ? 0.08 : 0))
+            .cornerRadius(6)
+            .onHover { hovering in
+                isHovering = hovering
+            }
+        }
+    }
+
     let context: DashboardContext
 
     enum SidebarDisplayMode: Equatable {
@@ -52,14 +73,8 @@ struct DashboardView: View {
                 VStack(spacing: 0) {
                     HStack {
                         if mode == .full {
-                            Button(action: toggleSidebar) {
-                                Image(systemName: "sidebar.left")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.secondary)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.leading, 80) // Clear traffic lights
+                            SidebarToggleButton(action: toggleSidebar)
+                                .padding(.leading, 80) // Clear traffic lights
                         }
                         Spacer()
                     }
@@ -109,16 +124,7 @@ struct DashboardView: View {
                 VStack(spacing: 0) {
                     HStack(spacing: 12) {
                         if mode != .full {
-                            Button(action: toggleSidebar) {
-                                Image(systemName: "sidebar.left")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.secondary)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .frame(width: 28, height: 28)
-                            .background(Color.speakCardBorder)
-                            .clipShape(Capsule())
+                            SidebarToggleButton(action: toggleSidebar)
                         }
                         
                         Text(selection.title)
