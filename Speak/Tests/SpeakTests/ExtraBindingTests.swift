@@ -148,6 +148,11 @@ final class BindingStoreExtraBindingsTests: XCTestCase {
         UserDefaults.standard.removeObject(forKey: "com.speak.extraHotkeyBindings")
     }
 
+    override func tearDown() {
+        UserDefaults.standard.removeObject(forKey: "com.speak.extraHotkeyBindings")
+        super.tearDown()
+    }
+
     func testSaveAndLoadRoundTrip() throws {
         let store = UserDefaultsBindingStore()
         let set = ExtraBindingSet(bindings: [ExtraBinding(source: .modifierKey(63), action: .activate)])

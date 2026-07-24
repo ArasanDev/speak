@@ -83,6 +83,24 @@ public extension Color {
         dark: Color(red: 0x12 / 255, green: 0x14 / 255, blue: 0x18 / 255)
     )
 
+    /// Unified window canvas background (F5F3EF light / 16181D dark).
+    static let speakWindowCanvas = Color(
+        light: Color(red: 0xF5 / 255, green: 0xF3 / 255, blue: 0xEF / 255),
+        dark: Color(red: 0x16 / 255, green: 0x18 / 255, blue: 0x1D / 255)
+    )
+
+    /// Main detail card canvas (FFFFFF light / 1C1F26 dark).
+    static let speakCardCanvas = Color(
+        light: Color(red: 0xFF / 255, green: 0xFF / 255, blue: 0xFF / 255),
+        dark: Color(red: 0x1C / 255, green: 0x1F / 255, blue: 0x26 / 255)
+    )
+
+    /// Sidebar selection pills (E8E5DE light / 262A34 dark).
+    static let speakSidebarSelection = Color(
+        light: Color(red: 0xE8 / 255, green: 0xE5 / 255, blue: 0xDE / 255),
+        dark: Color(red: 0x26 / 255, green: 0x2A / 255, blue: 0x34 / 255)
+    )
+
     /// Active channel item highlight.
     static let speakSidebarActiveBg = Color.speakAgentViolet.opacity(0.18)
 
@@ -92,8 +110,11 @@ public extension Color {
     /// Tag mention badge text color.
     static let speakTagBadgeFg = Color.speakAgentViolet
 
-    /// Card & Container subtle border.
-    static let speakCardBorder = Color.speakMica.opacity(0.25)
+    /// Card & Container subtle border (E5E2DA light / 2B2F3A dark).
+    static let speakCardBorder = Color(
+        light: Color(red: 0xE5 / 255, green: 0xE2 / 255, blue: 0xDA / 255),
+        dark: Color(red: 0x2B / 255, green: 0x2F / 255, blue: 0x3A / 255)
+    )
 }
 
 // MARK: - Light/dark color helper

@@ -21,8 +21,10 @@ struct DashboardView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
             VStack(spacing: 0) {
+                Spacer().frame(height: 28)
+                
                 List(selection: $selection) {
                     ForEach(DashboardSection.mainSections) { section in
                         Label(section.title, systemImage: section.systemImage)
@@ -30,26 +32,36 @@ struct DashboardView: View {
                     }
                 }
                 .listStyle(.sidebar)
-
+                .scrollContentBackground(.hidden)
+                
                 Spacer(minLength: 0)
-
+                
                 List(selection: $selection) {
                     Label(DashboardSection.settings.title, systemImage: DashboardSection.settings.systemImage)
                         .tag(DashboardSection.settings)
                 }
                 .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
                 .frame(height: 52)
                 .scrollDisabled(true)
             }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
-        } detail: {
+            .frame(width: 220)
+            .tint(Color.speakSidebarSelection)
+            
             detail(for: selection)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.speakInk)
-                .navigationTitle(selection.title)
+                .background(Color.speakCardCanvas)
+                .clipShape(RoundedRectangle(cornerRadius: 24))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24)
+                        .stroke(Color.speakCardBorder, lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.05), radius: 12, y: 4)
+                .padding(16)
         }
         .frame(minWidth: 860, minHeight: 580)
-        .background(Color.speakInk)
+        .background(Color.speakWindowCanvas)
+        .ignoresSafeArea(.all, edges: .top)
     }
 
     // MARK: - Detail routing
