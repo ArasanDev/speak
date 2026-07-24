@@ -131,6 +131,14 @@ extension DictationController {
                 onReadback: settingsStore.readbackEnabled ? { [weak self] in self?.toggleReadback() } : nil
             )
             return .started
+        } catch SpeakError.microphoneDenied {
+            monitor.notifySessionEnded()
+            permissionsNeeded = true
+            overlayController.showError("Microphone permission denied. Click Resolve in Dashboard or Grant access.")
+            icon = .error
+            showOnboardingIfNeeded()
+            SpeakLog.engine.error("DictationController: beginDictation failed — microphone denied.")
+            return .failed
         } catch SpeakError.microphoneMuted {
             monitor.notifySessionEnded()
             icon = .idle
@@ -141,6 +149,13 @@ extension DictationController {
             // W2.2: show an error state in the HUD instead of silently hiding.
             overlayController.showError(error.localizedDescription)
             icon = .error
+            // Check permissions and open onboarding setup if missing
+            let axGranted = permissionManager.status(.accessibility) == .granted
+            let micGranted = permissionManager.status(.microphone) == .granted
+            if !axGranted || !micGranted {
+                permissionsNeeded = true
+                showOnboardingIfNeeded()
+            }
             SpeakLog.engine.error(
                 "DictationController: beginDictation failed — \(error.localizedDescription, privacy: .public)"
             )

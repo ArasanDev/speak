@@ -170,6 +170,7 @@ final class OnboardingViewModel {
         hasPrompted.insert(.accessibility)
         isWaitingForAccessibility = true
         let trusted = permissionManager.requestAccessibility()
+        openSystemSettings(for: .accessibility)
         refreshEvaluation()
         if trusted {
             isWaitingForAccessibility = false
