@@ -28,20 +28,25 @@ struct DashboardView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
-                Section {
+            VStack(spacing: 0) {
+                List(selection: $selection) {
                     ForEach(DashboardSection.mainSections) { section in
                         Label(section.title, systemImage: section.systemImage)
                             .tag(section)
                     }
                 }
-                
-                Section {
+                .listStyle(.sidebar)
+
+                Spacer(minLength: 0)
+
+                List(selection: $selection) {
                     Label(DashboardSection.settings.title, systemImage: DashboardSection.settings.systemImage)
                         .tag(DashboardSection.settings)
                 }
+                .listStyle(.sidebar)
+                .frame(height: 52)
+                .scrollDisabled(true)
             }
-            .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
         } detail: {
             detail(for: selection)
