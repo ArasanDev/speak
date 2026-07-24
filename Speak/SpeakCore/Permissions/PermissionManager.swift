@@ -53,7 +53,7 @@ public final class PermissionManager: PermissionManaging {
     /// [verified: swiftc -typecheck against macOS 26 SDK, 2026-06-21]
     @discardableResult
     public func requestAccessibility() -> Bool {
-        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        let options = [(kAXTrustedCheckOptionPrompt.takeUnretainedValue() as CFString) as String: true] as CFDictionary
         let trusted = AXIsProcessTrustedWithOptions(options)
         SpeakLog.permissions.info("accessibility prompt → trusted=\(trusted, privacy: .public)")
         return trusted

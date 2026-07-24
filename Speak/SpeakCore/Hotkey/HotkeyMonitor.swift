@@ -448,7 +448,7 @@ public final class HotkeyMonitor: @unchecked Sendable {
 
         if !currentlyArmed && shouldArm {
             // Check AX trust without prompting. Safe at 100ms cadence — no prompt shown.
-            let opts = ["AXTrustedCheckOptionPrompt": false] as CFDictionary
+            let opts = [(kAXTrustedCheckOptionPrompt.takeUnretainedValue() as CFString) as String: false] as CFDictionary
             let nowTrusted = AXIsProcessTrustedWithOptions(opts)
             let wasTrustedPrev = lock.withLock { wasTrusted }
 
