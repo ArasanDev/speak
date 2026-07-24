@@ -225,17 +225,23 @@ struct HotkeyRecorderView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.md) {
 
-            // Title
-            Text("Record Shortcut")
-                .font(.headline)
-                .padding(.bottom, SpeakSpacing.xs)
+            // Title & Description (Wispr Flow modal style)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Shortcuts")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.primary)
+                Text("Choose your preferred shortcut for activating speak.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, SpeakSpacing.xs)
 
             // Trigger mode picker
             Picker("Activation Mode", selection: $selectedTrigger) {
                 Text("Double-tap (toggle)").tag(HotkeyBinding.Trigger.doubleTap)
                 Text("Hold (push-to-talk)").tag(HotkeyBinding.Trigger.hold)
             }
-            .pickerStyle(.inline)
+            .pickerStyle(.segmented)
             .padding(.bottom, SpeakSpacing.xs)
 
             Divider()
@@ -256,6 +262,8 @@ struct HotkeyRecorderView: View {
                     stopMonitor()
                     onCancel()
                 }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
                 .keyboardShortcut(.cancelAction)
 
                 Spacer()
@@ -265,17 +273,20 @@ struct HotkeyRecorderView: View {
                         recorderState = .idle
                         stopMonitor()
                     }
+                    .buttonStyle(.bordered)
                 }
 
-                Button("Save") {
+                Button("Save Shortcut") {
                     commitSave()
                 }
+                .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(!canSave)
             }
         }
         .padding(SpeakSpacing.lg)
-        .frame(minWidth: 400, minHeight: 260) // [decision: fits preview at default text size, W1.1]
+        .frame(minWidth: 440, minHeight: 280) // [decision: fits Wispr-style shortcut card, W1.1]
+        .background(Color(nsColor: .windowBackgroundColor))
         .onDisappear {
             stopMonitor()
         }
@@ -289,33 +300,49 @@ struct HotkeyRecorderView: View {
 
         case .idle:
             VStack(spacing: SpeakSpacing.sm) {
-                Button("Start Recording") {
+                Button("Click to Record Shortcut") {
                     startMonitor()
                 }
                 .buttonStyle(.borderedProminent)
-                Text("Press Start, then press your desired shortcut.")
+                .controlSize(.large)
+                Text("Supports Right-Command, Fn double-tap, or modifier combinations.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity)
+            .padding(.vertical, SpeakSpacing.md)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
 
         case .recording:
             VStack(spacing: SpeakSpacing.sm) {
-                Text("Press your shortcut\u{2026}")
-                    .font(.speakMonoBody)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
+                HStack(spacing: SpeakSpacing.xs) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Press your shortcut key combination\u{2026}")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.primary)
+                }
 
-                // Pulsing indicator
-                Image(systemName: "record.circle")
+                Image(systemName: "record.circle.fill")
                     .foregroundStyle(.red)
                     .imageScale(.large)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, SpeakSpacing.sm)
+            .padding(.vertical, SpeakSpacing.lg)
             .background(
-                RoundedRectangle(cornerRadius: 8) // [decision: matches keycap radius, W1.1]
-                    .fill(Color.speakSurface)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.red.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.red.opacity(0.2), lineWidth: 1)
             )
 
         case .captured(let capture, _):
