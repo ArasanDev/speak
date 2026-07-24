@@ -775,21 +775,22 @@ private struct ConnectToolsCard: View {
         client = OpenAI(base_url="\(baseURL)", api_key="\(key)")
         response = client.chat.completions.create(
             model="speak-default",
-            messages=[{"role": "user", "content": "Hello from speak!"}]
+            messages=[{"role": "user", "content": "Hello from speak"}]
         )
-        result = response.choices[0].message.content  # your text
+        result = response.choices[0].message.content
         """
     }
 
     private func pythonAnthropicSnippet(baseURL: String, key: String) -> String {
         """
-        import anthropic
-        client = anthropic.Anthropic(base_url="\(baseURL)", api_key="\(key)")
+        # pip install anthropic
+        from anthropic import Anthropic
+        client = Anthropic(base_url="\(baseURL)", api_key="\(key)")
         message = client.messages.create(
             model="speak-default", max_tokens=1024,
-            messages=[{"role": "user", "content": "Hello from speak!"}]
+            messages=[{"role": "user", "content": "Hello from speak"}]
         )
-        result = message.content[0].text  # your text
+        result = message.content[0].text
         """
     }
 
@@ -798,7 +799,7 @@ private struct ConnectToolsCard: View {
         curl \(baseURL)/chat/completions \\
           -H "Content-Type: application/json" \\
           -H "Authorization: Bearer \(key)" \\
-          -d '{"model": "speak-default", "messages": [{"role": "user", "content": "Hello!"}]}'
+          -d '{"model": "speak-default", "messages": [{"role": "user", "content": "Hello"}]}'
         """
     }
 
