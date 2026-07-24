@@ -69,7 +69,7 @@ Taking inspiration from **Slack**, `speak` evolves into a **Channel-Based, Multi
 
 To make `speak` the daily driver without cluttering the screen:
 
-1. **Screen Overlay & Pip Pet (Compact Mode)**:
+1. **Screen Overlay & Voice Desktop Pet Pet (Compact Mode)**:
    - Floating, non-activating panel (breathes with mic activity, shows partial transcription streaming, handles quick double-tap voice inputs).
 2. **Workspace Window (Full Mode)**:
    - Full Slack-style window with Sidebar (Channels, DMs, Agent Teams), Thread Canvas, Rich Evidence Viewer, and Agent Inbox.

@@ -713,7 +713,7 @@ extension SettingsStore {
         }
     }
 
-    /// FE-1: Pip the pet enabled state. Controls whether the floating 56x36pt
+    /// FE-1: Voice Desktop Pet the pet enabled state. Controls whether the floating 56x36pt
     /// edge-snapping mascot lozenge (`PetPanelController`) is visible.
     /// Defaults to `true` (always-on companion).
     public var petEnabled: Bool {
@@ -728,7 +728,7 @@ extension SettingsStore {
         }
     }
 
-    /// Pip's last dragged-to position, keyed by display UUID (spec §5:
+    /// Voice Desktop Pet's last dragged-to position, keyed by display UUID (spec §5:
     /// "position persisted per display UUID in SettingsStore"). JSON-encoded,
     /// same pattern as `cleanupEngine`/`sttEngine` — `CGPoint` is `Codable` on
     /// Apple platforms so no custom coding is needed.

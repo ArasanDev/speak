@@ -1,10 +1,10 @@
 // App/Pet/PetState.swift
 //
-// FE-1 (specs/frontend-identity.md §5): Pip's state machine. Pure, value-type
+// FE-1 (specs/frontend-identity.md §5): Voice Desktop Pet's state machine. Pure, value-type
 // logic — no AppKit/SwiftUI — so it is unit-testable independent of the panel
 // or rendering, matching the `SpeakCore`-style pattern used elsewhere (e.g.
 // `LevelMath.swift`, `AuroraMath.swift`) even though this type lives app-side
-// (Pip is an App-target concept, not an engine concept).
+// (Voice Desktop Pet is an App-target concept, not an engine concept).
 //
 // STATE MAPPING (locked, orchestrator brief):
 //   dormant      = petEnabled but engine unavailable / mic permission missing
@@ -21,7 +21,7 @@
 
 import Foundation
 
-/// Pip's visual/behavioral state (spec §5 table).
+/// Voice Desktop Pet's visual/behavioral state (spec §5 table).
 public enum PetState: String, CaseIterable, Equatable, Sendable {
     case dormant
     case idle
@@ -36,7 +36,7 @@ extension PetState {
 
     /// The EXPECTED-transitions map — ADVISORY ONLY (review fix, 2026-07-11).
     ///
-    /// `PetState.resolve(from:)` is the single source of truth for what Pip
+    /// `PetState.resolve(from:)` is the single source of truth for what Voice Desktop Pet
     /// displays; `PetPanelController.tick()` applies its output UNCONDITIONALLY
     /// every tick. This map exists solely to flag unexpected edges (a signal
     /// source skipping a beat between two polls, e.g. `.listening → .idle`
@@ -71,7 +71,7 @@ extension PetState {
 
 // MARK: - State-priority resolution
 
-/// The inputs that determine Pip's current state, mirroring the STATE MAPPING
+/// The inputs that determine Voice Desktop Pet's current state, mirroring the STATE MAPPING
 /// table above one-to-one. Resolved by `PetState.resolve(from:)` into exactly
 /// one `PetState` per the locked priority order.
 public struct PetStateInputs: Equatable, Sendable {
@@ -80,7 +80,7 @@ public struct PetStateInputs: Equatable, Sendable {
     public var engineAvailable: Bool
     /// The dictation engine's own idle/listening/processing signal (mirrors
     /// `MenubarIcon`/`CaptureSession.State`, collapsed to the three that matter
-    /// to Pip — `.done`/`.error` are transient and read as `.idle` here).
+    /// to Voice Desktop Pet — `.done`/`.error` are transient and read as `.idle` here).
     public var isListening: Bool
     public var isProcessing: Bool
     /// Agent TTS active (`AgentSpeechQueue`-backed).

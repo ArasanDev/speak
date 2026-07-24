@@ -1,6 +1,6 @@
 // App/DictationController+Pet.swift
 //
-// FE-1 (specs/frontend-identity.md §5): live-apply wiring for Pip, the
+// FE-1 (specs/frontend-identity.md §5): live-apply wiring for Voice Desktop Pet, the
 // floating pet panel. Split out of `DictationController.swift` to hold
 // SwiftLint's type_body_length cap — same pattern as `+VoiceOut`/`+CLI`.
 // `petWiring`'s three fields are grouped into one struct (`PetWiring`) so
@@ -18,7 +18,7 @@ import Foundation
 import Observation
 import SpeakCore
 
-/// The three pieces of Pip live-toggle state, grouped into one struct so
+/// The three pieces of Voice Desktop Pet live-toggle state, grouped into one struct so
 /// `DictationController`'s stored-property list grows by exactly one entry.
 @MainActor
 struct PetWiring {

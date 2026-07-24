@@ -1,6 +1,6 @@
 // App/Pet/PetGeometry.swift
 //
-// Pure geometry for Pip's panel: edge-snap on drag-release (spec §5 —
+// Pure geometry for Voice Desktop Pet's panel: edge-snap on drag-release (spec §5 —
 // "Draggable anywhere; on release, snaps to the nearest screen edge with an
 // 8pt inset"). Factored out of `PetPanelController` so the snap math is
 // unit-testable without a live `NSPanel`/`NSScreen`.
@@ -79,7 +79,7 @@ public enum PetGeometry {
     /// Used by `PetPanelController` (review fix, 2026-07-11): `NSScreen.main`
     /// always resolves to the PRIMARY display for a non-key
     /// `.nonactivatingPanel`, so snap math and per-display persistence must
-    /// resolve the screen Pip is actually on — `panel.screen` first, then
+    /// resolve the screen Voice Desktop Pet is actually on — `panel.screen` first, then
     /// this max-intersection fallback, then `NSScreen.main` as last resort.
     public static func indexOfScreenMaximallyIntersecting(
         panelFrame: CGRect,

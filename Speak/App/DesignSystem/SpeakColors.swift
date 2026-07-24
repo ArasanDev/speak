@@ -7,7 +7,7 @@
 // This file adds a NEW token namespace (`Color.speak*`) alongside the existing
 // `SpeakTheme.swift` tokens (`Color.speak*` there are the Monaco-era dashboard
 // tokens). No existing surface is restyled by FE-1 (spec §6) — these tokens
-// exist for Pip (FE-1) and are adopted by the HUD/dashboard in FE-2/FE-3.
+// exist for Voice Desktop Pet (FE-1) and are adopted by the HUD/dashboard in FE-2/FE-3.
 //
 // LIGHT/DARK: dark values are the spec §2 table verbatim. Light-mode values are
 // derivations per §2 ("bone surfaces, ink text, identical channel hues at

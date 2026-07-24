@@ -1,15 +1,15 @@
 // App/DesignSystem/SpeakMotion.swift
 //
 // FE-1 (specs/frontend-identity.md §4): the motion charter, as reusable
-// constants + a Reduce-Motion-aware helper. Every animation in Pip (and,
+// constants + a Reduce-Motion-aware helper. Every animation in Voice Desktop Pet (and,
 // later, FE-2/FE-3 surfaces) should be built from these, not ad-hoc durations.
 //
 // CHARTER (spec §4):
 //   - Every animation maps to a real signal (audio level, state transition,
 //     attention request). If it doesn't read from a signal, cut it.
 //   - Durations: 120ms (micro), 320ms (state), springs (response 0.35 /
-//     damping 0.8). Nothing slower except Pip's idle breath (~4s cycle).
-//   - Reduce Motion: crossfades replace movement; Pip's breath becomes a slow
+//     damping 0.8). Nothing slower except Voice Desktop Pet's idle breath (~4s cycle).
+//   - Reduce Motion: crossfades replace movement; Voice Desktop Pet's breath becomes a slow
 //     opacity pulse; word-materialize becomes plain fade-in.
 
 import SwiftUI
@@ -24,7 +24,7 @@ public enum SpeakMotion {
     /// State-transition duration — e.g. idle → listening. [decision: spec §4, 320ms]
     public static let stateDuration: TimeInterval = 0.320
 
-    /// Pip's idle "breath" cycle — the one exception to "nothing slower."
+    /// Voice Desktop Pet's idle "breath" cycle — the one exception to "nothing slower."
     /// [decision: spec §4, ~4s cycle]
     public static let idleBreathCycle: TimeInterval = 4.0
 
@@ -47,9 +47,9 @@ public enum SpeakMotion {
         reduceMotion ? .easeInOut(duration: stateDuration) : stateSpring
     }
 
-    /// Pip's idle breath: a full spring-driven ripple normally, or a slow
+    /// Voice Desktop Pet's idle breath: a full spring-driven ripple normally, or a slow
     /// opacity pulse (same cycle length) under Reduce Motion — spec §4:
-    /// "Pip's breath becomes a slow opacity pulse."
+    /// "Voice Desktop Pet's breath becomes a slow opacity pulse."
     public static func idleBreath(reduceMotion: Bool) -> Animation {
         reduceMotion
             ? .easeInOut(duration: idleBreathCycle).repeatForever(autoreverses: true)

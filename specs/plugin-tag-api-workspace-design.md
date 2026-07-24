@@ -87,7 +87,7 @@ The main interface features a clean **Top Segmented Navigation Control** allowin
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                        │
 │  MODE 1: DICTATION ENGINE MODE (Focused Quick Input)                                   │
-│  - Clean visual orb (Pip pet) breathing with mic audio                                  │
+│  - Clean visual orb (Voice Desktop Pet pet) breathing with mic audio                                  │
 │  - Partial transcript streaming live near cursor or floating capsule                    │
 │  - Quick steer chips (Raw, Clean, Commit, Code, Task)                                   │
 │  - Instant write-only paste into active focused app (Terminal, Xcode, Slack, etc.)     │

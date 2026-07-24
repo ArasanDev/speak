@@ -1,6 +1,6 @@
 // App/Pet/PetPanelController.swift
 //
-// FE-1 (specs/frontend-identity.md §5): Pip's panel lifecycle. Mirrors the
+// FE-1 (specs/frontend-identity.md §5): Voice Desktop Pet's panel lifecycle. Mirrors the
 // established overlay-panel precedents:
 //   - `TranscriptOverlayPanel`: non-activating, always-on-top NSPanel,
 //     `.canJoinAllSpaces` + `.fullScreenAuxiliary`, `FirstMouseHostingView`
@@ -18,10 +18,10 @@
 // signal sources (engine/permission availability, `DictationController.icon`,
 // `AgentSpeechQueue.queuedCount`, `PetAttentionProviding.count`) and resolves
 // them through `PetState.resolve(from:)` — the single source of truth for
-// "what is Pip doing right now."
+// "what is Voice Desktop Pet doing right now."
 //
 // HARD RULES (never violate):
-//   - Pip's own code never opens the mic — clicks route through
+//   - Voice Desktop Pet's own code never opens the mic — clicks route through
 //     `DictationController.beginDictation()`/`endDictation()`, the SAME path
 //     the hotkey uses. No parallel capture path.
 //   - Never steals/holds keyboard focus (`canBecomeKey`/`canBecomeMain` both
@@ -119,7 +119,7 @@ fileprivate final class PetHostingView: NSHostingView<PetView> {
 
 // MARK: - PetPanel
 
-/// A non-activating, always-on-top NSPanel hosting Pip. Follows
+/// A non-activating, always-on-top NSPanel hosting Voice Desktop Pet. Follows
 /// `TranscriptOverlayPanel`'s focus-steal-prevention layers exactly.
 final class PetPanel: NSPanel {
     static let size = CGSize(width: 56, height: 36)
@@ -169,7 +169,7 @@ final class PetPanel: NSPanel {
 
 // MARK: - PetPanelController
 
-/// Owns Pip's panel, model, state-resolution loop, and interaction wiring.
+/// Owns Voice Desktop Pet's panel, model, state-resolution loop, and interaction wiring.
 /// Constructed by `DictationController` when `settingsStore.petEnabled`
 /// becomes true; torn down when it becomes false. See `DictationController`'s
 /// `startObservingPetEnabled()` for the live-apply wiring.
@@ -253,7 +253,7 @@ final class PetPanelController {
     }
 
     /// Right-click menu (spec §5): Start/Stop Dictation · Open speak ·
-    /// Hide Pip (session) · Disable Pip (setting).
+    /// Hide Voice Desktop Pet (session) · Disable Voice Desktop Pet (setting).
     private func showContextMenu() {
         guard let dictationController else { return }
         let menu = NSMenu()
@@ -278,7 +278,7 @@ final class PetPanelController {
         menu.addItem(.separator())
 
         let hideItem = NSMenuItem(
-            title: "Hide Pip",
+            title: "Hide Voice Desktop Pet",
             action: #selector(MenuActionTarget.hideSession),
             keyEquivalent: ""
         )
@@ -286,7 +286,7 @@ final class PetPanelController {
         menu.addItem(hideItem)
 
         let disableItem = NSMenuItem(
-            title: "Disable Pip",
+            title: "Disable Voice Desktop Pet",
             action: #selector(MenuActionTarget.disablePet),
             keyEquivalent: ""
         )
@@ -316,12 +316,12 @@ final class PetPanelController {
 
     // MARK: - Position persistence (per display UUID)
 
-    /// The screen Pip is actually on (review fix, 2026-07-11).
+    /// The screen Voice Desktop Pet is actually on (review fix, 2026-07-11).
     ///
     /// `NSScreen.main` ALWAYS resolves to the primary display for a non-key
     /// `.nonactivatingPanel` (this panel can never be key), so using it for
     /// snap math / persistence keys would pin both to the primary display no
-    /// matter where the user drags Pip. Resolution order:
+    /// matter where the user drags Voice Desktop Pet. Resolution order:
     ///   1. `panel.screen` — AppKit's own answer for a positioned window;
     ///   2. the screen whose frame maximally intersects `panelFrame`
     ///      (pure, tested — `PetGeometry.indexOfScreenMaximallyIntersecting`);
@@ -446,11 +446,11 @@ final class PetPanelController {
         refreshRootView()
     }
 
-    /// Pip's bars read the SAME level signal as the Aurora HUD (spec §5:
+    /// Voice Desktop Pet's bars read the SAME level signal as the Aurora HUD (spec §5:
     /// "the same signal as HUD"). Drains `SpeakEngine.currentLevels()` only
     /// while `.listening`; resets to 0 otherwise. Uses the SpeakCore-level
     /// perceptual mapping + asymmetric smoothing helpers `OverlayController`
-    /// already established (`LevelMath.swift`), so Pip's bars and the HUD's
+    /// already established (`LevelMath.swift`), so Voice Desktop Pet's bars and the HUD's
     /// waveform read identically for the same audio.
     private func updateLevelDrain(for state: PetState) {
         levelTask?.cancel()

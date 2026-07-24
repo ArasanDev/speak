@@ -176,19 +176,19 @@
 
 **Loop #51 (2026-07-11) — THREE SLICES SHIPPED in one orchestrated day:
 AVB-6 sessions (`9cff623`), AVB-7 durable calls + inbox (`d245dcc`), and FE-1
-design tokens + Pip the pet (`973514e`, fixes `20e55a2`). Frontend identity is
+design tokens + Voice Desktop Pet the pet (`973514e`, fixes `20e55a2`). Frontend identity is
 now a frozen spec (`specs/frontend-identity.md`). Still open: the AVB-5 live
 question-response round trip (needs the human at the mic).**
 
 ### What changed this loop (read before doing anything)
--29. **FE-1 design tokens + Pip the pet (2026-07-11, merge `973514e` +
+-29. **FE-1 design tokens + Voice Desktop Pet the pet (2026-07-11, merge `973514e` +
    `20e55a2`).** Contract: `specs/frontend-identity.md` (orchestrator-authored,
    incl. the research-informed "Animation soul" amendment, `2289030`).
    - `Speak/App/DesignSystem/` — `SpeakColors` (two-temperature palette:
      warm=human `humanAmber`/`onAir`, cool=agent `agentViolet`; onAir iff mic
      capturing is a HARD rule), `SpeakTypography` (NY/SF Pro/SF Mono roles),
      `SpeakMotion` (signal-mapped durations, Reduce Motion fallbacks).
-   - `Speak/App/Pet/` — Pip: five-bar waveform creature in a non-activating
+   - `Speak/App/Pet/` — Voice Desktop Pet: five-bar waveform creature in a non-activating
      all-Spaces `NSPanel`; `PetState.resolve()` is the single source of truth
      (priority: listening > speaking > attention > agentWorking > processing >
      idle > dormant) and the displayed state converges to it unconditionally
@@ -197,13 +197,13 @@ question-response round trip (needs the human at the mic).**
      onAir-iff-capturing). Drag + edge-snap with per-display-UUID persistence
      (review fix: resolve the panel's ACTUAL screen, never `NSScreen.main`,
      which is always primary for a non-key panel). Click = the one true
-     `DictationController.beginDictation()` path; Pip can never open the mic
+     `DictationController.beginDictation()` path; Voice Desktop Pet can never open the mic
      itself. `attention` state is the AVB-7 inbox badge (stub provider until
      wired). `petEnabled` default false (opt-in this slice).
    - Reduce Motion: heights static, 0.55–0.70 opacity breath pulse (clamped —
      fp ulp overshoot caught by tests post-merge).
    - Reviewed FIX-FIRST → fixed → SHIP. `[deferred — needs human]`: live
-     multi-monitor drag dogfood; visual taste pass on Pip in situ.
+     multi-monitor drag dogfood; visual taste pass on Voice Desktop Pet in situ.
 -28. **AVB-7 durable Agent Calls + local inbox (2026-07-11, `d245dcc`).**
    Design doc: `specs/avb7-durable-calls-design.md`. New tools
    `speak_submit_call` / `speak_get_call` (wire: additive `.submitCall`/

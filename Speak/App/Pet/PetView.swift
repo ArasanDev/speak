@@ -1,6 +1,6 @@
 // App/Pet/PetView.swift
 //
-// FE-1 (specs/frontend-identity.md §5): Pip's body. A 56×36pt capsule
+// FE-1 (specs/frontend-identity.md §5): Voice Desktop Pet's body. A 56×36pt capsule
 // containing five 3pt bars — "the body is a live waveform... bars-as-body
 // means every animation is a true signal readout, never decoration."
 //
@@ -18,9 +18,9 @@ import SwiftUI
 
 // MARK: - PetView
 
-/// Pip's rendered body: capsule + five bars + tally dot + hover-widened
+/// Voice Desktop Pet's rendered body: capsule + five bars + tally dot + hover-widened
 /// status lozenge. Purely a function of `state`, `level`, and `attentionCount` —
-/// no side effects, no engine access (hard rule: Pip never opens the mic).
+/// no side effects, no engine access (hard rule: Voice Desktop Pet never opens the mic).
 struct PetView: View {
     let state: PetState
     /// Smoothed 0…1 microphone/TTS level — same signal the Aurora HUD orb uses.
@@ -203,7 +203,7 @@ struct PetView: View {
 /// Per-bar heights for one animation frame, driven by `state` + `level` + `time`.
 /// Pure function — no Canvas/AppKit dependency — see `PetViewMathTests`.
 ///
-/// - Parameter enteredStateAt: The `time` at which Pip most recently entered
+/// - Parameter enteredStateAt: The `time` at which Voice Desktop Pet most recently entered
 ///   `state` (nil if unknown). Only consulted for `.listening`, to drive the
 ///   ~100ms anticipation dip on capture-start (animation-soul amendment,
 ///   2026-07-11) — the dip composes with spec §4's "ignites within 100ms"
