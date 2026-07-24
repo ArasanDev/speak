@@ -48,6 +48,7 @@ targets:
     platform: macOS
     sources:
       - App
+      - SpeakLLM
     dependencies:
       - target: SpeakCore
         embed: true
