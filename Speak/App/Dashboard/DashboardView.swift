@@ -35,19 +35,43 @@ struct DashboardView: View {
                 }
                 .listStyle(.sidebar)
 
-                Divider()
-                    .overlay(Color.speakCardBorder)
-
-                List([DashboardSection.settings], selection: $selection) { section in
-                    Label(section.title, systemImage: section.systemImage)
-                        .tag(section)
+                // Premium Glassmorphic Settings Footer Button
+                VStack(spacing: 0) {
+                    Divider()
+                        .overlay(Color.speakCardBorder.opacity(0.6))
+                    
+                    Button {
+                        selection = .settings
+                    } label: {
+                        HStack(spacing: SpeakSpacing.sm) {
+                            Image(systemName: DashboardSection.settings.systemImage)
+                                .font(.system(size: 14, weight: selection == .settings ? .bold : .medium))
+                                .foregroundStyle(selection == .settings ? Color.white : Color.secondary)
+                            Text(DashboardSection.settings.title)
+                                .font(.system(size: 13, weight: selection == .settings ? .semibold : .medium))
+                                .foregroundStyle(selection == .settings ? Color.white : Color.primary)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, SpeakSpacing.md)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(selection == .settings ? Color.accentColor : Color.white.opacity(0.06))
+                                .shadow(color: Color.black.opacity(selection == .settings ? 0.2 : 0.05), radius: selection == .settings ? 4 : 2, x: 0, y: 1)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.white.opacity(selection == .settings ? 0.3 : 0.1), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, SpeakSpacing.xs + 2)
+                    .padding(.vertical, SpeakSpacing.xs + 2)
                 }
-                .listStyle(.sidebar)
-                .frame(height: 40)
-                .scrollDisabled(true)
+                .background(.ultraThinMaterial)
             }
             .background(Color.speakSidebarBg)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
+            .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 250)
         } detail: {
             detail(for: selection)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

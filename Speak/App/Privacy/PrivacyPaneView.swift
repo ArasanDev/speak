@@ -65,38 +65,63 @@ struct PrivacyPaneView: View {
     private var headline: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
             HStack(spacing: SpeakSpacing.sm) {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.green)
-                Text("Nothing Leaves Your Device")
-                    .font(.system(size: 17, weight: .semibold))
+                ZStack {
+                    Circle()
+                        .fill(Color.green.opacity(0.15))
+                        .frame(width: 32, height: 32)
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.green)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Nothing Leaves Your Device")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.primary)
+                    Text("100% local architecture. Zero cloud APIs, zero telemetry, zero accounts.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
             }
-            Text("speak runs 100% locally. No cloud, no account, no tracking.")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, SpeakSpacing.md)
+        .padding(SpeakSpacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
     }
 
     // MARK: - Guarantee Rows
 
     private func guaranteeRow(_ title: String, _ description: String) -> some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            HStack(spacing: SpeakSpacing.sm) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.green)
+        HStack(spacing: SpeakSpacing.md) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.green)
+            
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
-                Spacer(minLength: 0)
+                    .foregroundStyle(.primary)
+                Text(description)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
             }
-            Text(description)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .padding(.leading, 20)
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(SpeakSpacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.03))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+        )
     }
 
     // MARK: - Verify Moat Button
@@ -107,44 +132,68 @@ struct PrivacyPaneView: View {
             showMoatResults = true
         }) {
             HStack(spacing: SpeakSpacing.sm) {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 14))
-                Text("Verify Moat")
+                Image(systemName: "shield.checkmark.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("Verify Privacy & Security Moat")
                     .font(.system(size: 13, weight: .semibold))
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .background(Color(nsColor: .systemBlue))
+            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .background(
+                LinearGradient(
+                    colors: [Color.blue.opacity(0.9), Color.blue],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             .foregroundStyle(.white)
-            .cornerRadius(6)
+            .cornerRadius(8)
+            .shadow(color: Color.blue.opacity(0.3), radius: 4, x: 0, y: 2)
         }
         .buttonStyle(.plain)
-        .padding(.vertical, SpeakSpacing.sm)
     }
 
     // MARK: - Trust Links
 
     private var trustLinks: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-            Text("Transparency & Community")
-                .font(.system(size: 13, weight: .semibold))
+            Text("Transparency & Open Source")
+                .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.primary)
 
-            trustLink("📖 Read the source code", "https://github.com/tamilarasanraja14/speak")
-            trustLink("📋 MIT License", "https://github.com/tamilarasanraja14/speak/blob/main/LICENSE")
-            trustLink("🐛 Report a privacy concern", "https://github.com/tamilarasanraja14/speak/issues")
+            HStack(spacing: SpeakSpacing.md) {
+                trustLinkCard("Source Code", "github.com", "https://github.com/tamilarasanraja14/speak", icon: "code")
+                trustLinkCard("MIT License", "Open Source", "https://github.com/tamilarasanraja14/speak/blob/main/LICENSE", icon: "doc.text")
+                trustLinkCard("Report Concern", "GitHub Issues", "https://github.com/tamilarasanraja14/speak/issues", icon: "exclamationmark.bubble")
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func trustLink(_ label: String, _ url: String) -> some View {
+    private func trustLinkCard(_ title: String, _ subtitle: String, _ url: String, icon: String) -> some View {
         Button(action: { openURL(url) }) {
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundStyle(.blue)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color.accentColor)
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Text(subtitle)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(SpeakSpacing.sm + 2)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }
@@ -153,31 +202,50 @@ struct PrivacyPaneView: View {
 
     private var comparisonSection: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.md) {
-            Text("Why speak?")
-                .font(.system(size: 13, weight: .semibold))
+            Text("Architecture Comparison")
+                .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.primary)
 
-            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-                Text("Wispr Flow:")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: SpeakSpacing.md) {
+                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                    Text("Cloud Competitors")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.red.opacity(0.9))
 
-                comparisonItem("❌ Cloud upload", "All audio processed on Wispr servers")
-                comparisonItem("❌ Login required", "Account needed, data tied to email")
-                comparisonItem("❌ Word limit", "Free plan restricted, paid tiers available")
-            }
+                    comparisonItem("Cloud Upload", "Audio sent to third-party servers")
+                    comparisonItem("Account Required", "Login & tracking tied to email")
+                    comparisonItem("Subscription Tiers", "Word limits & monthly subscriptions")
+                }
+                .padding(SpeakSpacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.red.opacity(0.05))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.red.opacity(0.15), lineWidth: 1)
+                )
 
-            Divider()
-                .padding(.vertical, SpeakSpacing.sm)
+                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                    Text("speak Architecture")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.green.opacity(0.9))
 
-            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-                Text("speak:")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-
-                comparisonItem("✅ Local only", "Everything runs on your Mac")
-                comparisonItem("✅ No account", "Free, forever, no signup needed")
-                comparisonItem("✅ Unlimited free", "Dictate as much as you want")
+                    comparisonItem("100% Local On-Device", "SpeechAnalyzer & Apple Silicon")
+                    comparisonItem("Zero Account Needed", "Instant open-source dictation")
+                    comparisonItem("100% Free Forever", "Unlimited dictation & neat-writing")
+                }
+                .padding(SpeakSpacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.green.opacity(0.05))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.green.opacity(0.15), lineWidth: 1)
+                )
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
