@@ -69,6 +69,9 @@ struct DashboardContext {
     /// contexts. [decision: AVB-7]
     var agentCallStore: (any AgentCallStoring)?
 
+    /// Agent Playground conversation persistence. Nil only in preview contexts.
+    var conversationStore: (any ConversationStoring)?
+
     /// AVB-7: "Answer by voice" row action — routes through
     /// `DictationController.answerAgentCallByVoice(_:)` (the same capture path
     /// `speak_request_input` uses). Nil in preview contexts.
@@ -95,6 +98,7 @@ struct DashboardContext {
         dictationCompletedPublisher: AnyPublisher<Void, Never>? = nil,
         rebindHotkey: ((HotkeyBinding) -> Void)? = nil,
         agentCallStore: (any AgentCallStoring)? = nil,
+        conversationStore: (any ConversationStoring)? = nil,
         answerAgentCallByVoice: ((AgentCall) async -> HumanResponseOutcome)? = nil,
         declineAgentCall: ((UUID) async -> Void)? = nil,
         dismissAgentCall: ((UUID) async -> Void)? = nil
@@ -111,6 +115,7 @@ struct DashboardContext {
         self.dictationCompletedPublisher = dictationCompletedPublisher
         self.rebindHotkey = rebindHotkey
         self.agentCallStore = agentCallStore
+        self.conversationStore = conversationStore
         self.answerAgentCallByVoice = answerAgentCallByVoice
         self.declineAgentCall = declineAgentCall
         self.dismissAgentCall = dismissAgentCall

@@ -18,6 +18,7 @@ enum DashboardSection: String, CaseIterable, Identifiable, Hashable {
     case transforms
     case scratchpad
     case inference
+    case playground
     case history
     /// AVB-7 (specs/avb7-durable-calls-design.md): non-terminal `AgentCall`s
     /// (prompt, urgency, elapsed time, mode) — the local inbox. [decision: AVB-7]
@@ -39,6 +40,7 @@ enum DashboardSection: String, CaseIterable, Identifiable, Hashable {
         case .transforms: return "Transforms"
         case .scratchpad: return "Scratchpad"
         case .inference:  return "Inference"
+        case .playground: return "Playground"
         case .history:    return "History"
         case .agentInbox: return "Agent Inbox"
         case .mcpAgents:  return "MCP & Agents"
@@ -66,6 +68,7 @@ enum DashboardSection: String, CaseIterable, Identifiable, Hashable {
         case .transforms: return "arrow.triangle.2.circlepath"
         case .scratchpad: return "note.text"
         case .inference:  return "cpu"
+        case .playground: return "bubble.left.and.text.bubble.right"
         case .history:    return "clock.arrow.circlepath"
         case .agentInbox: return "tray.and.arrow.down"
         case .mcpAgents:  return "server.rack"
