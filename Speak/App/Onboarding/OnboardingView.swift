@@ -213,12 +213,11 @@ private struct PermissionStepView: View {
                     }
                 } else {
                     VStack(spacing: 10) {
-                        Button(isWaiting ? "Waiting for permission\u{2026}" : actionLabel) {
+                        Button(actionLabel) {
                             onAction()
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
-                        .disabled(isWaiting)
 
                         // Open System Settings link — always enabled for
                         // Accessibility and Input Monitoring steps, so the user
@@ -233,12 +232,12 @@ private struct PermissionStepView: View {
                             .foregroundStyle(.secondary)
                             .font(.caption)
                         } else {
-                            Button("Open System Settings") {
+                            Button(isWaiting ? "Re-check Accessibility / Open Settings →" : "Open System Settings") {
                                 onOpenSettings()
                             }
                             .buttonStyle(.plain)
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
+                            .foregroundStyle(isWaiting ? Color.blue : Color.secondary)
+                            .font(isWaiting ? .caption.bold() : .caption)
                         }
                     }
                 }
