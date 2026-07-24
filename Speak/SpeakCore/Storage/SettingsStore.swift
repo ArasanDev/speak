@@ -27,6 +27,7 @@
 //   All UserDefaults keys live in `Keys` to avoid typos and make the key
 //   namespace discoverable. There are no magic strings elsewhere in this file.
 
+import AVFoundation
 import CoreGraphics
 import Foundation
 import Observation
@@ -148,6 +149,10 @@ public final class SettingsStore: @unchecked Sendable {
         static let petEnabled            = "speak.settings.petEnabled"
         static let petPositions          = "speak.settings.petPositions"
         static let readbackEnabled       = "speak.settings.readbackEnabled"
+        static let ttsVoiceIdentifier    = "speak.settings.ttsVoiceIdentifier"
+        static let ttsSpeechRate         = "speak.settings.ttsSpeechRate"
+        static let ttsPitchMultiplier    = "speak.settings.ttsPitchMultiplier"
+        static let ttsVolume             = "speak.settings.ttsVolume"
     }
 
     // MARK: - Injected defaults (the testability seam)
@@ -186,7 +191,11 @@ public final class SettingsStore: @unchecked Sendable {
             // surprise cost to shipping it on by default — the toggle exists purely
             // to let a user hide the button, not to gate a background behavior.
             Keys.readbackEnabled: true,
-            Keys.petEnabled: false
+            Keys.petEnabled: false,
+            Keys.ttsVoiceIdentifier: "",
+            Keys.ttsSpeechRate: AVSpeechUtteranceDefaultSpeechRate,
+            Keys.ttsPitchMultiplier: Float(1.0),
+            Keys.ttsVolume: Float(1.0)
         ])
         // Enum defaults are handled via `?? fallback` at the getter level because
         // Codable JSON cannot be registered as a `[String: Any]` literal.
@@ -644,6 +653,18 @@ public final class SettingsStore: @unchecked Sendable {
         withMutation(keyPath: \.petEnabled) {
             defaults.set(true, forKey: Keys.petEnabled)
         }
+        withMutation(keyPath: \.ttsVoiceIdentifier) {
+            defaults.set("", forKey: Keys.ttsVoiceIdentifier)
+        }
+        withMutation(keyPath: \.ttsSpeechRate) {
+            defaults.set(AVSpeechUtteranceDefaultSpeechRate, forKey: Keys.ttsSpeechRate)
+        }
+        withMutation(keyPath: \.ttsPitchMultiplier) {
+            defaults.set(Float(1.0), forKey: Keys.ttsPitchMultiplier)
+        }
+        withMutation(keyPath: \.ttsVolume) {
+            defaults.set(Float(1.0), forKey: Keys.ttsVolume)
+        }
 
         SpeakLog.storage.info("SettingsStore reset to defaults")
     }
@@ -748,6 +769,65 @@ extension SettingsStore {
                 } else {
                     SpeakLog.storage.error("SettingsStore: failed to encode petPositions — value not persisted.")
                 }
+            }
+        }
+    }
+
+    // MARK: - TTS Voice Settings
+
+    /// Selected TTS voice identifier (e.g. `com.apple.speech.synthesis.voice.samantha`). Empty string = system default.
+    public var ttsVoiceIdentifier: String {
+        get {
+            access(keyPath: \.ttsVoiceIdentifier)
+            return defaults.string(forKey: Keys.ttsVoiceIdentifier) ?? ""
+        }
+        set {
+            withMutation(keyPath: \.ttsVoiceIdentifier) {
+                defaults.set(newValue, forKey: Keys.ttsVoiceIdentifier)
+            }
+        }
+    }
+
+    /// TTS speech rate multiplier (0.1 to 1.0, default: `AVSpeechUtteranceDefaultSpeechRate` ~0.5).
+    public var ttsSpeechRate: Float {
+        get {
+            access(keyPath: \.ttsSpeechRate)
+            let val = defaults.float(forKey: Keys.ttsSpeechRate)
+            return val > 0 ? val : AVSpeechUtteranceDefaultSpeechRate
+        }
+        set {
+            withMutation(keyPath: \.ttsSpeechRate) {
+                defaults.set(newValue, forKey: Keys.ttsSpeechRate)
+            }
+        }
+    }
+
+    /// TTS pitch multiplier (0.5 to 2.0, default: 1.0).
+    public var ttsPitchMultiplier: Float {
+        get {
+            access(keyPath: \.ttsPitchMultiplier)
+            let val = defaults.float(forKey: Keys.ttsPitchMultiplier)
+            return val > 0 ? val : 1.0
+        }
+        set {
+            withMutation(keyPath: \.ttsPitchMultiplier) {
+                defaults.set(newValue, forKey: Keys.ttsPitchMultiplier)
+            }
+        }
+    }
+
+    /// TTS volume (0.0 to 1.0, default: 1.0).
+    public var ttsVolume: Float {
+        get {
+            access(keyPath: \.ttsVolume)
+            if defaults.object(forKey: Keys.ttsVolume) == nil {
+                return 1.0
+            }
+            return defaults.float(forKey: Keys.ttsVolume)
+        }
+        set {
+            withMutation(keyPath: \.ttsVolume) {
+                defaults.set(newValue, forKey: Keys.ttsVolume)
             }
         }
     }

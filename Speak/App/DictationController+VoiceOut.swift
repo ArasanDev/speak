@@ -36,7 +36,14 @@ extension DictationController {
                 return
             }
             SpeakLog.voiceOut.info("DictationController: readback started — \(text.count, privacy: .public) chars.")
-            await self.voiceOut.speak(text, locale: self.settingsStore.language)
+            await self.voiceOut.speak(
+                text,
+                voiceIdentifier: self.settingsStore.ttsVoiceIdentifier,
+                rate: self.settingsStore.ttsSpeechRate,
+                pitch: self.settingsStore.ttsPitchMultiplier,
+                volume: self.settingsStore.ttsVolume,
+                locale: self.settingsStore.language
+            )
         }
     }
 }

@@ -92,27 +92,48 @@ public actor AppleSpeechSynthesizer: SpeechSynthesizing {
     public var isSpeaking: Bool { speaking }
 
     public func speak(_ text: String, locale: Locale) async {
+        await speak(
+            text,
+            voiceIdentifier: nil,
+            rate: AVSpeechUtteranceDefaultSpeechRate,
+            pitch: 1.0,
+            volume: 1.0,
+            locale: locale
+        )
+    }
+
+    public func speak(
+        _ text: String,
+        voiceIdentifier: String?,
+        rate: Float,
+        pitch: Float,
+        volume: Float,
+        locale: Locale
+    ) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             SpeakLog.voiceOut.info("AppleSpeechSynthesizer: speak() skipped — empty text.")
             return
         }
         // Never overlap utterances: interrupt whatever is currently playing.
-        // (H-2: "any hotkey press cuts TTS instantly" — the same stop path a
-        // new readback request takes.)
         if speaking {
             await stop()
         }
 
         let utterance = AVSpeechUtterance(string: trimmed)
-        // Fall back to en-US if the requested locale has no installed voice
-        // (e.g. a language pack the user hasn't downloaded) rather than
-        // silently producing no audio.
-        utterance.voice = AVSpeechSynthesisVoice(language: locale.identifier)
-            ?? AVSpeechSynthesisVoice(language: "en-US")
+        if let voiceIdentifier = voiceIdentifier, !voiceIdentifier.isEmpty,
+           let voice = AVSpeechSynthesisVoice(identifier: voiceIdentifier) {
+            utterance.voice = voice
+        } else {
+            utterance.voice = AVSpeechSynthesisVoice(language: locale.identifier)
+                ?? AVSpeechSynthesisVoice(language: "en-US")
+        }
+        utterance.rate = rate
+        utterance.pitchMultiplier = pitch
+        utterance.volume = volume
 
         speaking = true
-        SpeakLog.voiceOut.info("AppleSpeechSynthesizer: speak() — \(trimmed.count, privacy: .public) chars, locale=\(locale.identifier, privacy: .public).")
+        SpeakLog.voiceOut.info("AppleSpeechSynthesizer: speak() — \(trimmed.count, privacy: .public) chars, locale=\(locale.identifier, privacy: .public), voice=\(voiceIdentifier ?? "default", privacy: .public), rate=\(rate, privacy: .public), pitch=\(pitch, privacy: .public).")
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             self.continuation = continuation
             synthesizer.speak(utterance)

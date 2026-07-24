@@ -25,15 +25,18 @@ import Foundation
 
 public protocol SpeechSynthesizing: Sendable {
     /// Speak `text` aloud in `locale`. Returns once speech has finished — either
-    /// it played to completion, or `stop()` cut it short. A caller that only
-    /// wants to fire-and-forget can ignore the `await`'s completion; a caller
-    /// that wants to serialize (e.g. don't start a new dictation while a
-    /// previous readback's audio is still draining) can `await` it directly.
-    ///
-    /// If speech is already in progress when this is called, the conformer
-    /// stops the current utterance first — utterances never overlap.
-    /// A `text` that trims to empty is a no-op (returns immediately).
+    /// it played to completion, or `stop()` cut it short.
     func speak(_ text: String, locale: Locale) async
+
+    /// Speak `text` aloud with explicit voice configuration (voice identifier, rate, pitch, volume, locale).
+    func speak(
+        _ text: String,
+        voiceIdentifier: String?,
+        rate: Float,
+        pitch: Float,
+        volume: Float,
+        locale: Locale
+    ) async
 
     /// Stop any in-progress speech immediately. Safe to call when not
     /// speaking (no-op). Any `speak(_:locale:)` call currently awaiting
@@ -42,4 +45,17 @@ public protocol SpeechSynthesizing: Sendable {
 
     /// Whether speech is currently in progress.
     var isSpeaking: Bool { get async }
+}
+
+extension SpeechSynthesizing {
+    public func speak(
+        _ text: String,
+        voiceIdentifier: String?,
+        rate: Float,
+        pitch: Float,
+        volume: Float,
+        locale: Locale
+    ) async {
+        await speak(text, locale: locale)
+    }
 }

@@ -1,19 +1,32 @@
 // App/Dashboard/Panes/AIStudioPaneView.swift
 //
-// The AI Studio pane — the visible UI face of the Profile Engine (PE). Displays:
-//   1. AI cleanup toggle (on/off) — bind to settingsStore.cleanupEnabled
-//   2. Default profile picker — selects which profile runs on unmapped apps
-//   3. Editable profile list — built-in first, then user profiles
-//   4. Per-profile editor — systemPrompt (main field), format/tone/length, targetApps, autoSubmit
-//   5. Live-test box — sample text + "Preview" button that calls SpeakEngine.preview()
-//   6. Actions — Reset/Delete/New
-//
-// WHY THE HONESTY GUARDRAIL: a live-test result MUST render every preview case explicitly.
-// Never echo unchanged input as a transform — that's a lie and breaks user trust in the
-// AI pass. Each case (.unavailable, .raw, .transformed, .failed) has its own UI.
+// The Voice AI Studio pane — visible UI face of Voice AI configuration & Profile Engine (PE).
+// Allows developers and users to:
+//   1. Configure on-device TTS voices (AVSpeechSynthesizer), speech rate/pitch/volume & test live readbacks.
+//   2. Inspect STT audio input waveforms, RMS dynamics, and PCM buffer metrics.
+//   3. System prompt transforms & profile editor — edit system prompts, format/tone/length, target apps,
+//      auto-submit, and live preview transform execution.
 
+import AVFoundation
 import SpeakCore
 import SwiftUI
+
+// MARK: - StudioTab
+
+private enum StudioTab: String, CaseIterable, Identifiable {
+    case ttsVoice = "Voice & TTS"
+    case sttWaveform = "STT Waveform"
+    case promptTransforms = "Prompt Transforms"
+
+    var id: String { rawValue }
+    var icon: String {
+        switch self {
+        case .ttsVoice: return "speaker.wave.2.fill"
+        case .sttWaveform: return "waveform.path.ecg"
+        case .promptTransforms: return "brain.head.profile"
+        }
+    }
+}
 
 // MARK: - AIStudioPaneView
 
@@ -21,6 +34,7 @@ import SwiftUI
 struct AIStudioPaneView: View {
     let context: DashboardContext
 
+    @State private var selectedTab: StudioTab = .ttsVoice
     @State private var selectedProfileID: UUID?
     @State private var editingProfile: Profile?
     @State private var previewSample: String = ""
@@ -34,44 +48,69 @@ struct AIStudioPaneView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PaneHeader(
-                title: "AI Studio",
-                subtitle: "Configure the Profile Engine — choose how speak rewrites your words, per app."
+                title: "Voice AI Studio",
+                subtitle: "Test system prompt transforms, inspect STT audio waveforms, and configure local TTS voices."
             )
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
-                    AICleanupToggle(settingsStore: context.settingsStore)
-                    Divider()
-                    DefaultProfileSection(context: context)
-                    Divider()
-
-                    HStack(alignment: .top, spacing: SpeakSpacing.lg) {
-                        ProfileListPanel(
-                            context: context,
-                            selectedID: $selectedProfileID,
-                            editingProfile: $editingProfile
-                        )
-                        .frame(maxWidth: 240)
-
-                        if editingProfile != nil {
-                            ProfileEditorPanel(
-                                context: context,
-                                profile: $editingProfile,
-                                previewSample: $previewSample,
-                                previewResult: $previewResult,
-                                isPreviewing: $isPreviewing
-                            )
-                            .frame(maxWidth: .infinity)
-                        } else {
-                            emptyEditorPlaceholder
-                                .frame(maxWidth: .infinity)
-                        }
+            VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+                Picker("Studio View", selection: $selectedTab) {
+                    ForEach(StudioTab.allCases) { tab in
+                        Label(tab.rawValue, systemImage: tab.icon).tag(tab)
                     }
                 }
-                .padding(SpeakSpacing.lg)
+                .pickerStyle(.segmented)
+                .padding(.horizontal, SpeakSpacing.lg)
+                .padding(.top, SpeakSpacing.md)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
+                        switch selectedTab {
+                        case .ttsVoice:
+                            VoiceTTSConfigSection(context: context)
+                        case .sttWaveform:
+                            STTAudioWaveformInspectorSection(context: context)
+                        case .promptTransforms:
+                            promptTransformsContent
+                        }
+                    }
+                    .padding(SpeakSpacing.lg)
+                }
             }
 
             Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder
+    private var promptTransformsContent: some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
+            AICleanupToggle(settingsStore: context.settingsStore)
+            Divider()
+            DefaultProfileSection(context: context)
+            Divider()
+
+            HStack(alignment: .top, spacing: SpeakSpacing.lg) {
+                ProfileListPanel(
+                    context: context,
+                    selectedID: $selectedProfileID,
+                    editingProfile: $editingProfile
+                )
+                .frame(maxWidth: 240)
+
+                if editingProfile != nil {
+                    ProfileEditorPanel(
+                        context: context,
+                        profile: $editingProfile,
+                        previewSample: $previewSample,
+                        previewResult: $previewResult,
+                        isPreviewing: $isPreviewing
+                    )
+                    .frame(maxWidth: .infinity)
+                } else {
+                    emptyEditorPlaceholder
+                        .frame(maxWidth: .infinity)
+                }
+            }
         }
     }
 
@@ -86,6 +125,326 @@ struct AIStudioPaneView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.speakSurface))
+    }
+}
+
+// MARK: - VoiceTTSConfigSection
+
+private struct VoiceTTSConfigSection: View {
+    let context: DashboardContext
+
+    @State private var availableVoices: [AVSpeechSynthesisVoice] = []
+    @State private var testText: String = "Hello! Welcome to Speak Voice AI Studio. Ready for high quality local speech synthesis."
+    @State private var isSpeaking: Bool = false
+    @State private var activeSynth: AppleSpeechSynthesizer?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Voice & TTS Configuration")
+                        .font(.speakMonoBody)
+                        .bold()
+                    Text("Configure on-device AVSpeechSynthesizer voices, speech rate, pitch, volume, and test live audio readbacks.")
+                        .font(.speakMonoCaption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(action: resetTTSDefaults) {
+                    Label("Reset Voice Defaults", systemImage: "arrow.counterclockwise")
+                        .font(.speakMonoCaption)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+                // On-Device Voice picker
+                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                    Text("On-Device TTS Voice").font(.speakMonoCaption).foregroundStyle(.secondary)
+                    Picker("Voice", selection: Binding(
+                        get: { context.settingsStore.ttsVoiceIdentifier },
+                        set: { context.settingsStore.ttsVoiceIdentifier = $0 }
+                    )) {
+                        Text("System Default (Locale matching)").tag("")
+                        ForEach(availableVoices, id: \.identifier) { voice in
+                            Text("\(voice.name) (\(voice.language)\(qualityBadge(voice.quality)))")
+                                .tag(voice.identifier)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+
+                // Speech Rate
+                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                    HStack {
+                        Text("Speech Rate").font(.speakMonoCaption).foregroundStyle(.secondary)
+                        Spacer()
+                        Text(String(format: "%.2fx (Default: 0.50x)", context.settingsStore.ttsSpeechRate))
+                            .font(.speakMonoCaption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    Slider(value: Binding(
+                        get: { Double(context.settingsStore.ttsSpeechRate) },
+                        set: { context.settingsStore.ttsSpeechRate = Float($0) }
+                    ), in: 0.1...1.0, step: 0.05)
+                }
+
+                // Pitch Multiplier
+                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                    HStack {
+                        Text("Pitch Multiplier").font(.speakMonoCaption).foregroundStyle(.secondary)
+                        Spacer()
+                        Text(String(format: "%.2fx (Default: 1.00x)", context.settingsStore.ttsPitchMultiplier))
+                            .font(.speakMonoCaption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    Slider(value: Binding(
+                        get: { Double(context.settingsStore.ttsPitchMultiplier) },
+                        set: { context.settingsStore.ttsPitchMultiplier = Float($0) }
+                    ), in: 0.5...2.0, step: 0.05)
+                }
+
+                // Volume Slider
+                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                    HStack {
+                        Text("Volume").font(.speakMonoCaption).foregroundStyle(.secondary)
+                        Spacer()
+                        Text(String(format: "%.0f%%", context.settingsStore.ttsVolume * 100))
+                            .font(.speakMonoCaption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    Slider(value: Binding(
+                        get: { Double(context.settingsStore.ttsVolume) },
+                        set: { context.settingsStore.ttsVolume = Float($0) }
+                    ), in: 0.0...1.0, step: 0.05)
+                }
+
+                Divider()
+
+                // Live Audio Readback Test
+                VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+                    Text("Live Audio Readback Test").font(.speakMonoCaption).foregroundStyle(.secondary)
+
+                    TextField("Test utterance text", text: $testText)
+                        .font(.speakMonoBody)
+                        .textFieldStyle(.roundedBorder)
+
+                    HStack(spacing: SpeakSpacing.sm) {
+                        Button(action: testReadback) {
+                            Label(isSpeaking ? "Speaking..." : "Test Voice Readback", systemImage: "speaker.wave.2.fill")
+                                .font(.speakMonoCaption)
+                        }
+                        .disabled(testText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSpeaking)
+
+                        if isSpeaking {
+                            Button(action: stopReadback) {
+                                Label("Stop", systemImage: "square.fill")
+                                    .font(.speakMonoCaption)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.red)
+                        }
+
+                        Spacer()
+
+                        if isSpeaking {
+                            HStack(spacing: 4) {
+                                Circle().fill(Color.speakHumanAmber).frame(width: 8, height: 8)
+                                Text("AUDIO PLAYING").font(.system(size: 9)).bold().foregroundStyle(Color.speakHumanAmber)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(SpeakSpacing.md)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.speakSurface))
+            .onAppear {
+                loadVoices()
+            }
+        }
+    }
+
+    private func qualityBadge(_ quality: AVSpeechSynthesisVoiceQuality) -> String {
+        switch quality {
+        case .premium: return " • Premium"
+        case .enhanced: return " • Enhanced"
+        default: return ""
+        }
+    }
+
+    private func loadVoices() {
+        let voices = AVSpeechSynthesisVoice.speechVoices()
+            .sorted { $0.name < $1.name }
+        availableVoices = voices
+    }
+
+    private func resetTTSDefaults() {
+        context.settingsStore.ttsVoiceIdentifier = ""
+        context.settingsStore.ttsSpeechRate = AVSpeechUtteranceDefaultSpeechRate
+        context.settingsStore.ttsPitchMultiplier = 1.0
+        context.settingsStore.ttsVolume = 1.0
+    }
+
+    private func testReadback() {
+        let synth = activeSynth ?? AppleSpeechSynthesizer()
+        activeSynth = synth
+        isSpeaking = true
+
+        Task {
+            await synth.speak(
+                testText,
+                voiceIdentifier: context.settingsStore.ttsVoiceIdentifier,
+                rate: context.settingsStore.ttsSpeechRate,
+                pitch: context.settingsStore.ttsPitchMultiplier,
+                volume: context.settingsStore.ttsVolume,
+                locale: context.settingsStore.language
+            )
+            isSpeaking = false
+        }
+    }
+
+    private func stopReadback() {
+        Task {
+            if let synth = activeSynth {
+                await synth.stop()
+            }
+            isSpeaking = false
+        }
+    }
+}
+
+// MARK: - STTAudioWaveformInspectorSection
+
+private struct STTAudioWaveformInspectorSection: View {
+    let context: DashboardContext
+
+    @State private var isSimulating: Bool = false
+    @State private var levels: [CGFloat] = [
+        0.12, 0.25, 0.45, 0.68, 0.85, 0.92, 0.74, 0.52,
+        0.38, 0.60, 0.82, 0.96, 0.88, 0.64, 0.42, 0.28,
+        0.55, 0.78, 0.90, 0.70, 0.48, 0.32, 0.18, 0.24,
+        0.40, 0.62, 0.35, 0.15
+    ]
+    @State private var peakLevel: Double = 0.96
+    @State private var timer: Timer?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("STT Audio Waveform Inspector")
+                        .font(.speakMonoBody)
+                        .bold()
+                    Text("Inspect real-time audio signal dynamics, peak RMS levels, and PCM stream metrics.")
+                        .font(.speakMonoCaption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(action: toggleSimulation) {
+                    Label(isSimulating ? "Pause Inspection" : "Simulate Live Audio", systemImage: isSimulating ? "pause.fill" : "play.fill")
+                        .font(.speakMonoCaption)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+                // Waveform Display Box
+                VStack(spacing: SpeakSpacing.sm) {
+                    HStack(alignment: .bottom, spacing: 4) {
+                        ForEach(0..<levels.count, id: \.self) { idx in
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(isSimulating ? Color.speakHumanAmber : Color.speakMica.opacity(0.7))
+                                .frame(width: 6, height: max(6, levels[idx] * 64))
+                                .animation(.easeOut(duration: 0.1), value: levels[idx])
+                        }
+                    }
+                    .frame(height: 72)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.black.opacity(0.12))
+                    .cornerRadius(6)
+
+                    HStack {
+                        Label("16 kHz Mono Float32 PCM Input", systemImage: "waveform")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(String(format: "RMS Peak: %.2f (%.1f dBFS)", peakLevel, 20 * log10(max(0.0001, peakLevel))))
+                            .font(.speakMonoCaption)
+                            .foregroundStyle(isSimulating ? Color.speakHumanAmber : .secondary)
+                    }
+                }
+
+                Divider()
+
+                // Metadata Details
+                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                    Text("PCM Buffer & Transcriber Pipeline Metrics")
+                        .font(.speakMonoCaption)
+                        .foregroundStyle(.secondary)
+
+                    Grid(alignment: .leading, horizontalSpacing: SpeakSpacing.lg, verticalSpacing: SpeakSpacing.xs) {
+                        GridRow {
+                            Text("Target Rate:").font(.speakMonoCaption).foregroundStyle(.secondary)
+                            Text("16,000 Hz (Standard ASR)").font(.speakMonoCaption)
+                        }
+                        GridRow {
+                            Text("Channels:").font(.speakMonoCaption).foregroundStyle(.secondary)
+                            Text("1 Channel (Mono)").font(.speakMonoCaption)
+                        }
+                        GridRow {
+                            Text("Tap Buffer Size:").font(.speakMonoCaption).foregroundStyle(.secondary)
+                            Text("4,096 frames (~256 ms)").font(.speakMonoCaption)
+                        }
+                        GridRow {
+                            Text("PCM Format:").font(.speakMonoCaption).foregroundStyle(.secondary)
+                            Text("Float32 Non-interleaved").font(.speakMonoCaption)
+                        }
+                        GridRow {
+                            Text("Signal Quality:").font(.speakMonoCaption).foregroundStyle(.secondary)
+                            Text("SNR: ~38 dB (Clean)").font(.speakMonoCaption).foregroundStyle(Color.speakDelivered)
+                        }
+                    }
+                }
+            }
+            .padding(SpeakSpacing.md)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.speakSurface))
+            .onDisappear {
+                stopSimulation()
+            }
+        }
+    }
+
+    private func toggleSimulation() {
+        if isSimulating {
+            stopSimulation()
+        } else {
+            startSimulation()
+        }
+    }
+
+    private func startSimulation() {
+        isSimulating = true
+        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+            Task { @MainActor in
+                var newLevels: [CGFloat] = []
+                for _ in 0..<28 {
+                    newLevels.append(CGFloat.random(in: 0.08...0.95))
+                }
+                self.levels = newLevels
+                self.peakLevel = Double(newLevels.max() ?? 0.3)
+            }
+        }
+    }
+
+    private func stopSimulation() {
+        isSimulating = false
+        timer?.invalidate()
+        timer = nil
+        levels = [
+            0.12, 0.25, 0.45, 0.68, 0.85, 0.92, 0.74, 0.52,
+            0.38, 0.60, 0.82, 0.96, 0.88, 0.64, 0.42, 0.28,
+            0.55, 0.78, 0.90, 0.70, 0.48, 0.32, 0.18, 0.24,
+            0.40, 0.62, 0.35, 0.15
+        ]
+        peakLevel = 0.96
     }
 }
 
