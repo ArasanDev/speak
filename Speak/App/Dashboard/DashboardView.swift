@@ -106,21 +106,32 @@ struct DashboardView: View {
                 .clipped()
                 .tint(Color.speakSidebarSelection)
                 
-                ZStack(alignment: .topLeading) {
+                VStack(spacing: 0) {
+                    HStack(spacing: 12) {
+                        if mode != .full {
+                            Button(action: toggleSidebar) {
+                                Image(systemName: "sidebar.left")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.secondary)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .frame(width: 28, height: 28)
+                            .background(Color.speakCardBorder)
+                            .clipShape(Capsule())
+                        }
+                        
+                        Text(selection.title)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        
+                        Spacer()
+                    }
+                    .padding(.leading, mode == .hidden ? 80 : 16)
+                    .frame(height: mode == .full ? 44 : 36)
+                    
                     detail(for: selection)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    
-                    if mode != .full {
-                        Button(action: toggleSidebar) {
-                            Image(systemName: "sidebar.left")
-                                .font(.system(size: 16))
-                                .foregroundColor(.secondary)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.top, 16)
-                        .padding(.leading, mode == .hidden ? 80 : 26)
-                    }
                 }
                 .background(Color.speakCardCanvas)
                 .clipShape(RoundedRectangle(cornerRadius: 24))
