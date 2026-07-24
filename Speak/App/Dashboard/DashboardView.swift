@@ -12,87 +12,128 @@ struct DashboardView: View {
 
     let context: DashboardContext
 
+    enum SidebarDisplayMode: Equatable {
+        case full, rail, hidden
+    }
+
     /// The selected sidebar section. Seeded from `initialSection` (defaults to Home).
     @State private var selection: DashboardSection
-    @State private var isSidebarCollapsed = false
+    @State private var isSidebarManuallyToggled = false
 
     init(context: DashboardContext, initialSection: DashboardSection = .home) {
         self.context = context
         _selection = State(initialValue: initialSection)
     }
+    
+    private func effectiveSidebarMode(for width: CGFloat) -> SidebarDisplayMode {
+        if width < 600 {
+            return isSidebarManuallyToggled ? .full : .hidden
+        } else if width < 720 {
+            return isSidebarManuallyToggled ? .full : .rail
+        } else {
+            return isSidebarManuallyToggled ? .rail : .full
+        }
+    }
 
     private func toggleSidebar() {
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            isSidebarCollapsed.toggle()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            isSidebarManuallyToggled.toggle()
         }
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 0) {
-                HStack {
-                    Button(action: toggleSidebar) {
-                        Image(systemName: "sidebar.left")
-                            .font(.system(size: 16))
-                            .foregroundColor(.secondary)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.leading, 80) // Clear traffic lights
-                    Spacer()
-                }
-                .frame(height: 28)
-                
-                List(selection: $selection) {
-                    ForEach(DashboardSection.mainSections) { section in
-                        Label(section.title, systemImage: section.systemImage)
-                            .tag(section)
-                    }
-                }
-                .listStyle(.sidebar)
-                .scrollContentBackground(.hidden)
-                
-                Spacer(minLength: 0)
-                
-                List(selection: $selection) {
-                    Label(DashboardSection.settings.title, systemImage: DashboardSection.settings.systemImage)
-                        .tag(DashboardSection.settings)
-                }
-                .listStyle(.sidebar)
-                .scrollContentBackground(.hidden)
-                .frame(height: 52)
-                .scrollDisabled(true)
-            }
-            .frame(width: isSidebarCollapsed ? 0 : 220)
-            .opacity(isSidebarCollapsed ? 0 : 1)
-            .clipped()
-            .tint(Color.speakSidebarSelection)
+        GeometryReader { geo in
+            let width = geo.size.width
+            let mode = effectiveSidebarMode(for: width)
+            let isRail = mode == .rail
+            let sidebarWidth: CGFloat = mode == .full ? 220 : (isRail ? 54 : 0)
             
-            ZStack(alignment: .topLeading) {
-                detail(for: selection)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                
-                if isSidebarCollapsed {
-                    Button(action: toggleSidebar) {
-                        Image(systemName: "sidebar.left")
-                            .font(.system(size: 16))
-                            .foregroundColor(.secondary)
-                            .contentShape(Rectangle())
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    HStack {
+                        if mode == .full {
+                            Button(action: toggleSidebar) {
+                                Image(systemName: "sidebar.left")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.secondary)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.leading, 80) // Clear traffic lights
+                        }
+                        Spacer()
                     }
-                    .buttonStyle(.plain)
-                    .padding(24)
+                    .frame(height: 28)
+                    
+                    List(selection: $selection) {
+                        ForEach(DashboardSection.mainSections) { section in
+                            if isRail {
+                                Image(systemName: section.systemImage)
+                                    .font(.system(size: 16))
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                                    .help(section.title)
+                                    .tag(section)
+                            } else {
+                                Label(section.title, systemImage: section.systemImage)
+                                    .tag(section)
+                            }
+                        }
+                    }
+                    .listStyle(.sidebar)
+                    .scrollContentBackground(.hidden)
+                    
+                    Spacer(minLength: 0)
+                    
+                    List(selection: $selection) {
+                        if isRail {
+                            Image(systemName: DashboardSection.settings.systemImage)
+                                .font(.system(size: 16))
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .help(DashboardSection.settings.title)
+                                .tag(DashboardSection.settings)
+                        } else {
+                            Label(DashboardSection.settings.title, systemImage: DashboardSection.settings.systemImage)
+                                .tag(DashboardSection.settings)
+                        }
+                    }
+                    .listStyle(.sidebar)
+                    .scrollContentBackground(.hidden)
+                    .frame(height: 52)
+                    .scrollDisabled(true)
                 }
+                .frame(width: sidebarWidth)
+                .opacity(mode == .hidden ? 0 : 1)
+                .clipped()
+                .tint(Color.speakSidebarSelection)
+                
+                ZStack(alignment: .topLeading) {
+                    detail(for: selection)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    
+                    if mode != .full {
+                        Button(action: toggleSidebar) {
+                            Image(systemName: "sidebar.left")
+                                .font(.system(size: 16))
+                                .foregroundColor(.secondary)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 16)
+                        .padding(.leading, mode == .hidden ? 80 : 26)
+                    }
+                }
+                .background(Color.speakCardCanvas)
+                .clipShape(RoundedRectangle(cornerRadius: 24))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24)
+                        .stroke(Color.speakCardBorder, lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.05), radius: 12, y: 4)
+                .padding(16)
             }
-            .background(Color.speakCardCanvas)
-            .clipShape(RoundedRectangle(cornerRadius: 24))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24)
-                    .stroke(Color.speakCardBorder, lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.05), radius: 12, y: 4)
-            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 860, minHeight: 580)
+        .frame(minWidth: 480, minHeight: 480)
         .background(Color.speakWindowCanvas)
         .ignoresSafeArea(.all, edges: .top)
         .background(
