@@ -118,8 +118,8 @@ struct HomePaneView: View {
             Spacer(minLength: 0)
 
             if !ready {
-                Button(action: { /* Navigate to Settings */ }) {
-                    Text("Resolve")
+                Button(action: { context.showOnboarding?() }) {
+                    Text("Resolve Permissions →")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 12)

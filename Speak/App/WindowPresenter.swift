@@ -124,6 +124,7 @@ final class WindowPresenter {
             profileStore: dictationController?.profileStore ?? ProfileStore(),
             speakEngine: dictationController?.engine,
             permissionManager: permissionManager,
+            showOnboarding: { [weak self] in self?.showOnboarding() },
             dictationCompletedPublisher: dictationController?.dictationCompletedPublisher,
             rebindHotkey: { [weak self] binding in self?.dictationController?.rebindHotkey(binding) },
             agentCallStore: dictationController?.agentCallStore,
@@ -194,6 +195,23 @@ final class WindowPresenter {
                 // the top of showOnboardingIfNeeded() returns early on subsequent calls
                 // (hasCompletedOnboarding == true). Held for app lifetime; cost is small
                 // (one NSWindowController + OnboardingViewModel) and the pattern is uniform.
+            }
+            onboardingController = controller
+        }
+        onboardingController?.show()
+    }
+
+    /// Force show the onboarding setup flow regardless of `hasCompletedOnboarding`.
+    /// Called when the user clicks "Resolve" or "Fix Permissions" in the app UI.
+    func showOnboarding() {
+        if onboardingController == nil {
+            let controller = OnboardingWindowController(
+                permissionManager: permissionManager,
+                settings: settingsStore,
+                hotkeyFiredPublisher: hotkeyFiredPublisher
+            )
+            controller.onCompletion = { [weak self] in
+                self?.showDashboard()
             }
             onboardingController = controller
         }

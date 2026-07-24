@@ -43,6 +43,9 @@ struct DashboardContext {
     /// `var` so that `DashboardWindowController.updateContext()` can refresh it at show-time.
     var permissionManager: PermissionManager?
 
+    /// Callback to trigger permission resolution via Onboarding flow.
+    var showOnboarding: (() -> Void)?
+
     /// Publisher that fires when a dictation completes. Used by the Home pane to
     /// refresh recent dictations list. [decision P11-c: allows the dashboard to
     /// stay up-to-date when opened alongside active dictation.]
@@ -88,6 +91,7 @@ struct DashboardContext {
         profileStore: ProfileStore = ProfileStore(),
         speakEngine: SpeakEngine? = nil,
         permissionManager: PermissionManager? = nil,
+        showOnboarding: (() -> Void)? = nil,
         dictationCompletedPublisher: AnyPublisher<Void, Never>? = nil,
         rebindHotkey: ((HotkeyBinding) -> Void)? = nil,
         agentCallStore: (any AgentCallStoring)? = nil,
@@ -103,6 +107,7 @@ struct DashboardContext {
         self.profileStore = profileStore
         self.speakEngine = speakEngine
         self.permissionManager = permissionManager
+        self.showOnboarding = showOnboarding
         self.dictationCompletedPublisher = dictationCompletedPublisher
         self.rebindHotkey = rebindHotkey
         self.agentCallStore = agentCallStore

@@ -64,6 +64,7 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
         rebindHotkey: ((HotkeyBinding) -> Void)? = nil,
         speakEngine: SpeakEngine? = nil,
         permissionManager: PermissionManager? = nil,
+        showOnboarding: (() -> Void)? = nil,
         dictationCompletedPublisher: AnyPublisher<Void, Never>? = nil
     ) {
         if let hotkeyCombo { context.hotkeyCombo = hotkeyCombo }
@@ -71,6 +72,7 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
         if let rebindHotkey { context.rebindHotkey = rebindHotkey }
         if let speakEngine { context.speakEngine = speakEngine }
         if let permissionManager { context.permissionManager = permissionManager }
+        if let showOnboarding { context.showOnboarding = showOnboarding }
         if let dictationCompletedPublisher { context.dictationCompletedPublisher = dictationCompletedPublisher }
     }
 
