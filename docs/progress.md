@@ -7,6 +7,11 @@
 
 ## Current phase
 
+**Loop #75 (2026-07-24) — SwiftLint Cyclomatic Complexity & Line Length Violations Fixed COMPLETE.**
+- Refactored `Speak/SpeakCore/Hotkey/HotkeyBinding.swift`: replaced 74-case switch statement in `symbolForKeyCode(_:)` with a dictionary lookup table `keyCodeSymbolMap`, reducing cyclomatic complexity from 74 down to 1 (<= 10 limit).
+- Fixed line length in `Speak/SpeakCore/VoiceOut/AppleSpeechSynthesizer.swift` (line 136): split long `SpeakLog.voiceOut.info` call across multiple lines so all lines are <= 200 characters.
+- Verification passed: `make lint` (0 serious errors, exit 0), `make build` (exit 0), `make test` (216 tests passed, exit 0), `make verify-moat` (7/7 checks passed, exit 0).
+
 **Loop #74 (2026-07-24) — P14 Audit, AVB-5 Verification & Workspace Cleanup COMPLETE.**
 - Verified the AVB-5 live question-response round trip (`speak_request_input` question → real spoken answer) with human at the mic via Codex/Claude Code sessions. This completes the final AVB-5 done-condition.
 - Completed workspace cleanup, removing stale states and confirming all v0 readiness gates.

@@ -133,7 +133,13 @@ public actor AppleSpeechSynthesizer: SpeechSynthesizing {
         utterance.volume = volume
 
         speaking = true
-        SpeakLog.voiceOut.info("AppleSpeechSynthesizer: speak() — \(trimmed.count, privacy: .public) chars, locale=\(locale.identifier, privacy: .public), voice=\(voiceIdentifier ?? "default", privacy: .public), rate=\(rate, privacy: .public), pitch=\(pitch, privacy: .public).")
+        SpeakLog.voiceOut.info("""
+        AppleSpeechSynthesizer: speak() — \(trimmed.count, privacy: .public) chars, \
+        locale=\(locale.identifier, privacy: .public), \
+        voice=\(voiceIdentifier ?? "default", privacy: .public), \
+        rate=\(rate, privacy: .public), \
+        pitch=\(pitch, privacy: .public).
+        """)
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             self.continuation = continuation
             synthesizer.speak(utterance)

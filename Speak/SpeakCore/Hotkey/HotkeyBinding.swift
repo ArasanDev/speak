@@ -172,84 +172,89 @@ extension HotkeyBinding {
     }
 }
 
+private let keyCodeSymbolMap: [Int: String] = [
+    Int(kVK_Function): "Fn",
+    Int(kVK_RightCommand): "⌘",
+    Int(kVK_Command): "⌘",
+    Int(kVK_RightOption): "⌥",
+    Int(kVK_Option): "⌥",
+    Int(kVK_RightControl): "⌃",
+    Int(kVK_Control): "⌃",
+    Int(kVK_RightShift): "⇧",
+    Int(kVK_Shift): "⇧",
+    Int(kVK_Space): "Space",
+    Int(kVK_Return): "Return",
+    Int(kVK_Tab): "Tab",
+    Int(kVK_Delete): "Delete",
+    Int(kVK_Escape): "Esc",
+    Int(kVK_UpArrow): "↑",
+    Int(kVK_DownArrow): "↓",
+    Int(kVK_LeftArrow): "←",
+    Int(kVK_RightArrow): "→",
+    0: "A",
+    1: "S",
+    2: "D",
+    3: "F",
+    4: "H",
+    5: "G",
+    6: "Z",
+    7: "X",
+    8: "C",
+    9: "V",
+    11: "B",
+    12: "Q",
+    13: "W",
+    14: "E",
+    15: "R",
+    16: "Y",
+    17: "T",
+    18: "1",
+    19: "2",
+    20: "3",
+    21: "4",
+    22: "6",
+    23: "5",
+    24: "=",
+    25: "9",
+    26: "7",
+    27: "-",
+    28: "8",
+    29: "0",
+    30: "]",
+    31: "O",
+    32: "U",
+    33: "[",
+    34: "I",
+    35: "P",
+    37: "L",
+    38: "J",
+    39: "'",
+    40: "K",
+    41: ";",
+    42: "\\",
+    43: ",",
+    44: "/",
+    45: "N",
+    46: "M",
+    47: ".",
+    50: "`",
+    122: "F1",
+    120: "F2",
+    99: "F3",
+    118: "F4",
+    96: "F5",
+    97: "F6",
+    98: "F7",
+    100: "F8",
+    101: "F9",
+    109: "F10",
+    103: "F11",
+    111: "F12"
+]
+
 /// Helper function to map a key code to a printable key symbol.
 public func symbolForKeyCode(_ keyCode: Int) -> String {
-    switch keyCode {
-    case Int(kVK_Function):                         return "Fn"
-    case Int(kVK_RightCommand), Int(kVK_Command): return "⌘"
-    case Int(kVK_RightOption), Int(kVK_Option):    return "⌥"
-    case Int(kVK_RightControl), Int(kVK_Control):  return "⌃"
-    case Int(kVK_RightShift), Int(kVK_Shift):      return "⇧"
-    case Int(kVK_Space):        return "Space"
-    case Int(kVK_Return):       return "Return"
-    case Int(kVK_Tab):          return "Tab"
-    case Int(kVK_Delete):       return "Delete"
-    case Int(kVK_Escape):       return "Esc"
-    case Int(kVK_UpArrow):      return "↑"
-    case Int(kVK_DownArrow):    return "↓"
-    case Int(kVK_LeftArrow):    return "←"
-    case Int(kVK_RightArrow):   return "→"
-    case 0: return "A"
-    case 1: return "S"
-    case 2: return "D"
-    case 3: return "F"
-    case 4: return "H"
-    case 5: return "G"
-    case 6: return "Z"
-    case 7: return "X"
-    case 8: return "C"
-    case 9: return "V"
-    case 11: return "B"
-    case 12: return "Q"
-    case 13: return "W"
-    case 14: return "E"
-    case 15: return "R"
-    case 16: return "Y"
-    case 17: return "T"
-    case 18: return "1"
-    case 19: return "2"
-    case 20: return "3"
-    case 21: return "4"
-    case 22: return "6"
-    case 23: return "5"
-    case 24: return "="
-    case 25: return "9"
-    case 26: return "7"
-    case 27: return "-"
-    case 28: return "8"
-    case 29: return "0"
-    case 30: return "]"
-    case 31: return "O"
-    case 32: return "U"
-    case 33: return "["
-    case 34: return "I"
-    case 35: return "P"
-    case 37: return "L"
-    case 38: return "J"
-    case 39: return "'"
-    case 40: return "K"
-    case 41: return ";"
-    case 42: return "\\"
-    case 43: return ","
-    case 44: return "/"
-    case 45: return "N"
-    case 46: return "M"
-    case 47: return "."
-    case 50: return "`"
-    case 122: return "F1"
-    case 120: return "F2"
-    case 99:  return "F3"
-    case 118: return "F4"
-    case 96:  return "F5"
-    case 97:  return "F6"
-    case 98:  return "F7"
-    case 100: return "F8"
-    case 101: return "F9"
-    case 109: return "F10"
-    case 103: return "F11"
-    case 111: return "F12"
-    default: return "Key \(keyCode)"
-    }
+    keyCodeSymbolMap[keyCode] ?? "Key \(keyCode)"
 }
 
 /// Helper function to check whether a key code represents a standalone modifier.
