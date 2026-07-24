@@ -115,7 +115,67 @@ public extension Color {
         light: Color(red: 0xE5 / 255, green: 0xE2 / 255, blue: 0xDA / 255),
         dark: Color(red: 0x2B / 255, green: 0x2F / 255, blue: 0x3A / 255)
     )
+
+    // MARK: - Flow Border Spectra (AnimatedFlowBorderModifier)
+    //
+    // Each spectrum is an [Color] array designed to wrap cleanly as a
+    // repeating AngularGradient. The first and last element match so the
+    // gradient tiles without a visible seam.
+    // [decision: semantic arrays not inline literals; every use goes through
+    //  the modifier's `colors:` parameter so future palette changes are one-edit.]
+
+    /// On-Air / dictation-active border — warm amber → hot red → amber.
+    /// HARD RULE (mirrors speakOnAir): only show while mic is capturing.
+    static let speakFlowOnAir: [Color] = [
+        Color(red: 1.0, green: 0.698, blue: 0.353),   // humanAmber #FFB25A
+        Color(red: 1.0, green: 0.361, blue: 0.286),   // onAir #FF5C49
+        Color(red: 1.0, green: 0.2,   blue: 0.1  ),   // deep red pivot
+        Color(red: 1.0, green: 0.361, blue: 0.286),   // onAir mirror
+        Color(red: 1.0, green: 0.698, blue: 0.353),   // humanAmber close
+    ]
+
+    /// Agent-working border — violet → electric blue → violet.
+    static let speakFlowAgent: [Color] = [
+        Color(red: 0.616, green: 0.549, blue: 1.0),   // agentViolet #9D8CFF
+        Color(red: 0.2,   green: 0.5,   blue: 1.0),   // electric blue
+        Color(red: 0.0,   green: 0.75,  blue: 1.0),   // cyan pivot
+        Color(red: 0.2,   green: 0.5,   blue: 1.0),   // electric blue mirror
+        Color(red: 0.616, green: 0.549, blue: 1.0),   // agentViolet close
+    ]
+
+    /// Inference-running border — blue → cyan → violet → blue.
+    static let speakFlowInference: [Color] = [
+        Color(red: 0.2,   green: 0.5,   blue: 1.0),   // electric blue
+        Color(red: 0.0,   green: 0.85,  blue: 1.0),   // cyan
+        Color(red: 0.616, green: 0.549, blue: 1.0),   // agentViolet
+        Color(red: 0.4,   green: 0.2,   blue: 1.0),   // deep violet pivot
+        Color(red: 0.2,   green: 0.5,   blue: 1.0),   // electric blue close
+    ]
+
+    /// Hover / glass shimmer — subtle white sheen for always-on brand mark.
+    static let speakFlowGlass: [Color] = [
+        Color.white.opacity(0.08),
+        Color.white.opacity(0.35),
+        Color.white.opacity(0.08),
+        Color.white.opacity(0.35),
+        Color.white.opacity(0.08),
+    ]
+
+    /// Error state border — red pulse.
+    static let speakFlowError: [Color] = [
+        Color(red: 1.0, green: 0.2, blue: 0.2),
+        Color(red: 0.7, green: 0.0, blue: 0.0),
+        Color(red: 1.0, green: 0.2, blue: 0.2),
+    ]
+
+    /// Success / delivered border — green pulse.
+    static let speakFlowSuccess: [Color] = [
+        Color(red: 0.373, green: 0.749, blue: 0.561),  // speakDelivered #5FBF8F
+        Color(red: 0.0,   green: 0.6,   blue: 0.35 ),  // deep green pivot
+        Color(red: 0.373, green: 0.749, blue: 0.561),  // close
+    ]
 }
+
 
 // MARK: - Light/dark color helper
 

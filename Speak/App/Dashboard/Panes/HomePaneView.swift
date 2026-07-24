@@ -52,6 +52,8 @@ struct HomePaneView: View {
     
     @State private var isCTAHovered = false
     @State private var isPulseAnimating = false
+    /// Tracks whether dictation is actively recording — drives the On-Air flow border.
+    @State private var isRecording = false
 
     init(context: DashboardContext) {
         self.context = context
@@ -158,17 +160,17 @@ struct HomePaneView: View {
                 }
 
                 HStack(spacing: 16) {
-                    Image(systemName: "mic.fill")
+                    Image(systemName: isRecording ? "stop.fill" : "mic.fill")
                         .font(.system(size: 24, weight: .bold))
                         .foregroundStyle(.white)
                         .scaleEffect(isPulseAnimating ? 1.05 : 1.0)
                         .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulseAnimating)
                     
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Start Dictation")
+                        Text(isRecording ? "Stop Dictation" : "Start Dictation")
                             .font(.system(size: 18, weight: .bold))
                             .foregroundStyle(.white)
-                        Text("Powered by AI")
+                        Text(isRecording ? "Recording..." : "Powered by AI")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.white.opacity(0.8))
                     }
@@ -205,6 +207,11 @@ struct HomePaneView: View {
             }
         }
         .buttonStyle(.plain)
+        .flowBorder(
+            colors: Color.speakFlowOnAir,
+            cornerRadius: 20,
+            isActive: isRecording
+        )
         .onHover { hovering in
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 isCTAHovered = hovering
@@ -218,11 +225,25 @@ struct HomePaneView: View {
 
     private func startDictation() {
         guard let engine = context.speakEngine else { return }
-        Task {
-            do {
-                _ = try await engine.beginDictation()
-            } catch {
-                os.Logger(subsystem: "speak", category: "dashboard").error("Start dictation failed: \(error.localizedDescription)")
+
+        if isRecording {
+            Task {
+                do {
+                    _ = try await engine.endDictation()
+                } catch {
+                    os.Logger(subsystem: "speak", category: "dashboard").error("Stop dictation failed: \(error.localizedDescription)")
+                }
+                isRecording = false
+            }
+        } else {
+            Task {
+                do {
+                    _ = try await engine.beginDictation()
+                    isRecording = true
+                } catch {
+                    os.Logger(subsystem: "speak", category: "dashboard").error("Start dictation failed: \(error.localizedDescription)")
+                    isRecording = false
+                }
             }
         }
     }
@@ -300,6 +321,13 @@ struct HomePaneView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassCard()
+        .flowBorder(
+            colors: Color.speakFlowGlass,
+            lineWidth: 1,
+            cornerRadius: 16,
+            speed: 0.5,
+            isActive: true
+        )
     }
 
     // MARK: - Recent Dictations (last 5)
