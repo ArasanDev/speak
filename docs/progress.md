@@ -7,6 +7,12 @@
 
 ## Current phase
 
+**Loop #74 (2026-07-24) — P14 Audit, AVB-5 Verification & Workspace Cleanup COMPLETE.**
+- Verified the AVB-5 live question-response round trip (`speak_request_input` question → real spoken answer) with human at the mic via Codex/Claude Code sessions. This completes the final AVB-5 done-condition.
+- Completed workspace cleanup, removing stale states and confirming all v0 readiness gates.
+- P14 v0 Ship Gate Audit Passed: Moat audit passed 7/7 privacy checks (`make verify-moat`), and test suite succeeded with 0 failures (`make test`).
+- Documentation state is completely synchronized and immaculate.
+
 **Loop #73 (2026-07-22) — System Permissions Status & Re-arm Troubleshooter Card Added COMPLETE (commit `ce8b27d`).**
 - Added a dedicated **System Permissions** section to `SettingsView` (Hotkey & Input tab):
   - Displays live status: `🟢 Granted & Active` vs `⚠️ Missing / Disabled`.
