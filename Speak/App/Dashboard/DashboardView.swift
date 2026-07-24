@@ -28,57 +28,28 @@ struct DashboardView: View {
 
     var body: some View {
         NavigationSplitView {
-            VStack(spacing: 0) {
-                List(DashboardSection.mainSections, selection: $selection) { section in
-                    Label(section.title, systemImage: section.systemImage)
-                        .tag(section)
-                }
-                .listStyle(.sidebar)
-
-                // Premium Glassmorphic Settings Footer Button
-                VStack(spacing: 0) {
-                    Divider()
-                        .overlay(Color.speakCardBorder.opacity(0.6))
-                    
-                    Button {
-                        selection = .settings
-                    } label: {
-                        HStack(spacing: SpeakSpacing.sm) {
-                            Image(systemName: DashboardSection.settings.systemImage)
-                                .font(.system(size: 14, weight: selection == .settings ? .bold : .medium))
-                                .foregroundStyle(selection == .settings ? Color.white : Color.secondary)
-                            Text(DashboardSection.settings.title)
-                                .font(.system(size: 13, weight: selection == .settings ? .semibold : .medium))
-                                .foregroundStyle(selection == .settings ? Color.white : Color.primary)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.horizontal, SpeakSpacing.md)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(selection == .settings ? Color.accentColor : Color.white.opacity(0.06))
-                                .shadow(color: Color.black.opacity(selection == .settings ? 0.2 : 0.05), radius: selection == .settings ? 4 : 2, x: 0, y: 1)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(Color.white.opacity(selection == .settings ? 0.3 : 0.1), lineWidth: 1)
-                        )
+            List(selection: $selection) {
+                Section {
+                    ForEach(DashboardSection.mainSections) { section in
+                        Label(section.title, systemImage: section.systemImage)
+                            .tag(section)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, SpeakSpacing.xs + 2)
-                    .padding(.vertical, SpeakSpacing.xs + 2)
                 }
-                .background(.ultraThinMaterial)
+                
+                Section {
+                    Label(DashboardSection.settings.title, systemImage: DashboardSection.settings.systemImage)
+                        .tag(DashboardSection.settings)
+                }
             }
-            .background(Color.speakSidebarBg)
-            .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 250)
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
         } detail: {
             detail(for: selection)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.speakInk)
                 .navigationTitle(selection.title)
         }
-        .frame(minWidth: 840, minHeight: 560)
+        .frame(minWidth: 860, minHeight: 580)
         .background(Color.speakInk)
     }
 
