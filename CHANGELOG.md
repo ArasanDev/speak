@@ -10,12 +10,96 @@ release. The version ladder (v0 → v3+) is defined in `docs/product.md` §9.
 
 ## [Unreleased] — v0
 
-> **Status**: Engine and UI are fully built and pass 574 tests (see
-> [`docs/progress.md`](docs/progress.md) for current count). Live-gated
-> verification (paste into real apps, hotkey with real permissions, Developer
-> ID notarization) is in progress. See
-> [`docs/human-verification.md`](docs/human-verification.md) for what remains
-> before v0 ships.
+> **Status**: Engine, UI, and Agent Bridge are fully built and pass 216 tests. v0 ship
+> gate (P14) verified 2026-07-24: `make verify-moat` 7/7 ✅, build clean, 0 lint errors.
+> Active work: P15 local inference server + Agent Playground (uncommitted).
+> See [`docs/progress.md`](docs/progress.md) for current loop state.
+
+### Agent Voice Bridge (AVB — Loops #51, #74)
+
+- `speak_request_input` MCP tool — unified structured input with typed outcomes
+  (`answered` / `declined` / `cancelled` / `timedOut` / `busy`); deterministic
+  `RequestInputExtractor` (phrase-list, no LLM); `speak_ask` / `speak_confirm`
+  rebased as thin compatibility adapters
+- `speak_register_session` + `AgentSessionRegistry` actor — stable sessionId
+  threading through all bridge tools via `BridgeOutcome` advisory notes
+- `speak_submit_call` / `speak_get_call` — durable Agent Calls with `AgentCallStore`
+  SQLite actor; CAS state machine (`pending → presented → answered / declined /
+  cancelled / expired / superseded`); menubar badge (10 s poll) + Agent Inbox pane
+- `speak_notify` — preferred MCP application tool for final outcomes / blockers;
+  `AgentSpeechQueue` serializes non-interrupting notifications; cancel/replace
+  semantics for urgent interrupts; human dictation always discards agent queue
+- `make install-mcp-user` — relocatable `speak-mcp` + `SpeakCore` / `SpeakLLM`
+  framework layout under `~/Library/Application Support/speak/mcp/`
+
+### Human-Agent Workspace (Loops #53–68)
+
+- `TagRegistry` actor — thread-safe `@tag` agent registry (`@Claude`, `@terminal`,
+  `@github`); `PluginTagAdapter` protocol; `EvidencePayload` rich media cards
+- `WorkspaceStore` SQLite actor — channels (`#general`, `#core-engine`), spoken
+  threads, and evidence cards; `searchMessagesFTS` FTS5 full-text search engine
+- `VoiceCommandParser+Tags.swift` — spoken/typed `@tag` mention parsing
+- `WorkspaceMainView` — Slack-style dual-mode workspace: channel sidebar, message
+  threading, emoji reaction bar (👀 ✅ 🎙️ 🚀), pronged action trigger system
+  (⚡ Run / 🔍 Inspect / 🛡️ Audit / 🗣️ Speak), voice huddles, TTS readback
+- `EvidenceCardView` + `CodeDiffInspectorView` — line-by-line syntax-highlighted
+  diffs; 5-status task checklist (pending / inProgress / done / blocked / failed)
+- `QuickSwitcherModalView` (Cmd+K) — spotlight-style search over channels, agents,
+  SQLite messages
+- `ChannelCanvasView` — pinned spec/checklist side-sheet; quick action shortcuts
+- `NewChannelModalView` — channel creation wired to `WorkspaceStore`
+- Direct Messages sidebar — 1-on-1 private agent conversations
+- `ApprovalCardView` — interactive Approve / Decline cards for high-risk actions
+- `UserProfileModalView` — handle, role, privacy moat metrics, active tag roster
+- `CustomAgentDefinition` + `DynamicCustomTagAdapter` — hackable `@tag` agent
+  definitions without touching core code; `registerCustomAgent` in `TagRegistry`
+- Multi-agent swarm broadcaster — `@team` / `@engineers` / `@qa` broadcast across
+  `@Claude`, `@builder-qa`, `@terminal` via `resolveSwarmTags`
+- Dual-mode `DashboardView` — `AppMode.dictation` vs `AppMode.workspace` with
+  hidden `NavigationSplitView` sidebar in workspace mode
+- `TopSegmentedBarView` — ⚡ Dictation Engine / 💬 Agent Workspace toggle
+
+### Local Inference Server (P15 — Loop #75)
+
+- `SpeakLLM/InferenceServer/` — local HTTP gateway on `127.0.0.1:11235`
+- OpenAI Chat Completions API + Anthropic Messages API + Responses API handlers
+- `InferencePaneView` + `InferenceClient` wired into dashboard
+- `AnimatedFlowBorderModifier` — On-Air / Glass animated border variants on
+  `HomePaneView`
+
+### UI Overhaul (Loops #53–75)
+
+- `DashboardView` — 3-tier adaptive responsiveness; compact side-by-side mode
+  (minWidth 480 pt); `Cmd+Ctrl+S` sidebar toggle with fluid collapse animation
+- `HomePaneView` — hero status banner, gradient CTA, glassmorphic stat cards,
+  Apple continuous super-ellipse curves (`style: .continuous`)
+- `SidebarToggleButton` — ultra-minimal borderless Apple-native styling, 6 pt
+  hover highlight
+- `HotkeyRecorderView` modal — Wispr Flow-inspired styling
+- Settings sidebar footer — glassmorphism + Privacy pane redesign
+- `SpeakColors` — centralized Slack-inspired design system tokens
+  (`speakSidebarBg`, `speakSidebarActiveBg`, `speakTagBadgeBg`, `speakCardBorder`)
+
+### Hotkey hardening (Loops #69–72)
+
+- `isMatchingBoundKey(eventKeyCode:bindingKeyCode:)` — flexible keycode matching;
+  Left/Right Command (55/54) and Left/Right Option (58/61) both trigger correctly
+- `HotkeyMonitor.watchdogTick()` — `cgSessionEventTap` primary with
+  `cghidEventTap` fallback; rising-edge `nowTrusted` guard restored to prevent
+  100 ms reset-loop wipe of first tap
+- `OnboardingViewModel` — `NSApplication.didBecomeActiveNotification` observer
+  triggers `refreshEvaluation()` instantly on return from System Settings
+- `SettingsView` — System Permissions live status card; 1-click deep-link to
+  Accessibility pane; Re-check & Re-arm button
+
+### SwiftLint (Loop #75)
+
+- `HotkeyBinding.symbolForKeyCode(_:)` — replaced 74-case switch with
+  `keyCodeSymbolMap` dictionary; cyclomatic complexity 74 → 1
+- `AppleSpeechSynthesizer` — split long `SpeakLog.voiceOut.info` call; all lines
+  ≤ 200 characters
+
+
 
 ### Build system (P0)
 

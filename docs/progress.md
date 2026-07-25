@@ -7,6 +7,14 @@
 
 ## Current phase
 
+**Loop #76 (2026-07-25) — Docs Reconciliation COMPLETE. Next: P15 Inference + Agent Playground.**
+- Reconciled `docs/roadmap.md`: marked AVB-5 `[x]` (live round-trip verified Loop #74), AVB-6 `[x]` (Loop #51), AVB-7 `[x]` (Loop #51), P14 `[DONE]` with all sub-items checked.
+- Updated `CHANGELOG.md`: added Human-Agent Workspace, AVB bridge, Agent Voice Bridge, inference server, UI overhaul, SwiftLint fixes to [Unreleased] section.
+- **Next active work**: `P15` — complete and commit the in-progress SpeakLLM inference + Agent Playground feature:
+  - Modified (uncommitted): `AgentPlaygroundView.swift`, `StreamingChatClient.swift`, `InferenceRouter.swift`, `OpenAIChatCompletionsHandler.swift`
+  - Untracked (new): `ProvenanceReceipt.swift`, `StreamingCadenceEngine.swift`
+  - After commit, next gate: AVB-8 (Semantic events + attention)
+
 **Loop #75 (2026-07-24) — SwiftLint Cyclomatic Complexity & Line Length Violations Fixed COMPLETE.**
 - Refactored `Speak/SpeakCore/Hotkey/HotkeyBinding.swift`: replaced 74-case switch statement in `symbolForKeyCode(_:)` with a dictionary lookup table `keyCodeSymbolMap`, reducing cyclomatic complexity from 74 down to 1 (<= 10 limit).
 - Fixed line length in `Speak/SpeakCore/VoiceOut/AppleSpeechSynthesizer.swift` (line 136): split long `SpeakLog.voiceOut.info` call across multiple lines so all lines are <= 200 characters.
