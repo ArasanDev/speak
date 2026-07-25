@@ -406,13 +406,28 @@ struct TranscriptOverlayView: View {
         // is removed per the locked direction (overlay = live control, not settings).
         // A live profile-control affordance belongs here later (Profile Engine), not a gear.
         ZStack {
-            // Frosted-glass background — pulls from behind the panel.
-            VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            // Inner clipped card (frosted-glass background + HUD content).
+            ZStack {
+                // Frosted-glass background — pulls from behind the panel.
+                VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-            contentLayer
+                contentLayer
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            // Animated gradient border — layered OUTSIDE the inner clipShape so the
+            // glow blur bleeds naturally beyond the card edge. Uses the same
+            // RoundedRectangle corner radius for pixel-perfect alignment.
+            // [decision: outer-ZStack placement — glow must not be clipped by the
+            //  inner clipShape or the halo effect disappears entirely.]
+            AnimatedGradientBorder(
+                shape: RoundedRectangle(cornerRadius: 14, style: .continuous),
+                state: model.overlayState,
+                level: model.level,
+                reduceMotion: reduceMotion
+            )
         }
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .padding(2)  // prevent shadow clipping at the edge
         .onChange(of: model.overlayState) { _, newState in
             postAccessibilityAnnouncement(for: newState)

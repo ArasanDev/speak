@@ -53,14 +53,27 @@ struct AuroraOverlayView: View {
 
     var body: some View {
         ZStack {
-            VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
-                .clipShape(Capsule(style: .continuous))
+            // Inner clipped card (frosted-glass background + HUD content).
+            ZStack {
+                VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
+                    .clipShape(Capsule(style: .continuous))
 
-            contentLayer
+                contentLayer
+            }
+            // Capsule (vs. the classic HUD's rounded rectangle) is the primary
+            // shape differentiator for the Aurora style. [decision H-UI]
+            .clipShape(Capsule(style: .continuous))
+
+            // Animated gradient border — Capsule shape to match Aurora's silhouette,
+            // layered outside the inner clipShape so the glow halo bleeds naturally.
+            // [decision: outer-ZStack placement — same rationale as Classic HUD]
+            AnimatedGradientBorder(
+                shape: Capsule(style: .continuous),
+                state: model.overlayState,
+                level: model.level,
+                reduceMotion: reduceMotion
+            )
         }
-        // Capsule (vs. the classic HUD's rounded rectangle) is the primary
-        // shape differentiator for the Aurora style. [decision H-UI]
-        .clipShape(Capsule(style: .continuous))
         .padding(2)
         .onChange(of: model.overlayState) { _, newState in
             postAccessibilityAnnouncement(for: newState)
