@@ -398,6 +398,7 @@ private struct WaveformView: View {
 /// Renders four visual states: listening, processing, done, error.
 struct TranscriptOverlayView: View {
     let model: OverlayViewModel
+    let settingsStore: SettingsStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -416,21 +417,38 @@ struct TranscriptOverlayView: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-            // Animated gradient border — layered OUTSIDE the inner clipShape so the
-            // glow blur bleeds naturally beyond the card edge. Uses the same
-            // RoundedRectangle corner radius for pixel-perfect alignment.
-            // [decision: outer-ZStack placement — glow must not be clipped by the
-            //  inner clipShape or the halo effect disappears entirely.]
+            // Animated border layer — switches based on settingsStore.borderAnimationStyle
+            borderLayer
+        }
+        .padding(2)  // prevent shadow clipping at the edge
+        .onChange(of: model.overlayState) { _, newState in
+            postAccessibilityAnnouncement(for: newState)
+        }
+    }
+
+    @ViewBuilder
+    private var borderLayer: some View {
+        switch settingsStore.borderAnimationStyle {
+        case .none:
+            EmptyView()
+
+        case .fullGlow:
             AnimatedGradientBorder(
                 shape: RoundedRectangle(cornerRadius: 14, style: .continuous),
                 state: model.overlayState,
                 level: model.level,
                 reduceMotion: reduceMotion
             )
-        }
-        .padding(2)  // prevent shadow clipping at the edge
-        .onChange(of: model.overlayState) { _, newState in
-            postAccessibilityAnnouncement(for: newState)
+
+        case .edgeFlow:
+            EdgeFlowBorder(
+                shape: RoundedRectangle(cornerRadius: 14, style: .continuous),
+                state: model.overlayState,
+                level: model.level,
+                speed: settingsStore.borderFlowSpeed,
+                count: settingsStore.borderFlowCount,
+                reduceMotion: reduceMotion
+            )
         }
     }
 
@@ -813,7 +831,7 @@ struct OverlayKnobsRow: View {
     model.overlayState = .listening
     model.partialText = ""
     model.level = 0.0
-    return TranscriptOverlayView(model: model)
+    return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 340, height: 60)
 }
 
@@ -823,7 +841,7 @@ struct OverlayKnobsRow: View {
     model.overlayState = .listening
     model.partialText = "the quick brown fox"
     model.level = 0.6
-    return TranscriptOverlayView(model: model)
+    return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 340, height: 60)
 }
 
@@ -832,7 +850,7 @@ struct OverlayKnobsRow: View {
     let model = OverlayViewModel()
     model.overlayState = .processing
     model.isCleaningUp = true
-    return TranscriptOverlayView(model: model)
+    return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 340, height: 60)
 }
 
@@ -841,7 +859,7 @@ struct OverlayKnobsRow: View {
     let model = OverlayViewModel()
     model.overlayState = .processing
     model.isCleaningUp = false
-    return TranscriptOverlayView(model: model)
+    return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 340, height: 60)
 }
 
@@ -849,7 +867,7 @@ struct OverlayKnobsRow: View {
 #Preview("Done") {
     let model = OverlayViewModel()
     model.overlayState = .done
-    return TranscriptOverlayView(model: model)
+    return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 340, height: 60)
 }
 
@@ -860,7 +878,7 @@ struct OverlayKnobsRow: View {
     model.overlayState = .done
     model.onReadback = {}
     model.onReclean = {}
-    return TranscriptOverlayView(model: model)
+    return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 340, height: 60)
 }
 
@@ -869,7 +887,7 @@ struct OverlayKnobsRow: View {
     let model = OverlayViewModel()
     model.overlayState = .error
     model.errorReason = "Speech engine unavailable"
-    return TranscriptOverlayView(model: model)
+    return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 340, height: 60)
 }
 
@@ -878,7 +896,7 @@ struct OverlayKnobsRow: View {
     let model = OverlayViewModel()
     model.overlayState = .error
     model.errorReason = nil
-    return TranscriptOverlayView(model: model)
+    return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 340, height: 60)
 }
 
@@ -890,120 +908,8 @@ struct OverlayKnobsRow: View {
     model.overlayState = .listening
     model.partialText = "open the customization panel"
     model.isCodingPanelOpen = true
-    return TranscriptOverlayView(model: model)
+    return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 340, height: 60)
 }
 #endif
-// MARK: - AnimatedTranscriptView & FlowLayout
 
-struct AnimatedTranscriptView: View {
-    let text: String
-    @State private var previousText: String = ""
-    @State private var diffTokens: [DiffToken] = []
-    @State private var cleanupTask: Task<Void, Never>? = nil
-
-    var body: some View {
-        ScrollViewReader { _ in
-            ScrollView(.vertical, showsIndicators: false) {
-                FlowLayout(spacing: 4) {
-                    ForEach(Array(diffTokens.enumerated()), id: \.offset) { index, token in
-                        TokenView(token: token)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .onAppear {
-            previousText = text
-            let resolver = TextDiffResolver()
-            diffTokens = resolver.resolve(raw: "", cleaned: text)
-        }
-        .onChange(of: text) { _, newText in
-            let resolver = TextDiffResolver()
-            let tokens = resolver.resolve(raw: previousText, cleaned: newText)
-            
-            withAnimation(.easeInOut(duration: 0.2)) {
-                diffTokens = tokens
-            }
-            
-            // Clean up canceled tokens after delay
-            cleanupTask?.cancel()
-            cleanupTask = Task { @MainActor in
-                try? await Task.sleep(for: .seconds(0.8))
-                guard !Task.isCancelled else { return }
-                previousText = newText
-                let cleanTokens = resolver.resolve(raw: "", cleaned: newText)
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    diffTokens = cleanTokens
-                }
-            }
-        }
-    }
-}
-
-private struct TokenView: View {
-    let token: DiffToken
-    @State private var progress: CGFloat = 0
-
-    var body: some View {
-        Text(token.text)
-            .font(.speakMonoBody)
-            .foregroundStyle(token.state == .canceled ? .secondary : .primary)
-            .overlay(
-                Group {
-                    if token.state == .canceled {
-                        AnimatedStrikethroughLine(progress: progress)
-                            .stroke(Color.red, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                            .onAppear {
-                                withAnimation(.easeOut(duration: 0.2)) {
-                                    progress = 1.0
-                                }
-                            }
-                    }
-                }
-            )
-            // Canceled words look slightly faded
-            .opacity(token.state == .canceled ? 0.6 : 1.0)
-    }
-}
-
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = 4
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let result = FlowResult(in: proposal.width ?? .infinity, subviews: subviews, spacing: spacing)
-        return result.size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let result = FlowResult(in: bounds.width, subviews: subviews, spacing: spacing)
-        for (index, subview) in subviews.enumerated() {
-            let point = result.frames[index].origin
-            subview.place(at: CGPoint(x: point.x + bounds.minX, y: point.y + bounds.minY), proposal: .unspecified)
-        }
-    }
-
-    struct FlowResult {
-        var size: CGSize = .zero
-        var frames: [CGRect] = []
-        
-        init(in maxWidth: CGFloat, subviews: Subviews, spacing: CGFloat) {
-            var currentX: CGFloat = 0
-            var currentY: CGFloat = 0
-            var lineHeight: CGFloat = 0
-            
-            for subview in subviews {
-                let size = subview.sizeThatFits(.unspecified)
-                if currentX + size.width > maxWidth && currentX > 0 {
-                    currentX = 0
-                    currentY += lineHeight + spacing
-                    lineHeight = 0
-                }
-                frames.append(CGRect(origin: CGPoint(x: currentX, y: currentY), size: size))
-                currentX += size.width + spacing
-                lineHeight = max(lineHeight, size.height)
-            }
-            size = CGSize(width: maxWidth, height: currentY + lineHeight)
-        }
-    }
-}

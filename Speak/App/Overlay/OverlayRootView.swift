@@ -23,10 +23,10 @@ struct OverlayRootView: View {
     var body: some View {
         switch settingsStore.hudStyle {
         case .classic:
-            TranscriptOverlayView(model: model)
+            TranscriptOverlayView(model: model, settingsStore: settingsStore)
 
         case .aurora:
-            AuroraOverlayView(model: model)
+            AuroraOverlayView(model: model, settingsStore: settingsStore)
         }
     }
 }

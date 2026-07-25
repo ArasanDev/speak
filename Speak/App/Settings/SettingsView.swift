@@ -190,6 +190,8 @@ private struct GeneralSettingsTab: View {
 
             HUDStyleSection(store: store)
 
+            BorderStyleSection(store: store)
+
             PetSection(store: store)
 
             Section {

@@ -115,6 +115,33 @@ public enum HUDStyle: String, Codable, Sendable, Equatable {
     case aurora
 }
 
+/// Which border animation style to show on the recording HUD overlay.
+/// Default = `.none` — zero regression risk for existing users.
+public enum BorderAnimationStyle: String, Codable, Sendable, Equatable, CaseIterable {
+    /// No border animation — plain panel edges. (default)
+    case none
+    /// Full-panel rotating conic gradient glow (style 2).
+    case fullGlow
+    /// Traveling color chaser that moves along the border edges only (style 3).
+    case edgeFlow
+}
+
+/// Speed of the EdgeFlow border animation.
+public enum BorderFlowSpeed: String, Codable, Sendable, Equatable, CaseIterable {
+    case slow    // 6s per loop
+    case medium  // 3s per loop
+    case fast    // 1.5s per loop
+
+    /// Cycle duration in seconds.
+    public var cycleDuration: Double {
+        switch self {
+        case .slow: return 6.0
+        case .medium: return 3.0
+        case .fast: return 1.5
+        }
+    }
+}
+
 // MARK: - SettingsStore
 
 /// The single source of truth for all persisted user preferences in `speak`.
@@ -144,6 +171,9 @@ public final class SettingsStore: @unchecked Sendable {
         static let perAppContextEnabled  = "speak.settings.perAppContextEnabled"
         static let extraBindings         = "speak.settings.extraHotkeyBindings"
         static let hudStyle              = "speak.settings.hudStyle"
+        static let borderAnimationStyle  = "speak.settings.borderAnimationStyle"
+        static let borderFlowSpeed       = "speak.settings.borderFlowSpeed"
+        static let borderFlowCount       = "speak.settings.borderFlowCount"
         static let voiceActionsEnabled   = "speak.settings.voiceActionsEnabled"
         static let voiceActionsPrefix    = "speak.settings.voiceActionsPrefix"
         static let petEnabled            = "speak.settings.petEnabled"
@@ -185,6 +215,9 @@ public final class SettingsStore: @unchecked Sendable {
             Keys.appTheme: AppTheme.system.rawValue,
             Keys.perAppContextEnabled: true,
             Keys.hudStyle: HUDStyle.classic.rawValue,
+            Keys.borderAnimationStyle: BorderAnimationStyle.none.rawValue,
+            Keys.borderFlowSpeed: BorderFlowSpeed.medium.rawValue,
+            Keys.borderFlowCount: 1,
             Keys.voiceActionsPrefix: "hey speak",
             // [decision H-2] Default true: the readback affordance is inert until the
             // user presses it (no audio plays unprompted), so there is no privacy/
@@ -479,58 +512,6 @@ public final class SettingsStore: @unchecked Sendable {
         }
     }
 
-    // MARK: - Streaming settings (keystroke injection)
-
-    /// Whether raw (unprocessed) text is streamed character-by-character during dictation
-    /// when `streamingMode == .keystrokeInjection`.
-    ///
-    /// `true` (default): raw transcript is delivered live as you speak.
-    /// `false`: only cleaned text is streamed (after the LLM pass completes).
-    ///
-    /// Has no effect when `streamingMode == .off` (text is always delivered in a single paste).
-    public var streamingRawTextEnabled: Bool {
-        get {
-            access(keyPath: \.streamingRawTextEnabled)
-            return defaults.bool(forKey: Keys.streamingRawTextEnabled)
-        }
-        set {
-            withMutation(keyPath: \.streamingRawTextEnabled) {
-                defaults.set(newValue, forKey: Keys.streamingRawTextEnabled)
-            }
-        }
-    }
-
-    /// Whether keystroke injection (real-time text delivery) is active.
-    /// Default: `.keystrokeInjection`.
-    public var streamingMode: StreamingMode {
-        get {
-            access(keyPath: \.streamingMode)
-            let raw = defaults.string(forKey: Keys.streamingMode) ?? StreamingMode.keystrokeInjection.rawValue
-            return StreamingMode(rawValue: raw) ?? .keystrokeInjection
-        }
-        set {
-            withMutation(keyPath: \.streamingMode) {
-                defaults.set(newValue.rawValue, forKey: Keys.streamingMode)
-            }
-        }
-    }
-
-    // MARK: - Application theme (UI appearance)
-
-    /// The application appearance theme. Default: `.system` (follow macOS setting).
-    public var appTheme: AppTheme {
-        get {
-            access(keyPath: \.appTheme)
-            let raw = defaults.string(forKey: Keys.appTheme) ?? AppTheme.system.rawValue
-            return AppTheme(rawValue: raw) ?? .system
-        }
-        set {
-            withMutation(keyPath: \.appTheme) {
-                defaults.set(newValue.rawValue, forKey: Keys.appTheme)
-            }
-        }
-    }
-
     // MARK: - Voice Actions (H-1) & VoiceOut (H-2) — see extension below ([lint] type_body_length)
 
     // MARK: - Reset to defaults
@@ -552,6 +533,9 @@ public final class SettingsStore: @unchecked Sendable {
         access(keyPath: \.appTheme)
         access(keyPath: \.perAppContextEnabled)
         access(keyPath: \.hudStyle)
+        access(keyPath: \.borderAnimationStyle)
+        access(keyPath: \.borderFlowSpeed)
+        access(keyPath: \.borderFlowCount)
         access(keyPath: \.voiceActionsEnabled)
         access(keyPath: \.voiceActionsPrefix)
         access(keyPath: \.readbackEnabled)
@@ -595,6 +579,15 @@ public final class SettingsStore: @unchecked Sendable {
         withMutation(keyPath: \.hudStyle) {
             defaults.set(HUDStyle.classic.rawValue, forKey: Keys.hudStyle)
         }
+        withMutation(keyPath: \.borderAnimationStyle) {
+            defaults.set(BorderAnimationStyle.none.rawValue, forKey: Keys.borderAnimationStyle)
+        }
+        withMutation(keyPath: \.borderFlowSpeed) {
+            defaults.set(BorderFlowSpeed.medium.rawValue, forKey: Keys.borderFlowSpeed)
+        }
+        withMutation(keyPath: \.borderFlowCount) {
+            defaults.set(1, forKey: Keys.borderFlowCount)
+        }
         withMutation(keyPath: \.voiceActionsEnabled) {
             defaults.set(false, forKey: Keys.voiceActionsEnabled)
         }
@@ -629,6 +622,52 @@ public final class SettingsStore: @unchecked Sendable {
 // type_body_length cap — pure code motion, same file so the @Observable
 // macro's access/withMutation members remain reachable.
 extension SettingsStore {
+    // MARK: - Streaming settings (keystroke injection)
+
+    /// Whether raw (unprocessed) text is streamed character-by-character during dictation
+    /// when `streamingMode == .keystrokeInjection`.
+    public var streamingRawTextEnabled: Bool {
+        get {
+            access(keyPath: \.streamingRawTextEnabled)
+            return defaults.bool(forKey: Keys.streamingRawTextEnabled)
+        }
+        set {
+            withMutation(keyPath: \.streamingRawTextEnabled) {
+                defaults.set(newValue, forKey: Keys.streamingRawTextEnabled)
+            }
+        }
+    }
+
+    /// Whether keystroke injection (real-time text delivery) is active. Default: `.keystrokeInjection`.
+    public var streamingMode: StreamingMode {
+        get {
+            access(keyPath: \.streamingMode)
+            let raw = defaults.string(forKey: Keys.streamingMode) ?? StreamingMode.keystrokeInjection.rawValue
+            return StreamingMode(rawValue: raw) ?? .keystrokeInjection
+        }
+        set {
+            withMutation(keyPath: \.streamingMode) {
+                defaults.set(newValue.rawValue, forKey: Keys.streamingMode)
+            }
+        }
+    }
+
+    // MARK: - Application theme (UI appearance)
+
+    /// The application appearance theme. Default: `.system` (follow macOS setting).
+    public var appTheme: AppTheme {
+        get {
+            access(keyPath: \.appTheme)
+            let raw = defaults.string(forKey: Keys.appTheme) ?? AppTheme.system.rawValue
+            return AppTheme(rawValue: raw) ?? .system
+        }
+        set {
+            withMutation(keyPath: \.appTheme) {
+                defaults.set(newValue.rawValue, forKey: Keys.appTheme)
+            }
+        }
+    }
+
     // MARK: - HUD style (overlay visual style, H-UI)
 
     /// Visual style for the floating recording HUD. Default: `.classic`.
@@ -641,6 +680,51 @@ extension SettingsStore {
         set {
             withMutation(keyPath: \.hudStyle) {
                 defaults.set(newValue.rawValue, forKey: Keys.hudStyle)
+            }
+        }
+    }
+
+    // MARK: - Border animation settings
+
+    /// Border animation style for the overlay panel. Default: `.none`.
+    public var borderAnimationStyle: BorderAnimationStyle {
+        get {
+            access(keyPath: \.borderAnimationStyle)
+            let raw = defaults.string(forKey: Keys.borderAnimationStyle) ?? BorderAnimationStyle.none.rawValue
+            return BorderAnimationStyle(rawValue: raw) ?? .none
+        }
+        set {
+            withMutation(keyPath: \.borderAnimationStyle) {
+                defaults.set(newValue.rawValue, forKey: Keys.borderAnimationStyle)
+            }
+        }
+    }
+
+    /// Speed of the EdgeFlow border animation. Default: `.medium`.
+    public var borderFlowSpeed: BorderFlowSpeed {
+        get {
+            access(keyPath: \.borderFlowSpeed)
+            let raw = defaults.string(forKey: Keys.borderFlowSpeed) ?? BorderFlowSpeed.medium.rawValue
+            return BorderFlowSpeed(rawValue: raw) ?? .medium
+        }
+        set {
+            withMutation(keyPath: \.borderFlowSpeed) {
+                defaults.set(newValue.rawValue, forKey: Keys.borderFlowSpeed)
+            }
+        }
+    }
+
+    /// Number of flowing light blobs in EdgeFlow animation (1...3). Default: `1`.
+    public var borderFlowCount: Int {
+        get {
+            access(keyPath: \.borderFlowCount)
+            let val = defaults.integer(forKey: Keys.borderFlowCount)
+            return (1...3).contains(val) ? val : 1
+        }
+        set {
+            withMutation(keyPath: \.borderFlowCount) {
+                let clamped = min(max(newValue, 1), 3)
+                defaults.set(clamped, forKey: Keys.borderFlowCount)
             }
         }
     }

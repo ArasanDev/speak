@@ -45,6 +45,7 @@ import SwiftUI
 /// (hosted inside the same `TranscriptOverlayPanel`), different visual voice.
 struct AuroraOverlayView: View {
     let model: OverlayViewModel
+    let settingsStore: SettingsStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Orb frame size. [decision H-UI: 44pt — matches the classic HUD's
@@ -64,19 +65,38 @@ struct AuroraOverlayView: View {
             // shape differentiator for the Aurora style. [decision H-UI]
             .clipShape(Capsule(style: .continuous))
 
-            // Animated gradient border — Capsule shape to match Aurora's silhouette,
-            // layered outside the inner clipShape so the glow halo bleeds naturally.
-            // [decision: outer-ZStack placement — same rationale as Classic HUD]
+            // Animated border layer — switches based on settingsStore.borderAnimationStyle
+            borderLayer
+        }
+        .padding(2)
+        .onChange(of: model.overlayState) { _, newState in
+            postAccessibilityAnnouncement(for: newState)
+        }
+    }
+
+    @ViewBuilder
+    private var borderLayer: some View {
+        switch settingsStore.borderAnimationStyle {
+        case .none:
+            EmptyView()
+
+        case .fullGlow:
             AnimatedGradientBorder(
                 shape: Capsule(style: .continuous),
                 state: model.overlayState,
                 level: model.level,
                 reduceMotion: reduceMotion
             )
-        }
-        .padding(2)
-        .onChange(of: model.overlayState) { _, newState in
-            postAccessibilityAnnouncement(for: newState)
+
+        case .edgeFlow:
+            EdgeFlowBorder(
+                shape: Capsule(style: .continuous),
+                state: model.overlayState,
+                level: model.level,
+                speed: settingsStore.borderFlowSpeed,
+                count: settingsStore.borderFlowCount,
+                reduceMotion: reduceMotion
+            )
         }
     }
 
@@ -373,7 +393,7 @@ private struct AmbientOrbView: View {
     model.overlayState = .listening
     model.partialText = ""
     model.level = 0.0
-    return AuroraOverlayView(model: model)
+    return AuroraOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 340, height: 80)
 }
 
@@ -382,7 +402,7 @@ private struct AmbientOrbView: View {
     model.overlayState = .listening
     model.partialText = "the quick brown fox jumps over the lazy dog"
     model.level = 0.6
-    return AuroraOverlayView(model: model)
+    return AuroraOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 340, height: 80)
 }
 
@@ -390,14 +410,14 @@ private struct AmbientOrbView: View {
     let model = OverlayViewModel()
     model.overlayState = .processing
     model.isCleaningUp = true
-    return AuroraOverlayView(model: model)
+    return AuroraOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 340, height: 80)
 }
 
 #Preview("Aurora — done") {
     let model = OverlayViewModel()
     model.overlayState = .done
-    return AuroraOverlayView(model: model)
+    return AuroraOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 340, height: 80)
 }
 
@@ -405,7 +425,7 @@ private struct AmbientOrbView: View {
     let model = OverlayViewModel()
     model.overlayState = .error
     model.errorReason = "Speech engine unavailable"
-    return AuroraOverlayView(model: model)
+    return AuroraOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 340, height: 80)
 }
 #endif
