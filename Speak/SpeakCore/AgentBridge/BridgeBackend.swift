@@ -225,4 +225,14 @@ public protocol BridgeBackend: Sendable {
     /// `speak_get_call`. `nil` inside the outcome means "not found or not yours"
     /// — isolation, never an error. [decision: AVB-7]
     func getCall(callId: UUID, sessionId: String?) async -> Result<BridgeOutcome<AgentCall?>, BridgeUnavailable>
+
+    // MARK: - Layer 4
+
+    func askUser(
+        prompt: String, mode: String?, sessionId: String?
+    ) async -> Result<BridgeOutcome<String>, BridgeUnavailable>
+
+    func streamSpeech(
+        text: String, isFinal: Bool, sessionId: String?
+    ) async -> Result<BridgeOutcome<String>, BridgeUnavailable>
 }

@@ -478,4 +478,37 @@ extension DictationController {
             return .timedOut
         }
     }
+
+    // MARK: - Layer 4 askUser / streamSpeech
+
+    func cliAskUser(prompt: String, mode: String?) async -> CLIAskOutcome {
+        var args: [String: JSONValue] = ["prompt": .string(prompt)]
+        if let mode = mode {
+            args["mode"] = .string(mode)
+        }
+        guard let validCall = MCPToolCallRequest(params: .object(["name": .string("speak_ask_user"), "arguments": .object(args)])) else {
+            return .timedOut
+        }
+        let result = await speakMCPServer.handleToolCall(validCall)
+        if result.isError {
+            return .timedOut
+        }
+        let responseText = result.content.compactMap { block -> String? in
+            if case .text(let t) = block { return t }
+            return nil
+        }.joined(separator: "\n")
+        return .answered(responseText)
+    }
+
+    func cliStreamSpeech(text: String, isFinal: Bool) async -> String {
+        let args: [String: JSONValue] = ["text": .string(text), "isFinal": .bool(isFinal)]
+        guard let validCall = MCPToolCallRequest(params: .object(["name": .string("speak_stream_speech"), "arguments": .object(args)])) else {
+            return "error: invalid tool request"
+        }
+        let result = await speakMCPServer.handleToolCall(validCall)
+        return result.content.compactMap { block -> String? in
+            if case .text(let t) = block { return t }
+            return nil
+        }.joined(separator: "\n")
+    }
 }

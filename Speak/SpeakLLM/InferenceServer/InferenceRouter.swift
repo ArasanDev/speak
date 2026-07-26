@@ -150,6 +150,18 @@ public actor InferenceRouter {
         return chunkTextIntoWords(result.text)
     }
 
+    /// Streaming with provenance metadata for the UI colophon.
+    public func streamWithProvenance(
+        model: String,
+        messages: [RouterMessage],
+        temperature: Double?,
+        maxTokens: Int?
+    ) async throws -> (chunks: [String], result: InferenceResult) {
+        let result = try await complete(model: model, messages: messages,
+                                        temperature: temperature, maxTokens: maxTokens)
+        return (chunkTextIntoWords(result.text), result)
+    }
+
     // MARK: - Model Resolution
 
     /// Resolves a model identifier to its canonical form.

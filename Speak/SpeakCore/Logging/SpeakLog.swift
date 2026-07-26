@@ -27,4 +27,7 @@ public enum SpeakLog {
     public static let voiceActions = Logger(subsystem: subsystem, category: "voice-actions")
     /// H-2: VoiceOut readback (`SpeechSynthesizing` / `AppleSpeechSynthesizer`).
     public static let voiceOut    = Logger(subsystem: subsystem, category: "voiceOut")
+    /// Layer 2: Conversation state machine & loop manager.
+    public static let conversation = Logger(subsystem: subsystem, category: "conversation")
 }
+

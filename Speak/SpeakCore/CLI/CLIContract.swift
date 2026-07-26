@@ -120,6 +120,10 @@ public enum CLICommand: String, Codable, Sendable {
     /// AVB-7: `speak_get_call`. Same shape as `.submitCall` — no server-side wait,
     /// caller polls on its own interval. [decision: AVB-7]
     case getCall
+    /// Layer 4: speak_ask_user in Magenta conversation mode.
+    case askUser
+    /// Layer 4: speak_stream_speech for response readback and overlay text stream.
+    case streamSpeech
 }
 
 /// The JSON envelope wrapping a `CLICommand` over the wire.

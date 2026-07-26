@@ -493,7 +493,7 @@ private func idempotencyDecision(command: CLICommand, icon: MenubarIcon) -> Idem
     case .status:
         return .read
 
-    case .say, .ask, .confirm, .requestInput, .registerSession, .submitCall, .getCall:
+    case .say, .ask, .confirm, .requestInput, .registerSession, .submitCall, .getCall, .askUser, .streamSpeech:
         // H-3/AVB-5/AVB-6/AVB-7: say/ask/confirm/requestInput/registerSession/
         // submitCall/getCall are not gated by this idempotency table — say is
         // always dispatched (no icon precondition); the rest are handled by the

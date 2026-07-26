@@ -146,9 +146,10 @@ public enum OpenAIChatCompletionsHandler {
     ) async {
         let completionId = "chatcmpl-speak-\(UUID().uuidString.prefix(12))"
         let created = Int(Date().timeIntervalSince1970)
+        let startTime = ContinuousClock.now
 
         do {
-            let chunks = try await router.stream(
+            let (chunks, result) = try await router.streamWithProvenance(
                 model: chatRequest.model,
                 messages: chatRequest.messages,
                 temperature: chatRequest.temperature,
@@ -181,6 +182,23 @@ public enum OpenAIChatCompletionsHandler {
                    let chunkStr = String(data: chunkData, encoding: .utf8) {
                     await sendData(HTTPResponseBuilder.buildSSEChunk(data: chunkStr), connection: connection)
                 }
+            }
+
+            // Emit provenance event before [DONE].
+            let elapsed = startTime.duration(to: ContinuousClock.now)
+            let latencyMS = Int(elapsed.components.seconds * 1000
+                + elapsed.components.attoseconds / 1_000_000_000_000)
+            let receipt = ProvenanceReceipt(
+                backendID: result.model,
+                requestedModel: chatRequest.model,
+                latencyMS: latencyMS,
+                promptTokens: result.promptTokens,
+                completionTokens: result.completionTokens,
+                fellBack: result.model != chatRequest.model
+            )
+            if let receiptData = try? JSONSerialization.data(withJSONObject: receipt.toJSON()),
+               let receiptStr = String(data: receiptData, encoding: .utf8) {
+                await sendData(HTTPResponseBuilder.buildSSEEvent(event: "provenance", data: receiptStr), connection: connection)
             }
 
             // Send [DONE] terminator.

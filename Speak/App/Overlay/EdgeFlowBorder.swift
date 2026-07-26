@@ -63,6 +63,7 @@ struct EdgeFlowBorder<S: InsettableShape & Shape>: View {
     let speed: BorderFlowSpeed
     let count: Int
     let reduceMotion: Bool
+    var customPalette: [Color]? = nil
 
     // MARK: - Body
 
@@ -174,6 +175,9 @@ struct EdgeFlowBorder<S: InsettableShape & Shape>: View {
     // MARK: - State Palettes & Opacities
 
     private var palette: [Color] {
+        if let customPalette, !customPalette.isEmpty {
+            return customPalette
+        }
         switch state {
         case .listening:
             return [

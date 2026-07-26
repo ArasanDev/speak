@@ -116,6 +116,9 @@ final class OverlayViewModel {
     var partialText: String = ""
     var overlayState: OverlayState = .listening
 
+    /// Layer 3: Active bidirectional voice conversation loop manager.
+    var conversationLoopManager: ConversationLoopManager?
+
     // MARK: PE-3 live-panel strip
 
     /// Destination chips shown while listening. Empty ⇒ no strip (e.g. AI cleanup off —

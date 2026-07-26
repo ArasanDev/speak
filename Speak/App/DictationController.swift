@@ -268,13 +268,11 @@ final class DictationController: CLICommandHandler {
     /// Accessible to extensions (DictationController+ErrorHandling) for firing the signal.
     let dictationCompletedSubject = PassthroughSubject<Void, Never>()
 
-    // MARK: - CLI IPC server (W2.3)
-
-    /// Owns the named CFMessagePort server for the `speak` CLI tool.
-    /// Registered in `startMonitoring()` — not before, so the test host path
-    /// (XCTestConfigurationFilePath early-return) never opens the port.
-    /// [decision: W2.3 — server lifetime = app lifetime]
+    /// CLI IPC server (W2.3): owns the named CFMessagePort server for the `speak` CLI tool.
     private let cliPortServer = CLIPortServer()
+
+    /// Layer 4: MCP Server managing ask_user and stream_speech tools.
+    let speakMCPServer: SpeakMCPServer
 
     // MARK: - Settings store
 
@@ -440,6 +438,14 @@ final class DictationController: CLICommandHandler {
         activeBinding = updatedBinding
         lastAppliedTrigger = initialTrigger  // [validation-fix NEW-7] seed the dedupe baseline
         SpeakLog.hotkey.info("DictationController: trigger mode applied at init — \(initialTrigger.rawValue, privacy: .public)")
+
+        // Layer 4: Construct SpeakMCPServer for Layer 4 MCP tools
+        self.speakMCPServer = SpeakMCPServer(
+            overlayController: self.overlayController,
+            settingsStore: store,
+            voiceOut: speechSynthesizer,
+            agentSpeechQueue: self.agentSpeechQueue
+        )
 
         // Start observing future trigger-mode changes from SettingsView.
         // Uses withObservationTracking — fires only on triggerMode mutations.

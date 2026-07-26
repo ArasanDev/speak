@@ -15,7 +15,7 @@
 import Foundation
 
 public actor AgentBridgeServer {
-    private let backend: any BridgeBackend
+    let backend: any BridgeBackend
 
     /// Tracks whether `notifications/initialized` has been received. Not
     /// enforced as a hard gate in this slice (a strict server could reject
@@ -175,12 +175,20 @@ public actor AgentBridgeServer {
         case "speak_get_call":
             return await runGetCallTool(call, sessionId: sessionId)
 
+        case "speak_ask_user":
+            return await runAskUserTool(call, sessionId: sessionId)
+
+        case "speak_stream_speech":
+            return await runStreamSpeechTool(call, sessionId: sessionId)
+
         default:
             // Unreachable: handleToolsCall already checked membership in
             // AgentBridgeTools.all before calling runTool.
             return .error("Unknown tool: \(call.name)")
         }
     }
+
+
 
     private func runNotifyTool(_ call: MCPToolCallRequest, sessionId: String?) async -> MCPToolCallResult {
         guard let summary = call.arguments["summary"]?.stringValue?
@@ -271,7 +279,7 @@ public actor AgentBridgeServer {
     /// Appends an AVB-6 sessionNote to a successful tool result's text, when
     /// present. `nil` note (no sessionId supplied, or a recognized one) leaves
     /// the text unchanged. [decision: AVB-6]
-    private static func appendingNote(_ text: String, _ note: String?) -> String {
+    static func appendingNote(_ text: String, _ note: String?) -> String {
         guard let note else { return text }
         return "\(text)\n\(note)"
     }

@@ -68,6 +68,7 @@ struct AnimatedGradientBorder<S: InsettableShape>: View {
     /// Live RMS level (0…1). Only used in `.listening` to modulate glow intensity.
     let level: Double
     let reduceMotion: Bool
+    var customPalette: [Color]? = nil
 
     // MARK: - Animation state
 
@@ -128,6 +129,9 @@ struct AnimatedGradientBorder<S: InsettableShape>: View {
 
     /// State-specific base palette (4 stops + seamless wrap).
     private var palette: [Color] {
+        if let customPalette, !customPalette.isEmpty {
+            return customPalette
+        }
         switch state {
         case .listening:
             // Aurora: violet → indigo → cyan → teal.

@@ -1,12 +1,15 @@
 // App/Dashboard/Panes/AgentPlaygroundView.swift
 //
-// The Agent Playground — a multi-turn streaming chat interface for the local
-// inference server. Users pick a model, set a system prompt, and converse with
-// local LLMs via SSE streaming. Conversations persist to SQLite.
+// The Agent Playground — a document-style streaming interface for local
+// inference. Not a chatbot clone: the mental model is "an agent co-authoring
+// in my buffer." User instructions are dimmed command lines; model output is
+// full-width composed text with deliberate streaming cadence.
 //
-// This is the product surface for speak's "local human interface for software
-// agents" vision (product.md §6c). Phase 1: conversational chat. Phase 2:
-// tool calls and voice integration.
+// Design principles:
+// - Document, not chat. Full-width text flow, no bubbles.
+// - Provenance visible. Every response carries its wine-label colophon.
+// - Engine room. Backend health is always at a glance.
+// - Streaming as craft. Cadence-paced delivery, pulsing cursor, ink arrival.
 
 import Foundation
 import os
@@ -33,14 +36,22 @@ final class PlaygroundViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var serverPort: UInt16 = LocalInferenceServer.defaultPort
     @Published var apiKey = ""
+    @Published var lastProvenance: ProvenanceReceipt?
+    @Published var provenanceLog: [String: ProvenanceReceipt] = [:]
+    @Published var backends: [BackendInfo] = []
+    @Published var contextTokenEstimate = 0
 
     // MARK: - Dependencies
 
     private let client = StreamingChatClient()
     private let server = LocalInferenceServer()
+    private let registry = ModelRegistry()
     private var store: (any ConversationStoring)?
     private var streamTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "com.speak.app", category: "Playground")
+
+    /// Approximate context window size for the progress bar.
+    private let contextWindowLimit = 4096
 
     // MARK: - Init
 
@@ -52,9 +63,17 @@ final class PlaygroundViewModel: ObservableObject {
 
     func onAppear() {
         Task {
+            await ensureServerRunning()
             await fetchAPIKey()
             await loadConversations()
+            discoverBackends()
         }
+    }
+
+    // MARK: - Context progress
+
+    var contextProgress: Double {
+        min(Double(contextTokenEstimate) / Double(contextWindowLimit), 1.0)
     }
 
     // MARK: - Actions
@@ -79,13 +98,14 @@ final class PlaygroundViewModel: ObservableObject {
         if !streamingText.isEmpty {
             let partial = streamingText
             streamingText = ""
-            messages.append(ChatMessage(
+            let msg = ChatMessage(
                 id: UUID().uuidString,
                 conversationId: activeConversation?.id ?? "",
                 role: "assistant",
-                content: partial + " [cancelled]",
+                content: partial + " [stopped]",
                 createdAt: Date()
-            ))
+            )
+            messages.append(msg)
         }
     }
 
@@ -94,6 +114,9 @@ final class PlaygroundViewModel: ObservableObject {
         messages = []
         streamingText = ""
         errorMessage = nil
+        lastProvenance = nil
+        provenanceLog = [:]
+        contextTokenEstimate = 0
     }
 
     func loadConversation(_ conversation: Conversation) {
@@ -101,10 +124,12 @@ final class PlaygroundViewModel: ObservableObject {
         selectedModel = conversation.model
         systemPrompt = conversation.systemPrompt ?? ""
         errorMessage = nil
+        lastProvenance = nil
 
         Task {
             do {
                 messages = try await store?.messages(conversationId: conversation.id) ?? []
+                recalculateContextEstimate()
             } catch {
                 logger.error("Failed to load messages: \(error.localizedDescription)")
                 errorMessage = "Failed to load conversation"
@@ -119,6 +144,13 @@ final class PlaygroundViewModel: ObservableObject {
                 newConversation()
             }
             await loadConversations()
+        }
+    }
+
+    func discoverBackends() {
+        Task {
+            await registry.discover()
+            backends = await registry.backends
         }
     }
 
@@ -150,6 +182,7 @@ final class PlaygroundViewModel: ObservableObject {
             createdAt: Date()
         )
         messages.append(userMessage)
+        contextTokenEstimate += text.count / 4
 
         if let convId = conversation?.id {
             _ = try? await store?.appendMessage(conversationId: convId, role: "user", content: text)
@@ -165,20 +198,21 @@ final class PlaygroundViewModel: ObservableObject {
 
         isStreaming = true
         streamingText = ""
+        lastProvenance = nil
 
         let convId = conversation?.id
+        let result = client.streamChat(
+            messages: wireMessages,
+            model: selectedModel,
+            port: serverPort,
+            apiKey: apiKey
+        )
+
         streamTask = Task { [weak self] in
             guard let self else { return }
 
             do {
-                let stream = client.streamChat(
-                    messages: wireMessages,
-                    model: selectedModel,
-                    port: serverPort,
-                    apiKey: apiKey
-                )
-
-                for try await chunk in stream {
+                for try await chunk in result.tokens {
                     if Task.isCancelled { return }
                     streamingText += chunk
                 }
@@ -195,9 +229,15 @@ final class PlaygroundViewModel: ObservableObject {
                     createdAt: Date()
                 )
                 messages.append(assistantMessage)
+                contextTokenEstimate += finalText.count / 4
 
                 if let convId {
                     _ = try? await store?.appendMessage(conversationId: convId, role: "assistant", content: finalText)
+                }
+
+                for await receipt in result.provenance {
+                    lastProvenance = receipt
+                    provenanceLog[assistantMessage.id] = receipt
                 }
             } catch {
                 streamingText = ""
@@ -207,6 +247,17 @@ final class PlaygroundViewModel: ObservableObject {
                     logger.error("Stream failed: \(error.localizedDescription)")
                 }
             }
+        }
+    }
+
+    private func ensureServerRunning() async {
+        guard await !server.isRunning else { return }
+        do {
+            try await server.start()
+            logger.info("Playground auto-started inference server")
+        } catch {
+            errorMessage = "Could not start inference server: \(error.localizedDescription)"
+            logger.error("Server auto-start failed: \(error.localizedDescription)")
         }
     }
 
@@ -220,6 +271,14 @@ final class PlaygroundViewModel: ObservableObject {
         } catch {
             logger.error("Failed to load conversations: \(error.localizedDescription)")
         }
+    }
+
+    private func recalculateContextEstimate() {
+        var total = systemPrompt.count / 4
+        for msg in messages {
+            total += msg.content.count / 4
+        }
+        contextTokenEstimate = total
     }
 }
 
@@ -236,217 +295,224 @@ struct AgentPlaygroundView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PaneHeader(title: "Playground", subtitle: "Chat with local models via the inference server")
+            PaneHeader(title: "Playground", subtitle: "Local inference · streaming · multi-backend")
 
-            HStack(spacing: 0) {
-                ConversationSidebar(viewModel: viewModel)
-                    .frame(width: 220)
+            EngineRoomStrip(viewModel: viewModel)
 
-                Divider()
+            Divider()
 
-                ChatArea(viewModel: viewModel)
-            }
+            DocumentArea(viewModel: viewModel)
         }
         .onAppear { viewModel.onAppear() }
     }
 }
 
-// MARK: - ConversationSidebar
+// MARK: - EngineRoomStrip
 
-private struct ConversationSidebar: View {
+private struct EngineRoomStrip: View {
     @ObservedObject var viewModel: PlaygroundViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Conversations")
-                    .font(.speakMonoCaption)
-                    .foregroundStyle(.secondary)
-
-                Spacer(minLength: 0)
-
-                Button(action: { viewModel.newConversation() }) {
-                    Image(systemName: "plus.message")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.speakAgentViolet)
-                }
-                .buttonStyle(.plain)
-                .help("New conversation")
+        HStack(spacing: SpeakSpacing.md) {
+            ForEach(viewModel.backends) { backend in
+                EngineNode(backend: backend, isSelected: viewModel.selectedModel == backend.id)
             }
-            .padding(SpeakSpacing.sm)
 
-            Divider()
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
-                    ForEach(viewModel.conversations) { conversation in
-                        ConversationRow(
-                            conversation: conversation,
-                            isActive: viewModel.activeConversation?.id == conversation.id,
-                            onSelect: { viewModel.loadConversation(conversation) },
-                            onDelete: { viewModel.deleteConversation(conversation) }
-                        )
-                    }
+            if viewModel.backends.isEmpty {
+                HStack(spacing: SpeakSpacing.sm) {
+                    EngineNodePlaceholder(name: "Foundation Models", status: " probing...")
+                    EngineNodePlaceholder(name: "Ollama", status: " probing...")
+                    EngineNodePlaceholder(name: "MLX", status: " probing...")
                 }
-                .padding(SpeakSpacing.xs)
             }
+
+            Spacer(minLength: 0)
+
+            Button(action: { viewModel.discoverBackends() }) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.plain)
+            .help("Refresh backends")
         }
-        .background(Color.speakSurface.opacity(0.5))
+        .padding(.horizontal, SpeakSpacing.lg)
+        .padding(.vertical, SpeakSpacing.sm)
+        .background(Color.speakSurface.opacity(0.3))
     }
 }
 
-// MARK: - ConversationRow
-
-private struct ConversationRow: View {
-    let conversation: Conversation
-    let isActive: Bool
-    let onSelect: () -> Void
-    let onDelete: () -> Void
-
-    @State private var isHovering = false
+private struct EngineNode: View {
+    let backend: BackendInfo
+    let isSelected: Bool
 
     var body: some View {
         HStack(spacing: SpeakSpacing.xs) {
-            Button(action: onSelect) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(conversation.title)
-                        .font(.speakMonoCaption)
-                        .lineLimit(1)
-                        .foregroundStyle(isActive ? Color.speakAgentViolet : .primary)
+            Circle()
+                .fill(statusColor)
+                .frame(width: 6, height: 6)
+                .shadow(color: statusColor.opacity(0.6), radius: isSelected ? 3 : 1)
 
-                    Text(conversation.model)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, SpeakSpacing.sm)
-                .padding(.vertical, SpeakSpacing.xs)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(isActive ? Color.speakAgentViolet.opacity(0.12) : Color.clear)
-                )
-            }
-            .buttonStyle(.plain)
+            Text(backend.name)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(isSelected ? .primary : .secondary)
 
-            if isHovering {
-                Button(action: onDelete) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-            }
+            Text(backend.status.rawValue)
+                .font(.system(size: 8, design: .monospaced))
+                .foregroundStyle(statusColor.opacity(0.8))
         }
-        .onHover { isHovering = $0 }
+        .padding(.horizontal, SpeakSpacing.sm)
+        .padding(.vertical, 3)
+        .background(
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(isSelected ? Color.speakAgentViolet.opacity(0.08) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .strokeBorder(isSelected ? Color.speakAgentViolet.opacity(0.3) : Color.clear, lineWidth: 0.5)
+        )
+    }
+
+    private var statusColor: Color {
+        switch backend.status {
+        case .available, .reachable:
+            return Color.speakDelivered
+        case .offline:
+            return Color(nsColor: .systemRed)
+        case .unknown:
+            return Color(nsColor: .systemYellow)
+        }
     }
 }
 
-// MARK: - ChatArea
+private struct EngineNodePlaceholder: View {
+    let name: String
+    let status: String
 
-private struct ChatArea: View {
+    var body: some View {
+        HStack(spacing: SpeakSpacing.xs) {
+            Circle()
+                .fill(Color.speakMica.opacity(0.4))
+                .frame(width: 6, height: 6)
+
+            Text(name)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.tertiary)
+
+            Text(status)
+                .font(.system(size: 8, design: .monospaced))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, SpeakSpacing.sm)
+        .padding(.vertical, 3)
+    }
+}
+
+// MARK: - DocumentArea
+
+private struct DocumentArea: View {
     @ObservedObject var viewModel: PlaygroundViewModel
 
     var body: some View {
         VStack(spacing: 0) {
-            ChatToolbar(viewModel: viewModel)
+            DocumentToolbar(viewModel: viewModel)
 
             Divider()
 
-            ChatScrollView(viewModel: viewModel)
+            DocumentScrollView(viewModel: viewModel)
 
             Divider()
 
-            InputBar(viewModel: viewModel)
+            CommandBar(viewModel: viewModel)
         }
-        .flowBorder(
-            colors: Color.speakFlowAgent,
-            cornerRadius: 0,
-            isActive: viewModel.isStreaming
-        )
     }
 }
 
-// MARK: - ChatToolbar
+// MARK: - DocumentToolbar
 
-private struct ChatToolbar: View {
+private struct DocumentToolbar: View {
     @ObservedObject var viewModel: PlaygroundViewModel
 
     var body: some View {
         HStack(spacing: SpeakSpacing.sm) {
             Picker("Model", selection: $viewModel.selectedModel) {
-                Text("speak-default").tag("speak-default")
-                Text("apple-intelligence").tag("apple-intelligence")
-                Text("ollama/qwen3").tag("ollama/qwen3")
-                Text("ollama/gemma3").tag("ollama/gemma3")
-                Text("mlx/llama-3.2").tag("mlx/llama-3.2")
+                if viewModel.backends.isEmpty {
+                    Text("speak-default").tag("speak-default")
+                } else {
+                    ForEach(viewModel.backends) { backend in
+                        Text(backend.name).tag(backend.id)
+                    }
+                }
             }
             .pickerStyle(.menu)
-            .frame(maxWidth: 200)
+            .frame(maxWidth: 180)
 
             Spacer(minLength: 0)
 
-            Button(action: { viewModel.showSystemPrompt.toggle() }) {
-                HStack(spacing: SpeakSpacing.xs) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 11))
-                    Text("System Prompt")
-                        .font(.speakMonoCaption)
-                }
-                .padding(.horizontal, SpeakSpacing.sm)
-                .padding(.vertical, SpeakSpacing.xs)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(viewModel.systemPrompt.isEmpty ? Color.speakSurface : Color.speakAgentViolet.opacity(0.15))
-                )
-                .foregroundStyle(viewModel.systemPrompt.isEmpty ? .secondary : Color.speakAgentViolet)
-            }
-            .buttonStyle(.plain)
-            .popover(isPresented: $viewModel.showSystemPrompt, arrowEdge: .bottom) {
-                SystemPromptEditor(viewModel: viewModel)
-            }
-
             if let error = viewModel.errorMessage {
                 Text(error)
-                    .font(.speakMonoCaption)
+                    .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(Color(nsColor: .systemRed))
                     .lineLimit(1)
             }
+
+            Button(action: { viewModel.showSystemPrompt.toggle() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 10))
+                    Text("persona")
+                        .font(.system(size: 10, design: .monospaced))
+                }
+                .padding(.horizontal, SpeakSpacing.sm)
+                .padding(.vertical, 3)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(viewModel.systemPrompt.isEmpty
+                            ? Color.speakSurface
+                            : Color.speakAgentViolet.opacity(0.12))
+                )
+                .foregroundStyle(viewModel.systemPrompt.isEmpty ? Color.speakMica : Color.speakAgentViolet)
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $viewModel.showSystemPrompt, arrowEdge: .bottom) {
+                PersonaEditor(viewModel: viewModel)
+            }
         }
         .padding(.horizontal, SpeakSpacing.md)
-        .padding(.vertical, SpeakSpacing.sm)
+        .padding(.vertical, SpeakSpacing.xs)
     }
 }
 
-// MARK: - SystemPromptEditor
+// MARK: - PersonaEditor
 
-private struct SystemPromptEditor: View {
+private struct PersonaEditor: View {
     @ObservedObject var viewModel: PlaygroundViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-            Text("System Prompt")
-                .font(.speakMonoBody)
+            Text("System Persona")
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
 
-            Text("Sets the agent's persona and behavior for this conversation.")
-                .font(.speakMonoCaption)
+            Text("Prepended to every request. Defines the agent's voice and constraints.")
+                .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(.secondary)
 
             TextEditor(text: $viewModel.systemPrompt)
-                .font(.speakMonoBody)
-                .frame(width: 360, height: 140)
+                .font(.system(size: 12, design: .monospaced))
+                .frame(width: 340, height: 120)
                 .scrollContentBackground(.hidden)
                 .padding(SpeakSpacing.xs)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(Color.speakSurface)
                 )
 
             HStack {
                 Spacer()
                 Button("Clear") { viewModel.systemPrompt = "" }
-                    .font(.speakMonoCaption)
+                    .font(.system(size: 10, design: .monospaced))
                 Button("Done") { viewModel.showSystemPrompt = false }
-                    .font(.speakMonoCaption)
+                    .font(.system(size: 10, design: .monospaced))
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -454,40 +520,44 @@ private struct SystemPromptEditor: View {
     }
 }
 
-// MARK: - ChatScrollView
+// MARK: - DocumentScrollView
 
-private struct ChatScrollView: View {
+private struct DocumentScrollView: View {
     @ObservedObject var viewModel: PlaygroundViewModel
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: SpeakSpacing.md) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     if viewModel.messages.isEmpty && !viewModel.isStreaming {
-                        EmptyChatState()
+                        DocumentEmptyState()
                     }
 
                     ForEach(viewModel.messages) { message in
-                        ChatBubble(message: message)
-                            .id(message.id)
+                        DocumentSection(
+                            message: message,
+                            provenance: viewModel.provenanceLog[message.id]
+                        )
+                        .id(message.id)
                     }
 
                     if viewModel.isStreaming {
-                        StreamingBubble(text: viewModel.streamingText)
+                        StreamingSection(text: viewModel.streamingText)
                             .id("streaming")
                     }
                 }
-                .padding(SpeakSpacing.lg)
+                .padding(.horizontal, SpeakSpacing.lg)
+                .padding(.vertical, SpeakSpacing.md)
             }
             .onChange(of: viewModel.messages.count) {
                 if let lastId = viewModel.messages.last?.id {
-                    withAnimation(.easeOut(duration: 0.2)) {
+                    withAnimation(.easeOut(duration: 0.15)) {
                         proxy.scrollTo(lastId, anchor: .bottom)
                     }
                 }
             }
             .onChange(of: viewModel.streamingText) {
-                withAnimation(.easeOut(duration: 0.1)) {
+                withAnimation(.easeOut(duration: 0.08)) {
                     proxy.scrollTo("streaming", anchor: .bottom)
                 }
             }
@@ -495,166 +565,232 @@ private struct ChatScrollView: View {
     }
 }
 
-// MARK: - EmptyChatState
+// MARK: - DocumentEmptyState
 
-private struct EmptyChatState: View {
+private struct DocumentEmptyState: View {
     var body: some View {
         VStack(spacing: SpeakSpacing.md) {
-            Image(systemName: "bubble.left.and.text.bubble.right")
-                .font(.system(size: 34))
+            Spacer().frame(height: 60)
+
+            Image(systemName: "text.cursor")
+                .font(.system(size: 28))
                 .foregroundStyle(.tertiary)
 
-            Text("Start a conversation")
-                .font(.speakMonoBody)
+            Text("The agent writes here.")
+                .font(.system(size: 13, design: .monospaced))
                 .foregroundStyle(.secondary)
 
-            Text("Messages stream in real-time from your local inference server.")
-                .font(.speakMonoCaption)
+            Text("Type a command below. Responses stream in real-time from your local inference server.")
+                .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+
+            Spacer()
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, SpeakSpacing.xl)
     }
 }
 
-// MARK: - ChatBubble
+// MARK: - DocumentSection
 
-private struct ChatBubble: View {
+private struct DocumentSection: View {
     let message: ChatMessage
+    let provenance: ProvenanceReceipt?
 
     private var isUser: Bool { message.role == "user" }
 
     var body: some View {
-        HStack {
-            if isUser { Spacer(minLength: 60) }
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            if isUser {
+                HStack(alignment: .top, spacing: SpeakSpacing.sm) {
+                    Text(">")
+                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color.speakHumanAmber.opacity(0.7))
 
-            VStack(alignment: isUser ? .trailing : .leading, spacing: SpeakSpacing.xs) {
-                Text(message.role == "user" ? "You" : "Assistant")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(isUser ? Color.speakHumanAmber : Color.speakAgentViolet)
+                    Text(message.content)
+                        .font(.system(size: 13, design: .monospaced))
+                        .foregroundStyle(Color.speakMica)
+                        .textSelection(.enabled)
+                }
+                .padding(.top, SpeakSpacing.md)
+            } else {
+                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                    Text(message.content)
+                        .font(.system(size: 13, design: .monospaced))
+                        .foregroundStyle(Color.speakBone)
+                        .textSelection(.enabled)
+                        .lineSpacing(3)
 
-                Text(message.content)
-                    .font(.speakMonoBody)
-                    .textSelection(.enabled)
-                    .padding(SpeakSpacing.sm)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(isUser
-                                ? Color.speakHumanAmber.opacity(0.08)
-                                : Color.speakAgentViolet.opacity(0.06))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(
-                                isUser
-                                    ? Color.speakHumanAmber.opacity(0.2)
-                                    : Color.speakAgentViolet.opacity(0.15),
-                                lineWidth: 0.5
-                            )
-                    )
+                    if let receipt = provenance {
+                        ProvenanceColophon(receipt: receipt)
+                    }
+                }
+                .padding(.top, SpeakSpacing.sm)
+                .padding(.bottom, SpeakSpacing.xs)
             }
-
-            if !isUser { Spacer(minLength: 60) }
         }
     }
 }
 
-// MARK: - StreamingBubble
+// MARK: - ProvenanceColophon
 
-private struct StreamingBubble: View {
-    let text: String
-    @State private var cursorVisible = true
+private struct ProvenanceColophon: View {
+    let receipt: ProvenanceReceipt
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                Text("Assistant")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(Color.speakAgentViolet)
+        HStack(spacing: SpeakSpacing.sm) {
+            Text(receipt.backendID)
+                .foregroundStyle(Color.speakAgentViolet.opacity(0.7))
 
-                HStack(alignment: .bottom, spacing: 1) {
-                    Text(text.isEmpty ? " " : text)
-                        .font(.speakMonoBody)
+            Text("·")
+                .foregroundStyle(.tertiary)
 
-                    Text("\u{258F}")
-                        .font(.speakMonoBody)
-                        .foregroundStyle(Color.speakAgentViolet)
-                        .opacity(cursorVisible ? 1 : 0)
-                }
-                .padding(SpeakSpacing.sm)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.speakAgentViolet.opacity(0.06))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.speakAgentViolet.opacity(0.25), lineWidth: 0.5)
-                )
+            Text("\(receipt.latencyMS)ms")
+                .foregroundStyle(.tertiary)
+
+            Text("·")
+                .foregroundStyle(.tertiary)
+
+            Text("\(receipt.promptTokens + receipt.completionTokens) tok")
+                .foregroundStyle(.tertiary)
+
+            if receipt.fellBack {
+                Text("·")
+                    .foregroundStyle(.tertiary)
+                Text("fallback")
+                    .foregroundStyle(Color(nsColor: .systemYellow).opacity(0.8))
             }
-
-            Spacer(minLength: 60)
         }
+        .font(.system(size: 9, design: .monospaced))
+        .padding(.top, 2)
+    }
+}
+
+// MARK: - StreamingSection
+
+private struct StreamingSection: View {
+    let text: String
+    @State private var cursorOpacity: Double = 1.0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            HStack(alignment: .bottom, spacing: 0) {
+                Text(text.isEmpty ? " " : text)
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundStyle(Color.speakBone)
+                    .lineSpacing(3)
+
+                Rectangle()
+                    .fill(Color.speakAgentViolet)
+                    .frame(width: 2, height: 15)
+                    .opacity(cursorOpacity)
+                    .padding(.leading, 1)
+            }
+        }
+        .padding(.top, SpeakSpacing.sm)
         .onAppear {
-            withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
-                cursorVisible = false
+            withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+                cursorOpacity = 0.0
             }
         }
     }
 }
 
-// MARK: - InputBar
+// MARK: - CommandBar
 
-private struct InputBar: View {
+private struct CommandBar: View {
     @ObservedObject var viewModel: PlaygroundViewModel
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: SpeakSpacing.sm) {
-            TextField("Message the agent...", text: $viewModel.inputText, axis: .vertical)
-                .font(.speakMonoBody)
-                .textFieldStyle(.plain)
-                .lineLimit(1...6)
-                .padding(SpeakSpacing.sm)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.speakSurface)
-                )
-                .focused($isFocused)
-                .onSubmit {
-                    if !NSEvent.modifierFlags.contains(.shift) {
-                        viewModel.sendMessage()
-                    }
-                }
+        VStack(spacing: 0) {
+            ContextProgressBar(progress: viewModel.contextProgress)
 
-            if viewModel.isStreaming {
-                Button(action: { viewModel.cancelStream() }) {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color(nsColor: .systemRed))
-                        .frame(width: 32, height: 32)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color(nsColor: .systemRed).opacity(0.1))
-                        )
+            HStack(alignment: .bottom, spacing: SpeakSpacing.sm) {
+                Text(">")
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.speakHumanAmber.opacity(0.6))
+                    .padding(.bottom, 8)
+
+                TextField("instruct the agent...", text: $viewModel.inputText, axis: .vertical)
+                    .font(.system(size: 13, design: .monospaced))
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...6)
+                    .focused($isFocused)
+                    .onSubmit {
+                        if !NSEvent.modifierFlags.contains(.shift) {
+                            viewModel.sendMessage()
+                        }
+                    }
+
+                if viewModel.isStreaming {
+                    Button(action: { viewModel.cancelStream() }) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color(nsColor: .systemRed))
+                            .frame(width: 28, height: 28)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(Color(nsColor: .systemRed).opacity(0.08))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help("Stop generation")
+                } else {
+                    Button(action: { viewModel.sendMessage() }) {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(
+                                viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    ? Color.speakMica.opacity(0.4)
+                                    : Color.speakAgentViolet
+                            )
+                            .frame(width: 28, height: 28)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(Color.speakAgentViolet.opacity(
+                                        viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.04 : 0.12
+                                    ))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .help("Send (Enter)")
                 }
-                .buttonStyle(.plain)
-                .help("Stop generation")
-            } else {
-                Button(action: { viewModel.sendMessage() }) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundStyle(
-                            viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? Color.speakMica
-                                : Color.speakAgentViolet
-                        )
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .help("Send message")
+            }
+            .padding(.horizontal, SpeakSpacing.md)
+            .padding(.vertical, SpeakSpacing.sm)
+        }
+        .onAppear { isFocused = true }
+    }
+}
+
+// MARK: - ContextProgressBar
+
+private struct ContextProgressBar: View {
+    let progress: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(Color.speakSurface)
+                    .frame(height: 2)
+
+                Rectangle()
+                    .fill(barColor)
+                    .frame(width: geo.size.width * progress, height: 2)
             }
         }
-        .padding(SpeakSpacing.md)
-        .onAppear { isFocused = true }
+        .frame(height: 2)
+    }
+
+    private var barColor: Color {
+        if progress > 0.85 {
+            return Color(nsColor: .systemRed).opacity(0.7)
+        } else if progress > 0.6 {
+            return Color(nsColor: .systemYellow).opacity(0.7)
+        }
+        return Color.speakAgentViolet.opacity(0.5)
     }
 }

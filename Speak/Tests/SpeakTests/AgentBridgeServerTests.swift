@@ -130,6 +130,23 @@ final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
         lastSessionId = sessionId
         return getCallResult.map { BridgeOutcome($0, sessionNote: sessionNote) }
     }
+
+    var askUserResult: Result<String, BridgeUnavailable> = .success("user answer")
+    var streamSpeechResult: Result<String, BridgeUnavailable> = .success("speech streamed")
+
+    func askUser(
+        prompt: String, mode: String?, sessionId: String?
+    ) async -> Result<BridgeOutcome<String>, BridgeUnavailable> {
+        lastSessionId = sessionId
+        return askUserResult.map { BridgeOutcome($0, sessionNote: sessionNote) }
+    }
+
+    func streamSpeech(
+        text: String, isFinal: Bool, sessionId: String?
+    ) async -> Result<BridgeOutcome<String>, BridgeUnavailable> {
+        lastSessionId = sessionId
+        return streamSpeechResult.map { BridgeOutcome($0, sessionNote: sessionNote) }
+    }
 }
 
 // MARK: - JSONValue codec

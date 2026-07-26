@@ -117,6 +117,14 @@ public protocol CLICommandHandler: AnyObject {
     /// Requires a known-registered `sessionId`; a session mismatch or unknown id
     /// reads as `.call(nil)`, never revealing existence. [decision: AVB-7]
     func cliGetCall(sessionId: String?, callId: UUID) async -> CLIGetCallOutcome
+
+    // MARK: - Layer 4
+
+    /// `speak_ask_user`: ask prompt in Magenta overlay UI, returning user response string.
+    func cliAskUser(prompt: String, mode: String?) async -> CLIAskOutcome
+
+    /// `speak_stream_speech`: stream agent response text to TTS and overlay UI.
+    func cliStreamSpeech(text: String, isFinal: Bool) async -> String
 }
 
 // MARK: - AVB-7 durable-call outcomes
@@ -330,6 +338,12 @@ public final class CLIPortServer {
         if request.cmd == .getCall {
             return CLIPortServer.encodeReply(handleGetCall(request, handler: cmdHandler))
         }
+        if request.cmd == .askUser {
+            return CLIPortServer.encodeReply(handleAskUser(request, handler: cmdHandler))
+        }
+        if request.cmd == .streamSpeech {
+            return CLIPortServer.encodeReply(handleStreamSpeech(request, handler: cmdHandler))
+        }
 
         // AVB-6: resolve the optional sessionId note (if any) before the
         // synchronous dispatch below — `cliTouchSession` is an actor call and
@@ -395,9 +409,9 @@ public final class CLIPortServer {
             SpeakLog.cli.info("CLIPortServer: say dispatched.")
             reply = .accepted(sessionNote: sessionNote)
 
-        case .ask, .confirm, .requestInput, .registerSession, .submitCall, .getCall:
+        case .ask, .confirm, .requestInput, .registerSession, .submitCall, .getCall, .askUser, .streamSpeech:
             // Handled above, before this switch — unreachable here.
-            reply = .failure("internal: ask/confirm/requestInput/registerSession/submitCall/getCall routed incorrectly")
+            reply = .failure("internal: ask/confirm/requestInput/registerSession/submitCall/getCall/askUser/streamSpeech routed incorrectly")
         }
 
         return CLIPortServer.encodeReply(reply)
@@ -653,29 +667,12 @@ public final class CLIPortServer {
         }
     }
 
-    /// Resolve the optional "unregistered session" note for a request that
-    /// carries `sessionId`. `nil` when no `sessionId` was supplied (today's
-    /// behavior, unchanged) or when it was supplied and is a known session.
-    /// Bridges the actor-isolated `AgentSessionRegistry` the same way
-    /// `handleRegisterSession` does. [decision: AVB-6]
-    private static func pumpedSessionNote(sessionId: String?, handler: any CLICommandHandler) -> String? {
-        guard let sessionId else { return nil }
-        let box = CLIPendingResultBox<Bool>()
-        Task { @MainActor in
-            let known = await handler.cliTouchSession(sessionId)
-            box.set(known)
-        }
-        guard let known = pumpUntilResult(timeoutSeconds: 5.0, poll: box.get) else {
-            SpeakLog.cli.error("CLIPortServer: sessionId touch pump exhausted — omitting note.")
-            return nil
-        }
-        return known ? nil : BridgeOutcome<Void>.unregisteredSessionNote(sessionId)
-    }
+
 
     /// Pump the current (main) run loop in short slices until `poll()` returns a
     /// non-nil result or `timeoutSeconds` elapses. See `handleAskOrConfirm` for the
     /// full rationale. [decision: H-3]
-    private static func pumpUntilResult<T>(timeoutSeconds: TimeInterval, poll: () -> T?) -> T? {
+    static func pumpUntilResult<T>(timeoutSeconds: TimeInterval, poll: () -> T?) -> T? {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         let pollSlice: TimeInterval = 0.02  // 20 ms — short enough to stay responsive
         while Date() < deadline {
@@ -691,7 +688,7 @@ public final class CLIPortServer {
     ///
     /// On encoding failure (should never happen with a well-formed Codable type)
     /// we return a minimal ASCII fallback so the CLI still gets a response.
-    private static func encodeReply(_ reply: CLIReply) -> Unmanaged<CFData>? {
+    static func encodeReply(_ reply: CLIReply) -> Unmanaged<CFData>? {
         let data: Data
         do {
             data = try reply.encode()
@@ -717,7 +714,7 @@ public final class CLIPortServer {
 /// strictly main-thread-only. `@unchecked Sendable` matches this file's existing
 /// pattern (`CLIPortServer` itself) for a type whose thread-safety is manually
 /// reasoned about rather than compiler-enforced. [decision: H-3]
-private final class CLIPendingResultBox<T>: @unchecked Sendable {
+final class CLIPendingResultBox<T>: @unchecked Sendable {
     private var value: T?
     private let lock = NSLock()
 

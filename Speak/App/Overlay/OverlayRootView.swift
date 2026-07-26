@@ -21,12 +21,20 @@ struct OverlayRootView: View {
     let settingsStore: SettingsStore
 
     var body: some View {
-        switch settingsStore.hudStyle {
-        case .classic:
-            TranscriptOverlayView(model: model, settingsStore: settingsStore)
+        if let loopManager = model.conversationLoopManager {
+            ConversationOverlayView(
+                loopManager: loopManager,
+                model: model,
+                settingsStore: settingsStore
+            )
+        } else {
+            switch settingsStore.hudStyle {
+            case .classic:
+                TranscriptOverlayView(model: model, settingsStore: settingsStore)
 
-        case .aurora:
-            AuroraOverlayView(model: model, settingsStore: settingsStore)
+            case .aurora:
+                AuroraOverlayView(model: model, settingsStore: settingsStore)
+            }
         }
     }
 }

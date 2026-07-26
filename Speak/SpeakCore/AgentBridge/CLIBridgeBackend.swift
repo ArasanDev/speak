@@ -236,4 +236,57 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
             return .failure(.transportError("speak_get_call", String(describing: error)))
         }
     }
+
+    // MARK: - Layer 4 askUser / streamSpeech
+
+    public func askUser(
+        prompt: String, mode: String?, sessionId: String?
+    ) async -> Result<BridgeOutcome<String>, BridgeUnavailable> {
+        let effectiveTimeout = CLIContract.askConfirmDefaultTimeoutSeconds
+        let request = CLIRequest(
+            cmd: .askUser,
+            timeout: effectiveTimeout,
+            prompt: prompt,
+            mode: RequestInputMode(rawValue: mode ?? "freeform"),
+            sessionId: sessionId
+        )
+        do {
+            let reply = try transport.send(request, timeoutSeconds: effectiveTimeout + 5)
+            guard reply.ok else {
+                return .failure(.timedOut("speak_ask_user"))
+            }
+            guard let answer = reply.answer else {
+                return .failure(.transportError("speak_ask_user", reply.error ?? "missing 'answer' field"))
+            }
+            return .success(BridgeOutcome(answer, sessionNote: reply.sessionNote))
+        } catch CLITransportError.portNotFound {
+            return .failure(.appNotRunning)
+        } catch CLITransportError.timeout {
+            return .failure(.timedOut("speak_ask_user"))
+        } catch {
+            return .failure(.transportError("speak_ask_user", String(describing: error)))
+        }
+    }
+
+    public func streamSpeech(
+        text: String, isFinal: Bool, sessionId: String?
+    ) async -> Result<BridgeOutcome<String>, BridgeUnavailable> {
+        let request = CLIRequest(
+            cmd: .streamSpeech,
+            text: text,
+            interrupt: isFinal,
+            sessionId: sessionId
+        )
+        do {
+            let reply = try transport.send(request, timeoutSeconds: CLIContract.sendTimeoutSeconds)
+            guard reply.ok else {
+                return .failure(BridgeUnavailable(reply.error ?? "speak_stream_speech reported an error"))
+            }
+            return .success(BridgeOutcome(reply.answer ?? "speech stream updated", sessionNote: reply.sessionNote))
+        } catch CLITransportError.portNotFound {
+            return .failure(.appNotRunning)
+        } catch {
+            return .failure(.transportError("speak_stream_speech", String(describing: error)))
+        }
+    }
 }
