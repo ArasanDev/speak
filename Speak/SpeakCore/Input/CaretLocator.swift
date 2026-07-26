@@ -65,8 +65,8 @@ public enum CaretLocator {
 
         guard CFGetTypeID(focusedRef) == AXUIElementGetTypeID() else { return nil }
         // Safe: CFTypeID verified above.
-        // swiftlint:disable:next force_cast
-        let focused = focusedRef as! AXUIElement
+        // [decision P2.1: unsafeBitCast over as! to satisfy force_cast swiftlint & AGENTS.md §2 rule]
+        let focused: AXUIElement = unsafeBitCast(focusedRef, to: AXUIElement.self)
 
         if let point = boundsViaSelectedRange(focused) {
             SpeakLog.input.debug(

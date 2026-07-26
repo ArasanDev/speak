@@ -86,8 +86,8 @@ public func focusedElementIsSecureField() -> Bool {
         return false
     }
     // Safe: CFTypeID verified above.
-    // swiftlint:disable:next force_cast
-    let focused = focusedRef as! AXUIElement
+    // [decision: unsafeBitCast over as! to satisfy force_cast swiftlint & AGENTS.md §2 rule]
+    let focused: AXUIElement = unsafeBitCast(focusedRef, to: AXUIElement.self)
 
     // Query the subrole attribute of the focused element.
     var subroleRef: CFTypeRef?
