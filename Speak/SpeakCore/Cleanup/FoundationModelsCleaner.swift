@@ -202,7 +202,10 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
     /// [decision: XML boundary is a structural signal that outperforms negative
     ///  instructions ("do not answer") for small on-device models]
     static func wrapTranscript(_ text: String) -> String {
-        "<transcript>\(text)</transcript>"
+        let sanitized = text
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+        return "<transcript>\(sanitized)</transcript>"
     }
 
     /// Returns the system instructions string for the given cleanup mode.

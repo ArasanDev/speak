@@ -655,7 +655,20 @@ public actor CaptureSession {
                 }
             }
         }
-        partialsContinuation?.yield(chunk)
+        // Yield partial chunk to the overlay stream. For non-final (volatile) chunks,
+        // prepend `finalizedText` so the live HUD displays the complete accumulated
+        // utterance rather than flickering back to just the new speech window's text.
+        if !chunk.isFinal, !finalizedText.isEmpty {
+            let combinedText = finalizedText + " " + chunk.text
+            let combinedChunk = TranscriptChunk(
+                text: combinedText,
+                isFinal: false,
+                timestamp: chunk.timestamp
+            )
+            partialsContinuation?.yield(combinedChunk)
+        } else {
+            partialsContinuation?.yield(chunk)
+        }
     }
 
     /// Called when the STT stream throws (transcriber failure). The session

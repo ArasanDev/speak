@@ -90,6 +90,7 @@ final class OverlayController {
     /// is showing, removed on stop/cancel. Nil when idle.
     /// `NSEvent.addGlobalMonitorForEvents` returns `Any?` not `NSObjectProtocol`.
     private var escapeMonitor: Any?
+    private var localEscapeMonitor: Any?
     /// W2.2: callback invoked when the user presses Escape while dictating.
     /// The caller is responsible for guarding on the active-capture state to
     /// prevent re-entrancy during `.processing` or `.error` (see DictationController).
@@ -534,19 +535,38 @@ final class OverlayController {
     ///
     /// [decision W2.2: global monitor; no consumption; AX/Input Monitoring already granted]
     private func installEscapeMonitor() {
-        removeEscapeMonitor()   // idempotent — remove prior monitor if any
-        escapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            // keyCode 53 is Escape on all Apple keyboard layouts. [decision: kVK_Escape = 53]
-            guard event.keyCode == 53 else { return }
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                if self.closeCodingPanelIfOpen() {
-                    SpeakLog.engine.info("OverlayController: Escape key detected — closing coding panel (stage 1).")
-                    return
-                }
-                SpeakLog.engine.info("OverlayController: Escape key detected — stopping dictation (stage 2).")
-                self.onEscapeStop?()
+        removeEscapeMonitor()   // idempotent — remove prior monitors if any
+
+        let handleEscape: @MainActor (NSEvent) -> Void = { [weak self] _ in
+            guard let self else { return }
+            if self.closeCodingPanelIfOpen() {
+                SpeakLog.engine.info("OverlayController: Escape key detected — closing coding panel (stage 1).")
+                return
             }
+            if let loopManager = self.overlayModel.conversationLoopManager {
+                SpeakLog.engine.info("OverlayController: Escape key detected — interrupting conversation loop.")
+                loopManager.handleInterrupt()
+                return
+            }
+            SpeakLog.engine.info("OverlayController: Escape key detected — stopping dictation (stage 2).")
+            self.onEscapeStop?()
+        }
+
+        // Global monitor catches Escape when external app has focus
+        escapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53 else { return }
+            Task { @MainActor in
+                handleEscape(event)
+            }
+        }
+
+        // Local monitor catches Escape when Speak overlay (Coding panel / Conversation panel) has key focus
+        localEscapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53 else { return event }
+            Task { @MainActor in
+                handleEscape(event)
+            }
+            return nil // Consume event locally so it doesn't ring system bell
         }
     }
 
@@ -554,6 +574,10 @@ final class OverlayController {
         if let monitor = escapeMonitor {
             NSEvent.removeMonitor(monitor)
             escapeMonitor = nil
+        }
+        if let localMonitor = localEscapeMonitor {
+            NSEvent.removeMonitor(localMonitor)
+            localEscapeMonitor = nil
         }
     }
 }

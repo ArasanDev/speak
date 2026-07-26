@@ -91,6 +91,8 @@ final class TranscriptOverlayPanel: NSPanel {
     ///  with [weak self] capture; removed in deinit per macOS notification best practice.]
     nonisolated(unsafe) private var screenChangeObserver: (any NSObjectProtocol)?
 
+    private let model: OverlayViewModel
+
     // MARK: - Init
 
     /// - Parameter settingsStore: Drives `OverlayRootView`'s HUD-style switch
@@ -101,6 +103,7 @@ final class TranscriptOverlayPanel: NSPanel {
         overlayModel: OverlayViewModel,
         settingsStore: SettingsStore = SettingsStore()
     ) {
+        self.model = overlayModel
         // Step 1: style mask — .nonactivatingPanel is the primary focus-steal guard.
         let mask: NSWindow.StyleMask = [
             .nonactivatingPanel,
@@ -171,7 +174,12 @@ final class TranscriptOverlayPanel: NSPanel {
 
     // MARK: - Focus-steal guards (Step 5 + 6)
 
-    override var canBecomeKey: Bool { false }
+    /// Allows key status when Bidirectional Conversation Mode is active so text field
+    /// input works, while keeping `canBecomeKey = false` during standard dictation to
+    /// prevent focus stealing.
+    override var canBecomeKey: Bool {
+        model.conversationLoopManager != nil
+    }
     override var canBecomeMain: Bool { false }
 
     // MARK: - Show / Hide

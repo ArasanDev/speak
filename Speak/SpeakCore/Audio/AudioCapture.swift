@@ -133,7 +133,13 @@ public final class AudioCapture: @unchecked Sendable {
                 SpeakLog.audio.info("AudioCapture: AVAudioEngineConfigurationChange received — re-syncing input format.")
                 // Engine paused/reconfigured by OS — restart if running.
                 if self.engine.isRunning == false {
-                    try? self.engine.start()
+                    do {
+                        try self.engine.start()
+                        SpeakLog.audio.info("AudioCapture: AVAudioEngine successfully restarted after configuration change.")
+                    } catch {
+                        SpeakLog.audio.error("AudioCapture: AVAudioEngine failed to restart after configuration change — \(error.localizedDescription, privacy: .public). Stopping capture.")
+                        self.stop()
+                    }
                 }
             }
         }
