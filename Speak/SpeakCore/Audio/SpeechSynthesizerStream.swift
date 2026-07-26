@@ -239,12 +239,14 @@ public final class SpeechSynthesizerStream: @unchecked Sendable {
         pendingQueue.removeAll()
 
         let wasSpeakingOrPaused = synthesizer.isSpeaking || synthesizer.isPaused
+        updateStateLocked(.stopped)
+        lock.unlock()
+
+        // Call synthesizer.stopSpeaking OUTSIDE the lock to prevent re-entrant
+        // deadlock when delegate callbacks fire synchronously on the same thread.
         if wasSpeakingOrPaused {
             synthesizer.stopSpeaking(at: .immediate)
         }
-
-        updateStateLocked(.stopped)
-        lock.unlock()
 
         let elapsedTimeMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
         SpeakLog.voiceOut.info("SpeechSynthesizerStream: stopImmediately() executed in \(elapsedTimeMs, privacy: .public) ms")

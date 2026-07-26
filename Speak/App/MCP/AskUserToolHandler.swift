@@ -94,10 +94,19 @@ final class AskUserToolHandler {
         return try await withCheckedThrowingContinuation { continuation in
             self.activeContinuation = continuation
 
+            // Setup 120-second timeout task to guarantee continuation never hangs indefinitely
+            let timeoutTask = Task { @MainActor [weak self, weak overlayController] in
+                try? await Task.sleep(for: .seconds(120))
+                guard let self = self, self.activeContinuation != nil else { return }
+                SpeakLog.agentBridge.warning("AskUserToolHandler: request timed out after 120 seconds.")
+                self.finish(with: .failure(AskUserError.timeout), overlayController: overlayController)
+            }
+
             // Setup callbacks on loopManager
             loopManager.onUserTurnCommitted = { [weak self, weak overlayController] userText in
                 Task { @MainActor [weak self, weak overlayController] in
                     guard let self = self else { return }
+                    timeoutTask.cancel()
                     SpeakLog.agentBridge.info(
                         "AskUserToolHandler: user response committed via continuation (bypassing pasteboard)."
                     )
@@ -108,6 +117,7 @@ final class AskUserToolHandler {
             loopManager.onInterrupt = { [weak self, weak overlayController] _ in
                 Task { @MainActor [weak self, weak overlayController] in
                     guard let self = self else { return }
+                    timeoutTask.cancel()
                     SpeakLog.agentBridge.info("AskUserToolHandler: user interrupted prompt.")
                     self.finish(with: .failure(AskUserError.cancelled), overlayController: overlayController)
                 }
