@@ -118,6 +118,7 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
             let options = GenerationOptions(sampling: .greedy)
             let response = try await session.respond(to: Prompt(wrappedText), options: options)  // [Cleanup-M2]
             var cleaned = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            cleaned = Self.unescapeTranscript(cleaned)
             cleaned = Self.fixDeveloperAcronyms(cleaned)
             if voiceProvenanceHeaderEnabled {
                 let header = "[Audio Transcript • Speak Engine]\n> Note: Dictated via live voice ramble.\n\n"
@@ -206,6 +207,12 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
         return "<transcript>\(sanitized)</transcript>"
+    }
+
+    /// Unescapes sanitized XML entities back to raw angle brackets after LLM cleanup completes.
+    static func unescapeTranscript(_ text: String) -> String {
+        text.replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
     }
 
     /// Returns the system instructions string for the given cleanup mode.

@@ -655,14 +655,19 @@ public actor CaptureSession {
                 }
             }
         }
-        // Yield partial chunk to the overlay stream. For non-final (volatile) chunks,
-        // prepend `finalizedText` so the live HUD displays the complete accumulated
-        // utterance rather than flickering back to just the new speech window's text.
-        if !chunk.isFinal, !finalizedText.isEmpty {
-            let combinedText = finalizedText + " " + chunk.text
+        // Yield partial chunk to the overlay stream. Prepend `finalizedText` (excluding
+        // the current final chunk's own addition if already appended) so the live HUD
+        // displays the complete accumulated utterance without dropping earlier segments.
+        if !finalizedText.isEmpty {
+            let combinedText: String
+            if chunk.isFinal {
+                combinedText = finalizedText
+            } else {
+                combinedText = finalizedText + " " + chunk.text
+            }
             let combinedChunk = TranscriptChunk(
                 text: combinedText,
-                isFinal: false,
+                isFinal: chunk.isFinal,
                 timestamp: chunk.timestamp
             )
             partialsContinuation?.yield(combinedChunk)

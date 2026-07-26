@@ -96,7 +96,11 @@ final class AskUserToolHandler {
 
             // Setup 120-second timeout task to guarantee continuation never hangs indefinitely
             let timeoutTask = Task { @MainActor [weak self, weak overlayController] in
-                try? await Task.sleep(for: .seconds(120))
+                do {
+                    try await Task.sleep(for: .seconds(120))
+                } catch {
+                    return // Task was cancelled (user committed or interrupted) — exit cleanly
+                }
                 guard let self = self, self.activeContinuation != nil else { return }
                 SpeakLog.agentBridge.warning("AskUserToolHandler: request timed out after 120 seconds.")
                 self.finish(with: .failure(AskUserError.timeout), overlayController: overlayController)
