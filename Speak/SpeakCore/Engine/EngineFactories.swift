@@ -82,12 +82,11 @@ public func defaultCleaner(for settings: SettingsStore) -> (any LLMCleaning)? {
         return OpenAICompatibleCleaner(preset: preset, model: model)
 
     case .mlx(let model):
-        // Wave 2.1: MLXCleaner stub. MLX requires third-party Swift packages — forbidden
-        // in v0 (AGENTS.md §2.9). Stub returns `isAvailable == false`; graceful fallback.
-        // Replace when MLX dep is approved and added to project.yml (v0.1+).
+        // MLX requires third-party Swift packages — forbidden in v0 (AGENTS.md §2.3).
+        // Returns nil; graceful fallback to raw transcript.
         SpeakLog.cleanup.warning(
-            "defaultCleaner: .mlx(model: \(model, privacy: .public)) — using v0.1+ stub (isAvailable=false)."
+            "defaultCleaner: .mlx(model: \(model, privacy: .public)) — using v0.1+ fallback."
         )
-        return MLXCleaner(model: model)
+        return nil
     }
 }

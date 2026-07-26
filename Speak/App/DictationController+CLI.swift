@@ -143,7 +143,12 @@ extension DictationController {
         let deadline = Date().addingTimeInterval(max(0, timeoutSeconds))
         let pollNanoseconds: UInt64 = 100_000_000
         while Date() < deadline, [.listening, .processing].contains(icon) {
-            try? await Task.sleep(nanoseconds: pollNanoseconds)
+            guard !Task.isCancelled else { break }
+            do {
+                try await Task.sleep(nanoseconds: pollNanoseconds)
+            } catch {
+                break
+            }
         }
         let reachedDeadline = Date() >= deadline
 
@@ -155,7 +160,12 @@ extension DictationController {
             // — this is what makes a failed/aborted capture never return a stale
             // earlier dictation (stale-answer isolation).
             while icon == .processing {
-                try? await Task.sleep(nanoseconds: pollNanoseconds)
+                guard !Task.isCancelled else { break }
+                do {
+                    try await Task.sleep(nanoseconds: pollNanoseconds)
+                } catch {
+                    break
+                }
             }
         }
 

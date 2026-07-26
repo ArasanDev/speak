@@ -180,7 +180,6 @@ final class PetPanelController {
     private let settingsStore: SettingsStore
     private let permissionManager: PermissionManager
     private let agentSpeechQueue: AgentSpeechQueue
-    private let attentionProvider: any PetAttentionProviding
     /// Weak-ish by construction: closures capture `[weak controller]` where
     /// `controller` is the owning `DictationController`, avoiding a retain
     /// cycle (`DictationController` owns this `PetPanelController`).
@@ -196,14 +195,12 @@ final class PetPanelController {
         dictationController: DictationController,
         settingsStore: SettingsStore,
         permissionManager: PermissionManager,
-        agentSpeechQueue: AgentSpeechQueue,
-        attentionProvider: any PetAttentionProviding = StubPetAttentionProvider()
+        agentSpeechQueue: AgentSpeechQueue
     ) {
         self.dictationController = dictationController
         self.settingsStore = settingsStore
         self.permissionManager = permissionManager
         self.agentSpeechQueue = agentSpeechQueue
-        self.attentionProvider = attentionProvider
         self.panel = PetPanel(model: model)
 
         wireInteraction()
@@ -411,20 +408,18 @@ final class PetPanelController {
         let micGranted = permissionManager.status(.microphone) == .granted
         let axGranted = permissionManager.status(.accessibility) == .granted
         let queuedCount = await agentSpeechQueue.queuedCount
-        let attentionCount = await attentionProvider.count
-
         let inputs = PetStateInputs(
             engineAvailable: micGranted && axGranted,
             isListening: dictationController.icon == .listening,
             isProcessing: dictationController.icon == .processing,
             isSpeaking: queuedCount > 0,
             isAgentWorking: false,  // reserved — no producer until AVB-7's agentWorking signal exists
-            hasAttention: attentionCount > 0
+            hasAttention: false
         )
         let resolved = PetState.resolve(from: inputs)
 
-        model.attentionCount = attentionCount
-        model.statusText = Self.statusText(for: resolved, attentionCount: attentionCount)
+        model.attentionCount = 0
+        model.statusText = Self.statusText(for: resolved, attentionCount: 0)
         // CONVERGENCE RULE (review fix, 2026-07-11): `resolve()` is the single
         // source of truth and `model.state` ALWAYS converges to its output,
         // unconditionally, every tick. The transition graph is ADVISORY ONLY —
