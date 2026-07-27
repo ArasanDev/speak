@@ -481,9 +481,19 @@ struct TranscriptOverlayView: View {
     // SEPARATE `NSPanel` anchored above this fixed frame (see `OverlayController` /
     // `CodingCustomizationPanel`) — so this view's own layout never transitions.
     private var listeningContent: some View {
-        calmListeningRow
-            .padding(.horizontal, SpeakSpacing.md)
-            .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)   // = 12 pt [decision]
+        Group {
+            if let loopManager = model.conversationLoopManager {
+                ConversationOverlayView(
+                    loopManager: loopManager,
+                    model: model,
+                    settingsStore: settingsStore
+                )
+            } else {
+                calmListeningRow
+                    .padding(.horizontal, SpeakSpacing.md)
+                    .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)   // = 12 pt [decision]
+            }
+        }
     }
 
     /// The (only) listening layout: live waveform, partial text, elapsed timer, and the

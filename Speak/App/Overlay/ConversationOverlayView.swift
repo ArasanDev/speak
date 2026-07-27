@@ -39,21 +39,9 @@ struct ConversationOverlayView: View {
     // MARK: - Body
 
     var body: some View {
-        ZStack {
-            // Glass background container
-            ZStack {
-                VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-                contentVStack
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-            // Magenta / Violet Animated Border Layer
-            borderLayer
-        }
-        .padding(4)
-        .frame(minWidth: 380, maxWidth: 440)
+        contentVStack
+            .padding(12)
+            .frame(minWidth: 380, maxWidth: 440)
     }
 
     // MARK: - Content Layout
