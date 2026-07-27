@@ -10,26 +10,16 @@ extension CLIPortServer {
             return .failure("askUser requires a non-empty prompt")
         }
         let modeString = request.mode?.rawValue
-        let timeout = request.timeout ?? CLIContract.askConfirmDefaultTimeoutSeconds
-        let pumpCeiling = timeout + 2.0
         let sessionNote = CLIPortServer.pumpedSessionNote(sessionId: request.sessionId, handler: handler)
 
-        let box = CLIPendingResultBox<CLIAskOutcome>()
+        // Dispatch askUser asynchronously on @MainActor without blocking the C message port callback
         Task { @MainActor in
-            let outcome = await handler.cliAskUser(prompt: prompt, mode: modeString)
-            box.set(outcome)
+            _ = await handler.cliAskUser(prompt: prompt, mode: modeString)
         }
-        guard let outcome = CLIPortServer.pumpUntilResult(timeoutSeconds: pumpCeiling, poll: box.get) else {
-            SpeakLog.cli.error("CLIPortServer: askUser pump exhausted without a result.")
-            return .failure("speak_ask_user timed out waiting for user response")
-        }
-        switch outcome {
-        case .answered(let text):
-            return .asked(text, sessionNote: sessionNote)
 
-        case .timedOut:
-            return .failure("speak_ask_user timed out waiting for user response")
-        }
+        // Return immediately so the C message port callback exits in < 1ms,
+        // preventing AppKit main thread blocking and cursor hanging.
+        return .accepted(sessionNote: sessionNote)
     }
 
     func handleStreamSpeech(_ request: CLIRequest, handler: any CLICommandHandler) -> CLIReply {
