@@ -677,7 +677,7 @@ public final class CLIPortServer {
         let pollSlice: TimeInterval = 0.02  // 20 ms — short enough to stay responsive
         while Date() < deadline {
             if let result = poll() { return result }
-            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(pollSlice))
+            RunLoop.current.run(mode: RunLoop.Mode.common, before: Date().addingTimeInterval(pollSlice))
         }
         return poll()
     }
