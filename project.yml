@@ -140,6 +140,7 @@ targets:
         # APFS filesystem — both land in DerivedData/Build/Products/Debug/ and the
         # Swift module scanner would treat them as the same path. [decision: W2.3]
         SWIFT_MODULE_NAME: SpeakCLI
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path @executable_path/../Frameworks"
         # Signing inherited from Signing.xcconfig (see configFiles above).
 
   # MCP agent-bridge CLI target — produces the `speak-mcp` binary that serves
@@ -170,6 +171,7 @@ targets:
         # Distinct Swift module name — same APFS case-insensitivity rationale
         # as SpeakCLI's SWIFT_MODULE_NAME override above.
         SWIFT_MODULE_NAME: SpeakMCP
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path @executable_path/../Frameworks"
         # Signing inherited from Signing.xcconfig (see configFiles above).
 
 schemes:
