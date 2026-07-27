@@ -446,6 +446,7 @@ final class DictationController: CLICommandHandler {
             voiceOut: speechSynthesizer,
             agentSpeechQueue: self.agentSpeechQueue
         )
+        self.speakMCPServer.setDictationController(self)
 
         // Start observing future trigger-mode changes from SettingsView.
         // Uses withObservationTracking — fires only on triggerMode mutations.

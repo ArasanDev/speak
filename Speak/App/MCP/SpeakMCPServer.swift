@@ -18,6 +18,7 @@ final class SpeakMCPServer {
     // MARK: - Dependencies
 
     private let askUserHandler: AskUserToolHandler
+    private weak var dictationController: DictationController?
     private weak var overlayController: OverlayController?
     private weak var settingsStore: SettingsStore?
     private let voiceOut: any SpeechSynthesizing
@@ -26,17 +27,23 @@ final class SpeakMCPServer {
     // MARK: - Initialization
 
     init(
+        dictationController: DictationController? = nil,
         overlayController: OverlayController,
         settingsStore: SettingsStore,
         voiceOut: any SpeechSynthesizing,
         agentSpeechQueue: AgentSpeechQueue
     ) {
         self.askUserHandler = AskUserToolHandler()
+        self.dictationController = dictationController
         self.overlayController = overlayController
         self.settingsStore = settingsStore
         self.voiceOut = voiceOut
         self.agentSpeechQueue = agentSpeechQueue
         SpeakLog.agentBridge.info("SpeakMCPServer initialized for Layer 4 Bidirectional Voice Architecture.")
+    }
+
+    func setDictationController(_ dictationController: DictationController) {
+        self.dictationController = dictationController
     }
 
     // MARK: - Tool Registrations
@@ -94,6 +101,7 @@ final class SpeakMCPServer {
             let userResponse = try await askUserHandler.askUser(
                 prompt: prompt,
                 modeString: modeString,
+                dictationController: dictationController,
                 overlayController: overlay,
                 voiceOut: voiceOut,
                 settingsStore: settings

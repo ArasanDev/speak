@@ -61,6 +61,7 @@ final class AskUserToolHandler {
     func askUser(
         prompt: String,
         modeString: String?,
+        dictationController: DictationController? = nil,
         overlayController: OverlayController,
         voiceOut: any SpeechSynthesizing,
         settingsStore: SettingsStore
@@ -89,6 +90,17 @@ final class AskUserToolHandler {
 
         // Attach loopManager to OverlayViewModel so OverlayRootView renders ConversationOverlayView
         overlayController.overlayModel.conversationLoopManager = loopManager
+
+        // Begin dictation to open mic hardware & start SpeechAnalyzer STT stream
+        if let dictationController = dictationController {
+            await dictationController.beginDictation()
+        } else {
+            overlayController.start(
+                partialsProvider: { nil },
+                levelsProvider: { nil },
+                isCleaningUp: false
+            )
+        }
         overlayController.overlayModel.overlayState = .listening
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -147,13 +159,6 @@ final class AskUserToolHandler {
                     loopManager.handleVADSpeechStarted()
                 }
             }
-
-            // Present the overlay panel
-            overlayController.start(
-                partialsProvider: { nil },
-                levelsProvider: { nil },
-                isCleaningUp: false
-            )
         }
     }
 
