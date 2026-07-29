@@ -13,6 +13,7 @@
 [![Discord](https://img.shields.io/badge/Discord-coming%20soon-5865F2)](#contributing)
 
 <!-- Demo GIF coming soon — recording pending human verification of live paste flow. -->
+<!-- Trigger verification test for Bug Hunter bot -->
 <!-- Replace this comment with: ![speak demo](docs/assets/demo.gif) -->
 
 `speak` is a menubar app. Press a hotkey, talk, stop. On-device AI **writes the
