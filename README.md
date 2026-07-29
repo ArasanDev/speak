@@ -258,3 +258,5 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
+
+<!-- bughunter dogfood 20260729143949 -->
