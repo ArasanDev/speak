@@ -46,6 +46,53 @@ it times out.* That is what "I tried bidirectional and it wasn't successful" was
 Cause 1 is already fixed (bridge reinstalled). This spec fixes cause 2 and makes
 cause 1 structurally impossible to recur.
 
+## 1.5 Addendum (2026-07-30, live verification) — two more causes, both on the wire
+
+Live probe of the reinstalled bridge against the app built from `2934e3b` found
+**two further defects, both pre-existing and both in front of the VAD fix.** The
+Layer-1 orphans are now constructed correctly (`AskUserToolHandler.swift:119-120`),
+but no agent can reach them, because:
+
+3. **`speak_ask_user` structurally cannot return an answer.**
+   `CLIPortServer+Layer4.handleAskUser` dispatches the ask in a detached `Task`,
+   **discards the result** (`_ = await handler.cliAskUser(...)`), and returns
+   `.accepted(sessionNote:)`. `CLIReply.accepted` hardcodes `answer: nil`
+   (`CLIContract.swift:318-320`). `CLIBridgeBackend.askUser` then hits its
+   `guard let answer = reply.answer` and fails.
+   Observed live: `speak_ask_user transport error: missing 'answer' field`,
+   returned in well under a second. [verified]
+
+   Origin: `bd86f18` "make handleAskUser non-blocking (<1ms return) to eliminate
+   AppKit main-thread lock and cursor hanging". That fix was correct about the
+   hang — a 120s `pumpUntilResult` **would** freeze AppKit — but it traded the
+   return path away silently. `handleStreamSpeech` still pumps because it only
+   waits 5s.
+
+   **This is the real reason bidirectional "was not successful."** Causes 1 and 2
+   were necessary to fix and insufficient. A human can talk to the overlay; the
+   answer has had nowhere to go since `bd86f18`.
+
+4. **The conversation mode cannot survive the CLI hop.** `CLIRequest.mode` is typed
+   `RequestInputMode?` (`CLIContract.swift:175`), whose only cases are `freeform`,
+   `choice`, `approval` (`HumanResponse.swift:15-17`). `AskUserToolHandler.parseMode`
+   expects a `ConversationMode` string. So `mode: "fullDuplex"` becomes `nil` at the
+   boundary and never reaches `parseMode`. [verified]
+
+### 1.5.1 The fork (needs a decision, not a mechanical fix)
+
+`askUser` waits up to 120s for a human. A synchronous CFMessagePort reply cannot
+hold that open without reintroducing `bd86f18`'s AppKit freeze. Two directions:
+
+- **(Recommended) Reuse the durable-call machinery that already exists.**
+  `AgentCallStore` + `speak_submit_call` / `speak_get_call` (AVB-7) were built for
+  exactly this shape: return a `callId` immediately, let the agent poll. Nothing
+  new is invented and the <1ms port return is preserved.
+- Make the reply genuinely asynchronous at the wire level (app pushes a second
+  message on completion). Larger protocol change; more moving parts.
+
+Do not "fix" this by lengthening `pumpUntilResult` — that restores the hang
+`bd86f18` removed. [decision pending]
+
 ## 2. Objective
 
 An agent can hold a spoken conversation with the human — speak, be interrupted
