@@ -111,7 +111,7 @@
 - Re-built and launched fresh `Speak.app` (PID 31135).
 
 **Loop #65 (2026-07-22) — Master Next Workstreams Index & SQLite FTS5 Engine COMPLETE (commit `e1624d3`).**
-- Authored the Master Next Workstreams Index in `specs/next_topics_and_workstreams_master_index.md`.
+- Authored the Master Next Workstreams Index in `specs/next_topics_and_workstreams_master_index.md`. *(dead reference: never committed to git; no successor)*
 - Implemented **SQLite FTS5 Full-Text Search Query Engine** in `WorkspaceStore.swift` (`searchMessagesFTS`).
 - All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
 - Re-built and launched fresh `Speak.app` (PID 22499).
@@ -153,7 +153,7 @@
 - Re-built and launched fresh `Speak.app` (PID 66206).
 
 **Loop #60 (2026-07-22) — Master 90% Roadmap, Channel Creation, DMs & Approval Cards COMPLETE (commit `901576e`).**
-- Created the Master 90% Workspace Feature Index in `specs/workspace-90-percent-roadmap.md`.
+- Created the Master 90% Workspace Feature Index in `specs/workspace-90-percent-roadmap.md`. *(dead reference: never committed to git; the workspace feature it indexed was purged in `3425443`)*
 - Implemented **Channel Creation Modal** (`NewChannelModalView.swift`) and wired channel creation reactively to `WorkspaceStore` (SQLite).
 - Implemented **Direct Messages (DMs)** section in the channel sidebar for 1-on-1 private agent conversations (`@Claude`, `@builder-qa`, `@terminal`).
 - Implemented **Interactive Approval Cards** (`ApprovalCardView.swift`) for mutating/high-risk agent execution requests with interactive **[Approve Action]** and **[Decline]** buttons.
@@ -178,7 +178,7 @@
 - Re-built and launched fresh `Speak.app` (PID 49279).
 
 **Loop #57 (2026-07-22) — Human-Agent Voice Huddles & Verbal Readbacks COMPLETE (commit `33b28ab`).**
-- Created the Slack Inspiration Matrix in `specs/slack-full-inspiration-matrix.md`.
+- Created the Slack Inspiration Matrix in `specs/slack-full-inspiration-matrix.md`. *(dead reference: never committed to git; no successor)*
 - Implemented **Voice Huddles** (`huddleHeaderBar`) inside `WorkspaceMainView.swift`:
   - Drop-in live audio huddle room (`Join Huddle` / `Leave Huddle`).
   - Active participant roster display (`👤 @tamil`, `🤖 @Claude`, `🤖 @builder-qa`).
@@ -508,7 +508,7 @@ No build/test/lint run — pure doc/scaffold comment, no Swift changed.
 
 ## Done (2026-06-21, loop run #26 — PHASE 1 base-hardening COMPLETE + paste test-hygiene fix)
 
-**Executed all of Phase 1 from `specs/acceleration-plan.md` (autonomous loop).** Five
+**Executed all of Phase 1 from `specs/acceleration-plan.md` *(deleted in `b54d523`, superseded by `docs/roadmap.md`)* (autonomous loop).** Five
 surgical, mostly-additive seam-hardening tasks, all merged on `master` and verified by
 an independent orchestrator gate from a wiped DerivedData (**build ✅ · 199 tests / 5
 XCTSkip / 0 failures · lint 0 serious · moat 7/7**):
@@ -546,6 +546,6 @@ paste at cursor into terminal with no macOS 26.4 paste-prompt, raw-fallback with
 
 **Pivoted mission: "finish v0" → "build the full product, fast."**
 
-**`specs/acceleration-plan.md` produced** from 3 parallel scouts (architecture audit, product roadmap,
+**`specs/acceleration-plan.md` *(deleted in `b54d523`, superseded by `docs/roadmap.md`)* produced** from 3 parallel scouts (architecture audit, product roadmap,
 competitor analysis). Four locked user decisions: base-hardening-first · local-first+pluggable-later ·
 **full-window dashboard** · **Monaco** typographic theme.

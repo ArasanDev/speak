@@ -25,7 +25,7 @@ inserted **at the cursor**. Two trigger gestures on one key:
 ## 1. Diagnosis (what was actually wrong) — [verified, this session]
 
 1. **Signing** — Xcode (Cmd+R) built **ad-hoc**, so every run's cdhash changed and
-   TCC grants broke. *Fixed* (Signing.xcconfig → both Xcode + make cert-sign;
+   TCC grants broke. *Fixed* (Signing.xcconfig → both Xcode + make dev-cert;
    cert-anchored DR proven stable across builds).
 2. **Tap never re-arms** — `DictationController.startMonitoring()` calls
    `monitor.start()` once at launch; on permission-denied it returns and never

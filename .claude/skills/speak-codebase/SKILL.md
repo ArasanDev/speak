@@ -17,7 +17,7 @@ AI neat-writing → pasted at the cursor. It is the private, offline alternative
 ($15/mo, cloud-only). The app lives in the menubar. Double-tap Fn → talk → single-tap Fn →
 cleaned text appears in the focused field. 100% Apple frameworks. No accounts, no cloud audio,
 no telemetry, works offline. The directory is named `deepvoice` for historical reasons; the
-product is `speak`. Do not build anything from `research/sample-ideation.md` — that idea is
+product is `speak`. Do not build anything from `research/archive/deepvoice-ideation.md` — that idea is
 abandoned.
 
 **What it is NOT:** a coding agent, chatbot, voice assistant, meeting scribe, or cross-platform app.

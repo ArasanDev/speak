@@ -31,7 +31,7 @@ receipts. MCP is one local adapter to that domain. `[decision 2026-07-11]`
 
 The earlier research docs debated a "Rust core + Swift shell + uniffi" split.
 That debate is **over**. Reasons, in brief (full evidence in
-`research/SPEAK_DICTATION_STACKS.md` and `research/TECH_STACK_JUDGMENT.md`):
+`research/evidence/dictation-stacks-verified.md` and `research/evidence/tech-stack-judgment.md`):
 
 1. **All 8 shipping Mac dictation apps are Swift-native** (Wispr, Willow,
    Superwhisper, Aiko, MacWhisper, VoiceInk, FluidVoice, TypeWhisper).
@@ -40,10 +40,10 @@ That debate is **over**. Reasons, in brief (full evidence in
    `NSPasteboard`, `AVAudioEngine`, Apple Intelligence) are Swift-first.
 3. The Rust recommendation came from studying the **wrong category**
    (cross-platform desktop frameworks like Firefox/Deno/Tauri), not Mac-first
-   dictation apps. `[verified]` in `research/TECH_STACK_JUDGMENT.md`.
+   dictation apps. `[verified]` in `research/evidence/tech-stack-judgment.md`.
 4. The factual claim that "Anthropic rewrote Claude Code to Rust" was wrong —
    Claude Code is TypeScript + Bun. `[verified]` in
-   `research/SPEAK_LANGUAGE_CORRECTION.md`.
+   `research/archive/SPEAK_LANGUAGE_CORRECTION.md`.
 
 ### The portability seam (preserve, don't build)
 

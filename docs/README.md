@@ -28,6 +28,7 @@ Every session starts with `AGENTS.md` (the operating manual, one level up), then
 **Maintainer** (deciding direction, shipping, positioning)
 - [`product.md`](product.md) — the destination: what `speak` is/isn't, moats, the v0→v3+ version ladder
 - [`competitors.md`](competitors.md) — Wispr Flow and category comparison, for positioning/README claims
+- [`strategy-platform-ladder.md`](strategy-platform-ladder.md) — why Apple-Silicon-only *is* the strategy, and the stated trigger for reconsidering Windows/Linux
 - [`release.md`](release.md) — sign/notarize/package walkthrough for `make release`
 - [`human-verification.md`](human-verification.md) — the live, human-only verification checklist
 - [`progress-archive.md`](progress-archive.md) — historical loop log (sessions #1–#25), archived from `progress.md`
@@ -46,6 +47,7 @@ Every session starts with `AGENTS.md` (the operating manual, one level up), then
 - **I want to design or touch a UI surface** → [`ui/foundations.md`](ui/foundations.md) (tokens/rules) + [`ui/surfaces-v0.md`](ui/surfaces-v0.md) (current) or [`ui/surfaces-future.md`](ui/surfaces-future.md) (later)
 - **I want to cut a release** → [`release.md`](release.md)
 - **I want to know how competitors stack up** → [`competitors.md`](competitors.md)
+- **I want to know when we'd do Windows/Linux** → [`strategy-platform-ladder.md`](strategy-platform-ladder.md)
 - **I want to know how agents are equipped to build this** → [`agent-tooling.md`](agent-tooling.md) + [`agentic-workflow.md`](agentic-workflow.md)
 - **I'm looking for old history not in `progress.md` anymore** → [`progress-archive.md`](progress-archive.md)
 
