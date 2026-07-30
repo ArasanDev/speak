@@ -183,18 +183,38 @@ The server auto-discovers available local inference backends:
 ## MCP Setup
 
 `speak-mcp` is a native Swift binary that serves the Model Context Protocol over
-stdio for any MCP-capable agent (Claude Code, Cursor, Windsurf).
+stdio for any MCP-capable agent (Claude Code, Codex, Cursor, Windsurf).
 
-### Claude Code
+### Two commands
 
-Add to your Claude Code MCP settings:
+```sh
+make install-mcp-user    # install the relocatable bridge under ~/Library/Application Support/speak/
+make register-mcp        # preview: which agent CLIs were found, what would change (writes nothing)
+make register-mcp-apply  # register with every detected agent CLI, idempotently
+```
+
+`register-mcp-apply` writes **user-level agent config outside this repo**
+(`~/.claude.json`, `~/.codex/config.toml`), touching only the single `speak-app`
+server entry. Re-running replaces that entry rather than duplicating it. Run
+`make register-mcp` first if you want to see the exact commands before anything
+is written.
+
+Verify with `claude mcp list` — expect `speak-app ... ✔ Connected`. The menubar
+app must be running: it owns the microphone and text-to-speech; `speak-mcp` owns
+no audio or UI of its own.
+
+### Manual setup (any other MCP client)
+
+The bridge lives at `~/Library/Application Support/speak/mcp/bin/speak-mcp`. That
+path contains a space, so launch it through a shell to keep quoting correct in
+every client:
 
 ```json
 {
   "mcpServers": {
-    "speak": {
-      "command": "/usr/local/bin/speak-mcp",
-      "args": []
+    "speak-app": {
+      "command": "/bin/zsh",
+      "args": ["-lc", "exec \"$HOME/Library/Application Support/speak/mcp/bin/speak-mcp\""]
     }
   }
 }
@@ -202,16 +222,17 @@ Add to your Claude Code MCP settings:
 
 ### Available tools
 
+Canonical contract: `specs/agent-voice-bridge.md` §5.
+
 | Tool | Description |
 |---|---|
-| `speak_register_session` | Bind an agent session to the speak daemon |
-| `speak_notify` | Visual HUD alert + auditory tone |
-| `speak_say` | Read text aloud via speech synthesis |
-| `speak_ask` | Prompt user with spoken question, capture voice response |
-| `speak_confirm` | Binary Yes/No voice/HUD confirmation |
-| `speak_request_input` | Trigger dictation to gather developer prompt text |
-| `speak_status` | Return current state machine phase |
-| `speak_submit_call` / `speak_get_call` | Async function call dispatch |
+| `speak_register_session` | Session registration + capability negotiation |
+| `speak_status` | App / mic / engine availability |
+| `speak_notify` | Attention-worthy spoken outcome (semantic `kind`); speaks a concise summary via local TTS |
+| `speak_request_input` | Structured human input — `freeform` / `choice` / `approval`, with typed outcomes |
+| `speak_submit_call` / `speak_get_call` | Durable agent-call inbox (async; requires a registered session) |
+| `speak_say` | Compatibility TTS primitive |
+| `speak_ask` / `speak_confirm` | Compatibility wrappers over `speak_request_input` |
 
 ---
 

@@ -145,38 +145,73 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
 
     // MARK: - Prompt construction
 
-    private static let developerAcronymHomophones: [String: String] = [
-        "CL line": "CLI",
-        "CLA tools": "CLI tools",
-        "A page": "API",
-        "S D K": "SDK",
-        "you I": "UI",
-        "L L M": "LLM",
-        "P R": "PR",
-        "F T S 5": "FTS5",
-        "FTS 5": "FTS5",
-        "fts 5": "FTS5",
-        "fts5": "FTS5",
-        "Fts5": "FTS5",
-        "sequel light": "SQLite",
-        "sql lite": "SQLite",
-        "sqlite": "SQLite",
-        "Sqlite": "SQLite",
-        "sqlite3": "SQLite3",
-        "Sqlite3": "SQLite3",
-        "sql lite 3": "SQLite3",
-        "cli": "CLI",
-        "api": "API",
-        "sdk": "SDK",
-        "ui": "UI",
-        "llm": "LLM",
-        "pr": "PR"
+    /// Spoken-form → written-form rules for developer acronyms.
+    ///
+    /// `[decision]` This is an **ordered array**, not a dictionary, and every rule is
+    /// applied **word-boundary-anchored and case-insensitively** (see
+    /// `fixDeveloperAcronyms`). Both properties are load-bearing:
+    ///
+    /// 1. **Ordered** — overlapping rules must resolve deterministically. A
+    ///    `[String: String]` has nondeterministic iteration order, so `sqlite3` vs
+    ///    `sqlite` (and `fts5` vs `fts 5`) raced: the same transcript could clean to
+    ///    `SQLite3` on one run and `SQLite3`→`SQLite`+`3` on the next. Longer, more
+    ///    specific spoken forms are listed FIRST and must stay first.
+    /// 2. **Word-boundary-anchored** — plain substring replacement corrupted ordinary
+    ///    English mid-word: `pr` made "project" → "PRoject", `ui` made "build" →
+    ///    "bUIld", `cli` made "client" → "CLIent", `api` made "rapid" → "rAPId".
+    ///    Observed live in dictation history 2026-07-30.
+    ///
+    /// Case-insensitivity also lets one rule replace the former per-casing duplicates
+    /// (`sqlite`/`Sqlite`/`SQLite`, `fts5`/`Fts5`/`FTS5`).
+    static let developerAcronymRules: [(spoken: String, written: String)] = [
+        // Multi-word spoken forms first — they must win over their own prefixes.
+        ("sql lite 3", "SQLite3"),
+        ("sequel light", "SQLite"),
+        ("sql lite", "SQLite"),
+        ("CLA tools", "CLI tools"),
+        ("CL line", "CLI"),
+        ("A page", "API"),
+        ("F T S 5", "FTS5"),
+        ("FTS 5", "FTS5"),
+        ("S D K", "SDK"),
+        ("you I", "UI"),
+        ("L L M", "LLM"),
+        ("P R", "PR"),
+        // Single-token forms. `sqlite3` before `sqlite` so the digit is not orphaned.
+        ("sqlite3", "SQLite3"),
+        ("sqlite", "SQLite"),
+        ("fts5", "FTS5"),
+        ("cli", "CLI"),
+        ("api", "API"),
+        ("sdk", "SDK"),
+        ("ui", "UI"),
+        ("llm", "LLM"),
+        ("pr", "PR")
     ]
+
+    /// Compiled once — `NSRegularExpression` construction is not free and this runs on
+    /// every cleaned dictation. A rule whose pattern fails to compile is dropped rather
+    /// than force-unwrapped (project rule: no `try!`).
+    private static let developerAcronymRegexes: [(regex: NSRegularExpression, written: String)] = {
+        developerAcronymRules.compactMap { rule in
+            let pattern = "\\b\(NSRegularExpression.escapedPattern(for: rule.spoken))\\b"
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                return nil
+            }
+            return (regex, rule.written)
+        }
+    }()
 
     static func fixDeveloperAcronyms(_ text: String) -> String {
         var result = text
-        for (homophone, replacement) in developerAcronymHomophones {
-            result = result.replacingOccurrences(of: homophone, with: replacement)
+        for (regex, written) in developerAcronymRegexes {
+            let template = NSRegularExpression.escapedTemplate(for: written)
+            result = regex.stringByReplacingMatches(
+                in: result,
+                options: [],
+                range: NSRange(result.startIndex..., in: result),
+                withTemplate: template
+            )
         }
         return result
     }

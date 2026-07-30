@@ -49,6 +49,77 @@ final class DeveloperAcronymBiasingTests: XCTestCase {
         }
     }
 
+    /// Regression: the acronym rules used plain substring replacement, so short rules
+    /// (`pr`, `ui`, `cli`, `api`) corrupted ordinary English mid-word. Observed live in
+    /// dictation history on 2026-07-30, where a real dictation of "the project" cleaned
+    /// to "the PRoject". Every case below is a word that CONTAINS an acronym spelling
+    /// and must survive untouched.
+    func testFixDeveloperAcronymsNeverRewritesAcronymsInsideOrdinaryWords() {
+        let mustSurviveVerbatim = [
+            // "pr"
+            "project", "process", "approach", "improvement", "improving", "proper",
+            "product", "progress", "prompt", "practice", "expression",
+            // "ui"
+            "build", "guide", "building", "quick", "require", "quality", "suite",
+            // "cli"
+            "client", "click", "clip", "decline", "clipboard",
+            // "api"
+            "rapid", "capital", "therapist",
+            // "ui"/"pr" together, and other short rules
+            "prebuilt", "sdkless", "llama", "pruning"
+        ]
+
+        for word in mustSurviveVerbatim {
+            let fixed = FoundationModelsCleaner.fixDeveloperAcronyms(word)
+            XCTAssertEqual(
+                fixed, word,
+                "fixDeveloperAcronyms corrupted the ordinary word '\(word)' into '\(fixed)'"
+            )
+        }
+    }
+
+    /// The exact sentence shape that reached the user, end to end.
+    func testFixDeveloperAcronymsPreservesRealSentenceWhileStillFixingStandaloneAcronyms() {
+        let input = "Explore the project and its main purpose, then improve the approach to the cli and api."
+        let expected = "Explore the project and its main purpose, then improve the approach to the CLI and API."
+        XCTAssertEqual(FoundationModelsCleaner.fixDeveloperAcronyms(input), expected)
+    }
+
+    /// Standalone acronyms must still be fixed regardless of the casing the LLM emitted.
+    func testFixDeveloperAcronymsIsCaseInsensitiveForStandaloneTokens() {
+        let cases: [(String, String)] = [
+            ("open a pr for this", "open a PR for this"),
+            ("open a PR for this", "open a PR for this"),
+            ("the ui is slow", "the UI is slow"),
+            ("the UI is slow", "the UI is slow"),
+            ("Sqlite storage", "SQLite storage"),
+            ("SQLITE storage", "SQLite storage"),
+            ("Fts5 index", "FTS5 index")
+        ]
+        for (input, expected) in cases {
+            XCTAssertEqual(
+                FoundationModelsCleaner.fixDeveloperAcronyms(input), expected,
+                "case-insensitive standalone fix failed for '\(input)'"
+            )
+        }
+    }
+
+    /// Overlapping rules must resolve the same way on every run. The old
+    /// `[String: String]` map had nondeterministic iteration order, so `sqlite3` could
+    /// lose to `sqlite` and orphan the digit.
+    func testFixDeveloperAcronymsIsDeterministicAcrossRepeatedRuns() {
+        let input = "sqlite3 and sqlite and sql lite 3 and fts5 and fts 5"
+        let first = FoundationModelsCleaner.fixDeveloperAcronyms(input)
+        for _ in 0..<50 {
+            XCTAssertEqual(
+                FoundationModelsCleaner.fixDeveloperAcronyms(input), first,
+                "fixDeveloperAcronyms is not deterministic across runs"
+            )
+        }
+        XCTAssertTrue(first.contains("SQLite3"), "expected SQLite3 to survive, got '\(first)'")
+        XCTAssertFalse(first.contains("SQLite 3"), "sqlite3 was split into 'SQLite 3': '\(first)'")
+    }
+
     func testAppleSpeechTranscriberVocabularyInitPreservesTerms() {
         let customTerms = ["FTS5", "SQLite", "CustomEngine"]
         let transcriber = AppleSpeechTranscriber(vocabulary: customTerms)

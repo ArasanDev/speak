@@ -61,7 +61,7 @@ APP_BIN   := Speak.app/Contents/MacOS/Speak
 # Local history store (P9). `make history` dumps recent dictations (raw vs cleaned).
 HISTORY_DB := $$HOME/Library/Application Support/speak/history.sqlite
 
-.PHONY: all help generate build test eval study lint fmt run kill relaunch logs logs-show history doctor gates lsp clean install install-mcp-user github-release release verify-moat dev-cert reset-permissions release-preflight
+.PHONY: all help generate build test eval study lint fmt run kill relaunch logs logs-show history doctor gates lsp clean install install-mcp-user register-mcp register-mcp-apply github-release release verify-moat dev-cert reset-permissions release-preflight
 
 all: build
 
@@ -221,8 +221,27 @@ install-mcp-user: build
 	@rsync -a --delete "$(PRODUCTS)/SpeakLLM.framework/" "$(MCP_USER_DIR)/Frameworks/SpeakLLM.framework/"
 	@chmod +x "$(MCP_USER_DIR)/bin/speak-mcp"
 	@echo "install-mcp-user: installed $(MCP_USER_DIR)/bin/speak-mcp"
-	@echo "Add this stdio server to your agent's MCP configuration:"
+	@echo ""
+	@echo "Next: register it with your agent CLIs in one step —"
+	@echo "  make register-mcp        # preview the changes (writes nothing)"
+	@echo "  make register-mcp-apply  # register with every detected agent CLI"
+	@echo ""
+	@echo "Or add this stdio server manually to any other MCP client:"
 	@echo '  {"command":"$(MCP_USER_DIR)/bin/speak-mcp"}'
+
+## register-mcp: preview registering the installed bridge with detected agent CLIs.
+##
+## Writes nothing. Shows exactly which agent CLIs were found and what would change.
+register-mcp:
+	@MCP_USER_DIR="$(MCP_USER_DIR)" scripts/register-mcp.sh
+
+## register-mcp-apply: register the bridge with every detected agent CLI (idempotent).
+##
+## Blast radius: writes user-level agent config OUTSIDE this repo (~/.claude.json,
+## ~/.codex/config.toml), touching only the single 'speak-app' server entry.
+## Re-running replaces that entry rather than duplicating it.
+register-mcp-apply:
+	@MCP_USER_DIR="$(MCP_USER_DIR)" scripts/register-mcp.sh --apply
 
 ## github-release: build, ad-hoc sign, and zip into dist/ for a GitHub Releases artifact.
 ##
