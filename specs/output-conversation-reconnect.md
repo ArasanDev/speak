@@ -72,11 +72,41 @@ but no agent can reach them, because:
    were necessary to fix and insufficient. A human can talk to the overlay; the
    answer has had nowhere to go since `bd86f18`.
 
-4. **The conversation mode cannot survive the CLI hop.** `CLIRequest.mode` is typed
-   `RequestInputMode?` (`CLIContract.swift:175`), whose only cases are `freeform`,
-   `choice`, `approval` (`HumanResponse.swift:15-17`). `AskUserToolHandler.parseMode`
-   expects a `ConversationMode` string. So `mode: "fullDuplex"` becomes `nil` at the
-   boundary and never reaches `parseMode`. [verified]
+4. **An agent cannot *select* a conversation mode across the CLI hop.** `CLIRequest.mode`
+   is typed `RequestInputMode?` (`CLIContract.swift:175`), whose only cases are
+   `freeform`, `choice`, `approval` (`HumanResponse.swift:15-17`).
+   `AskUserToolHandler.parseMode` expects a `ConversationMode` string. So
+   `mode: "fullDuplex"` becomes `nil` at the boundary. **This is a limitation, not a
+   blocker** — `parseMode` defaults to `.fullDuplex`, so the default path is
+   unaffected; what an agent loses is the ability to ask for `.gatedTurn`. Lower
+   severity than #3. [verified]
+
+### 1.5.2 Layers 1–3 confirmed live (2026-07-30)
+
+Against a fresh app (PID 96806) built from `2934e3b`, one `speak_ask_user` probe with
+log streaming produced, in order:
+
+```
+[agent-bridge] AskUserToolHandler: ask_user starting with mode=fullDuplex, prompt length=19.
+[conversation] ConversationLoopManager initialized with mode=fullDuplex, muted=false
+[engine]       SpeakEngine: beginDictation — starting new session.
+[conversation] Conversation state transitioned: idle -> agentSpeaking(...)
+[conversation] Agent speaking finished -> returning to idle.
+[conversation] Conversation state transitioned: idle -> listening(userText: "")
+[audio]        VAD: Speech started
+[audio]        VAD: Speech ended (duration: 0.300000s)
+[conversation] VAD silence detected -> ...
+```
+
+So the handler runs, both Layer-1 orphans are constructed and **the VAD is actually
+firing and driving turn commits** — cause 2 is genuinely fixed, not merely
+source-plausible. Cause **3 is the single remaining blocker**: the loop completes
+and the answer is thrown away at the port boundary. [verified]
+
+> Probe gotcha: `log` is shadowed by a function in the interactive zsh profile, so
+> inline `log stream` silently emits nothing. Use `/usr/bin/log` (or `make logs`,
+> whose recipe runs under `sh`). Earlier empty log captures were this artifact, not
+> app silence.
 
 ### 1.5.1 The fork (needs a decision, not a mechanical fix)
 
