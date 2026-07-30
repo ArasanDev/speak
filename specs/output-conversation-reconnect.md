@@ -4,58 +4,65 @@ Status: **active** · Owner: output slice · Depends on: `specs/agent-voice-brid
 
 ## 1. What actually happened (the diagnosis)
 
+> **Correction (2026-07-30):** an earlier draft of this spec claimed Loop #78 removed
+> `speak_ask_user` / `speak_stream_speech` and the `.askUser` / `.streamSpeech` CLI
+> verbs. **That was wrong.** Both verbs are present at `CLIContract.swift:124,126`,
+> both tools are advertised by `AgentBridgeTools.swift`, and the whole Layer-4 path is
+> wired end to end. The real causes are below. [verified by grep on `b72bd7c`]
+
 The bidirectional voice loop was **built successfully** on 2026-07-26 in commit
 `e4ae017` — "bidirectional-voice: full-duplex voice loop + VAD + barge-in + MCP
-bridge (Layers 1-4)". Four layers landed:
+bridge (Layers 1-4)". Current state of the four layers:
 
-| Layer | Artifact | State today |
+| Layer | Artifact | State on `b72bd7c` |
 |---|---|---|
-| 1 | `VoiceActivityDetector` (286 LOC, RMS energy, 600ms silence, barge-in callback) | **zero non-test callers** |
-| 1 | `SpeechSynthesizerStream` (373 LOC, sub-10ms `stopImmediately()`) | **zero non-test callers** |
-| 2 | `ConversationLoopManager` (495 LOC, `.fullDuplex` transitions, VAD handlers, interrupt) | **intact**, reached only from the overlay, pinned to `.gatedTurn` |
-| 3 | `ConversationOverlayView` (Mute / Interrupt / mode switcher) | present |
-| 4 | `SpeakMCPServer` + `speak_ask_user` / `speak_stream_speech` | **removed** |
+| 1 | `VoiceActivityDetector` (286 LOC, RMS energy, 600ms silence, barge-in callback) | **zero non-test callers — never instantiated** |
+| 1 | `SpeechSynthesizerStream` (373 LOC, sub-10ms `stopImmediately()`) | **zero non-test callers — never instantiated** |
+| 2 | `ConversationLoopManager` (495 LOC, `.fullDuplex` transitions, VAD handlers, interrupt) | **intact and reachable** |
+| 3 | `ConversationOverlayView` (Mute / Interrupt / mode switcher) | present, wired |
+| 4 | `SpeakMCPServer` + `AskUserToolHandler` + both tools | **present and wired** |
 
-Two independent failures, neither of them an engineering-capability failure:
+Two independent failures, neither an engineering-capability failure:
 
-1. **The front door was deleted.** Loop #78 (2026-07-30) withdrew `speak_ask_user`
-   and `speak_stream_speech` and removed `.askUser` / `.streamSpeech` from
-   `CLIContract`, for spec purity — §5 did not list them. Correct call on process,
-   but it left the engine with no path an agent could reach. The VAD and the
-   interruptible TTS became dead code.
-2. **The bridge under test was 19 days stale.** The installed
-   `~/Library/Application Support/speak/mcp/bin/speak-mcp` was dated Jul 11; its
-   embedded `SpeakCore.framework` Jul 10. `CLIContract` — the wire protocol, which
-   lives *in* `SpeakCore` — changed across five commits after that date. Every test
-   was conducted against a bridge that could not speak the protocol it was speaking
-   to. `make install-mcp-user` is not part of `make gates` and nothing warned.
+1. **The tools were invisible, because the installed bridge was 19 days stale.** The
+   installed `~/Library/Application Support/speak/mcp/bin/speak-mcp` was dated Jul 11;
+   its embedded `SpeakCore.framework` Jul 10. The source advertises **eleven** tools;
+   that stale bridge exposed **nine** — missing exactly `speak_ask_user` and
+   `speak_stream_speech`. An agent connected to it could not see the bidirectional
+   surface at all. `make install-mcp-user` is not in `make gates` and nothing warned.
+   [verified: the orchestrator's own live MCP session listed precisely those nine]
 
-So the capability exists. This spec **reconnects** it and makes failure mode 2
-structurally impossible.
+2. **Even when reached, `.fullDuplex` cannot commit a turn.** `AskUserToolHandler`
+   defaults to `.fullDuplex`, opens the mic via `beginDictation()`, and sets
+   `onUserTurnCommitted`. But that callback fires only from `commitUserTurn` or
+   `handleVADSilenceDetected` — and **nothing ever constructs a
+   `VoiceActivityDetector`**, so `handleVADSilenceDetected` is never called. The user
+   speaks, and the call hangs until the 120-second timeout. Likewise no barge-in,
+   because `SpeechSynthesizerStream` is never constructed either.
+
+Symptom, precisely: *the mic opens, the overlay appears, you talk, nothing happens,
+it times out.* That is what "I tried bidirectional and it wasn't successful" was.
+
+Cause 1 is already fixed (bridge reinstalled). This spec fixes cause 2 and makes
+cause 1 structurally impossible to recur.
 
 ## 2. Objective
 
 An agent can hold a spoken conversation with the human — speak, be interrupted
-mid-sentence, hear the reply, continue — through the **existing** nine-tool surface,
-with no new tool and no amendment to `specs/agent-voice-bridge.md` §5.
+mid-sentence, hear the reply, continue — through the **existing** tool surface. No
+new MCP tool, no amendment to `specs/agent-voice-bridge.md` §5.
 
-## 3. Design — `conversation` as a mode, not a tool
+## 3. Design — instantiate the two orphans
 
-`RequestInputMode` (`SpeakCore/AgentBridge/HumanResponse.swift:14`) is a
-`String`-backed enum: `freeform`, `choice`, `approval`. Add a fourth:
+**Do not add a `conversation` mode to `RequestInputMode`, and do not add a tool.**
+An earlier draft proposed that; it was based on the incorrect belief that
+`speak_ask_user` had been withdrawn. It has not been. The front door exists and
+works — what is missing is that two of the four Layer-1 primitives are never
+constructed. [decision]
 
-```swift
-case conversation
-```
-
-`speak_request_input` with `mode: "conversation"` drives
-`ConversationLoopManager` in `.fullDuplex` instead of presenting a single-shot
-prompt. This is deliberately **not** a new tool.
-
-**Why this and not re-adding `speak_ask_user`:** §5 withdrew `speak_ask_user`
-specifically because it *duplicated* `speak_request_input`. A mode on the existing
-tool duplicates nothing, so §5's own reasoning endorses it. The tool list stays at
-nine and Loop #78's decision is honoured rather than reverted. [decision]
+The fix is narrow: `AskUserToolHandler` must own a `VoiceActivityDetector` and a
+`SpeechSynthesizerStream`, and feed them into the `ConversationLoopManager` handlers
+that already exist and are already tested.
 
 ### 3.1 What must be wired
 
@@ -65,12 +72,11 @@ nine and Loop #78's decision is honoured rather than reverted. [decision]
 - Agent speech → `SpeechSynthesizerStream`, with `VoiceActivityDetector`'s barge-in
   callback calling `stopImmediately()`. This is the whole point: interruption is
   what makes it a conversation instead of an intercom.
-- `ConversationLoopManager.onUserTurnCommitted` → a `HumanResponseOutcome` returned
-  through the existing durable `AgentCallStore` path. All five outcomes must remain
-  reachable — `answered`, `declined`, `cancelled`, `timedOut`, `busy`. Ambiguity
-  must never silently become an empty string.
-- Multi-turn: a `conversation` call stays open across turns and closes on explicit
-  end, timeout, or user cancel. It must not leak a session or an open mic.
+- `AskUserToolHandler` constructs both primitives (today it constructs neither) and
+  tears them down on every exit path. `onUserTurnCommitted` already resolves the
+  continuation — that half works; it is simply never reached.
+- The existing 120s timeout must remain the backstop, not the primary path. After
+  this change a normal turn commits on VAD silence in well under a second.
 
 ### 3.2 Hard constraints
 
@@ -105,8 +111,8 @@ The 19-day drift cost more than the missing code did. Fix it structurally:
 
 ## 6. Verification
 
-- Unit: `.conversation` mode round-trips every one of the five
-  `HumanResponseOutcome` cases.
+- Unit: a full-duplex turn commits on VAD silence, not on the 120s timeout.
+- Unit: `AskUserToolHandler` releases VAD, synthesizer, and mic on every exit path.
 - Unit: barge-in stops synthesis in <10ms of the VAD callback.
 - Unit: the mic is released on every conversation-end path — normal, timeout, cancel,
   error, hardware mute.
