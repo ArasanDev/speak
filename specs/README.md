@@ -66,23 +66,6 @@ cross-checks — not vibes. See each file's header for its own evidence.
   (menubar/overlay/dashboard/settings/privacy) still stands, but its *visual identity/look*
   is explicitly superseded by `frontend-identity.md` (2026-07-11).
 
-## Superseded/rejected (built, then reverted — kept only as provenance)
-
-The following four specs describe a Slack-style multi-agent workspace (Channels, DMs,
-`@tag` plugin dispatch, Quick Switcher, Emoji reactions) that was fully **built** under
-AVB-8 through AVB-19 (`feature/agent-workspace` branch, commits `2a1b08c`…`0fbf023`) and
-then **fully purged** from the codebase (`3425443` "completely purge Slack-style workspace
-UI", `3e35137` "Remove legacy Workspace & Channels prototype slop"). None has any inbound
-reference from `docs/roadmap.md` or `docs/product.md` today. `agent-voice-bridge.md` §1
-explicitly scopes `speak` OUT of being a general workspace/automation/routing server —
-read that as the reason this direction was abandoned, though the reversal commits
-themselves don't narrate why.
-
-- **`git-and-product-minting-blueprint.md`**
-- **`human-agent-workspace-slack-inspiration.md`**
-- **`plugin-tag-api-workspace-design.md`**
-- **`open-tag-system.md`**
-
 ## Research/snapshot (point-in-time, not a contract)
 
 - **`landscape-analysis-2026-06-28.md`** — competitive analysis, fed
@@ -128,10 +111,6 @@ listed so a central pass can repair them if a move is approved.
 | current path | proposed path | why | inbound references that would break |
 |---|---|---|---|
 | `specs/horizon-voice-os.md` | `specs/archive/horizon-voice-os.md` | superseded, kept only as provenance | `CLAUDE.md:79` (agent-bridge design list), `docs/roadmap.md:31` |
-| `specs/git-and-product-minting-blueprint.md` | `specs/archive/git-and-product-minting-blueprint.md` | built-then-purged, no inbound refs | none found |
-| `specs/human-agent-workspace-slack-inspiration.md` | `specs/archive/human-agent-workspace-slack-inspiration.md` | built-then-purged, no inbound refs | none found |
-| `specs/plugin-tag-api-workspace-design.md` | `specs/archive/plugin-tag-api-workspace-design.md` | built-then-purged, no inbound refs | none found |
-| `specs/open-tag-system.md` | `specs/archive/open-tag-system.md` | built-then-purged, no inbound refs | none found |
 | `specs/validation-findings.md` | `specs/archive/validation-findings.md` | closed dated audit, no inbound refs | none found |
 | `specs/wispr-parity-and-spec.md` | `specs/archive/wispr-parity-and-spec.md` | its outputs are the live artifacts now, this is provenance | none found |
 | `specs/dictation-flow.md` | `specs/archive/dictation-flow.md` | build contract fulfilled | none found |
@@ -154,12 +133,3 @@ binding or actively referenced.
 - Whether `validation-findings.md`'s individual P0/P1 findings were each closed
   one-by-one — no per-finding tracking found in `docs/progress.md`; only the file's own
   "no inbound references" absence is evidence it isn't live-tracked elsewhere.
-- The exact commit or reasoning for *why* the Slack-style workspace (AVB-8..19) was
-  reversed — `3425443` and `3e35137` commit messages state *what* was purged, not *why*;
-  `docs/progress.md` was out of this pass's scope to search exhaustively for a narrative
-  entry.
-- Whether `docs/progress.md`'s references to `specs/next_topics_and_workstreams_master_index.md`,
-  `specs/workspace-90-percent-roadmap.md`, and `specs/slack-full-inspiration-matrix.md`
-  (lines 112, 154, 179) point to files that were deleted in the same purge, or never
-  existed in this directory — none of the three are present in `specs/` today, and this
-  falls under `docs/` ownership, not `specs/`, so it's reported here rather than fixed.

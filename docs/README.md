@@ -51,10 +51,6 @@ Every session starts with `AGENTS.md` (the operating manual, one level up), then
 - **I want to know how agents are equipped to build this** → [`agent-tooling.md`](agent-tooling.md) + [`agentic-workflow.md`](agentic-workflow.md)
 - **I'm looking for old history not in `progress.md` anymore** → [`progress-archive.md`](progress-archive.md)
 
-## Known issue — flag before trusting
-
-- [`speak_transformation_master_checklist.md`](speak_transformation_master_checklist.md) — describes a feature (Slack-replacement Human-Agent Workspace) that was built then fully purged (`3425443`, 2026-07-24); treat as superseded, not current-app fact — see the file's own header.
-
 ## Other
 
 - `assets/` — empty; referenced by root `README.md:14` as the source for `docs/assets/demo.gif` (not yet added).
