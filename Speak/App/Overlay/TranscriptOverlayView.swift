@@ -589,16 +589,35 @@ struct TranscriptOverlayView: View {
     // MARK: - Processing state
 
     private var processingContent: some View {
-        HStack(spacing: SpeakSpacing.sm) {
-            ProgressView()
-                .scaleEffect(0.7)
-                .frame(width: 16, height: 16)
-            // W2.2: honest copy — "Cleaning up…" only when cleanup is actually running.
-            Text(model.isCleaningUp ? "Cleaning up\u{2026}" : "Pasting\u{2026}")
-                .font(.speakMonoBody)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
-            closeButton
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            HStack(spacing: SpeakSpacing.sm) {
+                ProgressView()
+                    .scaleEffect(0.7)
+                    .frame(width: 16, height: 16)
+                // W2.2: honest copy — "Cleaning up…" only when cleanup is actually running.
+                Text(model.isCleaningUp ? "Cleaning up\u{2026}" : "Pasting\u{2026}")
+                    .font(.speakMonoBody)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                closeButton
+            }
+            // [input-felt-speed §3.3] Progressive reveal: `model.partialText` is the raw
+            // transcript we already captured — `OverlayController.transition(to: .processing)`
+            // deliberately does not clear it. Showing it here (dimmed, "settling") masks the
+            // cleanup wait instead of a bare spinner. This is NOT §3's two-phase optimistic
+            // paste: nothing is pasted here, and the eventual single paste (inside
+            // `SpeakEngine.endDictation()`) is completely unchanged. Gated by the settings
+            // knob (default on); off reproduces the exact pre-slice spinner-only view.
+            if settingsStore.revealTextWhileProcessing, !model.partialText.isEmpty {
+                Text(model.partialText)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary.opacity(0.75))
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+                    .lineSpacing(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityLabel("Settling: \(model.partialText)")
+            }
         }
         .padding(.horizontal, SpeakSpacing.md)
         .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)

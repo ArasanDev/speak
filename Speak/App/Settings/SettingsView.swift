@@ -227,6 +227,18 @@ private struct GeneralSettingsTab: View {
             } header: {
                 Text("Voice Out")
             }
+
+            Section {
+                Toggle("Show transcript while cleaning up", isOn: Binding(
+                    get: { store.revealTextWhileProcessing },
+                    set: { store.revealTextWhileProcessing = $0 }
+                ))
+                Text("Keeps your raw words visible in the HUD while AI cleanup runs, instead of just a spinner, so you always see something happened. Turn off to see only the spinner.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Felt Speed")
+            }
         }
         .formStyle(.grouped)
         .padding(SpeakSpacing.md)

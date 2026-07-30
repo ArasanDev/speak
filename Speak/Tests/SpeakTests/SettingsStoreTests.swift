@@ -537,6 +537,35 @@ final class SettingsStoreVoiceTests: XCTestCase {
             "readbackEnabled=true must survive a SettingsStore reload on the same defaults.")
     }
 
+    // MARK: - revealTextWhileProcessing (input-felt-speed §3.2/§3.3)
+
+    func testRevealTextWhileProcessingDefaultIsTrue() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertTrue(store.revealTextWhileProcessing,
+            "revealTextWhileProcessing default must be true — showing text we already captured is additive, not a new capability.")
+    }
+
+    func testRevealTextWhileProcessingFalseRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.revealTextWhileProcessing = false
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertFalse(reloaded.revealTextWhileProcessing,
+            "revealTextWhileProcessing=false must survive a SettingsStore reload — this is the escape hatch back to the pre-slice spinner-only view.")
+    }
+
+    func testRevealTextWhileProcessingTrueRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.revealTextWhileProcessing = false   // flip to false first
+        store.revealTextWhileProcessing = true    // then back to true
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertTrue(reloaded.revealTextWhileProcessing,
+            "revealTextWhileProcessing=true must survive a SettingsStore reload on the same defaults.")
+    }
+
     // MARK: - petEnabled / petPositions (FE-1)
 
     func testPetEnabledDefaultIsFalse() throws {

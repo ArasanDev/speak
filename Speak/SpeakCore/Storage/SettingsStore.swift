@@ -179,6 +179,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let petEnabled            = "speak.settings.petEnabled"
         static let petPositions          = "speak.settings.petPositions"
         static let readbackEnabled       = "speak.settings.readbackEnabled"
+        static let revealTextWhileProcessing = "speak.settings.revealTextWhileProcessing"
         static let ttsVoiceIdentifier    = "speak.settings.ttsVoiceIdentifier"
         static let ttsSpeechRate         = "speak.settings.ttsSpeechRate"
         static let ttsPitchMultiplier    = "speak.settings.ttsPitchMultiplier"
@@ -224,6 +225,12 @@ public final class SettingsStore: @unchecked Sendable {
             // surprise cost to shipping it on by default — the toggle exists purely
             // to let a user hide the button, not to gate a background behavior.
             Keys.readbackEnabled: true,
+            // [decision input-felt-speed §3.2/§3.3] Default true: showing the raw
+            // transcript in the HUD during cleanup is strictly additive to what the
+            // user already sees while listening — no new capability, no privacy cost,
+            // just not hiding text we already have. OFF reproduces the pre-slice
+            // spinner-only `.processing` view exactly.
+            Keys.revealTextWhileProcessing: true,
             Keys.petEnabled: false,
             Keys.ttsVoiceIdentifier: "",
             Keys.ttsSpeechRate: AVSpeechUtteranceDefaultSpeechRate,
@@ -799,6 +806,27 @@ extension SettingsStore {
         set {
             withMutation(keyPath: \.readbackEnabled) {
                 defaults.set(newValue, forKey: Keys.readbackEnabled)
+            }
+        }
+    }
+
+    /// [input-felt-speed §3.2/§3.3] Whether the `.processing` HUD state shows the raw
+    /// transcript (dimmed, marked as settling) instead of only a spinner + "Cleaning
+    /// up…"/"Pasting…" label. Read directly by `TranscriptOverlayView` on every render
+    /// (not cached), so a Settings change takes effect on the very next dictation.
+    ///
+    /// This is progressive reveal, NOT the two-phase optimistic-paste design from
+    /// `specs/input-felt-speed.md` §3 — the paste itself is untouched and still
+    /// happens exactly once, after cleanup returns, inside `SpeakEngine.endDictation()`.
+    /// Default `true`. `false` reproduces the exact pre-slice spinner-only view.
+    public var revealTextWhileProcessing: Bool {
+        get {
+            access(keyPath: \.revealTextWhileProcessing)
+            return defaults.bool(forKey: Keys.revealTextWhileProcessing)
+        }
+        set {
+            withMutation(keyPath: \.revealTextWhileProcessing) {
+                defaults.set(newValue, forKey: Keys.revealTextWhileProcessing)
             }
         }
     }
