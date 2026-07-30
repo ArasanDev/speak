@@ -1,5 +1,11 @@
 # Constraint Split for Agent dictations: CS-1 rejected → CS-2 architecture validated, parked
 
+**Status:** closed finding — CS-1 rejected, CS-2 architecture validated but parked (blocked
+on-device 3B extraction fidelity, not design) · **Binds:** nothing currently shipped ·
+**Owner:** orchestrator · **Depends on:** `docs/product.md` §6c · **Superseded by:** none —
+revisit trigger is the WWDC26 Foundation Models provider API (V1-13) · **Last substantive
+change:** 2026-07-06
+
 > **Status**: `[decision 2026-07-06]` CS-1 (single-prompt) explored, measured, **rejected**
 > (over-trigger). CS-2 (two-pass) built and measured: **architecture validated, but not
 > shipped** — blocked by on-device 3B extraction *fidelity*, not by the design. Revisit when

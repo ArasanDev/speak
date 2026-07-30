@@ -27,12 +27,18 @@ make verify-moat  # 7/7 source-tree checks (MIT, no third-party imports, no egre
 
 # Run
 make run          # build + launch the menubar app
+
+# The merge gate — build -> test -> lint -> verify-moat, in order
+make gates
 ```
 
 `make build` runs `xcodegen generate` automatically. A clean clone has no
 `.xcodeproj` (it is git-ignored; `project.yml` is the source of truth).
 
-**CI**: GitHub Actions runs `xcodebuild build` + `swiftlint` on every push.
+**CI** (`.github/workflows/ci.yml`) runs two jobs on every push/PR: `moat-audit`
+(ubuntu, `make verify-moat` — no Xcode needed) and `build-test-lint` (pinned to
+the `macos-26` runner image, since `FoundationModels`/`SpeechAnalyzer` only
+resolve on the macOS 26 SDK — `make build`, `make test`, `make lint`).
 
 ---
 
@@ -58,7 +64,14 @@ Do not treat `research/` as direction. It is historical reasoning; the
 
 ## Architecture seams
 
-Two targets: `SpeakCore.framework` (headless engine, no SwiftUI) and `Speak.app` (SwiftUI menubar shell). Every seam is a protocol (`Transcribing`, `LLMCleaning`, `TextInserting`, `HistoryStoring`) — mock conformances make every seam headless-testable. See `docs/architecture.md` for the full pipeline and module layout.
+Four build products, wired by XcodeGen from `project.yml`: `Speak.app` (SwiftUI
+menubar shell), `SpeakCore.framework` (headless engine, no SwiftUI), `SpeakLLM.framework`
+(the opt-in cloud cleanup engine, isolated in its own target so the moat audit can
+honestly assert zero networking/auth symbols in `SpeakCore`/App/CLI), and the
+`SpeakTests` bundle — plus two CLI tools, `speak` (`SpeakCLI`) and `speak-mcp`
+(`SpeakMCP`). Every seam is a protocol (`Transcribing`, `LLMCleaning`,
+`TextInserting`, `HistoryStoring`) — mock conformances make every seam
+headless-testable. See `docs/architecture.md` for the full pipeline and module layout.
 
 ---
 

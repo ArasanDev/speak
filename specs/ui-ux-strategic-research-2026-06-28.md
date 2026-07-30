@@ -1,5 +1,10 @@
 # speak — Strategic UI/UX Research (2026-06-28)
 
+**Status:** research/snapshot — point-in-time strategic research, feeds
+`specs/speak-ui-design-final-2026-06-28.md` · **Binds:** nothing — evidence, not contract ·
+**Owner:** orchestrator · **Depends on:** none · **Superseded by:** none · **Last
+substantive change:** 2026-06-28
+
 > **Purpose**: Strategic research document guiding all UI/UX design decisions for speak v0+ — from navigation architecture to component design to visual language. This becomes the source of truth for the product's interface.
 
 > **Scope**: v0 → v1 UI strategy, competitor positioning, design principles, current state, and implementation recommendations.

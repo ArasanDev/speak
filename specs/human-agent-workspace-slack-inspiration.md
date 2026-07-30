@@ -1,5 +1,11 @@
 # `speak` — The Slack-Inspired Human-Agent Workspace
 
+**Status:** superseded/rejected — the Channel/DM workspace this envisions was built
+(AVB-8..AVB-19, `feature/agent-workspace`) then fully purged from the codebase
+(`3425443`, `3e35137`) · **Binds:** nothing — no inbound references · **Owner:**
+orchestrator · **Depends on:** none · **Superseded by:** `specs/agent-voice-bridge.md`
+§1 ("not a general automation server") · **Last substantive change:** 2026-07-21
+
 > **Strategic Direction & Vision document (2026-07-21)**
 > **Destination**: Transform `speak` from a local voice dictation & attention tool into the **day-to-day local-first human workspace for managing multi-agent teams**.
 

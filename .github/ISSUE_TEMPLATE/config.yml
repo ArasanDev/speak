@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Contributing guide
+    url: https://github.com/ArasanDev/speak/blob/master/CONTRIBUTING.md
+    about: How to build, test, and submit changes to speak.
+  - name: Security disclosure
+    url: https://github.com/ArasanDev/speak/blob/master/SECURITY.md
+    about: Please do not file a public issue for a security vulnerability — see the disclosure policy instead.

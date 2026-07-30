@@ -1,5 +1,7 @@
 # `speak` — Product Transformation Master Checklist & Daily Tracker
 
+> **Purpose**: Tracked a "Slack-replacement Human-Agent Workspace" UI (channels, DMs, Voice Huddles, approval cards) — the feature it describes was built, then deliberately deleted. · **Audience**: none currently — the described feature no longer exists · **Status**: superseded by `roadmap.md` (North star / Agent Voice Bridge track); the codebase it tracked was purged in `3425443` (2026-07-24) — see `docs/README.md` known-issues entry and the reorg report for the full evidence trail · **Last reviewed**: 2026-07-30 (reviewed today)
+
 > **Master Execution Register & Daily Progress Log**
 > **Location**: `docs/speak_transformation_master_checklist.md`
 > **Authority**: Primary living register for tracking the transformation of `speak` into the world's leading local-first Human-Agent Workspace.

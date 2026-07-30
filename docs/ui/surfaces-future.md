@@ -1,6 +1,8 @@
-> v1/v2/v3+ design exploration. Low-priority reference. Do not implement until the v0 ship gate passes.
-
 # speak — Future Surfaces (v1/v2/v3+)
+
+> **Purpose**: v1/v2/v3+ UI design exploration (snippet editor, dictionary editor, etc). · **Audience**: contributor, AI agent (low-priority reference) · **Status**: living design exploration — do not implement until the v0 ship gate passes · **Last reviewed**: 2026-06-30 (git log)
+
+> v1/v2/v3+ design exploration. Low-priority reference. Do not implement until the v0 ship gate passes.
 
 ---
 

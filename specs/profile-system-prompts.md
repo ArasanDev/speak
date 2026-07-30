@@ -1,5 +1,12 @@
 # `speak` — Default Profile System Prompts
 
+**Status:** active/binding — shipped defaults (`Speak/SpeakCore/Profiles/DefaultProfiles.swift`
+implements these), user-editable · **Binds:** the default system-prompt text per built-in
+profile, until edited in AI Studio · **Owner:** orchestrator · **Depends on:**
+`specs/profile-engine.md` · **Superseded by:** none, though `DefaultProfiles.swift` has since
+added a fifth `Chat` profile not described here (see contradiction note in
+`specs/profile-taxonomy.md`) · **Last substantive change:** 2026-06-29
+
 > **Status**: Locked draft (2026-06-29). The shipped defaults for the Profile
 > Engine (`specs/profile-engine.md`). Every prompt here is written for a **very
 > small (~3B) on-device model** (Apple Foundation Models) and obeys the

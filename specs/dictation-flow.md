@@ -1,6 +1,14 @@
 # Spec — End-to-end dictation flow (hotkey → record → process → paste)
 
-> **Owner:** orchestrator (principal engineer). **Status:** active build contract.
+**Status:** closed/historical — build phases A–E (hotkey re-arm, two trigger modes, HUD,
+paste, live E2E) have their logic implemented and unit-verified; `docs/roadmap.md` P5/P6
+are `[~IN PROGRESS]` with live/human-verification items still open, and the subsequent
+Loop #67–#75 hotkey hardening entries in `docs/progress.md` supersede this document's
+diagnosis by execution · **Binds:** nothing further — historical build contract, its
+logic-level scope fulfilled · **Owner:** orchestrator (principal engineer) · **Depends on:** none ·
+**Superseded by:** shipped implementation (no single spec) · **Last substantive change:**
+2026-06-22
+
 > **Grounded in** three research reports (OSS: VoiceInk, Hex, Handy, Whispering;
 > lifecycle: AltTab, Loop) — all claims carry file:line / SDK citations in the
 > session record. **Supersedes** ad-hoc hotkey behavior; does not change the moat.

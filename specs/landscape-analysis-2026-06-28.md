@@ -1,5 +1,10 @@
 # Voice Dictation Landscape Analysis — Smart Design Patterns & Opportunities for `speak`
 
+**Status:** research/snapshot — point-in-time competitive analysis, feeds
+`specs/speak-ui-design-final-2026-06-28.md` · **Binds:** nothing — evidence, not
+contract · **Owner:** orchestrator · **Depends on:** none · **Superseded by:** none ·
+**Last substantive change:** 2026-06-28
+
 > **Date**: 2026-06-28  
 > **Scope**: Competitive analysis of 7 apps (Wispr Flow, Superwhisper, MacWhisper, VoiceInk, FluidVoice, Aiko, TypeWhisper) across 8 UX dimensions.  
 > **Purpose**: Identify smart design decisions that fit `speak`'s local-first, free, no-account moat.  

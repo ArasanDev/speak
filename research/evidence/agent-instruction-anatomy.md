@@ -1,5 +1,9 @@
 # Research — The Anatomy of an Effective Instruction TO a Coding Agent (per category)
 
+> **Research header** — Question: "what should a ~3B Apple Foundation Models cleanup
+> model emit, per category, so the downstream coding agent succeeds?" · Date:
+> 2026-06-30 · Status: **evidence** (cited by `AGENTS.md`)
+
 > **Status**: read-only evidence (`research/`). Does NOT edit specs/, prompts, or
 > fixtures. Feeds SM-2 (#50, Agent-mode prompt optimization) and the eval harness.
 > **Date**: 2026-06-30. **Author frame**: every finding below is bound to one

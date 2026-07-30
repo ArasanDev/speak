@@ -1,5 +1,14 @@
 # `speak` — Git Strategy & Product Minting Blueprint
 
+**Status:** superseded/rejected — the Slack-style workspace this blueprints
+(`feature/agent-workspace`, commits `2a1b08c`…`0fbf023`) was built (AVB-8 through
+AVB-19) and then fully purged (`3425443` "completely purge Slack-style workspace UI",
+`3e35137` "Remove legacy Workspace & Channels prototype slop") · **Binds:** nothing —
+no inbound references from `docs/roadmap.md` or `docs/product.md` · **Owner:**
+orchestrator · **Depends on:** none · **Superseded by:** `specs/agent-voice-bridge.md`
+§1 (explicitly scopes `speak` OUT of being a general workspace/automation server) ·
+**Last substantive change:** 2026-07-21
+
 > **Engineering & Product Strategy (2026-07-21)**
 > **Branch**: `feature/agent-workspace`
 > **Target**: Build, test, and mint the local-first Human-Agent Workspace, then merge to `master`.

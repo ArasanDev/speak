@@ -1,5 +1,11 @@
 # `speak` — Architecture Verification (My Judgment vs Evidence)
 
+> **Research header** — Question: "does the `SPEAK_PLATFORM_MODEL.md` recommendation
+> hold up against primary sources on how production apps are built?" · Date:
+> 2026-06-18 · Status: **archived** — contains a known false claim ("Claude Code is
+> rewritten in Rust+WASM"), corrected in `SPEAK_LANGUAGE_CORRECTION.md`. Per
+> `research/README.md`, do not read the body of this file.
+
 > **Status**: Verification memo. The user asked: *"use the web to find all the information against your judgment and also your thought — we need to know what are the reliable ways and how most advanced applications are built."*
 >
 > This doc **stress-tests the recommendation in `SPEAK_PLATFORM_MODEL.md`** against primary sources on how real production apps are built in 2026.

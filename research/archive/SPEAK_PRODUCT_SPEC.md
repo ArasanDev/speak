@@ -1,5 +1,10 @@
 # `speak` — Voice Dictation for MacBook
 
+> **Research header** — Question: "what is the v0 product spec for a Mac-native,
+> local-first, free Wispr Flow alternative?" · Date: 2026-06-18 · Status:
+> **archived** (pre-build ideation pass, superseded by `spec-superseded.md`; see
+> `research/README.md`)
+
 > **Status**: Product spec v0.1. Working name: `speak`. GTM wedge: MacBook (Apple Silicon, macOS 26+).
 > **Date**: 2026-06-18
 > **Author**: research pass + product design

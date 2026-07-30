@@ -1,5 +1,9 @@
 # How to Make Correct Tech-Stack Judgments
 
+> **Research header** — Question: "what process would have caught this session's 4
+> wrong tech-stack claims and produced the right one faster?" · Date: 2026-06-18 ·
+> Status: **evidence** (cited by `docs/architecture.md`)
+
 > **Status**: Meta-process memo. The user asked: *"how to take correct judgment for tech stack."* This session produced 4 wrong claims (Wispr is Electron, Claude Code is Rust, both Anthropic and OpenAI went Rust, Rust is right for `speak`'s core) and 1 right call (Mac dictation apps are Swift + native). The right answer is the *process* that would have caught the 4 wrong claims and produced the right one faster.
 >
 > **Date**: 2026-06-18

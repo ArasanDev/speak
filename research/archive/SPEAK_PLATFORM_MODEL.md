@@ -1,5 +1,10 @@
 # `speak` — Platform Model & Generalized Architecture (Ideation)
 
+> **Research header** — Question: "should `speak` be architected as a Mac-first
+> product or a generalized cross-platform core with a Mac shell first?" · Date:
+> 2026-06-18 · Status: **archived** (pre-build ideation pass, superseded by
+> `spec-superseded.md`; see `research/README.md`)
+
 > **Status**: Ideation memo. The previous spec (`SPEAK_PRODUCT_SPEC.md`) is **not wrong** — it's correct *as a v0 product brief*. But it answers the wrong question. It says "build a Mac dictation app." You're asking "build a *product* that happens to ship on Mac first." Those are different architectures.
 >
 > **Date**: 2026-06-18

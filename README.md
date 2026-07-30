@@ -3,17 +3,14 @@
 > **Your voice is the new keyboard.** macOS-native, 100% local, free, open-source
 > voice dictation with AI neat-writing — speech → on-device AI → pasted at cursor.
 
-[![CI](https://img.shields.io/badge/CI-passing-green)](docs/progress.md)
-[![Release](https://img.shields.io/badge/release-v0.0.1-orange)](CHANGELOG.md)
+[![CI](https://github.com/ArasanDev/speak/actions/workflows/ci.yml/badge.svg)](https://github.com/ArasanDev/speak/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/platform-macOS%2026%2B-lightgrey)](#build-from-source)
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange)](#tech-stack)
 [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-black)](#build-from-source)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Moat audit](https://img.shields.io/badge/moat%20audit-7%2F7-green)](#privacy)
-[![Discord](https://img.shields.io/badge/Discord-coming%20soon-5865F2)](#contributing)
 
 <!-- Demo GIF coming soon — recording pending human verification of live paste flow. -->
-<!-- Trigger verification test for Bug Hunter bot -->
 <!-- Replace this comment with: ![speak demo](docs/assets/demo.gif) -->
 
 `speak` is a menubar app. Press a hotkey, talk, stop. On-device AI **writes the
@@ -58,22 +55,17 @@ without abandoning their business model: **fully local, free, open, and private*
 
 ## Quick start
 
-### Homebrew (recommended)
+### Build from source (the only path today)
 
-```bash
-brew tap speak-dev/speak
-brew install speak
-```
-
-> The tap publishes at first tag (`v0.0.1`). Until then, build from source below.
-
-### Build from source
+> **Homebrew tap: not yet published.** `dist/speak.cask.rb` is a scaffold, inert
+> until a signed + notarized release exists (`docs/roadmap.md` P11-b) — there is
+> no `brew tap` command to run yet. Build from source below.
 
 Requirements: macOS 26 (Tahoe), Apple Silicon, Xcode 26+.
 
 ```bash
 brew install xcodegen swiftlint xcbeautify
-git clone https://github.com/speak-dev/speak.git && cd speak
+git clone https://github.com/ArasanDev/speak.git && cd speak
 make build     # generates Speak.xcodeproj, builds Speak.app
 make test      # full test suite
 make run       # launch the menubar app

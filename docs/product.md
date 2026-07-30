@@ -1,5 +1,7 @@
 # `speak` — Product Definition (WHAT + WHY)
 
+> **Purpose**: The destination — what `speak` is/isn't, positioning, moats, the v0–v3+ version ladder. · **Audience**: maintainer, contributor, AI agent · **Status**: living (human-owned; §9 version ladder is authoritative for scope) · **Last reviewed**: 2026-07-11 (git log)
+
 > **Status**: The destination. This defines what `speak` IS and what the
 > finished product looks like. Architecture (`architecture.md`) says HOW;
 > `roadmap.md` says IN WHAT ORDER; `benchmark.md` says WHEN IT IS DONE.

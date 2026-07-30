@@ -1,6 +1,9 @@
 # Spec: Output — Reconnecting the Conversation
 
-Status: **active** · Owner: output slice · Depends on: `specs/agent-voice-bridge.md` §5
+**Status:** active · **Binds:** re-wiring the bidirectional voice loop (VAD, barge-in,
+full-duplex) that was built but never activated · **Owner:** output slice · **Depends on:**
+`specs/agent-voice-bridge.md` §5 · **Superseded by:** none · **Last substantive change:**
+2026-07-30
 
 ## 1. What actually happened (the diagnosis)
 

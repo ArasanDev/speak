@@ -1,5 +1,7 @@
 # `speak` — Benchmark & Definition of Done (vs the category frontier)
 
+> **Purpose**: The testable definition of done vs. Wispr Flow and the category — MATCH/BEAT/SKIP gates. · **Audience**: contributor, maintainer, AI agent · **Status**: living (v0 gate); v0.1+ rows added as roadmap grows · **Last reviewed**: 2026-07-11 (git log)
+
 > **Status**: The testable target. `speak` is "done" not when the roadmap is
 > checked, but when this benchmark passes: every **MATCH** row meets its
 > criterion *measured against the frontier*, every **BEAT** row holds, every

@@ -1,5 +1,7 @@
 # `speak` — Agentic Build Workflow (HOW we build)
 
+> **Purpose**: Operating manual for HOW agents build `speak` — authority model, the work loop, model tiering. · **Audience**: AI agent, maintainer · **Status**: living · **Last reviewed**: 2026-06-29 (git log)
+
 > **Status**: Standing operating manual for any agent (orchestrator or worker)
 > building speak. Read alongside `AGENTS.md`. **Updated**: 2026-06-29.
 >

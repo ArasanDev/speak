@@ -1,5 +1,7 @@
 # `speak` — Architecture (HOW)
 
+> **Purpose**: The build blueprint — tech stack, module layout, key Swift types, state machines. · **Audience**: contributor, AI agent · **Status**: living · **Last reviewed**: 2026-07-11 (git log)
+
 > **Status**: The build blueprint. Implement from this. Types and signatures
 > below are **verbatim Swift** — implement them as written unless you find a
 > compile-error or primary-source contradiction (then surface it).

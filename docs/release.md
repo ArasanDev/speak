@@ -1,5 +1,7 @@
 # Release — sign, notarize, package
 
+> **Purpose**: One-time manual setup (Developer ID cert, notarization credentials) so `make release` can produce a Gatekeeper-clean `.dmg`. · **Audience**: maintainer (P11-b, currently blocked on cert enrollment) · **Status**: current, but describes a not-yet-executed path — v0 ships via P11-a (build-from-source) instead, see `roadmap.md` P11-b · **Last reviewed**: 2026-06-21 (git log)
+
 This document describes the one-time manual setup required before `make release`
 can produce a Gatekeeper-clean `.dmg`. The `make release` target is fully
 implemented and automated; only the credentials are manual.

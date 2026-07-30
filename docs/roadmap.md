@@ -1,5 +1,7 @@
 # `speak` — Build Roadmap (v0 only)
 
+> **Purpose**: The v0 task-by-task build order (P0–P14) + the Agent Voice Bridge (AVB) north-star track. · **Audience**: AI agent (pick next task), contributor, maintainer · **Status**: living — read every session per `CLAUDE.md` · **Last reviewed**: 2026-07-25 (git log)
+
 > Agent navigation: pick lowest `[ ]` task with no open `[~]` blockers.
 > Status: `[x]` done · `[~]` partial (logic verified; live/visual deferred) · `[ ]` todo · `[!]` blocked.
 > Ship gate: `docs/benchmark.md §4` MATCH + `docs/quality.md §9` all pass.

@@ -1,5 +1,9 @@
 # Synthesis — Agent-Mode Prompt Optimization (SM-2), research-first
 
+> **Research header** — Question: "how do the instruction-anatomy and small-model-eval
+> pillars combine into a sequenced plan for SM-2 Agent-mode prompt optimization?" ·
+> Date: 2026-06-30 · Status: **evidence** (cited by `AGENTS.md`)
+
 > **Status**: orchestrator synthesis of two research pillars (2026-06-30). Read-only
 > evidence + a PROPOSED sequenced plan. No prompts/specs/fixtures changed yet — this is
 > the checkpoint artifact. Inputs: `research/coding-agent-instruction-anatomy.md` (the

@@ -1,7 +1,9 @@
+# `speak` — Progress (NOW)
+
+> **Purpose**: Current build state, rewritten at the end of every loop. · **Audience**: AI agent (read every session per `CLAUDE.md`), maintainer · **Status**: living (actively maintained — do not restructure) · **Last reviewed**: 2026-07-30 (reviewed today; file itself last substantively edited 2026-07-30)
+>
 > Living state file. Agents: rewrite the "current" section at end of each loop. Do not delete history — append.
 > Archive location: `docs/progress-archive.md`.
-
-# `speak` — Progress (NOW)
 
 ---
 

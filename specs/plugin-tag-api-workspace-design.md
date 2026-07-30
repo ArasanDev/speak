@@ -1,5 +1,12 @@
 # `speak` — Plugin-as-Tag API Architecture & Dual-Panel UI Design
 
+**Status:** superseded/rejected — the `@tag` plugin dispatch system and dual-panel UI
+this designs were built under AVB-8..AVB-19 then fully purged (`3425443`, `3e35137`) ·
+**Binds:** nothing — no inbound references · **Owner:** orchestrator · **Depends on:**
+`specs/open-tag-system.md` · **Superseded by:** `specs/agent-voice-bridge.md` §4 ("Tools
+are semantic workflows," not generic plugin/channel primitives) · **Last substantive
+change:** 2026-07-21
+
 > **Strategic API & UI Blueprint (2026-07-21)**
 > **Core Concept**: Every channel, tool, and plugin integration (GitHub, Terminal, Datadog, Xcode, Browser, AI Agents) becomes a **Spoken Tag (`@tag`)**.
 

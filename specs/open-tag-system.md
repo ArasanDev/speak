@@ -1,5 +1,12 @@
 # `speak` — Claude Tag & Open Tag (@mention) Architecture
 
+**Status:** superseded/rejected — the `@mention` tag-routing architecture this proposes
+was built (`TagRegistry`, spoken-tag parser, AVB-8..AVB-19) then fully purged
+(`3425443`, `3e35137`) · **Binds:** nothing — no inbound references · **Owner:**
+orchestrator · **Depends on:** none · **Superseded by:** `specs/agent-voice-bridge.md`
+§1, §8 (no generic multi-agent routing/channel primitives in the bridge) ·
+**Last substantive change:** 2026-07-21
+
 > **Official Inspiration**: Anthropic's **Claude Tag** (`https://claude.com/docs/claude-tag/overview`), Claude Code Agent Teams, Mattermost AI Copilot, and Zulip.
 
 ---

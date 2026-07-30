@@ -1,5 +1,7 @@
 # `speak` — Progress Archive
 
+> **Purpose**: Historical loop-by-loop log (sessions #1–#25 + old handoff banners), archived from `progress.md`. · **Audience**: AI agent / maintainer doing history archaeology · **Status**: archived (frozen at 2026-06-26; superseded for current state by `progress.md`) · **Last reviewed**: 2026-06-30 (git log)
+>
 > Sessions #1–#25 and all old handoff banners, archived from `progress.md` on
 > 2026-06-26 to keep the live file fast for cold-start agents.
 > See `progress.md` for current state and sessions #26+.

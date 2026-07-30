@@ -1,5 +1,12 @@
 # Plan: Wispr Flow Parity Map + Consolidated Human Spec for `speak`
 
+**Status:** closed/historical — this plan's stated outputs (`docs/benchmark.md`, `SPEC.md`)
+already exist and are the current canonical done-condition/spec; this document is the
+provenance record of how they were produced · **Binds:** nothing directly — see
+`docs/benchmark.md` for the binding gate · **Owner:** orchestrator · **Depends on:** none ·
+**Superseded by:** `docs/benchmark.md`, `SPEC.md` (its own outputs) · **Last substantive
+change:** 2026-06-20
+
 > **Plan type**: enhancement (verified benchmark) + chore (doc synthesis)
 > **Complexity**: complex (external verification + definition-of-done + synthesis)
 > **Outputs**:
