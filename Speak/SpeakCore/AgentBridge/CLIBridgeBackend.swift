@@ -28,6 +28,19 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
                     detail: reply.error ?? "speak reported an error"
                 ), sessionNote: reply.sessionNote)
             }
+            // Contract-version guard: an app build from before/after this one
+            // must surface as a loud error, not a plausible-looking normal
+            // status reply. [decision: output-conversation-reconnect §4]
+            guard reply.contractVersion == CLIContract.bridgeContractVersion else {
+                let mismatch = BridgeUnavailable.contractVersionMismatch(
+                    runningVersion: reply.contractVersion,
+                    expectedVersion: CLIContract.bridgeContractVersion
+                )
+                return BridgeOutcome(BridgeStatusReport(
+                    appRunning: true, engineState: reply.state?.rawValue, hotkeyBinding: reply.binding,
+                    detail: mismatch.reason, contractMismatch: true
+                ), sessionNote: reply.sessionNote)
+            }
             return BridgeOutcome(BridgeStatusReport(
                 appRunning: true,
                 engineState: reply.state?.rawValue,

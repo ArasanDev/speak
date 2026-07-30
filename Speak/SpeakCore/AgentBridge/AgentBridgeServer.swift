@@ -449,6 +449,13 @@ public actor AgentBridgeServer {
     }
 
     private static func render(_ report: BridgeStatusReport, sessionNote: String?) -> MCPToolCallResult {
+        // Version skew is reported as a loud, actionable error even though the
+        // app itself is running — never folded into the normal "speak is
+        // running" text reply, where a caller could plausibly miss it.
+        // [decision: output-conversation-reconnect §4]
+        if report.contractMismatch {
+            return .error(report.detail ?? "speak-mcp/speak.app contract version mismatch.")
+        }
         guard report.appRunning else {
             return .error(report.detail ?? BridgeUnavailable.appNotRunning.reason)
         }

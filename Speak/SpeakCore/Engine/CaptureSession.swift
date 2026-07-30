@@ -253,6 +253,25 @@ public actor CaptureSession {
         return nil
     }
 
+    // MARK: - VAD attachment (output-conversation-reconnect)
+
+    /// Attaches (or, passing `nil`, detaches) a `VoiceActivityDetector` to the
+    /// live `AudioCapture` behind this session's transcriber, mirroring the
+    /// `levels()` seam above: same `AudioCaptureProviding` cast, same narrow
+    /// coupling, no change to `Transcribing` or any other transcriber.
+    ///
+    /// Returns `true` if an `AudioCapture` was found to attach to, `false`
+    /// otherwise (e.g. a test fixture transcriber with no live capture).
+    @discardableResult
+    public func attachVoiceActivityDetector(_ vad: VoiceActivityDetector?) -> Bool {
+        guard let sttTranscriber = transcriber as? AudioCaptureProviding,
+              let audioCapture = sttTranscriber.audioCapture else {
+            return false
+        }
+        audioCapture.attachVoiceActivityDetector(vad)
+        return true
+    }
+
     // MARK: - Lifecycle
 
     /// Begin a new dictation. Transitions `.idle → .listening`. Throws

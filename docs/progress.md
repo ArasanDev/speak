@@ -7,6 +7,34 @@
 
 ## Current phase
 
+**builder-engine — output-conversation-reconnect (2026-07-30) — Parts 1+2 COMPLETE, uncommitted in worktree `input-felt-speed`.**
+- Part 1: `AskUserToolHandler` now constructs and owns a `VoiceActivityDetector` + `SpeechSynthesizerStream`
+  (previously dead code), feeds real VAD events into the existing, untouched `ConversationLoopManager`
+  handlers, routes prompt readback through the synthesizer with VAD barge-in → `stopImmediately()`
+  (measured 5.8ms), and tears both primitives + mic down on every exit path. New attach seam
+  `AudioCapture.attachVoiceActivityDetector` → `CaptureSession` → `SpeakEngine`, mirroring the existing
+  W2.1 level-stream pattern. `ConversationLoopManager.swift` was NOT modified per scope.
+- Part 2: `CLIContract.bridgeContractVersion` constant; `speak_status`/`CLIBridgeBackend.status` now
+  compares the running app's compiled-in version and returns a loud `.error` (never a normal reply)
+  naming `make install-mcp-user` on skew.
+- Fixed in passing (own territory, `AgentBridgeServerTests.swift`): a stale `tools/list` expectation
+  set that predated the Layer 4 tools (`speak_ask_user`/`speak_stream_speech`) landing — was already
+  failing at HEAD before this work started.
+- `make gates`: build OK · full test suite green (273 Swift-Testing tests + XCTest, `** TEST SUCCEEDED **`)
+  · verify-moat 7/7 · **lint still exits 2**, but the only 3 remaining errors are pre-existing and
+  outside this task's territory (`DictationController.swift` type-body-length, `Overlay/ConversationOverlayView.swift`
+  type-body-length, `SpeakLLM/StreamingChatClient.swift` function-body-length — confirmed via
+  `git diff --stat HEAD` showing zero changes to those files).
+- Coverage gap, disclosed not silently skipped: no unit test drives all 5 mic-release exit paths
+  (normal/timeout/cancel/error/hardware-mute) through a real `DictationController` — no precedent in
+  the suite constructs one directly (needs a live AVAudioEngine/permission stack). Recommend live/manual
+  verification or a future XCUITest.
+- Judgment call flagged for review: `AskUserToolHandler.onInterrupt` still terminates the request
+  (`.cancelled`) on any VAD-detected interrupt, while `ConversationLoopManager`'s own design treats an
+  interrupt as pause-then-resume-listening. Preserved existing behavior per "don't rewrite CLM" scope;
+  `vad.onBargeIn` still satisfies the literal <10ms barge-in requirement independently.
+- Not committed — orchestrator reviews the worktree diff and commits.
+
 **Loop #76 (2026-07-25) — Docs Reconciliation COMPLETE. Next: P15 Inference + Agent Playground.**
 - Reconciled `docs/roadmap.md`: marked AVB-5 `[x]` (live round-trip verified Loop #74), AVB-6 `[x]` (Loop #51), AVB-7 `[x]` (Loop #51), P14 `[DONE]` with all sub-items checked.
 - Updated `CHANGELOG.md`: added Human-Agent Workspace, AVB bridge, Agent Voice Bridge, inference server, UI overhaul, SwiftLint fixes to [Unreleased] section.

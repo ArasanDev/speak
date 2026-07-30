@@ -84,6 +84,22 @@ public enum CLIContract {
     /// think, and answer, while still failing a truly-abandoned request rather than
     /// hanging the CLI process forever. [decision: H-3]
     public static let askConfirmDefaultTimeoutSeconds: TimeInterval = 60.0
+
+    /// The compiled-in version of this wire contract. Bump whenever `CLICommand`,
+    /// `CLIRequest`, or `CLIReply` gains/changes a field in a way that would make an
+    /// old binary on either end of the port silently misinterpret the other's
+    /// payload (as opposed to a purely additive `Optional` field, which old/new
+    /// binaries both tolerate).
+    ///
+    /// `speak.app` and `speak-mcp` are separate build products that both embed
+    /// this same source file, but nothing forces them to be rebuilt/reinstalled
+    /// together — a stale `speak-mcp` left over from `make install-mcp-user` can
+    /// end up talking to a freshly rebuilt `speak.app` (or vice versa). Both
+    /// sides report/compare this constant so a version skew surfaces as a loud,
+    /// actionable error (see `BridgeUnavailable.contractVersionMismatch`)
+    /// instead of a confusing malformed-request/decode failure.
+    /// [decision: output-conversation-reconnect §4 — contract-version guard]
+    public static let bridgeContractVersion: Int = 1
 }
 
 // MARK: - CLICommand (request)
@@ -250,6 +266,11 @@ public struct CLIReply: Codable, Sendable {
     public let state: CLIState?
     /// Present in status replies: the hotkey binding display string (e.g. "⌘ Right Command ×2").
     public let binding: String?
+    /// Present in status replies: the running app's compiled-in
+    /// `CLIContract.bridgeContractVersion`. `nil` on any reply from an app build
+    /// that predates this field (itself a signal of skew, handled the same as an
+    /// explicit mismatch). [decision: output-conversation-reconnect §4]
+    public let contractVersion: Int?
     /// Present in `ask` replies: the raw transcript text of the spoken answer.
     public let answer: String?
     /// Present in `confirm` replies when `ok == true`: `true`/`false` for a recognized
@@ -303,10 +324,11 @@ public struct CLIReply: Codable, Sendable {
         CLIReply(ok: false, error: message, state: nil, binding: nil, answer: nil, confirmed: nil)
     }
 
-    /// Status reply carrying live icon + binding.
+    /// Status reply carrying live icon + binding + this build's contract version.
+    /// [decision: output-conversation-reconnect §4]
     public static func status(state: CLIState, binding: String, sessionNote: String? = nil) -> CLIReply {
         CLIReply(ok: true, error: nil, state: state, binding: binding, answer: nil, confirmed: nil,
-                 sessionNote: sessionNote)
+                 contractVersion: CLIContract.bridgeContractVersion, sessionNote: sessionNote)
     }
 
     /// `ask` reply carrying the spoken answer's transcript text.
@@ -358,6 +380,7 @@ public struct CLIReply: Codable, Sendable {
                 answer: String? = nil, confirmed: Bool? = nil,
                 outcome: String? = nil, choice: String? = nil,
                 sessionId: String? = nil, capabilities: [String]? = nil,
+                contractVersion: Int? = nil,
                 sessionNote: String? = nil,
                 agentCall: AgentCall? = nil, duplicateSubmission: Bool? = nil) {
         self.ok = ok
@@ -370,6 +393,7 @@ public struct CLIReply: Codable, Sendable {
         self.choice = choice
         self.sessionId = sessionId
         self.capabilities = capabilities
+        self.contractVersion = contractVersion
         self.sessionNote = sessionNote
         self.agentCall = agentCall
         self.duplicateSubmission = duplicateSubmission

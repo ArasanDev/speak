@@ -17,6 +17,17 @@
 //   it does NOT consume the PCM buffer stream (which is single-consumer for the
 //   transcriber). The level computation is isolated to `Self.rmsLevel(buffer:)`,
 //   a pure static helper that touches only immutable buffer data. [decision W2.1]
+//
+// VAD FEED (output-conversation-reconnect):
+//   A `VoiceActivityDetector` can be attached/detached at any time via
+//   `attachVoiceActivityDetector(_:)`, mirroring the W2.1 pattern: the tap
+//   callback hands the same raw input buffer to `VoiceActivityDetector.processBuffer`
+//   as a read-only side channel, alongside (not instead of) the RMS level feed and
+//   the PCM buffer stream. Unlike `levelsContinuation` (rebuilt each `start()`),
+//   the VAD attachment is held in `vadBox`, a lock-protected box that survives
+//   across `start()`/`stop()` calls so a caller (e.g. `AskUserToolHandler`) can
+//   attach before capture begins or at any point during an already-running
+//   session. [decision]
 
 @preconcurrency import AVFoundation
 import os
@@ -53,6 +64,28 @@ public final class AudioCapture: @unchecked Sendable {
     private var pendingLevelStream: AsyncStream<Double>?
     /// Observer for hardware configuration changes (device plug/unplug, Bluetooth route changes).
     private var configObserver: (any NSObjectProtocol)?
+
+    /// Lock-protected holder for an attached `VoiceActivityDetector`. Unlike
+    /// `levelsContinuation`, this survives across `start()`/`stop()` calls — a
+    /// caller can attach before capture begins or while it is already running.
+    private final class VADBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var vad: VoiceActivityDetector?
+
+        func set(_ newValue: VoiceActivityDetector?) {
+            lock.lock()
+            vad = newValue
+            lock.unlock()
+        }
+
+        func get() -> VoiceActivityDetector? {
+            lock.lock()
+            defer { lock.unlock() }
+            return vad
+        }
+    }
+
+    private let vadBox = VADBox()
 
     public init() {}
 
@@ -99,11 +132,16 @@ public final class AudioCapture: @unchecked Sendable {
         var currentConverter: AVAudioConverter = converter
         let currentContinuation = continuation
         let currentLevelsContinuation = levelsContinuation
+        let vadBox = self.vadBox
 
         input.removeTap(onBus: bus)
         input.installTap(onBus: bus, bufferSize: Constants.tapBufferSize, format: inputFormat) { buffer, _ in
             let rms = Self.rmsLevel(buffer: buffer)
             currentLevelsContinuation.yield(rms)
+
+            // VAD feed: read-only side channel on the same raw input buffer,
+            // independent of the RMS level feed and the PCM buffer stream.
+            vadBox.get()?.processBuffer(buffer)
 
             // Dynamic format re-sync: if device sample rate changed mid-stream
             // (e.g. Bluetooth profile switch from 48kHz to 16kHz SCO), rebuild converter on the fly.
@@ -176,6 +214,10 @@ public final class AudioCapture: @unchecked Sendable {
     }
 
     /// Stops capture, removes the tap, and finishes the stream. Idempotent.
+    ///
+    /// Deliberately does NOT clear `vadBox` — an attached VAD is a caller-owned
+    /// attachment, not tied to a single capture session's lifetime, and detaching
+    /// is the caller's explicit responsibility via `attachVoiceActivityDetector(nil)`.
     public func stop() {
         if let observer = configObserver {
             NotificationCenter.default.removeObserver(observer)
@@ -190,6 +232,13 @@ public final class AudioCapture: @unchecked Sendable {
         pendingLevelStream = nil
         converter = nil
         SpeakLog.audio.info("AudioCapture stopped")
+    }
+
+    /// Attaches or detaches a `VoiceActivityDetector` to receive the same raw
+    /// input buffers the RMS level feed sees. Pass `nil` to detach. Safe to call
+    /// before `start()`, while capture is running, or after `stop()`.
+    public func attachVoiceActivityDetector(_ vad: VoiceActivityDetector?) {
+        vadBox.set(vad)
     }
 
     // MARK: - W2.1: RMS level computation
