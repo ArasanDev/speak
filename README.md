@@ -4,9 +4,9 @@
 > voice dictation with AI neat-writing — speech → on-device AI → pasted at cursor.
 
 [![CI](https://github.com/ArasanDev/speak/actions/workflows/ci.yml/badge.svg)](https://github.com/ArasanDev/speak/actions/workflows/ci.yml)
-[![Platform](https://img.shields.io/badge/platform-macOS%2026%2B-lightgrey)](#build-from-source)
+[![Platform](https://img.shields.io/badge/platform-macOS%2026%2B-lightgrey)](#quick-start)
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange)](#tech-stack)
-[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-black)](#build-from-source)
+[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-black)](#quick-start)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Moat audit](https://img.shields.io/badge/moat%20audit-7%2F7-green)](#privacy)
 
@@ -55,13 +55,30 @@ without abandoning their business model: **fully local, free, open, and private*
 
 ## Quick start
 
-### Build from source (the only path today)
+Requirements: macOS 26 (Tahoe), Apple Silicon, Xcode 26+ (full install, not just
+Command Line Tools).
 
-> **Homebrew tap: not yet published.** `dist/speak.cask.rb` is a scaffold, inert
-> until a signed + notarized release exists (`docs/roadmap.md` P11-b) — there is
-> no `brew tap` command to run yet. Build from source below.
+### One-line install (recommended)
 
-Requirements: macOS 26 (Tahoe), Apple Silicon, Xcode 26+.
+Builds from source on your machine, ad-hoc signs, installs to `/Applications`,
+and clears the Gatekeeper quarantine flag automatically — no prompt, no manual
+`xattr` step, no Apple Developer account needed:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ArasanDev/speak/main/scripts/install.sh | bash
+```
+
+Reviewing a `curl | bash` before running it is always reasonable — the script
+is [scripts/install.sh](scripts/install.sh), ~80 lines, does exactly what the
+manual steps below do.
+
+> **Official Homebrew Cask: not yet published.** `dist/speak.cask.rb` is a
+> scaffold, inert until a signed + notarized release exists (`docs/roadmap.md`
+> P11-b, currently deferred). The one-liner above and the manual/build-from-source
+> tap below don't need that — Gatekeeper only inspects downloaded binaries,
+> never a local source build, so no cert is required either way.
+
+### Build from source (manual)
 
 ```bash
 brew install xcodegen swiftlint xcbeautify
