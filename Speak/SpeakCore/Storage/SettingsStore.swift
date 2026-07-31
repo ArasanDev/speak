@@ -86,7 +86,11 @@ public enum PasteMode: String, Codable, Sendable, Equatable {
     case accessibility
 }
 
-/// Whether to stream cleaned text as keystrokes during active dictation. v0 = `.off`.
+/// Whether to stream cleaned text as keystrokes during active dictation.
+/// [doc fix, survey: permissions-persistence/low] Actual v0 default is
+/// `.keystrokeInjection` (see `Keys.streamingMode` registration and the
+/// getter's fallback below) — this comment previously said `.off`, which no
+/// longer matched the implementation.
 public enum StreamingMode: String, Codable, Sendable, Equatable {
     /// Streaming disabled. Cleaned text is pasted all at once after dictation ends.
     case off = "off"
@@ -526,6 +530,15 @@ public final class SettingsStore: @unchecked Sendable {
     /// Resets all user settings to their default values. All preferences are wiped;
     /// history is NOT cleared (separate operation). [decision: reset != clear history]
     public func resetToDefaults() {
+        resetDictationDefaults()
+        resetAppearanceDefaults()
+        resetInteractionDefaults()
+        resetVoiceOutDefaults()
+
+        SpeakLog.storage.info("SettingsStore reset to defaults")
+    }
+
+    private func resetDictationDefaults() {
         access(keyPath: \.cleanupEnabled)
         access(keyPath: \.cleanupEngine)
         access(keyPath: \.sttEngine)
@@ -537,21 +550,21 @@ public final class SettingsStore: @unchecked Sendable {
         access(keyPath: \.cleanupLevel)
         access(keyPath: \.streamingRawTextEnabled)
         access(keyPath: \.streamingMode)
-        access(keyPath: \.appTheme)
-        access(keyPath: \.perAppContextEnabled)
-        access(keyPath: \.hudStyle)
-        access(keyPath: \.borderAnimationStyle)
-        access(keyPath: \.borderFlowSpeed)
-        access(keyPath: \.borderFlowCount)
-        access(keyPath: \.voiceActionsEnabled)
-        access(keyPath: \.voiceActionsPrefix)
-        access(keyPath: \.readbackEnabled)
 
         withMutation(keyPath: \.cleanupEnabled) {
             defaults.set(true, forKey: Keys.cleanupEnabled)
         }
         withMutation(keyPath: \.sttEngine) {
             defaults.removeObject(forKey: Keys.sttEngine)
+        }
+        // [bug fix, survey: permissions-persistence/high] cleanupEngine was accessed
+        // above but never actually reset — a user's configured cloud engine (e.g.
+        // OpenAI-compatible with an API key) survived "Reset to Defaults", which
+        // contradicts both the setting's stated default (`.foundationModels`,
+        // see its doc comment) and the app's "100% local by default" posture.
+        // removeObject restores the getter's fallback (`.foundationModels`).
+        withMutation(keyPath: \.cleanupEngine) {
+            defaults.removeObject(forKey: Keys.cleanupEngine)
         }
         withMutation(keyPath: \.language) {
             defaults.set("en-US", forKey: Keys.language)
@@ -577,6 +590,16 @@ public final class SettingsStore: @unchecked Sendable {
         withMutation(keyPath: \.streamingMode) {
             defaults.set(StreamingMode.keystrokeInjection.rawValue, forKey: Keys.streamingMode)
         }
+    }
+
+    private func resetAppearanceDefaults() {
+        access(keyPath: \.appTheme)
+        access(keyPath: \.perAppContextEnabled)
+        access(keyPath: \.hudStyle)
+        access(keyPath: \.borderAnimationStyle)
+        access(keyPath: \.borderFlowSpeed)
+        access(keyPath: \.borderFlowCount)
+
         withMutation(keyPath: \.appTheme) {
             defaults.set(AppTheme.system.rawValue, forKey: Keys.appTheme)
         }
@@ -595,6 +618,16 @@ public final class SettingsStore: @unchecked Sendable {
         withMutation(keyPath: \.borderFlowCount) {
             defaults.set(1, forKey: Keys.borderFlowCount)
         }
+    }
+
+    private func resetInteractionDefaults() {
+        access(keyPath: \.voiceActionsEnabled)
+        access(keyPath: \.voiceActionsPrefix)
+        access(keyPath: \.readbackEnabled)
+        access(keyPath: \.extraBindings)
+        access(keyPath: \.revealTextWhileProcessing)
+        access(keyPath: \.petPositions)
+
         withMutation(keyPath: \.voiceActionsEnabled) {
             defaults.set(false, forKey: Keys.voiceActionsEnabled)
         }
@@ -607,6 +640,28 @@ public final class SettingsStore: @unchecked Sendable {
         withMutation(keyPath: \.petEnabled) {
             defaults.set(true, forKey: Keys.petEnabled)
         }
+        // [bug fix, survey: permissions-persistence/medium] extraBindings (up to 4
+        // custom hotkey bindings per action, V01-5) was accessed above but never
+        // reset — survived "Reset to Defaults". removeObject restores the getter's
+        // documented default (`.empty`).
+        withMutation(keyPath: \.extraBindings) {
+            defaults.removeObject(forKey: Keys.extraBindings)
+        }
+        // [bug fix, survey: permissions-persistence/low] revealTextWhileProcessing
+        // was accessed above but never reset — survived "Reset to Defaults".
+        // Documented default is `true`.
+        withMutation(keyPath: \.revealTextWhileProcessing) {
+            defaults.set(true, forKey: Keys.revealTextWhileProcessing)
+        }
+        // [bug fix, survey: permissions-persistence/low] petPositions (per-display
+        // saved pet drag positions) was accessed above but never reset — survived
+        // "Reset to Defaults". removeObject restores the getter's default ([:]).
+        withMutation(keyPath: \.petPositions) {
+            defaults.removeObject(forKey: Keys.petPositions)
+        }
+    }
+
+    private func resetVoiceOutDefaults() {
         withMutation(keyPath: \.ttsVoiceIdentifier) {
             defaults.set("", forKey: Keys.ttsVoiceIdentifier)
         }
@@ -619,8 +674,6 @@ public final class SettingsStore: @unchecked Sendable {
         withMutation(keyPath: \.ttsVolume) {
             defaults.set(Float(1.0), forKey: Keys.ttsVolume)
         }
-
-        SpeakLog.storage.info("SettingsStore reset to defaults")
     }
 }
 
@@ -833,7 +886,12 @@ extension SettingsStore {
 
     /// FE-1: Voice Desktop Pet the pet enabled state. Controls whether the floating 56x36pt
     /// edge-snapping mascot lozenge (`PetPanelController`) is visible.
-    /// Defaults to `true` (always-on companion).
+    /// [doc fix, survey: permissions-persistence/low] Fresh-install default is
+    /// actually `false` (see the registration default and this getter's fallback);
+    /// it only becomes `true` after the user explicitly clicks "Reset to Defaults"
+    /// (`resetToDefaults()` sets it to `true` — the "always-on companion" behavior
+    /// applies post-reset, not on first launch). This comment previously claimed
+    /// `true` was the fresh-install default, which did not match the implementation.
     public var petEnabled: Bool {
         get {
             access(keyPath: \.petEnabled)

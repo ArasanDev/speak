@@ -243,13 +243,8 @@ final class SettingsStoreTests: XCTestCase {
             ".classic must round-trip after being explicitly re-set.")
     }
 
-    func testResetToDefaultsRestoresHUDStyleToClassic() throws {
-        let store = freshStore(on: try makeIsolatedDefaults())
-        store.hudStyle = .aurora
-        store.resetToDefaults()
-        XCTAssertEqual(store.hudStyle, .classic,
-            "resetToDefaults() must restore hudStyle to .classic.")
-    }
+    // resetToDefaults() coverage moved to SettingsStoreResetAndMiscTests.swift
+    // (split out to keep this class under SwiftLint's type_body_length cap).
 
     // MARK: - defaultCleaner(for:) factory
 
@@ -287,33 +282,8 @@ final class SettingsStoreTests: XCTestCase {
             "defaultCleaner must return OpenAICompatibleCleaner when .ollama is selected (V01-2).")
     }
 
-    // MARK: - defaultTranscriber(for:) factory
-
-    func testDefaultTranscriberReturnsAppleSpeechForAppleSpeech() throws {
-        let store = freshStore(on: try makeIsolatedDefaults())
-        store.sttEngine = .appleSpeech
-        let transcriber = defaultTranscriber(for: store)
-        XCTAssertTrue(transcriber is AppleSpeechTranscriber,
-            "defaultTranscriber must return AppleSpeechTranscriber for .appleSpeech.")
-    }
-
-    func testDefaultTranscriberFallsBackForWhisperKit() throws {
-        // WhisperKit is v0.1 — defaultTranscriber logs + falls back to AppleSpeech.
-        let store = freshStore(on: try makeIsolatedDefaults())
-        store.sttEngine = .whisperKit
-        let transcriber = defaultTranscriber(for: store)
-        XCTAssertTrue(transcriber is AppleSpeechTranscriber,
-            "defaultTranscriber v0.1 stub must fall back to AppleSpeechTranscriber for .whisperKit.")
-    }
-
-    func testDefaultTranscriberFallsBackForWhisperCpp() throws {
-        // whisper.cpp is v1 — defaultTranscriber logs + falls back to AppleSpeech.
-        let store = freshStore(on: try makeIsolatedDefaults())
-        store.sttEngine = .whisperCpp
-        let transcriber = defaultTranscriber(for: store)
-        XCTAssertTrue(transcriber is AppleSpeechTranscriber,
-            "defaultTranscriber v1 stub must fall back to AppleSpeechTranscriber for .whisperCpp.")
-    }
+    // defaultTranscriber(for:) factory tests moved to
+    // SettingsStoreResetAndMiscTests.swift.
 
     // MARK: - customVocabulary (H4 seam)
 
@@ -400,96 +370,9 @@ final class SettingsStoreTests: XCTestCase {
         }
     }
 
-    // MARK: - Multiple properties persist independently
-
-    func testMultiplePropertiesPersistIndependently() throws {
-        let defaults = try makeIsolatedDefaults()
-        let store = freshStore(on: defaults)
-        store.cleanupEnabled = false
-        store.language = Locale(identifier: "en-GB")
-        store.pasteMode = .accessibility
-        store.sttEngine = .whisperKit
-        store.cleanupEngine = .ollama(model: "phi-4")
-
-        let reloaded = freshStore(on: defaults)
-        XCTAssertFalse(reloaded.cleanupEnabled)
-        XCTAssertEqual(reloaded.language.identifier, "en-GB")
-        XCTAssertEqual(reloaded.pasteMode, .accessibility)
-        XCTAssertEqual(reloaded.sttEngine, .whisperKit)
-        XCTAssertEqual(reloaded.cleanupEngine, .ollama(model: "phi-4"))
-    }
-
-    // MARK: - Streaming settings
-
-    func testStreamingRawTextEnabledDefaultTrue() throws {
-        let store = freshStore(on: try makeIsolatedDefaults())
-        XCTAssertTrue(store.streamingRawTextEnabled,
-            "streamingRawTextEnabled default must be true.")
-    }
-
-    func testStreamingModePersistedAcrossRestart() throws {
-        let defaults = try makeIsolatedDefaults()
-        let store = freshStore(on: defaults)
-        store.streamingMode = .off
-
-        let reloaded = freshStore(on: defaults)
-        XCTAssertEqual(reloaded.streamingMode, .off,
-            "streamingMode=.off must survive a SettingsStore reload on the same defaults.")
-    }
-
-    // MARK: - perAppContextEnabled (V01-3, profile-native)
-
-    func testPerAppContextEnabledDefaultIsTrue() throws {
-        let store = freshStore(on: try makeIsolatedDefaults())
-        XCTAssertTrue(store.perAppContextEnabled,
-            "perAppContextEnabled default must be true — per-app profile matching has shipped since PE-1.")
-    }
-
-    func testPerAppContextEnabledRoundTrips() throws {
-        let defaults = try makeIsolatedDefaults()
-        let store = freshStore(on: defaults)
-        store.perAppContextEnabled = false
-
-        let reloaded = freshStore(on: defaults)
-        XCTAssertFalse(reloaded.perAppContextEnabled,
-            "perAppContextEnabled=false must survive a SettingsStore reload on the same defaults.")
-    }
-
-    // MARK: - Voice Actions (H-1, specs/horizon-voice-os.md Pillar 1)
-
-    func testVoiceActionsEnabledDefaultIsFalse() throws {
-        let store = freshStore(on: try makeIsolatedDefaults())
-        XCTAssertFalse(store.voiceActionsEnabled,
-            "voiceActionsEnabled default must be false — H-1 is an opt-in extension, existing users see no change.")
-    }
-
-    func testVoiceActionsEnabledRoundTrips() throws {
-        let defaults = try makeIsolatedDefaults()
-        let store = freshStore(on: defaults)
-        store.voiceActionsEnabled = true
-
-        let reloaded = freshStore(on: defaults)
-        XCTAssertTrue(reloaded.voiceActionsEnabled,
-            "voiceActionsEnabled=true must survive a SettingsStore reload on the same defaults.")
-    }
-
-    func testVoiceActionsPrefixDefaultIsHeySpeak() throws {
-        let store = freshStore(on: try makeIsolatedDefaults())
-        XCTAssertEqual(store.voiceActionsPrefix, "hey speak")
-    }
-
-    func testVoiceActionsPrefixRoundTrips() throws {
-        let defaults = try makeIsolatedDefaults()
-        let store = freshStore(on: defaults)
-        store.voiceActionsPrefix = "computer"
-
-        let reloaded = freshStore(on: defaults)
-        XCTAssertEqual(reloaded.voiceActionsPrefix, "computer",
-            "voiceActionsPrefix must survive a SettingsStore reload on the same defaults.")
-    }
-
+    // Multiple-properties-independence, streaming, perAppContextEnabled, and
+    // Voice Actions tests moved to SettingsStoreResetAndMiscTests.swift.
 }
-
 
 // MARK: - Voice settings tests (H-2) — separate class to hold SwiftLint's
 // type_body_length cap on SettingsStoreTests; identical isolated-defaults pattern.

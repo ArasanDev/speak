@@ -763,19 +763,35 @@ private extension HotkeyMonitor {
         let allowed = lock.withLock { restartRateLimiter.recordAttempt(now: now) }
 
         if allowed {
-            // TODO(system-state-resilience survey, out of scope for this pass):
-            // this branch unconditionally logs a re-enable success without
-            // re-verifying AXIsProcessTrustedWithOptions. If Accessibility was
-            // revoked mid-session (single tapDisabledByUserInput event, below
-            // the rate limiter threshold), `CGEvent.tapEnable` is a no-op, the
-            // tap is silently dead, and the watchdog's AX re-check at
-            // `watchdogTick()` (gated by `!currentlyArmed && shouldArm`) never
-            // re-fires because `isArmed` stays true. Needs an AX-trust check
-            // here before assuming success — left as a TODO because it
-            // requires deciding the right recovery UX (silent re-arm vs.
-            // surfacing `permissionsNeeded`), not just a mechanical fix.
             CGEvent.tapEnable(tap: port, enable: true)
-            SpeakLog.hotkey.warning("HotkeyMonitor: tap re-enabled after OS disable.")
+
+            // Re-verify Accessibility trust before believing tapEnable actually
+            // revived the tap. `CGEvent.tapEnable` is a no-op if AX was revoked
+            // mid-session (e.g. a single tapDisabledByUserInput event, below the
+            // rate limiter's cap) — without this check the monitor would leave
+            // `isArmed == true` while the tap is silently dead forever, since
+            // `watchdogTick()` only rebuilds on the untrusted→trusted RISING EDGE
+            // and never re-fires while `isArmed` stays true. Same
+            // `AXIsProcessTrustedWithOptions([prompt:false])` call already used
+            // in `watchdogTick()` — no prompt shown, safe to call here.
+            let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: false] as CFDictionary
+            let stillTrusted = AXIsProcessTrustedWithOptions(opts)
+
+            if stillTrusted {
+                SpeakLog.hotkey.warning("HotkeyMonitor: tap re-enabled after OS disable.")
+            } else {
+                // Accessibility was revoked mid-session. Do NOT claim success —
+                // tear the (now-dead) tap down and mark isArmed=false so the
+                // stream's arm-state observers (e.g. DictationController) see a
+                // `false` and can surface a permissions-needed state to the
+                // user. Reset wasTrusted so the watchdog's untrusted→trusted
+                // edge fires again once the user re-grants Accessibility,
+                // rebuilding the tap cleanly — mirrors the rate-limit-exceeded
+                // branch below.
+                SpeakLog.hotkey.error("HotkeyMonitor: tap re-enable reported success but Accessibility is no longer trusted — tearing down and surfacing permissions-needed.")
+                tearDownTap()
+                lock.withLock { wasTrusted = false }
+            }
         } else {
             SpeakLog.hotkey.error("HotkeyMonitor: tap restart cap exceeded — tearing down. Will re-arm on next AX check.")
             tearDownTap()
