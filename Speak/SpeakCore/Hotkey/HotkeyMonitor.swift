@@ -763,6 +763,17 @@ private extension HotkeyMonitor {
         let allowed = lock.withLock { restartRateLimiter.recordAttempt(now: now) }
 
         if allowed {
+            // TODO(system-state-resilience survey, out of scope for this pass):
+            // this branch unconditionally logs a re-enable success without
+            // re-verifying AXIsProcessTrustedWithOptions. If Accessibility was
+            // revoked mid-session (single tapDisabledByUserInput event, below
+            // the rate limiter threshold), `CGEvent.tapEnable` is a no-op, the
+            // tap is silently dead, and the watchdog's AX re-check at
+            // `watchdogTick()` (gated by `!currentlyArmed && shouldArm`) never
+            // re-fires because `isArmed` stays true. Needs an AX-trust check
+            // here before assuming success — left as a TODO because it
+            // requires deciding the right recovery UX (silent re-arm vs.
+            // surfacing `permissionsNeeded`), not just a mechanical fix.
             CGEvent.tapEnable(tap: port, enable: true)
             SpeakLog.hotkey.warning("HotkeyMonitor: tap re-enabled after OS disable.")
         } else {
