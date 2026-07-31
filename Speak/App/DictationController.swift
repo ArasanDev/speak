@@ -404,7 +404,7 @@ final class DictationController: CLICommandHandler {
         self.agentCallStore = makeAgentCallStore()
 
         engine = SpeakEngine(
-            transcriber: defaultTranscriber(for: store),
+            transcriber: DictationController.resolveTranscriber(for: store),
             cleaner: defaultCleaner(for: store),
             inserter: pasteboardWriter,
             history: historyStore,
