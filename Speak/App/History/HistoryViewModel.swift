@@ -55,12 +55,26 @@ final class HistoryViewModel {
     private let recentLimit = defaultHistoryMaxEntries
 
     /// The in-flight reload task, cancelled when a newer query supersedes it.
-    private var reloadTask: Task<Void, Never>?
+    /// `nonisolated(unsafe)`: not part of `@Observable`'s tracked UI state
+    /// (nothing reads it for display), and it must be reachable from `deinit`,
+    /// which runs nonisolated — the `@Observable` macro's tracked-accessor
+    /// storage otherwise can't be touched from a nonisolated context.
+    /// Safe because every mutation happens on the main actor (this class is
+    /// `@MainActor`); `deinit` only reads/cancels it after the instance is
+    /// otherwise unreachable.
+    @ObservationIgnored
+    nonisolated(unsafe) private var reloadTask: Task<Void, Never>?
 
     // MARK: - Init
 
     init(store: any HistoryStoring) {
         self.store = store
+    }
+
+    // [bug, survey: lifecycle-leaks/high] Cancel the in-flight reload task on
+    // dealloc so it doesn't keep spinning past this view model's lifetime.
+    deinit {
+        reloadTask?.cancel()
     }
 
     // MARK: - Lifecycle

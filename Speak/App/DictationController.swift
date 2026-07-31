@@ -132,8 +132,11 @@ final class DictationController: CLICommandHandler {
 
     let engine: SpeakEngine
     let monitor: HotkeyMonitor
-    private var eventTask: Task<Void, Never>?
-    private var armStateTask: Task<Void, Never>?
+    // nonisolated(unsafe): reachable from deinit. [bug, survey: lifecycle-leaks/critical]
+    @ObservationIgnored
+    nonisolated(unsafe) private var eventTask: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var armStateTask: Task<Void, Never>?
 
     let historyStore: any HistoryStoring
 
@@ -254,7 +257,8 @@ final class DictationController: CLICommandHandler {
     /// Drives Command Mode (Wave D) from the Fn+Ctrl chord. Constructed in
     /// `startMonitoring()`; consumes `monitor.commandChordEvents`.
     private var commandModeController: CommandModeController?
-    private var commandChordTask: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var commandChordTask: Task<Void, Never>?
 
     /// Fires on the main thread each time `icon` transitions idle → listening.
     /// Used by `ensureWindowPresenter()` to supply `hotkeyFiredPublisher` to the
@@ -338,7 +342,8 @@ final class DictationController: CLICommandHandler {
     /// Uses `withObservationTracking` (from `@Observable`) instead of a Combine
     /// subscription — fires only on `triggerMode` mutations (not on every settings
     /// write), so the dedupe guard is a last-defence against same-value writes.
-    private var triggerModeObserverTask: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var triggerModeObserverTask: Task<Void, Never>?
 
     /// The last trigger applied to the live monitor. [validation-fix NEW-7]
     /// Guards against same-value `withMutation` fires that would produce spurious
@@ -349,7 +354,8 @@ final class DictationController: CLICommandHandler {
     /// `settingsStore.extraBindings` changes, applying the new set to the live
     /// monitor without relaunch. Same `withObservationTracking` pattern as
     /// `triggerModeObserverTask`.
-    private var extraBindingsObserverTask: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var extraBindingsObserverTask: Task<Void, Never>?
 
     /// [V01-5] The last extra-bindings set applied to the live monitor — dedupe
     /// guard against same-value `withMutation` fires, mirroring `lastAppliedTrigger`.
@@ -360,14 +366,17 @@ final class DictationController: CLICommandHandler {
     private var lastAppliedAppearance: AppTheme = .system
 
     /// The in-flight appearance observation task, cancelled when a new one replaces it.
-    private var appearanceObserverTask: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var appearanceObserverTask: Task<Void, Never>?
 
     // MARK: - Onboarding
 
     let permissionManager: PermissionManager
 
     // MARK: - FE-1: Voice Desktop Pet (wiring in `DictationController+Pet.swift`, [lint] type_body_length)
-    var petWiring = PetWiring()
+    // nonisolated(unsafe): reachable from deinit. [bug, survey: lifecycle-leaks/critical]
+    @ObservationIgnored
+    nonisolated(unsafe) var petWiring = PetWiring()
 
     // MARK: - Init
 
@@ -867,6 +876,17 @@ final class DictationController: CLICommandHandler {
         case .stopCapture:
             await endDictation()
         }
+    }
+
+    // [bug, survey: lifecycle-leaks/critical] cancel every owned Task loop.
+    deinit {
+        triggerModeObserverTask?.cancel()
+        appearanceObserverTask?.cancel()
+        extraBindingsObserverTask?.cancel()
+        eventTask?.cancel()
+        armStateTask?.cancel()
+        commandChordTask?.cancel()
+        petWiring.petEnabledObserverTask?.cancel()
     }
 
 }
