@@ -244,9 +244,11 @@ surface; the native attention and voice experience is the product.
 
 ---
 
-## P11-b — Developer ID sign + notarize + Homebrew Cask [!BLOCKED: needs cert]
+## P11-b — Developer ID sign + notarize + Homebrew Cask [DEFERRED — `[decision 2026-08-01]`]
 
 **Hard deadline: 2026-09-01** — Homebrew ends support for casks that fail Gatekeeper checks. Official `homebrew-cask` tap requires notarization after that date. **Does NOT block v0 ship** — blocks only official Homebrew Cask and zero-friction install for non-developer users. Enroll at developer.apple.com ($99/yr).
+
+**`[decision 2026-08-01]`**: explicitly deferred, not enrolling now. v0 ships via P11-a (build-from-source + ad-hoc + GitHub Release) only. Official Homebrew Cask stays unavailable past the 2026-09-01 deadline until this is revisited — no cert, no `security find-identity` output on this machine as of this date.
 
 **Sub-tasks**: Developer ID Application cert; full `make release` (already implemented in `Makefile` + `docs/release.md`); only the credential is missing.
 
