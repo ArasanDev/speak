@@ -65,7 +65,7 @@ and clears the Gatekeeper quarantine flag automatically — no prompt, no manual
 `xattr` step, no Apple Developer account needed:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ArasanDev/speak/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ArasanDev/speak/master/scripts/install.sh | bash
 ```
 
 Reviewing a `curl | bash` before running it is always reasonable — the script

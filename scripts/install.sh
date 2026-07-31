@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # scripts/install.sh — one-line installer for speak (build-from-source, no cert needed).
 #
-#   curl -fsSL https://raw.githubusercontent.com/ArasanDev/speak/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/ArasanDev/speak/master/scripts/install.sh | bash
 #
 # What this does, and why it needs no Apple Developer credential:
-#   1. Clones the repo to a temp dir (shallow, main branch).
+#   1. Clones the repo to a temp dir (shallow, master branch).
 #   2. make build CONFIG=Release  — xcodegen + xcodebuild, Apple-frameworks only.
 #   3. Ad-hoc code-signs the app (codesign -s -) — free, no cert, no account.
 #   4. Copies Speak.app to /Applications and clears the quarantine attribute
