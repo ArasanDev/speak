@@ -28,6 +28,7 @@ jobs:
   # with `no such module 'FoundationModels'`, so this job MUST pin macos-26.
   build-test-lint:
     runs-on: macos-26
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
