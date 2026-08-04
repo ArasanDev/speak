@@ -340,7 +340,8 @@ struct AgentBridgeServerToolsListTests {
         let names = Set(tools.compactMap { $0.objectValue?["name"]?.stringValue })
         #expect(names == [
             "speak_register_session", "speak_notify", "speak_say", "speak_ask", "speak_confirm",
-            "speak_request_input", "speak_status", "speak_submit_call", "speak_get_call"
+            "speak_request_input", "speak_status", "speak_submit_call", "speak_get_call",
+            "speak_ask_user", "speak_stream_speech"
         ])
     }
 

@@ -1,5 +1,11 @@
 # Ultra-Lightweight Local Text-to-Speech (TTS) Research & Architecture
 
+**Status:** research/snapshot, superseded in part — VoiceOut (`docs/roadmap.md` "H-2")
+shipped using Apple's built-in `AVSpeechSynthesizer`, not the third-party CoreML/ONNX TTS
+models this document evaluates · **Binds:** nothing shipped · **Owner:** orchestrator ·
+**Depends on:** none · **Superseded by:** shipped `AVSpeechSynthesizer`-based VoiceOut
+implementation (no single spec header) · **Last substantive change:** 2026-07-24
+
 > **Document Status**: Production Architecture Specification  
 > **Target System**: macOS 26.0+ / Apple Silicon (M1–M4+)  
 > **Core Principle**: 100% Local, 0 Cloud Dependencies, Low-Latency Voice Synthesis  

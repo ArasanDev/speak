@@ -18,6 +18,16 @@
 //     overlay-demo                → Overlay panel with sample partial text
 //     simulate-dictation          → Real engine pipeline, fixture audio, pastes
 //                                   into whatever app is frontmost after 2.5 s
+//     simulate-dictation-scripted:<text>
+//                                 → Real engine pipeline (cleanup/paste/history/
+//                                   overlay), but STT is replaced by a
+//                                   ScriptedTranscriber that reveals <text>
+//                                   word-by-word — no mic, no fixture audio, no
+//                                   SpeechAnalyzer. Lets a human or an automation
+//                                   harness exercise arbitrary UI behaviors
+//                                   repeatedly without giving any real input.
+//                                   Defaults to a sample sentence if <text> is
+//                                   omitted.
 //
 // DESIGN:
 //   - All code in this file is wrapped in `#if DEBUG`. Nothing reaches release.
@@ -63,6 +73,7 @@ enum DebugTarget: String {
     case overlayDemoDone         = "overlay-demo-done"
     case overlayDemoError        = "overlay-demo-error"
     case simulateDictation       = "simulate-dictation"
+    case simulateDictationScripted = "simulate-dictation-scripted"
     // Menubar icon color verification (roadmap P8):
     //   Each target holds the menubar icon in the given state indefinitely so a
     //   `screencapture` can confirm the color survives the menu-bar compositor.
@@ -91,6 +102,8 @@ final class DebugLaunchDispatcher {
         let rawValue = args[idx + 1]
         // `dashboard:<section>` opens the dashboard straight to a pane (verification).
         if rawValue.hasPrefix("dashboard") { return .dashboard }
+        // `simulate-dictation-scripted:<text>` carries its script text after the colon.
+        if rawValue.hasPrefix("simulate-dictation-scripted") { return .simulateDictationScripted }
         guard let target = DebugTarget(rawValue: rawValue) else {
             // Unknown target — log and return nil so normal startup proceeds.
             SpeakLog.engine.error(
@@ -165,6 +178,13 @@ final class DebugLaunchDispatcher {
             // to remain in the target app (e.g. TextEdit) so paste lands correctly.
             // Return true to tell AppDelegate to skip startMonitoring().
             startSimulateDictation(controller: controller)
+            return true
+
+        case .simulateDictationScripted:
+            // Same focus-preservation reasoning as .simulateDictation.
+            let text = Self.scriptedDictationText(in: CommandLine.arguments)
+                ?? "the quick brown fox jumps over the lazy dog"
+            startSimulateDictationScripted(text: text, controller: controller)
             return true
 
         case .menubarIconListening:
@@ -419,6 +439,77 @@ final class DebugLaunchDispatcher {
                     "DebugLaunchDispatcher: simulate-dictation error — \(error.localizedDescription, privacy: .public)"
                 )
             }
+        }
+    }
+
+    // MARK: - Simulate dictation (scripted) target
+
+    /// Parse the script text from `--debug-open simulate-dictation-scripted:<text>`
+    /// out of arbitrary `args` (not necessarily `CommandLine.arguments` — this is
+    /// called from `DictationController.init()`, at construction time, to decide
+    /// which transcriber to build). Returns `nil` when the target isn't present at
+    /// all, so callers can distinguish "no scripted debug launch" from "scripted
+    /// launch with empty/omitted text" (which falls back to a sample sentence).
+    ///
+    /// NOTE: `open --args` splits on whitespace — pass the whole value quoted,
+    /// e.g. `--debug-open "simulate-dictation-scripted:hello there"`, or only the
+    /// first word survives.
+    static func scriptedDictationText(in args: [String]) -> String? {
+        guard let idx = args.firstIndex(of: "--debug-open"), args.indices.contains(idx + 1) else {
+            return nil
+        }
+        let raw = args[idx + 1]
+        guard raw.hasPrefix("simulate-dictation-scripted") else { return nil }
+        let fallback = "the quick brown fox jumps over the lazy dog"
+        guard let colon = raw.firstIndex(of: ":") else { return fallback }
+        let text = String(raw[raw.index(after: colon)...])
+        return text.isEmpty ? fallback : text
+    }
+
+    /// Drives the controller's REAL `beginDictation()`/`endDictation()` path —
+    /// the same one the hotkey and CLI use — so the overlay, caret overlay, and
+    /// menubar icon (all of which observe `controller.engine`, not a throwaway
+    /// instance) actually animate. The scripted reveal itself already happened:
+    /// `DictationController.init()` built `controller.engine` with a
+    /// `ScriptedTranscriber` (see `resolveTranscriber(for:)`) when this target was
+    /// detected, before this dispatcher ever ran. This method only supplies the
+    /// timing — waiting for the reveal to finish before calling `endDictation()`.
+    ///
+    /// [decision: mirrors `startSimulateDictation`'s 2.5 s pre-delay so the
+    ///  harness can bring a target app frontmost before dictation begins; the
+    ///  post-begin wait is computed from the actual script length instead of a
+    ///  fixed guess, since the reveal cadence is deterministic here.]
+    private func startSimulateDictationScripted(text: String, controller: DictationController) {
+        Task { [weak self] in
+            guard let self else { return }
+
+            self.log.info("DebugLaunchDispatcher: simulate-dictation-scripted starting — waiting 2.5 s for harness to prepare target app.")
+            let preDelayNanoseconds: UInt64 = 2_500_000_000
+            try? await Task.sleep(nanoseconds: preDelayNanoseconds)
+
+            self.log.info(
+                "DebugLaunchDispatcher: simulate-dictation-scripted beginning dictation via controller.beginDictation() with text='\(text.prefix(80), privacy: .private)'."
+            )
+
+            let outcome = await controller.beginDictation()
+            guard outcome == .started else {
+                self.log.error(
+                    "DebugLaunchDispatcher: simulate-dictation-scripted beginDictation did not start (outcome=\(String(describing: outcome), privacy: .public))."
+                )
+                return
+            }
+
+            // Wait for the scripted reveal to finish (word count × per-word
+            // delay) plus a small margin for cleanup/paste to settle, then end.
+            let wordDelayNanoseconds = ScriptedTranscriber.defaultWordDelayNanoseconds
+            let wordCount = text.split(separator: " ").count
+            let revealNanoseconds = UInt64(max(wordCount - 1, 0)) * wordDelayNanoseconds
+            let marginNanoseconds: UInt64 = 500_000_000
+            try? await Task.sleep(nanoseconds: revealNanoseconds + marginNanoseconds)
+
+            self.log.info("DebugLaunchDispatcher: simulate-dictation-scripted ending dictation via controller.endDictation().")
+            await controller.endDictation()
+            self.log.info("DebugLaunchDispatcher: simulate-dictation-scripted complete.")
         }
     }
 

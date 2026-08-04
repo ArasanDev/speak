@@ -306,16 +306,28 @@ final class HoldEdgeTests: XCTestCase {
 
 final class UserDefaultsBindingStoreTests: XCTestCase {
 
-    private let testKey = "com.speak.hotkeyBinding.test"
+    // [parallel-test-isolation] A UUID-named UserDefaults suite instead of
+    // `.standard` — `.standard` is backed by the same on-disk plist across
+    // concurrently-launched `xctest` worker processes (they share the host
+    // app's bundle ID), so parallel workers racing on the same fixed key
+    // (`com.speak.hotkeyBinding`) would corrupt/flake each other's runs.
+    private var suiteName = ""
+    private var defaults: UserDefaults!
 
     override func setUp() {
         super.setUp()
-        // Clean any stale value from a previous test run.
-        UserDefaults.standard.removeObject(forKey: "com.speak.hotkeyBinding")
+        suiteName = "UserDefaultsBindingStoreTests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+    }
+
+    override func tearDown() {
+        UserDefaults.standard.removePersistentDomain(forName: suiteName)
+        defaults = nil
+        super.tearDown()
     }
 
     func testSaveAndLoadRoundTrip() throws {
-        let store = UserDefaultsBindingStore()
+        let store = UserDefaultsBindingStore(defaults: defaults)
         let binding = HotkeyBinding.defaultBinding
         store.save(binding)
 
@@ -327,8 +339,8 @@ final class UserDefaultsBindingStoreTests: XCTestCase {
     }
 
     func testLoadReturnsNilWhenNothingStored() {
-        let store = UserDefaultsBindingStore()
-        // setUp cleared the key, so nothing should be there
+        let store = UserDefaultsBindingStore(defaults: defaults)
+        // A fresh UUID suite has nothing stored.
         let loaded = store.load()
         XCTAssertNil(loaded)
     }

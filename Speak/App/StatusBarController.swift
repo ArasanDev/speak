@@ -48,6 +48,7 @@ final class StatusBarController: NSObject {
 
     deinit {
         agentInboxPollTask?.cancel()
+        iconObserverTask?.cancel()
     }
 
     /// Poll `agentCallStore.pendingAndPresented().count` on a coarse interval

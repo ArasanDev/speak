@@ -27,12 +27,22 @@ public struct BridgeStatusReport: Sendable, Equatable {
     /// Human-readable detail — e.g. why the app isn't reachable, or an extra
     /// note appended to an otherwise-successful report.
     public let detail: String?
+    /// `true` when the running app's `CLIContract.bridgeContractVersion` doesn't
+    /// match `speak-mcp`'s own — `render(_:sessionNote:)` treats this the same as
+    /// `!appRunning` (a loud `.error`, never a plausible-looking normal reply),
+    /// even though the app itself is running. [decision:
+    /// output-conversation-reconnect §4]
+    public let contractMismatch: Bool
 
-    public init(appRunning: Bool, engineState: String?, hotkeyBinding: String?, detail: String?) {
+    public init(
+        appRunning: Bool, engineState: String?, hotkeyBinding: String?, detail: String?,
+        contractMismatch: Bool = false
+    ) {
         self.appRunning = appRunning
         self.engineState = engineState
         self.hotkeyBinding = hotkeyBinding
         self.detail = detail
+        self.contractMismatch = contractMismatch
     }
 }
 
@@ -62,6 +72,23 @@ public struct BridgeUnavailable: Error, Sendable, Equatable, CustomStringConvert
     /// an ambiguous answer for a deliberate "no". [decision: H-3]
     public static func unclearAnswer(_ tool: String) -> BridgeUnavailable {
         BridgeUnavailable("\(tool) got an answer that wasn't a recognizable yes/no/cancel.")
+    }
+
+    /// `speak_status` (and, by extension, every other bridge tool, since they all
+    /// ride the same wire): the running `speak.app`'s compiled-in
+    /// `CLIContract.bridgeContractVersion` doesn't match `speak-mcp`'s own. This is
+    /// deliberately loud and actionable rather than a plausible-looking normal
+    /// reply — a version-skewed pair can silently misinterpret fields on the wire.
+    /// `runningVersion: nil` means the app predates this field entirely (an older
+    /// build than any that reports a version at all). [decision:
+    /// output-conversation-reconnect §4]
+    public static func contractVersionMismatch(runningVersion: Int?, expectedVersion: Int) -> BridgeUnavailable {
+        let runningDescription = runningVersion.map(String.init) ?? "unknown (pre-versioning build)"
+        return BridgeUnavailable(
+            "speak-mcp/speak.app version mismatch: speak.app reports contract version " +
+            "\(runningDescription), speak-mcp expects \(expectedVersion). Reinstall/relaunch so both " +
+            "match — run `make install-mcp-user` and relaunch speak.app."
+        )
     }
 
     /// Any other transport-level failure translating a CLI reply (malformed JSON,

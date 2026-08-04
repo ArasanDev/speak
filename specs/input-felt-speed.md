@@ -1,6 +1,9 @@
 # Spec: Input — Felt Speed
 
-Status: **active** · Owner: input slice · Depends on: `specs/wispr-input-layer-taste.md`, `specs/frontend-identity.md` (frozen)
+**Status:** active · **Binds:** the <1.2s felt-speed done condition for the input slice ·
+**Owner:** input slice · **Depends on:** `specs/wispr-input-layer-taste.md`,
+`specs/frontend-identity.md` (frozen) · **Superseded by:** none · **Last substantive change:**
+2026-07-30
 
 ## 1. The problem, stated honestly
 

@@ -3,17 +3,14 @@
 > **Your voice is the new keyboard.** macOS-native, 100% local, free, open-source
 > voice dictation with AI neat-writing — speech → on-device AI → pasted at cursor.
 
-[![CI](https://img.shields.io/badge/CI-passing-green)](docs/progress.md)
-[![Release](https://img.shields.io/badge/release-v0.0.1-orange)](CHANGELOG.md)
-[![Platform](https://img.shields.io/badge/platform-macOS%2026%2B-lightgrey)](#build-from-source)
+[![CI](https://github.com/ArasanDev/speak/actions/workflows/ci.yml/badge.svg)](https://github.com/ArasanDev/speak/actions/workflows/ci.yml)
+[![Platform](https://img.shields.io/badge/platform-macOS%2026%2B-lightgrey)](#quick-start)
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange)](#tech-stack)
-[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-black)](#build-from-source)
+[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-black)](#quick-start)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Moat audit](https://img.shields.io/badge/moat%20audit-7%2F7-green)](#privacy)
-[![Discord](https://img.shields.io/badge/Discord-coming%20soon-5865F2)](#contributing)
 
 <!-- Demo GIF coming soon — recording pending human verification of live paste flow. -->
-<!-- Trigger verification test for Bug Hunter bot -->
 <!-- Replace this comment with: ![speak demo](docs/assets/demo.gif) -->
 
 `speak` is a menubar app. Press a hotkey, talk, stop. On-device AI **writes the
@@ -58,22 +55,34 @@ without abandoning their business model: **fully local, free, open, and private*
 
 ## Quick start
 
-### Homebrew (recommended)
+Requirements: macOS 26 (Tahoe), Apple Silicon, Xcode 26+ (full install, not just
+Command Line Tools).
+
+### One-line install (recommended)
+
+Builds from source on your machine, ad-hoc signs, installs to `/Applications`,
+and clears the Gatekeeper quarantine flag automatically — no prompt, no manual
+`xattr` step, no Apple Developer account needed:
 
 ```bash
-brew tap speak-dev/speak
-brew install speak
+curl -fsSL https://raw.githubusercontent.com/ArasanDev/speak/master/scripts/install.sh | bash
 ```
 
-> The tap publishes at first tag (`v0.0.1`). Until then, build from source below.
+Reviewing a `curl | bash` before running it is always reasonable — the script
+is [scripts/install.sh](scripts/install.sh), ~80 lines, does exactly what the
+manual steps below do.
 
-### Build from source
+> **Official Homebrew Cask: not yet published.** `dist/speak.cask.rb` is a
+> scaffold, inert until a signed + notarized release exists (`docs/roadmap.md`
+> P11-b, currently deferred). The one-liner above and the manual/build-from-source
+> tap below don't need that — Gatekeeper only inspects downloaded binaries,
+> never a local source build, so no cert is required either way.
 
-Requirements: macOS 26 (Tahoe), Apple Silicon, Xcode 26+.
+### Build from source (manual)
 
 ```bash
 brew install xcodegen swiftlint xcbeautify
-git clone https://github.com/speak-dev/speak.git && cd speak
+git clone https://github.com/ArasanDev/speak.git && cd speak
 make build     # generates Speak.xcodeproj, builds Speak.app
 make test      # full test suite
 make run       # launch the menubar app
@@ -341,3 +350,5 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). We welcome:
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
+
+<!-- bughunter dogfood 20260729143949 -->

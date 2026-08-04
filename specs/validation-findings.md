@@ -1,5 +1,11 @@
 # Validation & Hardening — Findings Report (`speak`)
 
+**Status:** closed finding — dated audit report from the validation phase; no inbound
+references from `docs/roadmap.md` or `docs/progress.md` found; whether individual
+findings were each closed one-by-one is undetermined (no per-finding tracking found) ·
+**Binds:** nothing further · **Owner:** orchestrator · **Depends on:** none ·
+**Superseded by:** none · **Last substantive change:** 2026-06-26
+
 > **Status:** LIVE — built across the validation phase (2026-06-22). Author: orchestrator.
 > **Mode:** report-first (user directive) — **NO code changes until the user approves a fix batch.**
 > **Scope:** master feature-complete through Wave 2 (HEAD d20a7b3 at audit start).

@@ -1,5 +1,7 @@
 # `speak` — Agent Tooling & Skills (the build harness)
 
+> **Purpose**: How the agents building `speak` are equipped — skills, MCP servers, standing team. · **Audience**: AI agent, maintainer · **Status**: living · **Last reviewed**: 2026-07-11 (git log)
+
 > **Status**: How the *agents* that build `speak` are equipped — skills, MCP
 > servers, plugins, and the standing team. This is build-harness infra, **not**
 > product architecture (that's `architecture.md`). The product's no-third-party-

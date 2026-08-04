@@ -102,6 +102,40 @@ final class OverlayControllerTests: XCTestCase {
         )
     }
 
+    /// [input-felt-speed §3.3] transition(to: .processing) must NOT clear
+    /// `overlayModel.partialText`. Progressive reveal in the `.processing` HUD
+    /// depends entirely on this: the raw transcript we already streamed stays
+    /// on the model so `TranscriptOverlayView`/`AuroraOverlayView` can show it
+    /// (dimmed, "settling") while cleanup runs. Losing this guarantee would
+    /// silently regress the felt-speed slice back to a bare spinner.
+    func testTransition_toProcessing_preservesPartialText() {
+        controller.overlayModel.overlayState = .listening
+        controller.overlayModel.partialText = "the quick brown fox"
+
+        controller.transition(to: .processing)
+
+        XCTAssertEqual(
+            controller.overlayModel.partialText, "the quick brown fox",
+            "transition(to: .processing) must preserve partialText — it is the source of the §3.3 progressive-reveal HUD text."
+        )
+    }
+
+    /// [input-felt-speed §4 / frontend-identity.md] Refinement (the `.processing`
+    /// state, with or without progressive reveal) is not capture — it must never
+    /// resolve to `.listening`, which is the only state that lights the Pet's
+    /// `onAir` tally (`PetState.resolve`, `specs/frontend-identity.md` §2).
+    func testTransition_toProcessing_isNeverListening() {
+        controller.overlayModel.overlayState = .listening
+        controller.overlayModel.partialText = "settling text"
+
+        controller.transition(to: .processing)
+
+        XCTAssertNotEqual(
+            controller.overlayModel.overlayState, .listening,
+            "Progressive reveal during .processing must never be mistaken for .listening — onAir must stay off."
+        )
+    }
+
     /// transition to .done sets the model state.
     func testTransition_toDone_setsState() {
         controller.overlayModel.overlayState = .processing

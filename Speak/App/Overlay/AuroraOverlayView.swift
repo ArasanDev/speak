@@ -144,12 +144,25 @@ struct AuroraOverlayView: View {
     // MARK: - Processing
 
     private var processingContent: some View {
-        HStack(spacing: SpeakSpacing.sm) {
-            AmbientOrbView(level: 0, phase: .processing, reduceMotion: reduceMotion)
-                .frame(width: Self.orbSize, height: Self.orbSize)
-            Text(model.isCleaningUp ? "Cleaning up\u{2026}" : "Pasting\u{2026}")
-                .font(.speakMonoBody)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            HStack(spacing: SpeakSpacing.sm) {
+                AmbientOrbView(level: 0, phase: .processing, reduceMotion: reduceMotion)
+                    .frame(width: Self.orbSize, height: Self.orbSize)
+                Text(model.isCleaningUp ? "Cleaning up\u{2026}" : "Pasting\u{2026}")
+                    .font(.speakMonoBody)
+                    .foregroundStyle(.secondary)
+            }
+            // [input-felt-speed §3.3] Same progressive reveal as `TranscriptOverlayView`
+            // (classic HUD) — kept in sync so the felt-speed benefit isn't style-gated.
+            if settingsStore.revealTextWhileProcessing, !model.partialText.isEmpty {
+                Text(model.partialText)
+                    .font(.speakMonoBody)
+                    .foregroundStyle(.secondary.opacity(0.75))
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityLabel("Settling: \(model.partialText)")
+            }
         }
         .padding(.horizontal, SpeakSpacing.md)
         .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)

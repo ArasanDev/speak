@@ -1,5 +1,12 @@
 # Plan: Wispr Flow Parity Map + Consolidated Human Spec for `speak`
 
+**Status:** closed/historical — this plan's stated outputs (`docs/benchmark.md`, `SPEC.md`)
+already exist and are the current canonical done-condition/spec; this document is the
+provenance record of how they were produced · **Binds:** nothing directly — see
+`docs/benchmark.md` for the binding gate · **Owner:** orchestrator · **Depends on:** none ·
+**Superseded by:** `docs/benchmark.md`, `SPEC.md` (its own outputs) · **Last substantive
+change:** 2026-06-20
+
 > **Plan type**: enhancement (verified benchmark) + chore (doc synthesis)
 > **Complexity**: complex (external verification + definition-of-done + synthesis)
 > **Outputs**:
@@ -152,11 +159,12 @@ Three-stage pipeline:
   (Risk 1: SpeechAnalyzer WER vs Wispr; Risk 7: Wispr copies local-first) +
   §9 ship checklist. The parity map's MATCH criteria slot alongside these.
 - `docs/progress.md` — current state (pre-build) + open questions.
-- `research/CATEGORY_LANDSCAPE.md`, `research/SPEAK_DICTATION_STACKS.md` —
+- `research/archive/CATEGORY_LANDSCAPE.md`, `research/evidence/dictation-stacks-verified.md` —
   competitor + market depth to mine for the matrix and `SPEC.md`.
-- `research/SPEAK_PRODUCT_SPEC.md`, `research/spec.md`,
-  `research/OPUS_BUILD_PROMPT.md` — prior spec attempts; mine for any Wispr
-  detail or GTM content the docs dropped.
+- `research/archive/SPEAK_PRODUCT_SPEC.md` — prior spec attempt; mine for any Wispr
+  detail or GTM content the docs dropped. (`research/spec.md` and
+  `research/OPUS_BUILD_PROMPT.md` were also cited here; both were deleted in `077d700`
+  and have no successor.)
 - `README.md` (root) — public positioning; keep consistent with `SPEC.md`.
 
 ### New Files

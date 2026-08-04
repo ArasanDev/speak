@@ -94,10 +94,10 @@ public actor AgentBridgeServer {
                 error: JSONRPCErrorObject(code: JSONRPCErrorCode.parseError,
                                            message: "Parse error: \(error.localizedDescription)")
             )
-            return try? JSONRPCCodec.encodeOutbound(outbound)
+            return encodeOutboundOrFallback(outbound, id: nil)
         }
         guard let outbound = await handle(inbound) else { return nil }
-        return try? JSONRPCCodec.encodeOutbound(outbound)
+        return encodeOutboundOrFallback(outbound, id: inbound.id)
     }
 
     // MARK: - initialize
@@ -449,6 +449,13 @@ public actor AgentBridgeServer {
     }
 
     private static func render(_ report: BridgeStatusReport, sessionNote: String?) -> MCPToolCallResult {
+        // Version skew is reported as a loud, actionable error even though the
+        // app itself is running — never folded into the normal "speak is
+        // running" text reply, where a caller could plausibly miss it.
+        // [decision: output-conversation-reconnect §4]
+        if report.contractMismatch {
+            return .error(report.detail ?? "speak-mcp/speak.app contract version mismatch.")
+        }
         guard report.appRunning else {
             return .error(report.detail ?? BridgeUnavailable.appNotRunning.reason)
         }
@@ -464,4 +471,26 @@ public actor AgentBridgeServer {
         SpeakLog.agentBridge.info(
             "AgentBridgeServer: '\(method, privacy: .public)' received before notifications/initialized — serving anyway (lenient).")
     }
+}
+
+// [bug, survey: agentbridge-protocol-edges/medium] `encodeOutbound()` can throw;
+// returning `nil` here (unlike `handle(_:)`'s legitimate no-reply `nil`) leaves
+// the MCP client with no bytes for a request it expected a reply to, so it hangs
+// until its own timeout — violates JSON-RPC 2.0. Mirrors `CLIPortServer.encodeReply`'s
+// fallback: log, then hand back a minimal JSON-RPC error response instead of `nil`.
+// Free function (not an actor member) so it doesn't grow `AgentBridgeServer`'s
+// type body further past SwiftLint's cap.
+private func encodeOutboundOrFallback(_ outbound: JSONRPCOutbound, id: JSONRPCID?) -> Data {
+    if let data = try? JSONRPCCodec.encodeOutbound(outbound) {
+        return data
+    }
+    SpeakLog.agentBridge.error("AgentBridgeServer: failed to encode outbound reply — returning fallback error response.")
+    let idLiteral: String
+    switch id {
+    case .string(let value): idLiteral = "\"\(value)\""
+    case .number(let value): idLiteral = "\(value)"
+    case nil: idLiteral = "null"
+    }
+    let fallback = #"{"jsonrpc":"2.0","id":\#(idLiteral),"error":{"code":-32603,"message":"internal error: failed to encode response"}}"#
+    return Data(fallback.utf8)
 }

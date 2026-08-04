@@ -184,7 +184,8 @@ schemes:
         SpeakTests: [test]
     test:
       targets:
-        - SpeakTests
+        - name: SpeakTests
+          parallelizable: true
     run:
       config: Debug
 

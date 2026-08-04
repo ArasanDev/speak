@@ -24,10 +24,10 @@ cask "speak" do
   version "0.0.1"
   sha256 "PLACEHOLDER_SHA256_REPLACE_AFTER_MAKE_RELEASE"
 
-  url "https://github.com/yourusername/speak/releases/download/v#{version}/Speak.dmg"
+  url "https://github.com/ArasanDev/speak/releases/download/v#{version}/Speak.dmg"
   name "speak"
   desc "Local-first, free, open-source AI voice dictation for macOS"
-  homepage "https://github.com/yourusername/speak"
+  homepage "https://github.com/ArasanDev/speak"
 
   # macOS 26 (Tahoe) minimum — speak requires SpeechAnalyzer + Foundation Models,
   # both macOS 26-only. :tahoe == "26" [verified: Homebrew macos_version.rb].

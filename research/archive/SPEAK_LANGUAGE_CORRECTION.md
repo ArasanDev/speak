@@ -1,5 +1,10 @@
 # Correction: Claude Code is TypeScript + Bun, not Rust
 
+> **Research header** — Question: "what is Claude Code's actual implementation
+> language, correcting the false Rust claim in `SPEAK_ARCHITECTURE_VERIFICATION.md`?"
+> · Date: 2026-06-18 · Status: **superseded** (this file is itself the correction of
+> an earlier archived claim; kept for provenance per `research/README.md`)
+
 > **Status**: Correction memo. I made a factual error in `SPEAK_ARCHITECTURE_VERIFICATION.md` §1.2 and `SPEAK_PLATFORM_MODEL.md`. This memo states the corrected facts, shows the local evidence, and updates the recommendation.
 >
 > **Date**: 2026-06-18

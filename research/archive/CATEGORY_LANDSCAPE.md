@@ -1,5 +1,9 @@
 # Voice-First Coding Tools — 2026 Category Landscape
 
+> **Research header** — Question: "where does `deepvoice`/`speak` sit in the 2026
+> voice-coding category landscape relative to competitors?" · Date: 2026-06-18 ·
+> Status: **archived** (pre-build ideation pass; see `research/README.md`)
+
 > **Status**: Exploration. Anchor: Wispr Flow. Sweep: every adjacent app in the dictation, voice-coding, IDE-voice-mode, and voice-agent-platform buckets.
 > **Date**: 2026-06-18
 > **Working dir**: `/Users/tamil/Developers/deepvoice`

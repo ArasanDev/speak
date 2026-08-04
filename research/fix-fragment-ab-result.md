@@ -1,5 +1,9 @@
 # SM-2 / D1 — the `fix` fragment A/B (live Foundation Models, decided by reading outputs)
 
+> **Research header** — Question: "which `fix`-category system-prompt fragment
+> (A: bug-report framing vs B: imperative + anti-invention guard) produces better
+> live Foundation Models output?" · Date: 2026-06-30 · Status: **evidence**
+
 > **Status**: `[verified]` live run 2026-06-30, greedy decoding (deterministic), Agent
 > profile · fix category · medium intensity. Harness: `FixABTests` under the `Eval`
 > scheme (SPEAK_EVAL=1 reaches the runner). Raw log: scratchpad `fixab.log`.

@@ -180,3 +180,57 @@ final class RearmEdgeLogicTests: XCTestCase {
         )
     }
 }
+
+// MARK: - handleTapDisabled AX-reverify logic (mirrors HotkeyMonitor.handleTapDisabled)
+
+/// Tests the pure boolean decision inside `handleTapDisabled()`'s `allowed` branch:
+/// after calling `CGEvent.tapEnable(enable: true)`, the tap must not be believed
+/// healthy unless Accessibility trust is re-verified. This mirrors the logic added
+/// to fix the TODO where a mid-session AX revocation (below the rate-limiter
+/// threshold) left `isArmed == true` while the tap was silently dead.
+final class TapDisabledRevocationLogicTests: XCTestCase {
+
+    /// Mirrors handleTapDisabled()'s post-tapEnable decision:
+    ///   claimSuccess = allowed && stillTrusted
+    ///   mustTearDownAndResetWasTrusted = allowed && !stillTrusted
+    private func shouldClaimReenableSuccess(allowed: Bool, stillTrusted: Bool) -> Bool {
+        allowed && stillTrusted
+    }
+
+    private func mustTearDownAfterFailedReenable(allowed: Bool, stillTrusted: Bool) -> Bool {
+        allowed && !stillTrusted
+    }
+
+    func testAllowedAndStillTrusted_claimsSuccess() {
+        XCTAssertTrue(
+            shouldClaimReenableSuccess(allowed: true, stillTrusted: true),
+            "tapEnable within rate limit + AX still trusted should be reported as a successful re-enable"
+        )
+        XCTAssertFalse(
+            mustTearDownAfterFailedReenable(allowed: true, stillTrusted: true),
+            "Should not tear down when AX is still trusted"
+        )
+    }
+
+    func testAllowedButAXRevoked_mustTearDownNotClaimSuccess() {
+        // The exact scenario from the fixed TODO: a single tapDisabledByUserInput
+        // event (within the rate-limiter cap) fires after the user revoked
+        // Accessibility mid-session. tapEnable() is then a no-op.
+        XCTAssertFalse(
+            shouldClaimReenableSuccess(allowed: true, stillTrusted: false),
+            "Must NOT claim success when AX was revoked — tapEnable is a silent no-op in that case"
+        )
+        XCTAssertTrue(
+            mustTearDownAfterFailedReenable(allowed: true, stillTrusted: false),
+            "Must tear down the dead tap and reset wasTrusted so the watchdog's untrusted→trusted edge can re-fire later"
+        )
+    }
+
+    func testRateLimited_neitherPathTaken() {
+        // When the rate limiter denies the attempt, tapEnable is never called at
+        // all (separate `else` branch) — the AX-reverify branch is simply not
+        // reached, regardless of stillTrusted.
+        XCTAssertFalse(shouldClaimReenableSuccess(allowed: false, stillTrusted: true))
+        XCTAssertFalse(mustTearDownAfterFailedReenable(allowed: false, stillTrusted: true))
+    }
+}

@@ -632,6 +632,26 @@ final class CaptureSessionTests: XCTestCase {
                        "Partials must preserve chunk order")
         XCTAssertEqual(result.rawText, "hello world", "Final result uses the last chunk")
     }
+
+    // MARK: - VAD attachment (output-conversation-reconnect)
+
+    /// `MockTranscriber` does not conform to `AudioCaptureProviding` (it has no
+    /// live `AudioCapture`), which is exactly the "fixture transcriber" case the
+    /// seam is documented to handle gracefully. `attachVoiceActivityDetector`
+    /// must report `false` rather than crash or silently pretend to attach.
+    func testAttachVoiceActivityDetectorReturnsFalseForFixtureTranscriber() async throws {
+        let transcriber = MockTranscriber(script: makeChunks(["hello"]))
+        let session = CaptureSession(transcriber: transcriber)
+        try await session.start()
+
+        let vad = VoiceActivityDetector()
+        let attached = await session.attachVoiceActivityDetector(vad)
+        XCTAssertFalse(attached, "No AudioCaptureProviding transcriber — attach must report false, not crash")
+
+        // Detaching (nil) must also be a safe no-op in this fixture case.
+        let detached = await session.attachVoiceActivityDetector(nil)
+        XCTAssertFalse(detached)
+    }
 }
 
 // MARK: - State == State (Equatable for assertions)

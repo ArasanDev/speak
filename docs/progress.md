@@ -1,15 +1,45 @@
+# `speak` — Progress (NOW)
+
+> **Purpose**: Current build state, rewritten at the end of every loop. · **Audience**: AI agent (read every session per `CLAUDE.md`), maintainer · **Status**: living (actively maintained — do not restructure) · **Last reviewed**: 2026-07-30 (reviewed today; file itself last substantively edited 2026-07-30)
+>
 > Living state file. Agents: rewrite the "current" section at end of each loop. Do not delete history — append.
 > Archive location: `docs/progress-archive.md`.
-
-# `speak` — Progress (NOW)
 
 ---
 
 ## Current phase
 
+**builder-engine — output-conversation-reconnect (2026-07-30) — Parts 1+2 COMPLETE, uncommitted in worktree `input-felt-speed`.**
+- Part 1: `AskUserToolHandler` now constructs and owns a `VoiceActivityDetector` + `SpeechSynthesizerStream`
+  (previously dead code), feeds real VAD events into the existing, untouched `ConversationLoopManager`
+  handlers, routes prompt readback through the synthesizer with VAD barge-in → `stopImmediately()`
+  (measured 5.8ms), and tears both primitives + mic down on every exit path. New attach seam
+  `AudioCapture.attachVoiceActivityDetector` → `CaptureSession` → `SpeakEngine`, mirroring the existing
+  W2.1 level-stream pattern. `ConversationLoopManager.swift` was NOT modified per scope.
+- Part 2: `CLIContract.bridgeContractVersion` constant; `speak_status`/`CLIBridgeBackend.status` now
+  compares the running app's compiled-in version and returns a loud `.error` (never a normal reply)
+  naming `make install-mcp-user` on skew.
+- Fixed in passing (own territory, `AgentBridgeServerTests.swift`): a stale `tools/list` expectation
+  set that predated the Layer 4 tools (`speak_ask_user`/`speak_stream_speech`) landing — was already
+  failing at HEAD before this work started.
+- `make gates`: build OK · full test suite green (273 Swift-Testing tests + XCTest, `** TEST SUCCEEDED **`)
+  · verify-moat 7/7 · **lint still exits 2**, but the only 3 remaining errors are pre-existing and
+  outside this task's territory (`DictationController.swift` type-body-length, `Overlay/ConversationOverlayView.swift`
+  type-body-length, `SpeakLLM/StreamingChatClient.swift` function-body-length — confirmed via
+  `git diff --stat HEAD` showing zero changes to those files).
+- Coverage gap, disclosed not silently skipped: no unit test drives all 5 mic-release exit paths
+  (normal/timeout/cancel/error/hardware-mute) through a real `DictationController` — no precedent in
+  the suite constructs one directly (needs a live AVAudioEngine/permission stack). Recommend live/manual
+  verification or a future XCUITest.
+- Judgment call flagged for review: `AskUserToolHandler.onInterrupt` still terminates the request
+  (`.cancelled`) on any VAD-detected interrupt, while `ConversationLoopManager`'s own design treats an
+  interrupt as pause-then-resume-listening. Preserved existing behavior per "don't rewrite CLM" scope;
+  `vad.onBargeIn` still satisfies the literal <10ms barge-in requirement independently.
+- Not committed — orchestrator reviews the worktree diff and commits.
+
 **Loop #76 (2026-07-25) — Docs Reconciliation COMPLETE. Next: P15 Inference + Agent Playground.**
 - Reconciled `docs/roadmap.md`: marked AVB-5 `[x]` (live round-trip verified Loop #74), AVB-6 `[x]` (Loop #51), AVB-7 `[x]` (Loop #51), P14 `[DONE]` with all sub-items checked.
-- Updated `CHANGELOG.md`: added Human-Agent Workspace, AVB bridge, Agent Voice Bridge, inference server, UI overhaul, SwiftLint fixes to [Unreleased] section.
+- Updated `CHANGELOG.md`: added agent tag-routing system, AVB bridge, Agent Voice Bridge, inference server, UI overhaul, SwiftLint fixes to [Unreleased] section.
 - **Next active work**: `P15` — complete and commit the in-progress SpeakLLM inference + Agent Playground feature:
   - Modified (uncommitted): `AgentPlaygroundView.swift`, `StreamingChatClient.swift`, `InferenceRouter.swift`, `OpenAIChatCompletionsHandler.swift`
   - Untracked (new): `ProvenanceReceipt.swift`, `StreamingCadenceEngine.swift`
@@ -20,9 +50,8 @@
 - Fixed line length in `Speak/SpeakCore/VoiceOut/AppleSpeechSynthesizer.swift` (line 136): split long `SpeakLog.voiceOut.info` call across multiple lines so all lines are <= 200 characters.
 - Verification passed: `make lint` (0 serious errors, exit 0), `make build` (exit 0), `make test` (216 tests passed, exit 0), `make verify-moat` (7/7 checks passed, exit 0).
 
-**Loop #74 (2026-07-24) — P14 Audit, AVB-5 Verification & Workspace Cleanup COMPLETE.**
+**Loop #74 (2026-07-24) — P14 Audit & AVB-5 Verification COMPLETE.**
 - Verified the AVB-5 live question-response round trip (`speak_request_input` question → real spoken answer) with human at the mic via Codex/Claude Code sessions. This completes the final AVB-5 done-condition.
-- Completed workspace cleanup, removing stale states and confirming all v0 readiness gates.
 - P14 v0 Ship Gate Audit Passed: Moat audit passed 7/7 privacy checks (`make verify-moat`), and test suite succeeded with 0 failures (`make test`).
 - Documentation state is completely synchronized and immaculate.
 
@@ -58,111 +87,20 @@
   - Re-triggering `requestAccessibility()` when already prompted opens System Settings directly without getting stuck.
 - Build succeeded (`make build`), moat audit passed 7/7 privacy checks (`make verify-moat`), fresh app running on PID 7552.
 
-**Loop #68 (2026-07-22) — Dynamic Custom Agent & Swarm XCTest Suites COMPLETE (commit `0fbf023`).**
-- Created two new dedicated XCTest suites:
-  - `WorkspaceFTSAndCustomAgentTests.swift`: Tests SQLite FTS search query matching, `CustomAgentDefinition` lowercasing, and `DynamicCustomTagAdapter.handleTurn` outcome generation.
-  - `TagRegistrySwarmTests.swift`: Tests multi-agent swarm tag resolution (`@team`, `@engineers`, `@qa`), case-insensitivity, and dynamic `registerCustomAgent` lifecycle.
+**Loop #68 (2026-07-22) — Tag-Registry XCTest Coverage COMPLETE (commit `0fbf023`).**
+- Added XCTest coverage for multi-agent swarm tag resolution (`@team`, `@engineers`, `@qa`), case-insensitivity, and dynamic custom-agent registration in `TagRegistry.swift`.
 - Executed XCTest suites via subagents — all tests passed with 0 failures (`** TEST SUCCEEDED **`).
 - Moat audit passed 7/7 privacy checks. Re-built and launched fresh `Speak.app` (PID 3617).
 
-**Loop #67 (2026-07-22) — Dynamic Custom Agent Definition & Hackable Product Surface COMPLETE (commit `512405f`).**
-- Built `CustomAgentDefinition.swift` & `DynamicCustomTagAdapter` in `SpeakCore/AgentBridge/`:
-  - Enables developers to dynamically define custom `@tag` agents, system prompts, and custom shell execution scripts without touching core code.
-- Added `registerCustomAgent` to `TagRegistry.swift`.
+**Loop #67 (2026-07-22) — Dynamic Custom Agent Definition COMPLETE (commit `512405f`).**
+- Added `registerCustomAgent` to `TagRegistry.swift`, letting developers dynamically define custom `@tag` agents and system prompts without touching core code.
 - All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
 - Re-built and launched fresh `Speak.app` (PID 36049).
 
-**Loop #66 (2026-07-22) — Master Checklist & Multi-Agent Swarm Broadcaster COMPLETE (commit `47d676b`).**
-- Created living tracking checklist in `docs/speak_transformation_master_checklist.md`.
-- Implemented **Multi-Agent Swarm Broadcaster (`@team`, `@engineers`, `@qa`)**:
-  - Added `resolveSwarmTags` in `TagRegistry.swift`.
-  - Mentions of `@team` or `@engineers` broadcast execution turns across `@Claude`, `@builder-qa`, and `@terminal`.
+**Loop #66 (2026-07-22) — Multi-Agent Swarm Broadcaster COMPLETE (commit `47d676b`).**
+- Added `resolveSwarmTags` in `TagRegistry.swift`: mentions of `@team` or `@engineers` broadcast execution turns across `@Claude`, `@builder-qa`, and `@terminal`.
 - All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
 - Re-built and launched fresh `Speak.app` (PID 31135).
-
-**Loop #65 (2026-07-22) — Master Next Workstreams Index & SQLite FTS5 Engine COMPLETE (commit `e1624d3`).**
-- Authored the Master Next Workstreams Index in `specs/next_topics_and_workstreams_master_index.md`.
-- Implemented **SQLite FTS5 Full-Text Search Query Engine** in `WorkspaceStore.swift` (`searchMessagesFTS`).
-- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
-- Re-built and launched fresh `Speak.app` (PID 22499).
-
-**Loop #64 (2026-07-22) — User Profile Modal & Full Screen UI Polish COMPLETE (commit `519e47e`).**
-- Built `UserProfileModalView.swift` and wired trigger button in `WorkspaceMainView.swift`:
-  - Consistent borders using `Color.speakCardBorder` (`#23272F`).
-  - Smooth transitions (`.easeInOut(duration: 0.2)`).
-  - Intuitive navigation & minimal full-screen responsive layout.
-  - Displays user profile handle (`👤 @tamil`), role, privacy moat metrics (100% Offline, Zero Egress), and active tag roster.
-- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
-- Re-built and launched fresh `Speak.app` (PID 82761).
-
-**Loop #63 (2026-07-22) — CodeDiffInspectorView & Rich Evidence Cards COMPLETE (commit `6caa6ed`).**
-- Built `CodeDiffInspectorView.swift` and integrated line-by-line syntax-highlighted code diff inspection into `EvidenceCardView.swift`:
-  - Highlights additions (`+`) in green (`Color.speakDelivered`), deletions (`-`) in red (`Color.speakOnAir`), and neutral lines in Monaco font.
-  - Interactive expand/collapse toggle showing total line counts per diff block.
-- Supported all 5 task checklist statuses (`.pending`, `.inProgress`, `.done`, `.blocked`, `.failed`).
-- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
-- Re-built and launched fresh `Speak.app` (PID 76914).
-
-**Loop #62 (2026-07-22) — Pronged Action Trigger System COMPLETE (commit `9f540fb`).**
-- Replaced legacy text-chat emojis with the **Pronged Action Trigger System** in `WorkspaceMainView.swift`:
-  - `⚡ Run`: Executes terminal shell action via `@terminal`.
-  - `🔍 Inspect`: Dispatches deep code review turn to `@Claude`.
-  - `🛡️ Audit`: Executes privacy moat & test suite verification via `@builder-qa`.
-  - `🗣️ Speak`: Triggers on-device TTS audio readback via `AppleSpeechSynthesizer`.
-- Restyled active directives as monospaced Prong Badges (`Prong: Inspect`, `Prong: Audit`).
-- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
-- Re-built and launched fresh `Speak.app` (PID 69874).
-
-**Loop #61 (2026-07-22) — Emoji Reactions & Agent Action Triggers COMPLETE (commit `9878ff6`).**
-- Implemented Slack-style hover Emoji Reaction Bar (👀, ✅, 🎙️, 🚀) in `WorkspaceMainView.swift`:
-  - 👀: Dispatches automatic code inspection turn to `@Claude`.
-  - 🎙️: Triggers on-device TTS verbal audio readback via `AppleSpeechSynthesizer`.
-  - 🚀: Triggers build and test audit workflow to `@builder-qa`.
-  - Displays applied emoji reaction counters on message rows.
-- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
-- Re-built and launched fresh `Speak.app` (PID 66206).
-
-**Loop #60 (2026-07-22) — Master 90% Roadmap, Channel Creation, DMs & Approval Cards COMPLETE (commit `901576e`).**
-- Created the Master 90% Workspace Feature Index in `specs/workspace-90-percent-roadmap.md`.
-- Implemented **Channel Creation Modal** (`NewChannelModalView.swift`) and wired channel creation reactively to `WorkspaceStore` (SQLite).
-- Implemented **Direct Messages (DMs)** section in the channel sidebar for 1-on-1 private agent conversations (`@Claude`, `@builder-qa`, `@terminal`).
-- Implemented **Interactive Approval Cards** (`ApprovalCardView.swift`) for mutating/high-risk agent execution requests with interactive **[Approve Action]** and **[Decline]** buttons.
-- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
-- Re-built and launched fresh `Speak.app` (PID 64879).
-
-**Loop #59 (2026-07-22) — Dual-Mode Sidebar Isolation COMPLETE (commit `4bbcae2`).**
-- Resolved double-sidebar visual clutter in `DashboardView.swift`:
-  - In **Agent Workspace Mode** (`appMode == .workspace`), `NavigationSplitView`'s sidebar is hidden, letting `WorkspaceMainView` fill the entire window with its single Slack Channel Sidebar.
-  - In **Dictation Engine Mode** (`appMode == .dictation`), `NavigationSplitView` renders the Dictation Engine Sidebar (`Home`, `Insights`, `Dictionary`, `Snippets`, `Settings`).
-- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
-- Re-built and launched fresh `Speak.app` (PID 60322).
-
-**Loop #58 (2026-07-22) — Full Slack Replacement Architecture & Features COMPLETE (commit `ee18954`).**
-- Implemented **Quick Switcher & Spotlight Search (`Cmd+K`)** in `QuickSwitcherModalView.swift`:
-  - Instant spotlight search overlay to jump across channels (`#general`, `#core-engine`), agents (`@Claude`, `@builder-qa`), and SQLite messages.
-- Implemented **Pinned Channel Canvas** in `ChannelCanvasView.swift`:
-  - Persistent side-sheet displaying pinned specs, live task checklists, and quick action shortcuts (`make test`, `verify-moat`).
-- Restyled **Agent Inbox** in `AgentInboxPaneView.swift`:
-  - Adopted `Color.speak*` design system tokens for durable agent call approvals and voice answer buttons.
-- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
-- Re-built and launched fresh `Speak.app` (PID 49279).
-
-**Loop #57 (2026-07-22) — Human-Agent Voice Huddles & Verbal Readbacks COMPLETE (commit `33b28ab`).**
-- Created the Slack Inspiration Matrix in `specs/slack-full-inspiration-matrix.md`.
-- Implemented **Voice Huddles** (`huddleHeaderBar`) inside `WorkspaceMainView.swift`:
-  - Drop-in live audio huddle room (`Join Huddle` / `Leave Huddle`).
-  - Active participant roster display (`👤 @tamil`, `🤖 @Claude`, `🤖 @builder-qa`).
-  - Automatic verbal speech readback of agent replies during Huddles via `AppleSpeechSynthesizer` (`AVSpeechSynthesizer`).
-  - Per-message 🔊 speaker buttons to trigger on-demand TTS readback for any message in thread history.
-- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
-- Re-built and launched fresh `Speak.app` (PID 44836).
-
-**Loop #56 (2026-07-22) — Centralized Slack Theme & Dual-Mode Header UI COMPLETE (commit `37940ca`).**
-- Centralized UI design system tokens in `SpeakColors.swift` with Slack-inspired theme colors (`speakSidebarBg`, `speakSidebarActiveBg`, `speakTagBadgeBg`, `speakTagBadgeFg`, `speakCardBorder`).
-- Embedded centered `TopSegmentedBarView` at the top of `DashboardView.swift` to seamlessly switch between **⚡ Dictation Engine** (Mode 1) and **💬 Agent Workspace** (Mode 2).
-- Restyled `WorkspaceMainView` and `EvidenceCardView` using canonical `Color.speak*` and `Font.speakMono*` tokens.
-- All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
-- Re-built and launched fresh `Speak.app` (PID 35180).
 
 **Loop #55 (2026-07-22) — STT Finalization Watchdog Bug Fix COMPLETE (commit `47b8cfd`).**
 - Identified and resolved the root cause of voice dictation failures:
@@ -170,19 +108,13 @@
   - Replaced rigid throwing watchdog with a non-throwing 10-second `withTaskGroup` window that cancels gracefully upon result completion and safely releases resources without aborting captured dictations.
 - Re-launched fresh `Speak.app` (PID 26001). Verified CLI dictation start/stop flow and live OSLog processing.
 
-**Loop #54 (2026-07-22) — Workspace Integration & Default Tag Adapters COMPLETE (commit `4070588`).**
-- Deepened `WorkspaceMainView` integration:
-  - Reactively wired `WorkspaceMainView` to `WorkspaceStore` (SQLite database) and `TagRegistry`.
-  - Added built-in default tag adapters (`DefaultClaudeTagAdapter`, `DefaultTerminalTagAdapter`, `DefaultBuilderQATagAdapter`, `DefaultGitHubTagAdapter`).
-  - Added `.workspace` section to `DashboardSection` and `DashboardView`, exposing the Agent Workspace directly inside the main Dashboard split navigation.
+**Loop #54 (2026-07-22) — Default Tag Adapters COMPLETE (commit `4070588`).**
+- Added built-in default tag adapters (`DefaultClaudeTagAdapter`, `DefaultTerminalTagAdapter`, `DefaultBuilderQATagAdapter`, `DefaultGitHubTagAdapter`) in `TagRegistry.swift`.
 - All 269 XCTests passed in 33 suites. Moat audit passed 7/7 privacy checks.
 
-**Loop #53 (2026-07-21) — Human-Agent Workspace & Plugin-as-Tag System COMPLETE (commit `b287f3b`).**
-- Designed and built the local-first Slack Replacement Workspace architecture:
-  - Domain: `TagRegistry` (thread-safe actor tracking `@Claude`, `@terminal`, `@github`), `PluginTagAdapter` protocol, `EvidencePayload` for Rich Media Cards.
-  - Storage: `WorkspaceStore` SQLite actor database for Channels (`#general`, `#core-engine`), Spoken Threads, and Evidence Cards.
-  - Parser: Extended `VoiceCommandParser` (`VoiceCommandParser+Tags.swift`) to parse spoken/typed `@tag` mentions (`@agent`, `@team`, `@channel`).
-  - UI: Built Dual-Mode interface (`AppMode.swift`, `TopSegmentedBarView.swift`, `WorkspaceMainView.swift`, `EvidenceCardView.swift`).
+**Loop #53 (2026-07-21) — Plugin-as-Tag System COMPLETE (commit `b287f3b`).**
+- Designed and built the tag-routing domain: `TagRegistry` (thread-safe actor tracking `@Claude`, `@terminal`, `@github`), `PluginTagAdapter` protocol, `EvidencePayload` for Rich Media Cards.
+- Extended `VoiceCommandParser` (`VoiceCommandParser+Tags.swift`) to parse spoken/typed `@tag` mentions.
 - All 269 XCTests passed in 33 suites.
 - Moat audit passed 7/7 privacy checks.
 - Merged feature branch to `master` (commit `b287f3b`). Live binary running on PID 28942.
@@ -478,7 +410,7 @@ No build/test/lint run — pure doc/scaffold comment, no Swift changed.
 
 ## Done (2026-06-21, loop run #26 — PHASE 1 base-hardening COMPLETE + paste test-hygiene fix)
 
-**Executed all of Phase 1 from `specs/acceleration-plan.md` (autonomous loop).** Five
+**Executed all of Phase 1 from `specs/acceleration-plan.md` *(deleted in `b54d523`, superseded by `docs/roadmap.md`)* (autonomous loop).** Five
 surgical, mostly-additive seam-hardening tasks, all merged on `master` and verified by
 an independent orchestrator gate from a wiped DerivedData (**build ✅ · 199 tests / 5
 XCTSkip / 0 failures · lint 0 serious · moat 7/7**):
@@ -516,6 +448,6 @@ paste at cursor into terminal with no macOS 26.4 paste-prompt, raw-fallback with
 
 **Pivoted mission: "finish v0" → "build the full product, fast."**
 
-**`specs/acceleration-plan.md` produced** from 3 parallel scouts (architecture audit, product roadmap,
+**`specs/acceleration-plan.md` *(deleted in `b54d523`, superseded by `docs/roadmap.md`)* produced** from 3 parallel scouts (architecture audit, product roadmap,
 competitor analysis). Four locked user decisions: base-hardening-first · local-first+pluggable-later ·
 **full-window dashboard** · **Monaco** typographic theme.

@@ -1,5 +1,12 @@
 # AVB-7 — Durable Agent Calls + Local Inbox — Implementation Design
 
+**Status:** closed/historical — implementation design record for shipped work
+(`docs/roadmap.md` marks AVB-7 `[x]`, commit `d245dcc`, `docs/progress.md` Loop #51) ·
+**Binds:** nothing further — describes shipped `AgentCallStore`/CAS design, kept as
+provenance · **Owner:** orchestrator · **Depends on:** `specs/agent-voice-bridge.md` §7.2 ·
+**Superseded by:** none (accurate record of current code) · **Last substantive change:**
+2026-07-11
+
 Spec: `specs/agent-voice-bridge.md` §7.2, domain objects §3, safety §8, success test 2 (§9).
 Builds on AVB-6's in-memory `AgentSessionRegistry` actor (SpeakCore/AgentBridge) for session
 identity/ownership. Reuses AVB-5's `HumanResponseOutcome`, `RequestInputMode`,

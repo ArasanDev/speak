@@ -82,7 +82,7 @@ Run this sequence before touching any code.
 | Verified API facts (ledger) | `specs/verification-ledger.md` |
 | Why a decision was made | `research/evidence/` (read-only) |
 
-Do not read `research/archive/`. Do not read `research/sample-ideation.md` for product direction (it documents the abandoned `deepvoice` idea, not `speak`).
+Do not read `research/archive/`. Do not read `research/archive/deepvoice-ideation.md` for product direction (it documents the abandoned `deepvoice` idea, not `speak`).
 
 ### Key build commands
 

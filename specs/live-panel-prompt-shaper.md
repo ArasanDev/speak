@@ -1,5 +1,13 @@
 # `speak` — Live Panel: the Prompt Shaper (PE-3)
 
+**Status:** closed/historical — the PE-3c-1 destination card + pill + Escape-close design
+(and PE-3.2 pin-to-context, scoped here as "later") are both implemented (`AgentCategory`,
+`PinnedContextStore`, `DictationController+LivePanel.swift`, `TranscriptOverlayView.swift`
+category/pill wiring) · **Binds:** nothing further — accurate record of shipped
+overlay/HUD interaction design · **Owner:** orchestrator · **Depends on:**
+specs/profile-taxonomy.md · **Superseded by:** none (still an accurate description of the
+shipped panel) · **Last substantive change:** 2026-06-29
+
 > The overlay HUD shown during dictation becomes a **shaper you glance at**, not a
 > menu you operate. Realizes `profile-taxonomy.md` in the live moment. Apple
 > low-friction: auto-resolved + voice carry the common case; the panel is the

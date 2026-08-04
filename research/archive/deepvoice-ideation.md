@@ -1,5 +1,10 @@
 # `deepvoice` — Voice-First Agentic Coding (Ideation Memo)
 
+> **Research header** — Question: "which direction should the greenfield `deepvoice`
+> voice-first agentic coding product take (ambient pair-programmer vs voice-first
+> CLI, etc.)?" · Date: 2026-06-18 · Status: **archived** (pre-build ideation pass;
+> see `research/README.md`)
+
 > **Status**: Ideation. Not a PRD. Pick a direction → turn this into a PRD.
 > **Date**: 2026-06-18
 > **Author**: ideation pass, grounded in 2026 primary sources (linked inline).

@@ -116,6 +116,38 @@ public actor HistoryStore: HistoryStoring {
     // MARK: - HistoryStoring
 
     public func save(_ entry: HistoryEntry) throws {
+        // [bug fix, survey: storage-durability/HIGH] INSERT and the capacity-enforcing
+        // DELETE (trimToCapacity) used to be two independent statements: if the DELETE
+        // threw (disk-full, permission error, etc.) after the INSERT already committed,
+        // the new entry persisted but the maxEntries cap silently went unenforced, with
+        // no error surfaced distinguishing "trim failed" from "trim succeeded". Wrapping
+        // both in one SQLite transaction makes them atomic: either both persist, or
+        // neither does, and a trim failure now propagates as a thrown error instead of
+        // being swallowed.
+        var errMsg: UnsafeMutablePointer<CChar>?
+        guard sqlite3_exec(db, "BEGIN IMMEDIATE TRANSACTION", nil, nil, &errMsg) == SQLITE_OK else {
+            let msg = errMsg.map { String(cString: $0) } ?? "BEGIN failed"
+            sqlite3_free(errMsg)
+            throw dbError("begin transaction: \(msg)")
+        }
+        do {
+            try saveEntryAndTrim(entry)
+        } catch {
+            sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
+            throw error
+        }
+        guard sqlite3_exec(db, "COMMIT", nil, nil, &errMsg) == SQLITE_OK else {
+            let msg = errMsg.map { String(cString: $0) } ?? "COMMIT failed"
+            sqlite3_free(errMsg)
+            sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
+            throw dbError("commit transaction: \(msg)")
+        }
+        SpeakLog.storage.debug("HistoryStore saved entry \(entry.id.uuidString, privacy: .private)")
+    }
+
+    /// Insert (or replace) the entry, then trim to capacity — the two statements
+    /// wrapped by `save(_:)`'s transaction so they succeed or fail atomically.
+    private func saveEntryAndTrim(_ entry: HistoryEntry) throws {
         let sql = """
             INSERT OR REPLACE INTO history \
             (id, rawText, cleanedText, createdAt, engineId, duration, stopToPasteSeconds, cleanupSeconds)
@@ -150,7 +182,6 @@ public actor HistoryStore: HistoryStoring {
             }
         }
         try trimToCapacity()
-        SpeakLog.storage.debug("HistoryStore saved entry \(entry.id.uuidString, privacy: .private)")
     }
 
     public func recent(limit: Int) throws -> [HistoryEntry] {
@@ -283,6 +314,18 @@ public actor HistoryStore: HistoryStoring {
         // "duplicate column name" on fresh DBs or after a prior migration — that is the
         // idempotent no-op case, so the result is ignored.
         // [decision: column-add migration over PRAGMA user_version — single additive columns]
+        //
+        // TODO(storage-durability survey, out of scope for this pass): ignoring the
+        // return code here also swallows non-idempotent failures (SQLITE_IOERR,
+        // SQLITE_FULL, SQLITE_PERM, SQLITE_CANTOPEN on a full/read-only/permission-
+        // denied filesystem), leaving the schema silently missing a column and later
+        // queries referencing it failing with a confusing "no such column" error
+        // instead of a clear schema-setup error at init time. A correct fix needs to
+        // distinguish "duplicate column name" (expected, ignore) from every other
+        // SQLite error (should propagate) by inspecting the error message via
+        // sqlite3_exec's errmsg out-param — left as a TODO because string-matching
+        // SQLite's error text is brittle across SQLite versions and deserves a
+        // deliberate decision, not a mechanical fix bolted on here.
         sqlite3_exec(db, "ALTER TABLE history ADD COLUMN duration REAL NOT NULL DEFAULT 0", nil, nil, nil)
         // P13 migration: stop→paste latency columns (benchmark.md §7).
         sqlite3_exec(db, "ALTER TABLE history ADD COLUMN stopToPasteSeconds REAL NOT NULL DEFAULT 0", nil, nil, nil)
@@ -337,7 +380,8 @@ public actor HistoryStore: HistoryStoring {
         try binder(stmt)
 
         var entries: [HistoryEntry] = []
-        while sqlite3_step(stmt) == SQLITE_ROW {
+        var stepResult = sqlite3_step(stmt)
+        while stepResult == SQLITE_ROW {
             guard
                 let idCStr = sqlite3_column_text(stmt, 0),
                 let rawCStr = sqlite3_column_text(stmt, 1)
@@ -369,6 +413,17 @@ public actor HistoryStore: HistoryStoring {
                 stopToPasteSeconds: stopToPasteSeconds,
                 cleanupSeconds: cleanupSeconds
             ))
+            stepResult = sqlite3_step(stmt)
+        }
+        // [bug fix, survey: storage-durability/MEDIUM] The loop used to be
+        // `while sqlite3_step(stmt) == SQLITE_ROW`, which cannot distinguish
+        // "query completed" (stepResult == SQLITE_DONE) from "query aborted
+        // mid-read due to lock contention" (SQLITE_BUSY/SQLITE_LOCKED) — both
+        // just fall out of the loop and silently return whatever rows were read
+        // so far. Now a non-DONE exit throws so the caller can see the failure
+        // instead of mistaking a partial result for a complete one.
+        guard stepResult == SQLITE_DONE else {
+            throw dbError("query step (row \(entries.count)): sqlite3_step returned \(stepResult)")
         }
         return entries
     }

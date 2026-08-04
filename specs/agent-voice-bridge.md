@@ -1,5 +1,10 @@
 # Human-Agent Interface Runtime — Product Contract `[decision 2026-07-11]`
 
+**Status:** active/binding — north star · **Binds:** the product boundary (§1), domain
+objects (§3), safety invariants (§8) for the agent-bridge layer; `docs/roadmap.md` "North
+star" cites this as the canonical contract · **Owner:** orchestrator · **Depends on:**
+`docs/product.md` · **Superseded by:** none · **Last substantive change:** 2026-07-11
+
 > **Canonical post-dictation direction.** `docs/product.md` defines why the
 > product exists; this specification defines the interaction model. The v0
 > dictation ship gate remains unchanged.

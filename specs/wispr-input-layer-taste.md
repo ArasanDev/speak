@@ -1,5 +1,11 @@
 # Wispr Flow — Input-Layer Taste & Choreography
 
+**Status:** reference — competitor research still actively depended on by
+`specs/input-felt-speed.md` (active) · **Binds:** nothing directly — reference evidence ·
+**Owner:** input slice · **Depends on:** `specs/wispr-parity-and-spec.md`,
+`specs/frontend-identity.md` (frozen), `specs/speak-ui-design-final-2026-06-28.md` ·
+**Superseded by:** none · **Last substantive change:** 2026-07-30
+
 > Purpose: capture the moment-by-moment *feel* of a single Wispr Flow dictation
 > — not a feature list — so `speak` can match/beat it on experiential grounds.
 > Extends `specs/wispr-parity-and-spec.md` (which is a feature/pricing parity

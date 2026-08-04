@@ -60,6 +60,27 @@ public actor AgentSessionRegistry {
             state: .active,
             lastSeen: now()
         )
+        // TODO(agentbridge-protocol-edges survey, critical, left unfixed):
+        // `sessionsById` only ever grows — sessions become `.stale` after
+        // `staleThreshold` inactivity (see `list()` below) but are never
+        // actually removed from storage, so a long-running app with many
+        // short-lived agent sessions accumulates entries forever. Two
+        // candidate fixes, neither applied here because the choice affects
+        // in-flight lookups and needs a deliberate decision:
+        //   1. Evict-on-register: before inserting `session` here, sweep
+        //      `sessionsById` for entries past some hard eviction threshold
+        //      (longer than `staleThreshold`, e.g. 24h) and remove them —
+        //      zero extra scheduling, but only reclaims memory on the next
+        //      registration, not while the app sits idle.
+        //   2. Periodic sweep task: a `Task` (owned by whoever constructs
+        //      this actor) that wakes on an interval and calls a new
+        //      `evictStale(olderThan:)` method — reclaims memory even with
+        //      no new registrations, but adds another long-lived task whose
+        //      lifecycle must be managed (see the lifecycle-leaks survey
+        //      findings in DictationController/StatusBarController/
+        //      HistoryViewModel for why that bookkeeping matters here).
+        // Either way, `isKnown(sessionId:)`/`touch(sessionId:)`/`list()` must
+        // keep working for any session not yet evicted — no TOCTOU window.
         sessionsById[id] = session
         return session
     }

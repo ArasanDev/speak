@@ -69,6 +69,25 @@ format_stream() {
             draw_step "Status" "${GREEN}Build Succeeded Cleanly${RESET}"
         elif echo "$line" | grep -q "TEST SUCCEEDED"; then
             draw_step "Status" "${GREEN}Test Suite Passed Cleanly${RESET}"
+        # Per-suite progress so a long `make test` run stays diagnosable instead
+        # of going silent for hours (was the actual blocker debugging a slow CI
+        # run — individual `Test Case` lines are too noisy to print one-by-one
+        # across ~300 tests, but suite start/pass/fail with timing is not).
+        elif echo "$line" | grep -qE "Test Suite '[^']+' started at"; then
+            suite=$(echo "$line" | grep -o "Test Suite '[^']*" | cut -d"'" -f2)
+            if [ "$suite" != "All tests" ] && [ "$suite" != "Selected tests" ]; then
+                draw_step "Suite" "▶ $suite"
+            fi
+        elif echo "$line" | grep -qE "Test Suite '[^']+' passed at"; then
+            suite=$(echo "$line" | grep -o "Test Suite '[^']*" | cut -d"'" -f2)
+            if [ "$suite" != "All tests" ] && [ "$suite" != "Selected tests" ]; then
+                draw_step "Suite" "${GREEN}✓ $suite${RESET}"
+            fi
+        elif echo "$line" | grep -qE "Test Suite '[^']+' failed at"; then
+            suite=$(echo "$line" | grep -o "Test Suite '[^']*" | cut -d"'" -f2)
+            draw_step "Suite" "${RED}✗ $suite${RESET}"
+        elif echo "$line" | grep -qE "Test Case '-\[[^]]+\]' failed"; then
+            printf "${RED}│ ✖ %s${RESET}\n" "$line"
         fi
     done
 

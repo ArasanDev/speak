@@ -748,4 +748,17 @@ public actor SpeakEngine {
         guard let session = currentSession else { return nil }
         return await session.levels()
     }
+
+    // MARK: - VAD attachment (output-conversation-reconnect)
+
+    /// Attach (or, passing `nil`, detach) a `VoiceActivityDetector` to the
+    /// current session's live `AudioCapture` — mirrors `currentLevels()` above.
+    /// Returns `false` when no session is active or the transcriber does not
+    /// expose an `AudioCapture` (fixture mode); the caller (`AskUserToolHandler`)
+    /// uses this to know whether real audio is actually feeding the VAD.
+    @discardableResult
+    public func attachVoiceActivityDetector(_ vad: VoiceActivityDetector?) async -> Bool {
+        guard let session = currentSession else { return false }
+        return await session.attachVoiceActivityDetector(vad)
+    }
 }

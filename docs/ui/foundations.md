@@ -1,6 +1,8 @@
-> Design-system reference for all SwiftUI work. Read when: adding a new surface or component. Authority: this file defines tokens; code is the implementation.
-
 # speak — UI Foundations
+
+> **Purpose**: Design-system reference — tokens, motion grammar, accessibility, i18n rules for all SwiftUI work. · **Audience**: contributor, AI agent (implementing any UI surface) · **Status**: living — authority for tokens; code is the implementation of record · **Last reviewed**: 2026-06-30 (git log)
+
+> Design-system reference for all SwiftUI work. Read when: adding a new surface or component. Authority: this file defines tokens; code is the implementation.
 
 ---
 

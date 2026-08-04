@@ -1,5 +1,11 @@
 # `speak` — Product & Build Specification (Single Source of Truth)
 
+> **Research header** — Question: "what is the single, reconciled build spec for
+> `speak`, superseding the earlier conflicting research-pass memos?" · Date:
+> 2026-06-19 · Status: **archived** — was itself the authoritative spec at the time,
+> but has since been superseded by the live `docs/` and `specs/` trees per
+> `CLAUDE.md`; kept for provenance only (see `research/README.md`)
+
 > **Status**: Authoritative spec v1.0. This document **supersedes** the conflicting
 > recommendations across `SPEAK_PRODUCT_SPEC.md`, `SPEAK_PLATFORM_MODEL.md`,
 > `SPEAK_ARCHITECTURE_VERIFICATION.md`, `SPEAK_LANGUAGE_CORRECTION.md`,

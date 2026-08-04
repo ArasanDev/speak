@@ -29,3 +29,18 @@ If anything in `docs/` contradicts something here, `docs/` wins.
 These are superseded pre-build specs from the 2026-06-18 research pass. Kept for provenance only.
 
 One file (`SPEAK_ARCHITECTURE_VERIFICATION.md`) contains a false claim. Treat the entire folder as off-limits.
+
+## Header convention
+
+Every file in this directory (root-level, `evidence/`, and `archive/`) carries a
+one-line header immediately below its title, of the form:
+
+> **Research header** — Question: "<what this file answers>" · Date: <git-log date
+> of last change> · Status: **evidence** | **superseded** | **archived**
+
+This is metadata only — it labels a file as read-only evidence, not direction, and
+records when the finding was made. It does not alter, endorse, or correct the
+content beneath it. `evidence` = still the live reference for a cited claim;
+`superseded` = an earlier finding later corrected or overtaken by another file in
+this directory (see that file's own header/body for the correction); `archived`
+= pre-build ideation, kept for provenance only, per the access policy above.

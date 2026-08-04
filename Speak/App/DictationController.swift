@@ -126,14 +126,19 @@ final class DictationController: CLICommandHandler {
 
     /// Hardware-mute state (SPEC §7.4). Mirrors `engine.isMuted` for the menu
     /// checkmark. The authoritative state lives in the engine.
-    private(set) var isMuted: Bool = false
+    /// Not `private(set)` — the setter is written from `DictationController+Session.swift`'s
+    /// `toggleMute()` (same module, different file; Swift's `private` is file-scoped).
+    var isMuted: Bool = false
 
     // MARK: - Private components
 
     let engine: SpeakEngine
     let monitor: HotkeyMonitor
-    private var eventTask: Task<Void, Never>?
-    private var armStateTask: Task<Void, Never>?
+    // nonisolated(unsafe): reachable from deinit. [bug, survey: lifecycle-leaks/critical]
+    @ObservationIgnored
+    nonisolated(unsafe) var eventTask: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) var armStateTask: Task<Void, Never>?
 
     let historyStore: any HistoryStoring
 
@@ -148,7 +153,7 @@ final class DictationController: CLICommandHandler {
 
     /// The paste writer — held so the engine and the "Paste Last Transcript" action
     /// share one instance (re-paste writes the clipboard + simulates Cmd+V).
-    private let pasteboardWriter = PasteboardWriter()
+    let pasteboardWriter = PasteboardWriter()
 
     /// H-2: on-device TTS readback (specs/horizon-voice-os.md Pillar 2). One instance
     /// for the app's lifetime — `toggleReadback()` (DictationController+VoiceOut.swift)
@@ -253,8 +258,9 @@ final class DictationController: CLICommandHandler {
 
     /// Drives Command Mode (Wave D) from the Fn+Ctrl chord. Constructed in
     /// `startMonitoring()`; consumes `monitor.commandChordEvents`.
-    private var commandModeController: CommandModeController?
-    private var commandChordTask: Task<Void, Never>?
+    var commandModeController: CommandModeController?
+    @ObservationIgnored
+    nonisolated(unsafe) var commandChordTask: Task<Void, Never>?
 
     /// Fires on the main thread each time `icon` transitions idle → listening.
     /// Used by `ensureWindowPresenter()` to supply `hotkeyFiredPublisher` to the
@@ -338,7 +344,8 @@ final class DictationController: CLICommandHandler {
     /// Uses `withObservationTracking` (from `@Observable`) instead of a Combine
     /// subscription — fires only on `triggerMode` mutations (not on every settings
     /// write), so the dedupe guard is a last-defence against same-value writes.
-    private var triggerModeObserverTask: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var triggerModeObserverTask: Task<Void, Never>?
 
     /// The last trigger applied to the live monitor. [validation-fix NEW-7]
     /// Guards against same-value `withMutation` fires that would produce spurious
@@ -349,7 +356,8 @@ final class DictationController: CLICommandHandler {
     /// `settingsStore.extraBindings` changes, applying the new set to the live
     /// monitor without relaunch. Same `withObservationTracking` pattern as
     /// `triggerModeObserverTask`.
-    private var extraBindingsObserverTask: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var extraBindingsObserverTask: Task<Void, Never>?
 
     /// [V01-5] The last extra-bindings set applied to the live monitor — dedupe
     /// guard against same-value `withMutation` fires, mirroring `lastAppliedTrigger`.
@@ -360,14 +368,17 @@ final class DictationController: CLICommandHandler {
     private var lastAppliedAppearance: AppTheme = .system
 
     /// The in-flight appearance observation task, cancelled when a new one replaces it.
-    private var appearanceObserverTask: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var appearanceObserverTask: Task<Void, Never>?
 
     // MARK: - Onboarding
 
     let permissionManager: PermissionManager
 
     // MARK: - FE-1: Voice Desktop Pet (wiring in `DictationController+Pet.swift`, [lint] type_body_length)
-    var petWiring = PetWiring()
+    // nonisolated(unsafe): reachable from deinit. [bug, survey: lifecycle-leaks/critical]
+    @ObservationIgnored
+    nonisolated(unsafe) var petWiring = PetWiring()
 
     // MARK: - Init
 
@@ -395,7 +406,7 @@ final class DictationController: CLICommandHandler {
         self.agentCallStore = makeAgentCallStore()
 
         engine = SpeakEngine(
-            transcriber: defaultTranscriber(for: store),
+            transcriber: DictationController.resolveTranscriber(for: store),
             cleaner: defaultCleaner(for: store),
             inserter: pasteboardWriter,
             history: historyStore,
@@ -701,46 +712,6 @@ final class DictationController: CLICommandHandler {
         ensureWindowPresenter().showSettings()
     }
 
-    /// Cancel the current dictation without pasting. Previously called by the Escape
-    /// key handler (W2.2), which was changed to invoke `endDictation()` (stop+paste)
-    /// instead. `cancelDictation()` is now only called internally (e.g. mute toggle)
-    /// and remains available for future use. Safe to call when idle — the engine
-    /// no-ops in that case.
-    ///
-    /// Hides the overlay immediately (no done-flash on cancel) and resets to idle.
-    func cancelDictation() {
-        Task { [weak self] in
-            guard let self else { return }
-            await self.engine.cancelDictation()
-            self.overlayController.cancelImmediate()
-            self.caretOverlay.hide()
-            self.icon = .idle
-            self.monitor.notifySessionEnded()  // [validation-fix C1] keep detector in sync
-            SpeakLog.engine.info("DictationController: dictation cancelled by user (Escape).")
-        }
-    }
-
-    /// Re-paste the most recent finished transcript at the current cursor (Wispr's
-    /// "Paste Last Transcript" / Ctrl+Cmd+V). No-op until the first dictation completes.
-    /// On AX-denied, the text is still placed on the clipboard (PasteboardWriter's
-    /// clipboard floor) and the permissions hint is surfaced.
-    func pasteLastTranscript() {
-        let text = lastTranscript
-        guard !text.isEmpty else { return }
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await self.pasteboardWriter.insert(text)
-                SpeakLog.engine.info("DictationController: re-pasted last transcript.")
-            } catch {
-                self.permissionsNeeded = true
-                SpeakLog.engine.info(
-                    "DictationController: re-paste left text on clipboard — Accessibility needed."
-                )
-            }
-        }
-    }
-
     /// Publisher that fires when a dictation completes (success or error).
     /// Used by the dashboard Home pane to refresh recent dictations after a new
     /// entry is saved to history. [decision P11-c]
@@ -761,112 +732,20 @@ final class DictationController: CLICommandHandler {
         }
     }
 
-    // MARK: - Hardware mute (SPEC §7.4)
+    // MARK: - Hardware mute, task management, and event handling
+    // (`toggleMute`, `startArmStateTask`, `startCommandChordTask`, `startEventTask`,
+    // `handle(_:)`) moved to `DictationController+Session.swift` ([lint] type_body_length)
+    // — pure code motion, no behavior change.
 
-    func toggleMute() {
-        Task { [weak self] in
-            guard let self else { return }
-            let nowMuted = await self.engine.toggleMute()
-            self.isMuted = nowMuted
-            if nowMuted {
-                self.monitor.notifySessionEnded()
-                self.overlayController.stop()
-                self.caretOverlay.hide()
-                self.icon = .idle
-            }
-        }
-    }
-
-    // MARK: - Private task management
-
-    /// Start consuming `monitor.armStateChanges` to update `permissionsNeeded`.
-    /// On arm: clear the hint and ensure the event-consume task is running.
-    private func startArmStateTask() {
+    // [bug, survey: lifecycle-leaks/critical] cancel every owned Task loop.
+    deinit {
+        triggerModeObserverTask?.cancel()
+        appearanceObserverTask?.cancel()
+        extraBindingsObserverTask?.cancel()
+        eventTask?.cancel()
         armStateTask?.cancel()
-        armStateTask = Task { [weak self] in
-            guard let self else { return }
-            for await armed in self.monitor.armStateChanges {
-                let isArmed = armed
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    if isArmed {
-                        self.permissionsNeeded = false
-                        SpeakLog.hotkey.info("DictationController: tap armed — permissionsNeeded cleared.")
-                    } else {
-                        // [validation-fix C7] A disarm fires on EVERY teardown — including
-                        // a normal re-arm cycle (rate-limit trip, wake re-arm) while AX is
-                        // still granted. Only raise the permissions hint when AX is actually
-                        // missing, so the menu doesn't flicker "permissions needed" spuriously.
-                        let axGranted = self.permissionManager.status(.accessibility) == .granted
-                        if !axGranted {
-                            self.permissionsNeeded = true
-                            SpeakLog.hotkey.warning("DictationController: tap disarmed + AX missing — permissionsNeeded set.")
-                        } else {
-                            SpeakLog.hotkey.info("DictationController: tap disarmed during re-arm (AX still granted) — no hint.")
-                        }
-
-                        // [validation-fix C2] If the tap died mid-session, the engine is
-                        // stuck `.recording` (HUD frozen, mic hot) with no way to self-heal.
-                        // Cancel the session so it doesn't hang. Covers BOTH hold and
-                        // double-tap (both surface as `icon == .listening`). We cancel
-                        // (discard) rather than paste: a tap death is not a user stop
-                        // intent, and "never paste against intent / be very safe" takes
-                        // precedence over salvaging the partial transcript.
-                        if self.icon == .listening {
-                            SpeakLog.hotkey.warning("DictationController: tap died mid-session — cancelling to avoid stuck recording.")
-                            self.cancelDictation()
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Consume `monitor.commandChordEvents` and drive Command Mode. Begin starts the
-    /// instruction capture; end runs the transform. Hops to the main actor (the
-    /// controller is `@MainActor`).
-    private func startCommandChordTask() {
         commandChordTask?.cancel()
-        let chordEvents = monitor.commandChordEvents
-        commandChordTask = Task { [weak self] in
-            for await event in chordEvents {
-                await MainActor.run { [weak self] in
-                    guard let self, let controller = self.commandModeController else { return }
-                    switch event {
-                    case .begin: controller.begin()
-                    case .end:   controller.end()
-                    }
-                }
-            }
-        }
-    }
-
-    /// Start the event-consume task. Because `monitor.events` is a stable
-    /// AsyncStream that lives for the monitor's lifetime, this task can be
-    /// started once at `startMonitoring()` and will receive events across all
-    /// arm cycles without restart.
-    private func startEventTask() {
-        guard eventTask == nil else { return }
-        let events = monitor.events
-        eventTask = Task { [weak self] in
-            for await event in events {
-                guard let self else { break }
-                await self.handle(event)
-            }
-            SpeakLog.hotkey.info("DictationController: event stream ended.")
-        }
-    }
-
-    // MARK: - Private event handling
-
-    private func handle(_ event: HotkeyEvent) async {
-        switch event {
-        case .startCapture:
-            await beginDictation()
-
-        case .stopCapture:
-            await endDictation()
-        }
+        petWiring.petEnabledObserverTask?.cancel()
     }
 
 }

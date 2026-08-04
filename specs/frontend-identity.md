@@ -1,5 +1,11 @@
 # speak — Frontend Identity & the Pet `[decision 2026-07-11]`
 
+**Status:** frozen/binding · **Binds:** the `onAir` color rule (#FF5C49 iff microphone is
+capturing) and the two-temperature (warm=human/cool=agent) palette, pinned by a 32-case
+test (`PetViewMathTests`, `PetStateTests`, `OverlayControllerTests`) · **Owner:** orchestrator
+(design direction) · **Depends on:** `specs/agent-voice-bridge.md` §1 · **Superseded by:**
+none · **Last substantive change:** 2026-07-24
+
 > Authored by the orchestrator as the product's design direction. Implementers:
 > build exactly this; escalate taste questions rather than improvising.
 > Supersedes the Wispr-Flow-derived look as the *default*; `HUDStyle.classic`

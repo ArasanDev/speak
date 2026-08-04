@@ -143,18 +143,28 @@ final class ExtraBindingCodableTests: XCTestCase {
 
 final class BindingStoreExtraBindingsTests: XCTestCase {
 
+    // [parallel-test-isolation] A UUID-named UserDefaults suite instead of
+    // `.standard` — `.standard` is backed by the same on-disk plist across
+    // concurrently-launched `xctest` worker processes (they share the host
+    // app's bundle ID), so parallel workers racing on the same fixed key
+    // (`com.speak.extraHotkeyBindings`) would corrupt/flake each other's runs.
+    private var suiteName = ""
+    private var defaults: UserDefaults!
+
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.removeObject(forKey: "com.speak.extraHotkeyBindings")
+        suiteName = "BindingStoreExtraBindingsTests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: "com.speak.extraHotkeyBindings")
+        UserDefaults.standard.removePersistentDomain(forName: suiteName)
+        defaults = nil
         super.tearDown()
     }
 
     func testSaveAndLoadRoundTrip() throws {
-        let store = UserDefaultsBindingStore()
+        let store = UserDefaultsBindingStore(defaults: defaults)
         let set = ExtraBindingSet(bindings: [ExtraBinding(source: .modifierKey(63), action: .activate)])
         store.saveExtraBindings(set)
 
@@ -163,7 +173,7 @@ final class BindingStoreExtraBindingsTests: XCTestCase {
     }
 
     func testLoadReturnsNilWhenNothingStored() {
-        let store = UserDefaultsBindingStore()
+        let store = UserDefaultsBindingStore(defaults: defaults)
         XCTAssertNil(store.loadExtraBindings())
     }
 }
