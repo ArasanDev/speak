@@ -57,6 +57,44 @@ func anyPunctuation(_ text: String) -> Bool {
     text.contains { ".?!,;:".contains($0) }
 }
 
+/// Words that should not end a finished sentence. Mirrors the closed word
+/// classes in `EndpointDecider.danglingTails` — duplicated rather than imported
+/// because this script compiles standalone against the SDK, with no SpeakCore
+/// to link. Deliberately a little WIDER than the decider's list (e.g. "going"),
+/// since a wider set can only find more collisions, never fewer: this is the
+/// side to err on when the whole point is to try to refute the rule.
+let danglingTails: Set<String> = [
+    "and", "but", "or", "so", "because", "that", "as",
+    "to", "of", "in", "on", "at", "by", "for", "with", "into",
+    "a", "an", "the", "my", "your", "this", "some",
+    "is", "are", "was", "am", "do", "did", "will", "would", "going",
+    "um", "uh", "like", "well"
+]
+
+/// Mirrors `EndpointDecider.finalWord` — last alphabetic token, lowercased,
+/// apostrophes kept word-internal.
+func finalWord(of text: String) -> String? {
+    var separators = CharacterSet.whitespacesAndNewlines
+        .union(.punctuationCharacters)
+        .union(.symbols)
+    separators.remove(charactersIn: "'\u{2019}")
+    guard let last = text.components(separatedBy: separators).last(where: { !$0.isEmpty })
+    else { return nil }
+    let lowered = last.lowercased()
+    return lowered.allSatisfy { $0.isLetter || $0 == "'" || $0 == "\u{2019}" } ? lowered : nil
+}
+
+/// THE DISCRIMINATING CHECK for `EndpointDecider`'s precedence rule.
+///
+/// The decider ranks terminal punctuation on a volatile ABOVE the dangling-tail
+/// list. That is only safe if the two signals do not collide — i.e. if the model
+/// never closes a sentence on a word that cannot end one. A single collision
+/// observed here forces a strong/weak split of the dangling list instead.
+func isCollision(_ text: String) -> Bool {
+    guard terminalPunctuation(text) != nil, let tail = finalWord(of: text) else { return false }
+    return danglingTails.contains(tail)
+}
+
 // ------------------------------------------------------------- synthesis ----
 
 /// Renders `text` to PCM buffers via the offline synthesis path.
@@ -163,6 +201,28 @@ struct Observation {
     let text: String
 }
 
+/// Accumulates the one number the experiment turns on, across every utterance.
+final class Tally: @unchecked Sendable {
+    private let lock = NSLock()
+    private var scored = 0
+    private var offenders: [String] = []
+
+    func record(utteranceScored: Bool, collisions: [String]) {
+        lock.lock()
+        if utteranceScored { scored += 1 }
+        offenders += collisions
+        lock.unlock()
+    }
+
+    func summary() -> (scored: Int, offenders: [String]) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (scored, offenders)
+    }
+}
+
+let tally = Tally()
+
 func probe(_ sentence: String) async {
     print("\n── utterance: \"\(sentence)\"")
 
@@ -267,18 +327,26 @@ func probe(_ sentence: String) async {
     for observation in observations {
         let kind = observation.isFinal ? "FINAL" : "vol  "
         let mark = terminalPunctuation(observation.text).map { "  <- ends '\($0)'" } ?? ""
+        let collision = !observation.isFinal && isCollision(observation.text) ? "  ** COLLISION **" : ""
         print("   \(pad(String(format: "%6.0fms", observation.atMs), 9))\(kind)  "
-              + "\"\(observation.text)\"\(mark)")
+              + "\"\(observation.text)\"\(mark)\(collision)")
     }
 
     let volatiles = observations.filter { !$0.isFinal }
     let finals = observations.filter { $0.isFinal }
     let volatileWithTerminal = volatiles.filter { terminalPunctuation($0.text) != nil }
     let volatileWithAny = volatiles.filter { anyPunctuation($0.text) }
+    let collisions = volatiles.filter { isCollision($0.text) }
 
     print("   ── volatiles=\(volatiles.count)  finals=\(finals.count)")
     print("      volatile w/ sentence-final punctuation: \(volatileWithTerminal.count)/\(volatiles.count)")
     print("      volatile w/ any punctuation:            \(volatileWithAny.count)/\(volatiles.count)")
+    print("      PUNCTUATION/DANGLING COLLISIONS:        \(collisions.count)"
+          + (collisions.isEmpty ? "  (precedence rule holds)" : "  <-- precedence rule BROKEN"))
+    for collision in collisions {
+        print("         \"\(collision.text)\"")
+    }
+    tally.record(utteranceScored: true, collisions: collisions.map(\.text))
     if let lastFinal = finals.last {
         let delay = lastFinal.atMs - audioDoneMs
         print(String(format: "      last audio fed -> final result: %.0f ms", delay))
@@ -291,16 +359,51 @@ func probe(_ sentence: String) async {
 print("=== E6: punctuation in volatile SpeechTranscriber results ===")
 print("Purpose: decide whether EndpointDecider may depend on transcript punctuation.")
 
-// Two sentences, so a boundary exists mid-utterance; a question, because '?'
-// is the highest-value endpoint signal; and a trailing conjunction, which is
-// the case the decider must handle by WAITING LONGER rather than firing early.
+// Row 1: two sentences, so a boundary exists mid-utterance, plus a question —
+// '?' is the highest-value endpoint signal.
+//
+// Rows 2-6: utterances that STOP MID-THOUGHT, each on a different class of
+// dangling word (conjunction, preposition, subordinator, article, participle).
+// These carry the weight of the experiment. The decider ranks punctuation on a
+// volatile above the dangling list, and the entire justification for that
+// ordering is that the model does not punctuate an unfinished sentence. One
+// collision here refutes it. Five clean rows raise the evidence from n=1 to n=5.
 let sentences = [
     "The meeting is at three. Can you remind me before it starts?",
-    "I need to send an email to Sarah about the quarterly numbers and"
+    "I need to send an email to Sarah about the quarterly numbers and",
+    "I want to send this to",
+    "The reason is because",
+    "Put it in the",
+    "I was going"
 ]
 
 for sentence in sentences {
     await probe(sentence)
+}
+
+let (scored, offenders) = tally.summary()
+
+print("\n── verdict ──────────────────────────────────────────────────────────────────")
+print("utterances scored: \(scored)/\(sentences.count)")
+if offenders.isEmpty {
+    print("""
+    punctuation/dangling collisions: 0
+
+    EndpointDecider may keep terminal punctuation on a volatile ranked ABOVE the
+    dangling-tail list. Across the mid-thought utterances above, the model never
+    closed a sentence on a word that cannot end one, so the two signals do not
+    compete and the common case ("Stop that!", "I did.") keeps the short window.
+    """)
+} else {
+    print("""
+    punctuation/dangling collisions: \(offenders.count)  <-- the precedence rule is WRONG
+
+    The model punctuated a volatile whose tail cannot end a sentence, so the two
+    signals DO collide and punctuation-first will truncate mid-thought speech.
+    Split `danglingTails` into strong (never ends a sentence: and, but, because,
+    the, a, an, of, with, into) and weak (that, this, some, at, for, in, on, is,
+    am, did, will). Strong outranks punctuation; punctuation outranks weak.
+    """)
 }
 
 print("""
@@ -312,4 +415,10 @@ decider must rely on lexical-tail analysis alone. Either way it must never
 REQUIRE punctuation: absence here is suggestive only (synthetic speech is
 prosodically flat), and the decider's floor behaviour has to stay correct when
 the signal is missing.
+
+The collision count is the load-bearing number, and it is asymmetric in the
+same way: one collision REFUTES punctuation-first outright, whereas zero across
+n utterances only fails to refute it. Synthetic speech is the weaker direction
+of that evidence, so re-run with more mid-thought rows before widening the
+claim.
 """)

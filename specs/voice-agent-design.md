@@ -573,20 +573,36 @@ five-word reply ~1640 ms — replies are far longer than the latency to start th
      utterance produced **two** finals, one per spoken sentence. The transcriber is doing
      segmentation for us; a final arriving mid-stream is the strongest available "a complete
      thought just closed" signal, and it is free.
-   - **Last audio in → final result: 53 ms and 80 ms.** STT finalization is not a latency
-     contributor and can be struck from the budget. The 600 ms endpoint policy is even more
-     dominant than §5's table implies.
+   - **Last audio in → final result: 40–80 ms across six utterances**, so STT finalization is
+     not a meaningful latency contributor and the 600 ms endpoint policy is even more dominant
+     than §5's table implies. Read the number narrowly: it was measured with input already
+     drained before `finalizeAndFinishThroughEndOfInput()`. In the live loop, finalization
+     fires on the endpoint decision with buffers possibly still queued, so re-measure there
+     before treating it as free.
    - **Terminal punctuation on a *final* proves nothing.** The deliberately incomplete
-     `"…quarterly numbers and"` came back as `"…quarterly numbers, Anne."` — the model both
-     hallucinated a word and appended a period. **Finalization punctuates unconditionally.**
-     Only punctuation observed on a *volatile*, while audio is still arriving, carries
-     information, because there the model chose to close a sentence it could still extend.
+     `"…quarterly numbers and"` came back as `"…quarterly numbers, Anne."`; `"…send this to"`
+     came back as `"…send this too."` — the model rewrites the tail *and* appends a period.
+     Finalization punctuated 3 of the 4 unfinished utterances (`"put it in the"` came back
+     bare), so it is a strong tendency rather than a law — either way, a final's punctuation
+     carries no information about whether the human stopped. Only punctuation observed on a
+     *volatile*, while audio is still arriving, means anything: there the model chose to close
+     a sentence it could still extend.
+   - **Punctuation and lexical-tail signals do not collide.** `[verified: E6, n=5]` Five
+     utterances stopping mid-thought, one per class of dangling word, produced **17 volatiles
+     carrying zero punctuation between them**. This is the evidence for `EndpointDecider`
+     ranking volatile punctuation *above* its dangling-tail list: the model never closed a
+     sentence on a word that cannot end one, so the ordering costs nothing on unfinished
+     speech while keeping the short window for the common short reply ("Stop that!", "I did.").
+     `make probe-partials` prints the collision count and fails the argument loudly if it is
+     ever nonzero.
 
    `[decision]` The decider keys on volatile punctuation and lexical tail, and treats a final
    as a boundary hint — never as proof the human is done talking.
 
 Still `[unverified]`, and deliberately not in the table above: first-token → first-clause
-flush (needs `SentenceBuffer`). The barge-in path keeps its own budget —
+flush (needs `SentenceBuffer`); and `SpeechTranscriber.ReportingOption.fastResults`, which the
+SDK dump surfaced and nothing has measured — a plausible lever on the same finalization path,
+worth a probe run before any further endpoint tuning. The barge-in path keeps its own budget —
 `stopImmediately()` self-reports elapsed time and targets <100 ms.
 
 **Non-latency finding from the same harness, and a shipping blocker for tone (§4.4): all 41

@@ -159,6 +159,41 @@ final class EndpointDeciderTests: XCTestCase {
         XCTAssertEqual(decision.window, config.trailingWindow, accuracy: 0.0001)
     }
 
+    /// The precedence rule's evidence, pinned as a test.
+    ///
+    /// These are verbatim volatiles observed by `make probe-partials` across
+    /// five utterances that stop mid-thought, one per class of dangling word.
+    /// None of the 17 volatiles carried punctuation, so punctuation-first never
+    /// competed with the dangling list — which is the entire argument for the
+    /// ordering. If a future transcriber starts punctuating partial fragments,
+    /// this test fails and the ordering must be revisited before shipping.
+    func testObservedMidThoughtVolatilesAllLengthen() {
+        let observed = [
+            "I want to send this to",
+            "The reason is because",
+            "Put it in the",
+            "I need to send an email to Sarah about the quarterly numbers and"
+        ]
+        for text in observed {
+            let decision = decider.decide(transcript: text, isVolatile: true)
+            XCTAssertEqual(decision.reason, .trailing, text)
+            XCTAssertEqual(decision.window, config.trailingWindow, accuracy: 0.0001, text)
+        }
+    }
+
+    /// The fifth E6 utterance, and the limit of the lexical approach.
+    ///
+    /// "I was going" is audibly unfinished, but its tail is a participle — an
+    /// open-class word, and "I was going." is a perfectly good sentence. Adding
+    /// it to `danglingTails` would trade a documented, principled rule (closed
+    /// word classes only) for one lucky case and start charging real completed
+    /// sentences the 900 ms penalty. It lands on neutral instead: the decider
+    /// declines to judge and behaves exactly as it did before it existed, which
+    /// is the intended outcome for everything outside its competence.
+    func testOpenClassTailIsNotTreatedAsDangling() {
+        XCTAssertEqual(decider.decide(transcript: "I was going", isVolatile: true).reason, .neutral)
+    }
+
     /// Punctuation-only noise must not read as a finished sentence — the guard
     /// is "contains a letter", not "ends in a period".
     func testPunctuationWithoutWordsIsNotComplete() {

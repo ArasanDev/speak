@@ -24,10 +24,13 @@
 //   a volatile 174 ms before its matching final. So the partial stream is a
 //   usable source. [verified]
 // • Punctuation on a FINAL is worthless as a completeness signal: finalization
-//   punctuates unconditionally. The deliberately unfinished "…numbers and" came
-//   back finalized as "…numbers, Anne." — hallucinated word, appended period.
-//   Only punctuation seen on a volatile means anything, because there the model
-//   chose to close a sentence it could still have extended. [verified]
+//   punctuates regardless of whether the speaker finished (3 of 4 deliberately
+//   unfinished utterances came back with a period; the fourth came back bare,
+//   so it is a strong tendency, not a law). Worse, it also rewrites the tail —
+//   "…quarterly numbers and" finalized as "…numbers, Anne." and "…send this to"
+//   as "…send this too." Only punctuation seen on a volatile means anything,
+//   because there the model chose to close a sentence it could still have
+//   extended. [verified]
 // That asymmetry is why `isVolatile` is a parameter and not an afterthought.
 //
 // Pure and synchronous on purpose: no audio, no model, no clock, no I/O. It is
@@ -153,9 +156,12 @@ public struct EndpointDecider: Sendable {
         // resolve conflicts toward waiting, which would put the dangling check
         // first. The evidence says otherwise, and the evidence wins:
         //
-        //   • E6 showed the model punctuates a volatile only where it actually
-        //     closed a sentence, and pointedly did NOT punctuate the volatile
-        //     for the genuinely unfinished "…quarterly numbers and".
+        //   • E6 tested the collision directly across five utterances that stop
+        //     mid-thought, one per class of dangling word ("…send this to",
+        //     "…is because", "Put it in the", "I was going", "…numbers and").
+        //     Not one of their 17 volatiles carried ANY punctuation, so the
+        //     model does not close a sentence on a word that cannot end one:
+        //     zero collisions, and the two signals never compete. [verified: E6]
         //   • English strands prepositions and ends on auxiliaries constantly —
         //     "sit down.", "what's it for?", "Yes I am.", "I did." Ranking the
         //     dangling list above punctuation charges every one of those the

@@ -129,9 +129,9 @@ measure-latency:
 	@$(DERIVED)/tools/measure-latency --first-turn-prewarm
 
 ## probe-partials: E6 — does the transcriber punctuate volatile (partial) results?
-## Gates the EndpointDecider rule set. Synthesizes its own audio, so it needs no
-## microphone, no permissions, and no fixtures — but it does need the speech
-## model installed (run a dictation once first).
+## Gates the EndpointDecider rule set. Synthesizes its own audio and installs the
+## speech model itself, so it needs no microphone, no permissions, no fixtures,
+## and no prior dictation — re-runnable in a clean checkout.
 probe-partials:
 	@mkdir -p $(DERIVED)/tools
 	@xcrun swiftc -O -sdk "$$(xcrun --show-sdk-path --sdk macosx)" \
