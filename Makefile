@@ -122,6 +122,11 @@ measure-latency:
 	  -target arm64-apple-macos26.0 \
 	  scripts/measure-latency.swift -o $(DERIVED)/tools/measure-latency
 	@$(DERIVED)/tools/measure-latency
+	@echo ""
+	@echo "First turn after launch — fresh process per row, so prewarm() has"
+	@echo "something left to save (in-process reps do not)."
+	@$(DERIVED)/tools/measure-latency --first-turn-cold
+	@$(DERIVED)/tools/measure-latency --first-turn-prewarm
 
 ## lint: SwiftLint over the source tree
 lint:

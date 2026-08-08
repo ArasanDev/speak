@@ -18,13 +18,16 @@
 // app bundle, and no permissions, so it runs on a clean clone in seconds. It
 // speaks a few short lines aloud — that is the measurement, not a side effect.
 //
-// MEASUREMENT CAVEATS (read before trusting a number)
-//  - `didStart` is the synthesizer reporting the utterance began, which is a
-//    proxy for "the human hears something", not a microphone-verified
-//    observation. The `write()` first-buffer figure is reported alongside it as
-//    the conservative bound on pure synthesis compute.
-//  - Warm figures follow a cold call in the same process. Real cold-start on a
-//    freshly launched app may be worse; the cold row is a single sample.
+// MEASUREMENT NOTES (read before trusting a number)
+//  - `didStart` is NOT audibility. It measured 1–2 ms warm, which is below the
+//    floor for CoreAudio output start, so it is reporting enqueue. The composite
+//    therefore uses `AUDIBLE first-sample`: a tap on the mixer that timestamps
+//    the first buffer whose RMS clears silence. `didStart` is still printed, so
+//    the gap between the two stays visible instead of being quietly assumed.
+//  - Warm figures follow a cold call in the same process, so the in-process
+//    `prewarm` row cannot show a gain — the model is already warm. The real
+//    question (does prewarming at launch recover the first turn?) needs a fresh
+//    process: `--first-turn-cold` / `--first-turn-prewarm`, run by the Makefile.
 
 import AVFoundation
 import Foundation
@@ -179,6 +182,161 @@ func measureWriteFirstBuffer(reps: Int) async -> [Double] {
     return out
 }
 
+// MARK: - TTS, audibility-verified
+
+/// Watches rendered output and records when the first genuinely non-silent
+/// sample appears.
+///
+/// This exists because `didStart` is the synthesizer reporting it *began* an
+/// utterance, which measured 1–2 ms warm — below the floor for CoreAudio output
+/// start on any hardware. That figure is almost certainly enqueue, not
+/// audibility, so it cannot be trusted as the `ttsFirstAudio` mark. This probe
+/// timestamps actual audio instead.
+final class FirstAudibleSampleProbe: @unchecked Sendable {
+    /// Comfortably above digital silence and dither, below any real speech.
+    private static let audibleRMS: Float = 0.001
+
+    private let lock = NSLock()
+    private var start: ContinuousClock.Instant?
+    private var audibleMs: Double?
+
+    func arm() {
+        lock.lock()
+        start = clock.now
+        audibleMs = nil
+        lock.unlock()
+    }
+
+    /// Called from the render thread — must not allocate or suspend.
+    func consider(_ buffer: AVAudioPCMBuffer) {
+        guard let channels = buffer.floatChannelData else { return }
+        let frames = Int(buffer.frameLength)
+        guard frames > 0 else { return }
+        var sumOfSquares: Float = 0
+        let samples = channels[0]
+        for index in 0..<frames {
+            sumOfSquares += samples[index] * samples[index]
+        }
+        guard (sumOfSquares / Float(frames)).squareRoot() > Self.audibleRMS else { return }
+
+        lock.lock()
+        if audibleMs == nil, let start {
+            audibleMs = ms(start.duration(to: clock.now))
+        }
+        lock.unlock()
+    }
+
+    /// Synchronous so the polling loop below never holds a lock across a
+    /// suspension point — `NSLock.lock()` is unavailable from async contexts.
+    private func recorded() -> Double? {
+        lock.lock()
+        defer { lock.unlock() }
+        return audibleMs
+    }
+
+    /// Polled rather than continuation-based: a missed resume would hang the
+    /// harness, and 2 ms of polling error is irrelevant when discriminating
+    /// 1 ms from ~150 ms.
+    func waitForAudible(timeoutMs: Int) async -> Double? {
+        let deadline = clock.now.advanced(by: .milliseconds(timeoutMs))
+        while clock.now < deadline {
+            if let value = recorded() { return value }
+            try? await Task.sleep(for: .milliseconds(2))
+        }
+        return nil
+    }
+}
+
+/// Holds the first rendered buffer's format across the render callback and the
+/// polling loop that waits for it.
+final class RenderFormatBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var format: AVAudioFormat?
+
+    func store(_ candidate: AVAudioFormat) {
+        lock.lock()
+        if format == nil { format = candidate }
+        lock.unlock()
+    }
+
+    func value() -> AVAudioFormat? {
+        lock.lock()
+        defer { lock.unlock() }
+        return format
+    }
+}
+
+/// Learn the synthesizer's native render format via a throwaway render, so the
+/// player graph can be built and started *before* the measured run — matching
+/// the app, where the engine is already running when a reply arrives.
+func firstWrittenBufferFormat(timeoutMs: Int = 5000) async -> AVAudioFormat? {
+    let synthesizer = AVSpeechSynthesizer()
+    let utterance = AVSpeechUtterance(string: "format probe")
+    utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+
+    let box = RenderFormatBox()
+    synthesizer.write(utterance) { (buffer: AVAudioBuffer) in
+        guard let pcm = buffer as? AVAudioPCMBuffer, pcm.frameLength > 0 else { return }
+        box.store(pcm.format)
+    }
+
+    let deadline = clock.now.advanced(by: .milliseconds(timeoutMs))
+    while clock.now < deadline {
+        if let found = box.value() { return found }
+        try? await Task.sleep(for: .milliseconds(5))
+    }
+    return nil
+}
+
+/// End-to-end first-audio for the architecture we would actually ship: render
+/// streaming out of `write()`, scheduled onto a player node as buffers arrive,
+/// with the first audible sample detected at the mixer.
+///
+/// This is the honest `synthesisMs`. It is also the path barge-in requires —
+/// silencing mid-utterance needs sample-level control that `speak()` does not give.
+func measureStreamedPlaybackFirstAudio(reps: Int) async -> [Double] {
+    guard let renderFormat = await firstWrittenBufferFormat() else { return [] }
+
+    let engine = AVAudioEngine()
+    let player = AVAudioPlayerNode()
+    engine.attach(player)
+    engine.connect(player, to: engine.mainMixerNode, format: renderFormat)
+
+    let probe = FirstAudibleSampleProbe()
+    engine.mainMixerNode.installTap(onBus: 0, bufferSize: 512, format: nil) { buffer, _ in
+        probe.consider(buffer)
+    }
+
+    do {
+        try engine.start()
+    } catch {
+        FileHandle.standardError.write(Data("  engine start failed: \(error)\n".utf8))
+        return []
+    }
+    player.play()
+
+    var out: [Double] = []
+    for index in 0..<reps {
+        let synthesizer = AVSpeechSynthesizer()
+        let utterance = AVSpeechUtterance(string: replyLines[index % replyLines.count])
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+
+        probe.arm()
+        synthesizer.write(utterance) { (buffer: AVAudioBuffer) in
+            guard let pcm = buffer as? AVAudioPCMBuffer, pcm.frameLength > 0 else { return }
+            player.scheduleBuffer(pcm, completionHandler: nil)
+        }
+        if let audible = await probe.waitForAudible(timeoutMs: 5000) { out.append(audible) }
+        // Let the utterance drain so the next arm() does not catch its tail.
+        try? await Task.sleep(for: .milliseconds(2200))
+    }
+
+    engine.mainMixerNode.removeTap(onBus: 0)
+    player.stop()
+    engine.stop()
+    return out
+}
+
 // MARK: - FoundationModels
 
 let promptLines = [
@@ -221,6 +379,48 @@ func measureModel(reps: Int, prewarm: Bool) async -> ModelRun {
     return ModelRun(ttft: ttft, total: total, errors: errors)
 }
 
+// MARK: - First-turn mode
+
+/// Measures the one thing a warm-process run structurally cannot: what the
+/// *first* turn after launch costs, and whether prewarming at launch recovers
+/// it. Requires a fresh process, so it is a separate invocation rather than
+/// another rep — which is exactly why the in-process `prewarm` row shows no
+/// gain: by then the model is already warm and there is nothing left to save.
+func measureFirstTurn(prewarm: Bool) async {
+    let label = prewarm ? "prewarmed at launch" : "no prewarm"
+    let session = LanguageModelSession(
+        instructions: Instructions("You are a terse voice assistant. Reply in one short sentence.")
+    )
+    if prewarm { session.prewarm() }
+
+    // Nobody speaks the instant the app launches. Both variants hold the same
+    // gap so the only difference between them is the prewarm() call.
+    try? await Task.sleep(for: .milliseconds(2000))
+
+    do {
+        let start = clock.now
+        var ttft: Double?
+        for try await snapshot in session.streamResponse(to: promptLines[0]) {
+            if ttft == nil, !snapshot.content.isEmpty {
+                ttft = ms(start.duration(to: clock.now))
+            }
+        }
+        guard let ttft else {
+            print("  \(pad(label, 26))no token observed")
+            return
+        }
+        print("  \(pad(label, 26))" + String(format: "first-turn TTFT = %6.0f", ttft))
+    } catch {
+        print("  \(pad(label, 26))error: \(error)")
+    }
+}
+
+let mode = CommandLine.arguments.dropFirst().first
+if mode == "--first-turn-prewarm" || mode == "--first-turn-cold" {
+    await measureFirstTurn(prewarm: mode == "--first-turn-prewarm")
+    exit(0)
+}
+
 // MARK: - Report
 
 print("=== E1 — conversational latency on this machine ===")
@@ -257,6 +457,10 @@ stats("warm first-audio", warmSpeak.firstAudio)
 stats("utterance duration", warmSpeak.speaking)
 let writeFirst = await measureWriteFirstBuffer(reps: 5)
 stats("write first-buffer", writeFirst)
+let audibleFirst = await measureStreamedPlaybackFirstAudio(reps: 5)
+stats("AUDIBLE first-sample", audibleFirst)
+print("  ↑ `warm first-audio` is didStart (enqueue). `AUDIBLE` is a mixer tap")
+print("    detecting real signal — that is the figure the composite uses.")
 print("")
 
 print("Model — FoundationModels streamResponse → first token")
@@ -272,7 +476,9 @@ if modelErrors > 0 { print("  errors: \(modelErrors)") }
 print("")
 
 print("Composite — userSpeechEnded → ttsFirstAudio")
-if let think = median(warmModel.ttft), let synth = median(warmSpeak.firstAudio) {
+// Uses the mixer-verified audible figure, never didStart: didStart measures
+// enqueue and would understate every total below.
+if let think = median(warmModel.ttft), let synth = median(audibleFirst) {
     // The VAD silence window is policy, so show what each choice costs.
     for (label, endpoint) in [("silence VAD (0.6s, today)", 600.0), ("semantic endpointing", 200.0)] {
         print("  \(pad(label, 26))" + String(format: "endpoint %4.0f + think %4.0f + tts %3.0f  =  %5.0f",
