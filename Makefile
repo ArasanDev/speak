@@ -113,6 +113,16 @@ eval: generate
 study: generate
 	SPEAK_STUDY=1 $(XCB) test -only-testing:SpeakTests/FoundationModelsStudyTests
 
+## measure-latency: E1 — conversational latency (TTS first-audio + model TTFT)
+## Standalone: needs no Xcode project, no app bundle, no permissions. Speaks a
+## few short lines aloud — that is the measurement. See specs/voice-agent-design.md §5.
+measure-latency:
+	@mkdir -p $(DERIVED)/tools
+	@xcrun swiftc -O -sdk "$$(xcrun --show-sdk-path --sdk macosx)" \
+	  -target arm64-apple-macos26.0 \
+	  scripts/measure-latency.swift -o $(DERIVED)/tools/measure-latency
+	@$(DERIVED)/tools/measure-latency
+
 ## lint: SwiftLint over the source tree
 lint:
 	swiftlint
