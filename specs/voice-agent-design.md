@@ -116,9 +116,11 @@ Two corrections this measurement forced, both of which would otherwise have ship
 
 - **`didStart` is enqueue, not audibility** (1–2 ms warm — below the physical floor). The real
   figure is 267 ms, from a mixer tap. `ttsFirstAudio` must be marked from the render path.
-- **A `LanguageModelSession` created at the moment of the request costs 2125 ms to first
-  token**; created ahead and prewarmed at launch, ~316 ms with the >850 ms tail eliminated
-  (0/9 runs vs 2/9). The app holds one long-lived prewarmed session. `[decision]`
+- **Prewarming at launch collapses the first-turn tail**: created ahead and prewarmed, p50
+  ~316 ms and the >850 ms tail eliminated (0/9 runs vs 2/9 without). It barely moves the
+  median — killing the worst turn is the whole value. The app holds one long-lived prewarmed
+  session. `[decision]` (A session built at request time was once observed at 2125 ms, but
+  that is n=1 under audio load — see §5 finding 3.)
 
 And one product blocker: **all 41 installed English voices are `.default` quality — zero
 enhanced, zero premium.** Tone (§4.4) is undermined before it starts; this is an onboarding
@@ -543,9 +545,12 @@ five-word reply ~1640 ms — replies are far longer than the latency to start th
    marked from the render path, never from the synthesizer delegate.
 
 3. **Create the model session ahead of the request; `prewarm()` it at launch.** A session
-   created and immediately queried while the process is busy cost **2125 ms** to first token.
-   The same first turn in a fresh process, with the session created ~2 s before the request,
-   cost ~350 ms. Measured over n=9 fresh processes each:
+   created and immediately queried while the process was busy cost 2125 ms to first token —
+   but that is **n=1, taken in-process right after the TTS block had been hammering the audio
+   stack, and the fresh-process runs below do not corroborate it. Treat it as an upper bound,
+   not a typical value.** The decision does not rest on it: the tail data does. The same first
+   turn in a fresh process, with the session created ~2 s before the request, cost ~350 ms.
+   Measured over n=9 fresh processes each:
 
    | First-turn TTFT | p50 | max | runs > 850 ms |
    |---|---|---|---|
@@ -556,9 +561,32 @@ five-word reply ~1640 ms — replies are far longer than the latency to start th
    its worst turn rather than its average, that is the whole value. `[decision]` The app holds
    one long-lived `LanguageModelSession`, created and prewarmed at launch.
 
-Still `[unverified]`, and deliberately not in the table above: endpoint → STT final
-(`resultsFinalizationTime`), and first-token → first-clause flush (needs `SentenceBuffer`).
-Both are additive to the composite. The barge-in path keeps its own budget —
+4. **The transcriber segments sentences itself, and STT finalization is nearly free.**
+   `[verified — make probe-partials, E6]` Feeding synthesized multi-sentence audio through
+   `SpeechAnalyzer` at real-time pace produced this, and it reshapes the endpoint design:
+
+   - **Volatile results DO carry punctuation.** `"The meeting is at 3."` arrived as a
+     *volatile* at 2267 ms with its terminal `.` — 174 ms before the matching final. So the
+     decider may read punctuation from the partial stream. (Conclusive: observed. The
+     converse would not have been — synthetic speech is prosodically flat.)
+   - **`isFinal` is a sentence boundary, not an utterance boundary.** A single continuous
+     utterance produced **two** finals, one per spoken sentence. The transcriber is doing
+     segmentation for us; a final arriving mid-stream is the strongest available "a complete
+     thought just closed" signal, and it is free.
+   - **Last audio in → final result: 53 ms and 80 ms.** STT finalization is not a latency
+     contributor and can be struck from the budget. The 600 ms endpoint policy is even more
+     dominant than §5's table implies.
+   - **Terminal punctuation on a *final* proves nothing.** The deliberately incomplete
+     `"…quarterly numbers and"` came back as `"…quarterly numbers, Anne."` — the model both
+     hallucinated a word and appended a period. **Finalization punctuates unconditionally.**
+     Only punctuation observed on a *volatile*, while audio is still arriving, carries
+     information, because there the model chose to close a sentence it could still extend.
+
+   `[decision]` The decider keys on volatile punctuation and lexical tail, and treats a final
+   as a boundary hint — never as proof the human is done talking.
+
+Still `[unverified]`, and deliberately not in the table above: first-token → first-clause
+flush (needs `SentenceBuffer`). The barge-in path keeps its own budget —
 `stopImmediately()` self-reports elapsed time and targets <100 ms.
 
 **Non-latency finding from the same harness, and a shipping blocker for tone (§4.4): all 41
@@ -586,8 +614,8 @@ its runtime populated-ness over a live corpus before any UI depends on it (§1.1
 *Outcome: the loop can close, and we can measure it.* No new UI.
 
 **VA-1 — The loop.** `ConversingAgent` + `AppleConversingAgent` over a **single long-lived,
-launch-prewarmed** `LanguageModelSession(tools:instructions:)` (§5, finding 3 — a per-request
-session costs 2125 ms). **Semantic endpointing is built here, not deferred to VA-4**: §5 sizes
+launch-prewarmed** `LanguageModelSession(tools:instructions:)` (§5, finding 3 — prewarming is
+what kills the first-turn tail). **Semantic endpointing is built here, not deferred to VA-4**: §5 sizes
 it at ~400 ms, the largest single win on the board. `SentenceBuffer`. Wire
 `SpeechSynthesizerStream` for real. Barge-in end-to-end: `.bargeIn` → `stopImmediately()` +
 `interrupt()`. Mute must gate the actual tap, not just the state machine. *Outcome: you can

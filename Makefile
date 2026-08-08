@@ -128,6 +128,17 @@ measure-latency:
 	@$(DERIVED)/tools/measure-latency --first-turn-cold
 	@$(DERIVED)/tools/measure-latency --first-turn-prewarm
 
+## probe-partials: E6 — does the transcriber punctuate volatile (partial) results?
+## Gates the EndpointDecider rule set. Synthesizes its own audio, so it needs no
+## microphone, no permissions, and no fixtures — but it does need the speech
+## model installed (run a dictation once first).
+probe-partials:
+	@mkdir -p $(DERIVED)/tools
+	@xcrun swiftc -O -sdk "$$(xcrun --show-sdk-path --sdk macosx)" \
+	  -target arm64-apple-macos26.0 \
+	  scripts/probe-partials.swift -o $(DERIVED)/tools/probe-partials
+	@$(DERIVED)/tools/probe-partials
+
 ## lint: SwiftLint over the source tree
 lint:
 	swiftlint

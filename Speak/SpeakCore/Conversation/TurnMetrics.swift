@@ -48,7 +48,16 @@ public enum TurnStage: String, Sendable, CaseIterable, Codable {
     case agentLastToken
     /// Text was handed to the synthesizer.
     case ttsRequested
-    /// The synthesizer produced its first audio — the human hears something.
+    /// The first genuinely audible sample reached the output — the human hears
+    /// something.
+    ///
+    /// **Mark this from the render path, never from
+    /// `AVSpeechSynthesizerDelegate.didStart`.** `make measure-latency` shows
+    /// `didStart` firing 1–2 ms after the request when warm, which is below the
+    /// floor for CoreAudio output start: it reports *enqueue*. The measured
+    /// audible figure on the same machine is ~267 ms, so marking from the
+    /// delegate understates `synthesisMs` — and therefore the headline
+    /// `responseLatencyMs` — by roughly a quarter second. [verified: E1]
     case ttsFirstAudio
     /// The utterance completed on its own.
     case ttsFinished
