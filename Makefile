@@ -139,6 +139,18 @@ probe-partials:
 	  scripts/probe-partials.swift -o $(DERIVED)/tools/probe-partials
 	@$(DERIVED)/tools/probe-partials
 
+## probe-latency: E7 — how long after speech stops does the volatile carrying the
+## last words arrive? Gates whether EndpointDecider can drive the VAD's silence
+## window at all. Feeds real silence at real time instead of finalizing early,
+## which is the difference between measuring the live pipeline and measuring a
+## forced flush. No microphone, no permissions, no fixtures.
+probe-latency:
+	@mkdir -p $(DERIVED)/tools
+	@xcrun swiftc -O -sdk "$$(xcrun --show-sdk-path --sdk macosx)" \
+	  -target arm64-apple-macos26.0 \
+	  scripts/probe-partial-latency.swift -o $(DERIVED)/tools/probe-partial-latency
+	@$(DERIVED)/tools/probe-partial-latency
+
 ## lint: SwiftLint over the source tree
 lint:
 	swiftlint
