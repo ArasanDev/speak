@@ -253,6 +253,22 @@ fastest signal available on-device.
 refutes and should not be plugged in; its header claim that punctuation-on-a-volatile is a
 usable early signal is `[verified]` as measured by E6 but false as applied.
 
+**Deleted** rather than kept dormant — a file whose header argues at length for a refuted
+premise is an attractive nuisance for the next agent that greps the tree. The implementation
+and its 20 tests are recoverable at `fee1396`.
+
+**The replacement is not another policy — it is a different mechanism.** Since the transcript
+cannot be consulted *before* deciding to end the turn, the endpoint must instead *cause* the
+transcript to complete: energy VAD fires at endpoint+600 ms → force transcriber finalization →
+commit when the final arrives, which E6 measured at 40–80 ms after drained input. Turn cost
+≈ 680 ms deterministically, versus racing a straggler that arrives anywhere in +222…+753 ms.
+Guessing a window is replaced by flushing on demand.
+
+This also means the naive wiring is wrong: `ConversationLoopManager.handleVADSilenceDetected`
+commits whatever text is in state at that instant (`ConversationLoopManager.swift:249`), so
+attaching `.speechEnded` straight to it would truncate exactly the slow-tail utterances
+`EndpointDecider`'s lengthening half was built to protect.
+
 ### 7a. The feed-shape hypothesis, tested and excluded
 
 The one live objection to the above: E7's first run fed the synthesizer's native ~11 ms

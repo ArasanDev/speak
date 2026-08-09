@@ -589,7 +589,7 @@ five-word reply ~1640 ms — replies are far longer than the latency to start th
      a sentence it could still extend.
    - **Punctuation and lexical-tail signals do not collide.** `[verified: E6, n=5]` Five
      utterances stopping mid-thought, one per class of dangling word, produced **17 volatiles
-     carrying zero punctuation between them**. This is the evidence for `EndpointDecider`
+     carrying zero punctuation between them**. This was the evidence for `EndpointDecider`
      ranking volatile punctuation *above* its dangling-tail list: the model never closed a
      sentence on a word that cannot end one, so the ordering costs nothing on unfinished
      speech while keeping the short window for the common short reply ("Stop that!", "I did.").
@@ -598,6 +598,16 @@ five-word reply ~1640 ms — replies are far longer than the latency to start th
 
    `[decision]` The decider keys on volatile punctuation and lexical tail, and treats a final
    as a boundary hint — never as proof the human is done talking.
+
+   > **`[refuted: E7]` — the decider is deleted; this subsection is history, not guidance.**
+   > E6 measured *which* signals appear on volatiles. It never measured *when*, and the answer
+   > is too late to act on: partials land on a ~1.04 s grid anchored to analyzer start, so the
+   > last word arrives +222…+753 ms after the acoustic endpoint and terminal punctuation
+   > +1474…+1693 ms or never — against a VAD that fires at 600 ms. The transcript is not
+   > current enough to choose a silence window from, and keying off transcript *arrival*
+   > instead is bounded below by the same cadence, hence slower than the energy VAD it would
+   > replace. Endpointing stays energy-based; completion is obtained by forcing finalization
+   > at the endpoint rather than predicting it. See `specs/verification-ledger.md` §7–7b.
 
 Still `[unverified]`, and deliberately not in the table above: first-token → first-clause
 flush (needs `SentenceBuffer`); and `SpeechTranscriber.ReportingOption.fastResults`, which the
