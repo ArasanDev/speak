@@ -48,7 +48,7 @@ When two sources conflict, the higher rank wins.
 6. `research/evidence/` — why-evidence archive; read-only; never the direction
 7. Training memory — starting point for searches, never a fact to ship
 
-**Never read `research/archive/`.** It contains superseded reasoning. In particular, `research/archive/SPEAK_ARCHITECTURE_VERIFICATION.md` contains a false claim (states Claude Code is Rust+WASM) — do not read or cite it.
+`research/archive/` has been removed; it contained superseded reasoning, including a false claim (states Claude Code is Rust+WASM).
 
 ---
 
@@ -82,7 +82,7 @@ Run this sequence before touching any code.
 | Verified API facts (ledger) | `specs/verification-ledger.md` |
 | Why a decision was made | `research/evidence/` (read-only) |
 
-Do not read `research/archive/`. Do not read `research/sample-ideation.md` for product direction (it documents the abandoned `deepvoice` idea, not `speak`).
+Do not read `research/sample-ideation.md` for product direction (it documents the abandoned `deepvoice` idea, not `speak`).
 
 ### Key build commands
 
