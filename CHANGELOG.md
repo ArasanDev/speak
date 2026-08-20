@@ -8,12 +8,18 @@ release. The version ladder (v0 → v3+) is defined in `docs/product.md` §9.
 
 ---
 
-## [Unreleased] — v0
+## [v0.0.1] — 2026-08-20
 
-> **Status**: Engine, UI, and Agent Bridge are fully built and pass 216 tests. v0 ship
-> gate (P14) verified 2026-07-24: `make verify-moat` 7/7 ✅, build clean, 0 lint errors.
-> Active work: P15 local inference server + Agent Playground (uncommitted).
-> See [`docs/progress.md`](docs/progress.md) for current loop state.
+> **Status**: v0 complete-core release. `make gates` verified: build OK,
+> 802 XCTest 0 failures + 269 Swift Testing 0 failures (9 documented environment
+> skips), lint 0 serious, `make verify-moat` 7/7. Live-only items (cross-app paste
+> matrix, WER corpus, latency measurement, demo GIF) remain `[deferred — needs
+> human verification]` and are recorded honestly in `docs/benchmark.md §4` and
+> `docs/quality.md §9`.
+>
+> Note: the **Human-Agent Workspace** entries below document a Slack-style prototype
+> that was later removed in commit `3e35137`. They are retained here as history, not
+> as a shipped v0 surface.
 
 ### Agent Voice Bridge (AVB — Loops #51, #74)
 

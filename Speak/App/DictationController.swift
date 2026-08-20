@@ -779,49 +779,6 @@ final class DictationController: CLICommandHandler {
 
     // MARK: - Private task management
 
-    /// Start consuming `monitor.armStateChanges` to update `permissionsNeeded`.
-    /// On arm: clear the hint and ensure the event-consume task is running.
-    private func startArmStateTask() {
-        armStateTask?.cancel()
-        armStateTask = Task { [weak self] in
-            guard let self else { return }
-            for await armed in self.monitor.armStateChanges {
-                let isArmed = armed
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    if isArmed {
-                        self.permissionsNeeded = false
-                        SpeakLog.hotkey.info("DictationController: tap armed — permissionsNeeded cleared.")
-                    } else {
-                        // [validation-fix C7] A disarm fires on EVERY teardown — including
-                        // a normal re-arm cycle (rate-limit trip, wake re-arm) while AX is
-                        // still granted. Only raise the permissions hint when AX is actually
-                        // missing, so the menu doesn't flicker "permissions needed" spuriously.
-                        let axGranted = self.permissionManager.status(.accessibility) == .granted
-                        if !axGranted {
-                            self.permissionsNeeded = true
-                            SpeakLog.hotkey.warning("DictationController: tap disarmed + AX missing — permissionsNeeded set.")
-                        } else {
-                            SpeakLog.hotkey.info("DictationController: tap disarmed during re-arm (AX still granted) — no hint.")
-                        }
-
-                        // [validation-fix C2] If the tap died mid-session, the engine is
-                        // stuck `.recording` (HUD frozen, mic hot) with no way to self-heal.
-                        // Cancel the session so it doesn't hang. Covers BOTH hold and
-                        // double-tap (both surface as `icon == .listening`). We cancel
-                        // (discard) rather than paste: a tap death is not a user stop
-                        // intent, and "never paste against intent / be very safe" takes
-                        // precedence over salvaging the partial transcript.
-                        if self.icon == .listening {
-                            SpeakLog.hotkey.warning("DictationController: tap died mid-session — cancelling to avoid stuck recording.")
-                            self.cancelDictation()
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     /// Consume `monitor.commandChordEvents` and drive Command Mode. Begin starts the
     /// instruction capture; end runs the transform. Hops to the main actor (the
     /// controller is `@MainActor`).
@@ -898,6 +855,50 @@ extension DictationController {
 // (Swift's file-scoped access rule): `extraBindingsObserverTask`,
 // `settingsStore`, `lastAppliedExtraBindings`, `monitor`, `activeExtraBindings`.
 extension DictationController {
+
+    /// Start consuming `monitor.armStateChanges` to update `permissionsNeeded`.
+    /// On arm: clear the hint and ensure the event-consume task is running.
+    /// Moved here for [lint] type_body_length — pure code motion, no behavior change.
+    private func startArmStateTask() {
+        armStateTask?.cancel()
+        armStateTask = Task { [weak self] in
+            guard let self else { return }
+            for await armed in self.monitor.armStateChanges {
+                let isArmed = armed
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    if isArmed {
+                        self.permissionsNeeded = false
+                        SpeakLog.hotkey.info("DictationController: tap armed — permissionsNeeded cleared.")
+                    } else {
+                        // [validation-fix C7] A disarm fires on EVERY teardown — including
+                        // a normal re-arm cycle (rate-limit trip, wake re-arm) while AX is
+                        // still granted. Only raise the permissions hint when AX is actually
+                        // missing, so the menu doesn't flicker "permissions needed" spuriously.
+                        let axGranted = self.permissionManager.status(.accessibility) == .granted
+                        if !axGranted {
+                            self.permissionsNeeded = true
+                            SpeakLog.hotkey.warning("DictationController: tap disarmed + AX missing — permissionsNeeded set.")
+                        } else {
+                            SpeakLog.hotkey.info("DictationController: tap disarmed during re-arm (AX still granted) — no hint.")
+                        }
+
+                        // [validation-fix C2] If the tap died mid-session, the engine is
+                        // stuck `.recording` (HUD frozen, mic hot) with no way to self-heal.
+                        // Cancel the session so it doesn't hang. Covers BOTH hold and
+                        // double-tap (both surface as `icon == .listening`). We cancel
+                        // (discard) rather than paste: a tap death is not a user stop
+                        // intent, and "never paste against intent / be very safe" takes
+                        // precedence over salvaging the partial transcript.
+                        if self.icon == .listening {
+                            SpeakLog.hotkey.warning("DictationController: tap died mid-session — cancelling to avoid stuck recording.")
+                            self.cancelDictation()
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     /// Apply the theme to NSApplication.shared.appearance based on the AppTheme
     /// setting. Moved here for [lint] type_body_length — pure code motion.

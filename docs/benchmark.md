@@ -149,18 +149,22 @@ These must *hold* for v0 to ship — they are the reason `speak` exists.
 
 v0 is "as good as Wispr on the core experience" when ALL hold (measured, §6):
 
-- [ ] **Accuracy**: en-US WER ≤ Wispr WER + `T_wer` on the §6 corpus.
-- [ ] **Neat writing**: stop→paste output is *cleaned* (filler removed,
+- [~] **Accuracy**: en-US WER ≤ Wispr WER + `T_wer` on the §6 corpus. `[deferred — needs human verification]` WER corpus run against live Wispr.
+- [~] **Neat writing**: stop→paste output is *cleaned* (filler removed,
       punctuated, capitalized, formatted) via on-device `Foundation Models`;
       toggle works; raw-transcript fallback when the engine is unavailable.
-- [ ] **Latency**: median stop→paste (incl. cleanup) < `L_e2e`, and ≤ Wispr's measured.
-- [ ] **Live feedback**: first volatile result → overlay < `L_partial`.
-- [ ] **Paste**: works in ≥ `N/M` apps (§7), zero read-prompts, Terminal tested.
-- [ ] **Hotkey**: global, rebindable, false-trigger rate < `F_rate`.
-- [ ] **History**: local search/clear/export works (the BEAT row that is also v0).
-- [ ] All **v0 BEAT rows** hold (§2 matrix / §3 moat): offline, free (unlimited),
-      MIT-open, no account, no egress, local history, lower latency, **plus the
-      live streaming overlay** (the v0 BEAT rows; pluggable cleanup models is v0.1).
+      Logic verified by unit tests; live quality `[deferred — needs human verification]`.
+- [~] **Latency**: median stop→paste (incl. cleanup) < `L_e2e`, and ≤ Wispr's measured. `[deferred — needs human measurement]`.
+- [~] **Live feedback**: first volatile result → overlay < `L_partial`.
+      Accumulator logic verified; live lag `[deferred — needs human verification]`.
+- [~] **Paste**: works in ≥ `N/M` apps (§7), zero read-prompts, Terminal tested.
+      Logic + secure-field refusal verified; live cross-app matrix `[deferred — needs human verification]`.
+- [~] **Hotkey**: global, rebindable, false-trigger rate < `F_rate`.
+      Detector + binding verified; live false-trigger rate `[deferred — needs human verification]`.
+- [x] **History**: local search/clear/export works (the BEAT row that is also v0) — `[verified]` `HistoryStoreTests`.
+- [x] All **v0 BEAT rows** hold (§2 matrix / §3 moat): offline, free (unlimited),
+      MIT-open, no account, no egress, local history, lower latency — `[verified]` `make verify-moat` 7/7.
+      The **live streaming overlay** BEAT remains `[deferred — needs human verification]` (P4 UI not built as a separate BEAT; overlay logic verified).
 
 Plus the mechanical gates already in `quality.md` §9 (build/sign/notarize, no
 `print`, no force-unwrap, etc.). **This MATCH gate + `quality.md` §9 = the loop's

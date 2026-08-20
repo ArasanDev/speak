@@ -48,6 +48,49 @@ public struct StreamingChatClient: Sendable {
 
     public init() {}
 
+    /// Builds the localhost SSE POST request for the inference server.
+    /// Throws `InferenceClientError.invalidURL` when the URL cannot be constructed.
+    private static func makeChatRequest(
+        messages: [ChatWireMessage],
+        model: String,
+        port: UInt16,
+        apiKey: String,
+        temperature: Double?,
+        maxTokens: Int?
+    ) throws -> URLRequest {
+        guard let url = URL(string: "http://127.0.0.1:\(port)/v1/chat/completions") else {
+            throw InferenceClientError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 120.0
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+
+        var body: [String: Any] = [
+            "model": model,
+            "messages": messages.map { ["role": $0.role, "content": $0.content] },
+            "stream": true
+        ]
+        if let temperature {
+            body["temperature"] = temperature
+        }
+        if let maxTokens {
+            body["max_tokens"] = maxTokens
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return request
+    }
+
+    private static func readErrorBody(from bytes: URLSession.AsyncBytes) async throws -> String {
+        var errorBody = ""
+        for try await line in bytes.lines {
+            errorBody += line
+        }
+        return errorBody
+    }
+
     /// Streams a chat completion with provenance metadata.
     ///
     /// - Parameters:
@@ -73,30 +116,14 @@ public struct StreamingChatClient: Sendable {
         let rawTokenStream = AsyncThrowingStream<String, Error> { continuation in
             let task = Task {
                 do {
-                    guard let url = URL(string: "http://127.0.0.1:\(port)/v1/chat/completions") else {
-                        continuation.finish(throwing: InferenceClientError.invalidURL)
-                        provenanceStream.continuation.finish()
-                        return
-                    }
-
-                    var request = URLRequest(url: url)
-                    request.httpMethod = "POST"
-                    request.timeoutInterval = 120.0
-                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-
-                    var body: [String: Any] = [
-                        "model": model,
-                        "messages": messages.map { ["role": $0.role, "content": $0.content] },
-                        "stream": true
-                    ]
-                    if let temperature {
-                        body["temperature"] = temperature
-                    }
-                    if let maxTokens {
-                        body["max_tokens"] = maxTokens
-                    }
-                    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+                    let request = try Self.makeChatRequest(
+                        messages: messages,
+                        model: model,
+                        port: port,
+                        apiKey: apiKey,
+                        temperature: temperature,
+                        maxTokens: maxTokens
+                    )
 
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
 
@@ -107,10 +134,7 @@ public struct StreamingChatClient: Sendable {
                     }
 
                     guard httpResponse.statusCode == 200 else {
-                        var errorBody = ""
-                        for try await line in bytes.lines {
-                            errorBody += line
-                        }
+                        let errorBody = try await Self.readErrorBody(from: bytes)
                         continuation.finish(
                             throwing: InferenceClientError.httpError(
                                 status: httpResponse.statusCode,
@@ -183,34 +207,33 @@ public struct StreamingChatClient: Sendable {
             }
         }
 
-        let tokenStream: AsyncThrowingStream<String, Error>
-        if paced {
-            let cadence = StreamingCadenceEngine()
-            tokenStream = AsyncThrowingStream { continuation in
-                let task = Task {
-                    let pacedStream = await cadence.pace(rawTokenStream)
-                    do {
-                        for try await chunk in pacedStream {
-                            if Task.isCancelled {
-                                continuation.finish()
-                                return
-                            }
-                            continuation.yield(chunk)
-                        }
-                        continuation.finish()
-                    } catch {
-                        continuation.finish(throwing: error)
-                    }
-                }
-                continuation.onTermination = { _ in task.cancel() }
-            }
-        } else {
-            tokenStream = rawTokenStream
-        }
-
         return StreamingChatResult(
-            tokens: tokenStream,
+            tokens: paced ? Self.paceTokens(rawTokenStream) : rawTokenStream,
             provenance: provenanceStream.stream
         )
+    }
+
+    private static func paceTokens(
+        _ raw: AsyncThrowingStream<String, Error>
+    ) -> AsyncThrowingStream<String, Error> {
+        let cadence = StreamingCadenceEngine()
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                let pacedStream = await cadence.pace(raw)
+                do {
+                    for try await chunk in pacedStream {
+                        if Task.isCancelled {
+                            continuation.finish()
+                            return
+                        }
+                        continuation.yield(chunk)
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
     }
 }

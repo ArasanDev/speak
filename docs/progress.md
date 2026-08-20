@@ -7,6 +7,17 @@
 
 ## Current phase
 
+**Loop #77 (2026-08-20) — Branch Consolidation, Gate Re-Verification & v0.0.1 Tag COMPLETE.**
+- Consolidated truth branch to `master` (this worktree's `main` was 15 commits stale; `main` is a strict ancestor of `master`).
+- Fixed 1 stale test expectation: `AgentBridgeServerTests.listsAllTools` now expects the full 11-tool catalog (`speak_ask_user`, `speak_stream_speech` added).
+- Fixed 3 serious SwiftLint violations on `master`'s new code via extension extraction + helper extraction (pure code motion):
+  - `DictationController` type_body_length (352→under cap): moved `startArmStateTask()` to extension.
+  - `ConversationOverlayView` type_body_length (371→under cap): moved state helpers + palette to extension.
+  - `StreamingChatClient.streamChat` function_body_length (124→under cap): extracted `makeChatRequest`, `readErrorBody`, `paceTokens`.
+- Verified `make gates`: build OK, 802 XCTest 0 failures + 269 Swift Testing 0 failures (9 documented environment skips), lint 0 serious (479 warnings are pre-existing style only), verify-moat 7/7.
+- Reconciled `docs/roadmap.md` (P14 tag-ready `[x]`), `docs/benchmark.md §4` (automated/verified rows ticked; live-only rows honestly `[deferred]`), `docs/quality.md §9` (same), `CHANGELOG.md` (`[v0.0.1]`), and this progress entry.
+- Tagged `v0.0.1`.
+
 **Loop #76 (2026-07-25) — Docs Reconciliation COMPLETE. Next: P15 Inference + Agent Playground.**
 - Reconciled `docs/roadmap.md`: marked AVB-5 `[x]` (live round-trip verified Loop #74), AVB-6 `[x]` (Loop #51), AVB-7 `[x]` (Loop #51), P14 `[DONE]` with all sub-items checked.
 - Updated `CHANGELOG.md`: added Human-Agent Workspace, AVB bridge, Agent Voice Bridge, inference server, UI overhaul, SwiftLint fixes to [Unreleased] section.

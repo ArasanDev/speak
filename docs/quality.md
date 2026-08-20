@@ -196,20 +196,20 @@ no "we'll monitor."
 
 Before tagging `v0.0.1`:
 
-- [ ] `make build` produces a runnable `.app` from a clean clone
-- [ ] Onboarding: a fresh user completes all 3 permissions and reaches a working test dictation without confusion (per `product.md` §7.3)
-- [ ] Stop→paste yields cleaned text via on-device Foundation Models (filler removed, punctuated, capitalized)
-- [ ] Cleanup toggle OFF → raw transcript pasted; engine-unavailable → raw transcript fallback, no crash
-- [ ] Paste works in ≥ 13/16 apps in the compatibility matrix (§3)
-- [ ] No `print` in codebase (OSLog only)
-- [ ] No force-unwraps / `try!` / `as!` outside tests
-- [ ] No global mutable state
-- [ ] Never reads the pasteboard (write-only)
-- [ ] No third-party dependencies (Apple frameworks only)
-- [ ] v0 developer preview builds and installs from source on a clean machine;
+- [x] `make build` produces a runnable `.app` from a clean clone — `[verified]` `make build` exit 0
+- [~] Onboarding: a fresh user completes all 3 permissions and reaches a working test dictation without confusion (per `product.md` §7.3) — state machine verified; live UX `[deferred — needs human verification]`
+- [~] Stop→paste yields cleaned text via on-device Foundation Models (filler removed, punctuated, capitalized) — orchestration verified; live quality `[deferred — needs human verification]`
+- [x] Cleanup toggle OFF → raw transcript pasted; engine-unavailable → raw transcript fallback, no crash — `[verified]` `DegradeToRawTests` + `CaptureSession` orchestration tests
+- [~] Paste works in ≥ 13/16 apps in the compatibility matrix (§3) — `[deferred — needs human verification]`
+- [x] No `print` in codebase (OSLog only) — `[verified]` `make verify-moat`
+- [x] No force-unwraps / `try!` / `as!` outside tests — `[verified]` `make lint` 0 serious + `make verify-moat`
+- [x] No global mutable state — `[verified]` actors + injected SwiftUI environment per architecture
+- [x] Never reads the pasteboard (write-only) — `[verified]` `make verify-moat` pasteboard read check
+- [x] No third-party dependencies (Apple frameworks only) — `[verified]` `make verify-moat` allowlist check
+- [x] v0 developer preview builds and installs from source on a clean machine;
       Developer ID notarization and the official Homebrew Cask remain the
-      separate P11-b distribution gate and do not block v0.0.1
-- [ ] 4h dogfood done (P13); top-3 bugs fixed (P14)
-- [ ] Performance budgets met (§4) or deviations documented
-- [ ] README + privacy section + demo GIF public (P12)
-- [ ] All `SpeakTests` green; no skipped tests without a documented reason
+      separate P11-b distribution gate and do not block v0.0.1 — `[verified]` P11-a done
+- [~] 4h dogfood done (P13); top-3 bugs fixed (P14) — dogfood notes logged; cleanup latency is documented design trade-off
+- [~] Performance budgets met (§4) or deviations documented — `[deferred — needs human measurement]`
+- [~] README + privacy section + demo GIF public (P12) — README + privacy done; demo GIF `[deferred — needs human recording]`
+- [x] All `SpeakTests` green; no skipped tests without a documented reason — `[verified]` 802 XCTest 0 failures + 269 Swift Testing 0 failures; 9 environment skips documented

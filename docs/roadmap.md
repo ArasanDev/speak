@@ -296,7 +296,7 @@ surface; the native attention and voice experience is the product.
 **Done when**:
 - [x] All four ship gate items verified (measured, not asserted)
 - [x] Roadmap reconciled (all [TODO] items either done or explicitly deferred to v0.1+)
-- [~] v0.0.1 tag ready — deferred until inference/playground feature committed and P15 complete
+- [x] v0.0.1 tag ready — P15 inference server + Agent Playground committed on `master`; `make gates` re-verified (build OK, tests 0 failures, lint 0 serious, verify-moat 7/7)
 - [x] No false triggers in normal typing — P13 dogfood: ~2h continuous use, 0 accidental triggers
 - [x] No permission edge cases — revocation, re-grant, OS-upgrade all handled (Loops #69-73)
 

@@ -285,7 +285,29 @@ struct ConversationOverlayView: View {
         }
     }
 
-    // MARK: - State Helpers
+    // MARK: - Actions
+
+    private func commitTypedResponse() {
+        let trimmed = typedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        SpeakLog.conversation.info("User committed typed response in overlay.")
+        loopManager.commitUserTurn(prompt: trimmed)
+        typedText = ""
+    }
+
+    // MARK: - Magenta / Violet Palette
+
+    /// Magenta & Violet gradient stops for Layer 3 Bidirectional Voice UI.
+    private var magentaVioletPalette: [Color] {
+        magentaVioletPalette(for: loopManager.state)
+    }
+}
+
+// MARK: - State Helpers
+//
+// [lint] Moved into an extension to keep `ConversationOverlayView` under
+// SwiftLint's `type_body_length` cap — pure code motion, no behavior change.
+extension ConversationOverlayView {
 
     private var currentOverlayState: OverlayState {
         switch loopManager.state {
@@ -342,11 +364,11 @@ struct ConversationOverlayView: View {
         case .idle:
             return .secondary
         case .listening:
-            return Color(hue: 0.83, saturation: 0.85, brightness: 1.00) // Magenta
+            return Color(hue: 0.83, saturation: 0.85, brightness: 1.00)
         case .processing:
-            return Color(hue: 0.78, saturation: 0.88, brightness: 1.00) // Violet
+            return Color(hue: 0.78, saturation: 0.88, brightness: 1.00)
         case .agentSpeaking:
-            return Color(hue: 0.85, saturation: 0.90, brightness: 1.00) // Vibrant Magenta
+            return Color(hue: 0.85, saturation: 0.90, brightness: 1.00)
         case .interrupted:
             return .pink
         case .paused:
@@ -410,54 +432,41 @@ struct ConversationOverlayView: View {
         }
     }
 
-    // MARK: - Actions
-
-    private func commitTypedResponse() {
-        let trimmed = typedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        SpeakLog.conversation.info("User committed typed response in overlay.")
-        loopManager.commitUserTurn(prompt: trimmed)
-        typedText = ""
-    }
-
-    // MARK: - Magenta / Violet Palette
-
-    /// Magenta & Violet gradient stops for Layer 3 Bidirectional Voice UI.
-    private var magentaVioletPalette: [Color] {
-        switch loopManager.state {
+    private func magentaVioletPalette(for state: ConversationState) -> [Color] {
+        switch state {
         case .listening:
             return [
-                Color(hue: 0.83, saturation: 0.85, brightness: 1.00),  // Deep Magenta
-                Color(hue: 0.78, saturation: 0.88, brightness: 1.00),  // Violet
-                Color(hue: 0.72, saturation: 0.82, brightness: 0.95),  // Indigo-Violet
-                Color(hue: 0.88, saturation: 0.80, brightness: 1.00),  // Magenta-Rose
+                Color(hue: 0.83, saturation: 0.85, brightness: 1.00),
+                Color(hue: 0.78, saturation: 0.88, brightness: 1.00),
+                Color(hue: 0.72, saturation: 0.82, brightness: 0.95),
+                Color(hue: 0.88, saturation: 0.80, brightness: 1.00),
             ]
         case .agentSpeaking:
             return [
-                Color(hue: 0.85, saturation: 0.90, brightness: 1.00),  // Vibrant Magenta
-                Color(hue: 0.80, saturation: 0.85, brightness: 1.00),  // Bright Violet
-                Color(hue: 0.75, saturation: 0.90, brightness: 1.00),  // Electric Violet
-                Color(hue: 0.85, saturation: 0.90, brightness: 1.00),  // Wrap Magenta
+                Color(hue: 0.85, saturation: 0.90, brightness: 1.00),
+                Color(hue: 0.80, saturation: 0.85, brightness: 1.00),
+                Color(hue: 0.75, saturation: 0.90, brightness: 1.00),
+                Color(hue: 0.85, saturation: 0.90, brightness: 1.00),
             ]
         case .processing:
             return [
-                Color(hue: 0.80, saturation: 0.75, brightness: 0.90),  // Muted Violet
-                Color(hue: 0.85, saturation: 0.70, brightness: 0.95),  // Soft Magenta
-                Color(hue: 0.78, saturation: 0.80, brightness: 0.85),  // Deep Purple
-                Color(hue: 0.80, saturation: 0.75, brightness: 0.90),  // Wrap
+                Color(hue: 0.80, saturation: 0.75, brightness: 0.90),
+                Color(hue: 0.85, saturation: 0.70, brightness: 0.95),
+                Color(hue: 0.78, saturation: 0.80, brightness: 0.85),
+                Color(hue: 0.80, saturation: 0.75, brightness: 0.90),
             ]
         case .interrupted:
             return [
-                Color(hue: 0.95, saturation: 0.88, brightness: 1.00),  // Crimson Pink
-                Color(hue: 0.85, saturation: 0.95, brightness: 0.90),  // Magenta Alert
-                Color(hue: 0.98, saturation: 0.80, brightness: 0.95),  // Deep Rose
+                Color(hue: 0.95, saturation: 0.88, brightness: 1.00),
+                Color(hue: 0.85, saturation: 0.95, brightness: 0.90),
+                Color(hue: 0.98, saturation: 0.80, brightness: 0.95),
                 Color(hue: 0.95, saturation: 0.88, brightness: 1.00),
             ]
         case .paused, .idle:
             return [
-                Color(hue: 0.78, saturation: 0.50, brightness: 0.70),  // Dimmed Violet
-                Color(hue: 0.83, saturation: 0.45, brightness: 0.75),  // Dimmed Magenta
-                Color(hue: 0.76, saturation: 0.50, brightness: 0.65),  // Dimmed Purple
+                Color(hue: 0.78, saturation: 0.50, brightness: 0.70),
+                Color(hue: 0.83, saturation: 0.45, brightness: 0.75),
+                Color(hue: 0.76, saturation: 0.50, brightness: 0.65),
                 Color(hue: 0.78, saturation: 0.50, brightness: 0.70),
             ]
         }
