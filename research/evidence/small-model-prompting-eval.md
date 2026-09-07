@@ -1,5 +1,9 @@
 # Small-Model Prompting + Eval for speak's Agent Mode
 
+> **Research header** — Question: "what prompting and eval design works for a ~3B
+> on-device model producing instructions for a downstream coding agent?" · Date:
+> 2026-06-30 · Status: **evidence** (cited by `docs/benchmark.md`)
+
 > **Status**: Read-only evidence (research round, 2026-06-30). Author: builder-cleanup.
 > **Scope bound**: only what changes our *prompts* or our *eval*. Does NOT touch
 > specs, prompts, or fixtures — every proposed change in §4 is **flagged, not applied.**

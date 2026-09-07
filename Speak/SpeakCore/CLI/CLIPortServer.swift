@@ -59,12 +59,17 @@ public protocol CLICommandHandler: AnyObject {
     /// `beginDictation()`/`endDictation()` session the hotkey uses) and return the
     /// transcript. Returns `.timedOut` if no answer arrives within `timeoutSeconds`.
     /// [decision: H-3]
-    func cliAsk(question: String, timeoutSeconds: TimeInterval) async -> CLIAskOutcome
+    /// `precomputedCallId`: when non-nil, the durable `AgentCall` row was already
+    /// submitted by the caller (`CLIPortServer`, synchronously, before this async
+    /// method was even started) — skip re-submitting and resolve that row
+    /// directly. [decision: AVB-7-ask-confirm-pump-fix]
+    func cliAsk(question: String, timeoutSeconds: TimeInterval, precomputedCallId: UUID?) async -> CLIAskOutcome
 
     /// Speak `question`, then run a full dictation round-trip and extract a
     /// deterministic yes/no/cancel/unclear from the answer via `YesNoCancelExtractor`.
     /// Returns `.timedOut` if no answer arrives within `timeoutSeconds`. [decision: H-3]
-    func cliConfirm(question: String, timeoutSeconds: TimeInterval) async -> CLIConfirmOutcome
+    /// See `cliAsk` above re: `precomputedCallId`. [decision: AVB-7-ask-confirm-pump-fix]
+    func cliConfirm(question: String, timeoutSeconds: TimeInterval, precomputedCallId: UUID?) async -> CLIConfirmOutcome
 
     // MARK: - AVB-5 (specs/agent-voice-bridge.md §6)
 
@@ -82,7 +87,8 @@ public protocol CLICommandHandler: AnyObject {
         choices: [String],
         timeoutSeconds: TimeInterval,
         consequence: String?,
-        spokenSummary: String?
+        spokenSummary: String?,
+        precomputedCallId: UUID?
     ) async -> HumanResponseOutcome
 
     // MARK: - AVB-6 (specs/agent-voice-bridge.md §7.1)
@@ -92,39 +98,39 @@ public protocol CLICommandHandler: AnyObject {
     /// `sessionId` (notify/say/ask/confirm/request_input/status) routes through
     /// this before replying so the wire can attach an "unregistered session"
     /// note without rejecting the call. [decision: AVB-6]
-    func cliTouchSession(_ sessionId: String) async -> Bool
+    func cliTouchSession(_ sessionId: String) -> Bool
 
     /// `speak_register_session`: register (or re-register, when `sessionId` is
     /// already known) an `AgentSession` and negotiate capabilities against
     /// `AgentSessionRegistry.supportedCapabilities`. [decision: AVB-6]
+    ///
+    /// Synchronous (not `async`) since `AgentSessionRegistry` is `@MainActor`
+    /// isolated and this method itself only runs on the main thread — no
+    /// actor hop, so no Task/pump bridge is needed. [decision: AVB-6-pump-fix]
     func cliRegisterSession(
         sessionId: String?,
         provider: String,
         label: String,
         workingDirectory: String?,
         requestedCapabilities: [String]
-    ) async -> (sessionId: String, capabilities: [String])
+    ) -> (sessionId: String, capabilities: [String])
 
     // MARK: - AVB-7 (specs/avb7-durable-calls-design.md)
 
-    /// `speak_submit_call`: durably record a new `AgentCall` — no mic, no pump,
-    /// fast return. Requires a known-registered `sessionId`; `.unregistered` when
-    /// absent or not found in the registry (never a silent proceed, unlike the
-    /// advisory `sessionNote` other tools attach). [decision: AVB-7]
-    func cliSubmitCall(_ args: SubmitCallArguments) async -> CLISubmitCallOutcome
+    /// Synchronous, MainActor session-registration check — mirrors
+    /// `cliTouchSession`. Split out of the old `cliSubmitCall`/`cliGetCall` so
+    /// the port server can validate registration inline (no Task, no pump)
+    /// before bridging only the genuine `agentCallStore` actor-hop below.
+    /// [decision: AVB-7-pump-fix]
+    func cliIsSessionKnown(_ sessionId: String) -> Bool
 
-    /// `speak_get_call`: read-only poll of one `AgentCall`'s current state.
-    /// Requires a known-registered `sessionId`; a session mismatch or unknown id
-    /// reads as `.call(nil)`, never revealing existence. [decision: AVB-7]
-    func cliGetCall(sessionId: String?, callId: UUID) async -> CLIGetCallOutcome
-
-    // MARK: - Layer 4
-
-    /// `speak_ask_user`: ask prompt in Magenta overlay UI, returning user response string.
-    func cliAskUser(prompt: String, mode: String?) async -> CLIAskOutcome
-
-    /// `speak_stream_speech`: stream agent response text to TTS and overlay UI.
-    func cliStreamSpeech(text: String, isFinal: Bool) async -> String
+    /// The durable-call store itself — a plain (non-`MainActor`) actor doing
+    /// real SQLite I/O, and `Sendable` (`AgentCallStoring: Sendable`). Exposed
+    /// directly (rather than via `async` wrapper methods on the handler) so
+    /// `CLIPortServer` can call `submit`/`get` from a `Task.detached` closure
+    /// without capturing the non-`Sendable` `any CLICommandHandler` existential
+    /// itself. [decision: AVB-7-pump-fix]
+    var agentCallStore: any AgentCallStoring { get }
 }
 
 // MARK: - AVB-7 durable-call outcomes
@@ -338,12 +344,6 @@ public final class CLIPortServer {
         if request.cmd == .getCall {
             return CLIPortServer.encodeReply(handleGetCall(request, handler: cmdHandler))
         }
-        if request.cmd == .askUser {
-            return CLIPortServer.encodeReply(handleAskUser(request, handler: cmdHandler))
-        }
-        if request.cmd == .streamSpeech {
-            return CLIPortServer.encodeReply(handleStreamSpeech(request, handler: cmdHandler))
-        }
 
         // AVB-6: resolve the optional sessionId note (if any) before the
         // synchronous dispatch below — `cliTouchSession` is an actor call and
@@ -409,9 +409,9 @@ public final class CLIPortServer {
             SpeakLog.cli.info("CLIPortServer: say dispatched.")
             reply = .accepted(sessionNote: sessionNote)
 
-        case .ask, .confirm, .requestInput, .registerSession, .submitCall, .getCall, .askUser, .streamSpeech:
+        case .ask, .confirm, .requestInput, .registerSession, .submitCall, .getCall:
             // Handled above, before this switch — unreachable here.
-            reply = .failure("internal: ask/confirm/requestInput/registerSession/submitCall/getCall/askUser/streamSpeech routed incorrectly")
+            reply = .failure("internal: ask/confirm/requestInput/registerSession/submitCall/getCall routed incorrectly")
         }
 
         return CLIPortServer.encodeReply(reply)
@@ -445,54 +445,75 @@ public final class CLIPortServer {
     /// accepted cost for a same-user, low-frequency IPC path where a real callback-
     /// based CFMessagePort reply mechanism does not exist (only synchronous
     /// send/reply, per `CFMessagePortSendRequest`'s design).
+    /// Submit+poll decoupling (2026-08-01): the old Task-plus-pump shape starved
+    /// (see `pumpUntilResult`'s probe evidence) because a `Task{@MainActor}`
+    /// dispatched from inside `MainActor.assumeIsolated`'s synchronous closure
+    /// never gets scheduled by a nested `RunLoop.run()`, even on the real main
+    /// run loop. Fix: submit the durable `AgentCall` synchronously (via the
+    /// already-proven `bridgeToStore`), fire the actual speak→mic→STT→resolve
+    /// round-trip as a non-blocking `Task` (safe because `cliRequestInput`
+    /// already durably resolves the call at every exit path regardless of
+    /// whether its return value is awaited), and reply immediately with the
+    /// pending call. The client (`CLIBridgeBackend`) polls `getCall` for the
+    /// terminal state. [decision: AVB-7-ask-confirm-pump-fix]
     private func handleAskOrConfirm(_ request: CLIRequest, handler: any CLICommandHandler) -> CLIReply {
         guard let question = request.question, !question.isEmpty else {
             return .failure("\(request.cmd.rawValue) requires a non-empty question")
         }
         let timeout = request.timeout ?? CLIContract.askConfirmDefaultTimeoutSeconds
-        // A small buffer beyond the caller's timeout so the handler's own internal
-        // timeout (if any) has a chance to resolve and set the box before we give up.
-        let pumpCeiling = timeout + 2.0
         // AVB-6: resolved up front so it's available regardless of which branch
         // below returns. [decision: AVB-6]
         let sessionNote = CLIPortServer.pumpedSessionNote(sessionId: request.sessionId, handler: handler)
+        let mode: RequestInputMode = request.cmd == .confirm ? .approval : .freeform
+
+        // Adapter path: always `sessionId: nil` on the durable row so `getCall`
+        // isolation matches the client's nil-session poll. Request `sessionId`
+        // remains advisory via `sessionNote` only. [decision: AgentCall adapter
+        // isolation — matches AgentCall.swift nil-session comment]
+        let submission = AgentCallSubmission(
+            sessionId: nil,
+            requestId: UUID().uuidString,
+            idempotencyKey: nil,
+            prompt: question,
+            mode: mode,
+            choices: [],
+            consequence: nil,
+            spokenSummary: question,
+            urgency: .normal,
+            expiresAt: nil
+        )
+        let store = handler.agentCallStore
+        guard let outerResult = CLIPortServer.bridgeToStore(
+            timeoutSeconds: CLIContract.storeBridgeTimeoutSeconds,
+            { () async -> AgentCall? in
+            do {
+                guard case .created(let call) = try await store.submit(submission) else { return nil }
+                try? await store.markPresented(id: call.id)
+                return call
+            } catch {
+                SpeakLog.storage.error(
+                    "CLIPortServer: \(request.cmd.rawValue) durable submit failed — \(error.localizedDescription, privacy: .public)"
+                )
+                return nil
+            }
+        }), let pendingCall = outerResult else {
+            SpeakLog.cli.error("CLIPortServer: \(request.cmd.rawValue) failed to submit durable call.")
+            return .failure("\(request.cmd.rawValue) failed to record the request")
+        }
 
         switch request.cmd {
         case .ask:
-            let box = CLIPendingResultBox<CLIAskOutcome>()
             Task { @MainActor in
-                let outcome = await handler.cliAsk(question: question, timeoutSeconds: timeout)
-                box.set(outcome)
+                _ = await handler.cliAsk(question: question, timeoutSeconds: timeout, precomputedCallId: pendingCall.id)
             }
-            guard let outcome = CLIPortServer.pumpUntilResult(timeoutSeconds: pumpCeiling, poll: box.get) else {
-                SpeakLog.cli.error("CLIPortServer: ask pump exhausted without a result.")
-                return .failure("speak_ask timed out waiting for a spoken answer")
-            }
-            switch outcome {
-            case .answered(let text): return .asked(text, sessionNote: sessionNote)
-            case .timedOut: return .failure("speak_ask timed out waiting for a spoken answer")
-            }
-
         case .confirm:
-            let box = CLIPendingResultBox<CLIConfirmOutcome>()
             Task { @MainActor in
-                let outcome = await handler.cliConfirm(question: question, timeoutSeconds: timeout)
-                box.set(outcome)
+                _ = await handler.cliConfirm(question: question, timeoutSeconds: timeout, precomputedCallId: pendingCall.id)
             }
-            guard let outcome = CLIPortServer.pumpUntilResult(timeoutSeconds: pumpCeiling, poll: box.get) else {
-                SpeakLog.cli.error("CLIPortServer: confirm pump exhausted without a result.")
-                return .failure("speak_confirm timed out waiting for a spoken answer")
-            }
-            switch outcome {
-            case .yes: return .confirmed(true, sessionNote: sessionNote)
-            case .no: return .confirmed(false, sessionNote: sessionNote)
-            case .unclear, .cancelled: return .confirmed(nil, sessionNote: sessionNote)
-            case .timedOut: return .failure("speak_confirm timed out waiting for a spoken answer")
-            }
-
         default:
             return .failure("internal: handleAskOrConfirm called with \(request.cmd.rawValue)")
         }
+        return .askConfirmPending(pendingCall, sessionNote: sessionNote)
     }
 
     // MARK: - AVB-5 requestInput dispatch
@@ -518,43 +539,91 @@ public final class CLIPortServer {
         }
 
         let timeout = request.timeout ?? CLIContract.askConfirmDefaultTimeoutSeconds
-        let pumpCeiling = timeout + 2.0
         let sessionNote = CLIPortServer.pumpedSessionNote(sessionId: request.sessionId, handler: handler)
 
-        let box = CLIPendingResultBox<HumanResponseOutcome>()
-        Task { @MainActor in
-            let outcome = await handler.cliRequestInput(
-                requestId: requestId,
-                idempotencyKey: request.idempotencyKey,
-                prompt: prompt,
-                mode: mode,
-                choices: choices,
-                timeoutSeconds: timeout,
-                consequence: request.consequence,
-                spokenSummary: request.spokenSummary
-            )
-            box.set(outcome)
+        // Adapter path: durable row is nil-session (same as ask/confirm). Request
+        // sessionId stays advisory via sessionNote. [decision: AgentCall adapter isolation]
+        let submission = AgentCallSubmission(
+            sessionId: nil,
+            requestId: requestId,
+            idempotencyKey: request.idempotencyKey,
+            prompt: prompt,
+            mode: mode,
+            choices: choices,
+            consequence: request.consequence,
+            spokenSummary: request.spokenSummary,
+            urgency: .normal,
+            expiresAt: nil
+        )
+        let store = handler.agentCallStore
+        guard let outerResult = CLIPortServer.bridgeToStore(
+            timeoutSeconds: CLIContract.storeBridgeTimeoutSeconds,
+            { () async -> PendingRequestInputSubmission? in
+            do {
+                switch try await store.submit(submission) {
+                case .created(let call):
+                    try? await store.markPresented(id: call.id)
+                    return PendingRequestInputSubmission(call: call, isFresh: true)
+                case .duplicateSubmission(let existingCallId):
+                    guard let existing = try? await store.get(id: existingCallId, requestingSessionId: nil) else {
+                        return nil
+                    }
+                    return PendingRequestInputSubmission(call: existing, isFresh: false)
+                }
+            } catch {
+                SpeakLog.storage.error(
+                    "CLIPortServer: requestInput durable submit failed — \(error.localizedDescription, privacy: .public)"
+                )
+                return nil
+            }
+        }), let pending = outerResult else {
+            SpeakLog.cli.error("CLIPortServer: requestInput failed to submit durable call.")
+            return .failure("requestInput failed to record the request")
         }
-        guard let outcome = CLIPortServer.pumpUntilResult(timeoutSeconds: pumpCeiling, poll: box.get) else {
-            SpeakLog.cli.error("CLIPortServer: requestInput pump exhausted without a result.")
-            return .requestInputResult(.timedOut, sessionNote: sessionNote)
+
+        // Only a genuinely fresh submission fires the round-trip — a duplicate
+        // (retried) requestId means the original submission already owns (or
+        // has already finished) the speak→mic→STT→resolve lifecycle for this
+        // call; firing a second one would double-prompt the human.
+        if pending.isFresh {
+            Task { @MainActor in
+                _ = await handler.cliRequestInput(
+                    requestId: requestId,
+                    idempotencyKey: request.idempotencyKey,
+                    prompt: prompt,
+                    mode: mode,
+                    choices: choices,
+                    timeoutSeconds: timeout,
+                    consequence: request.consequence,
+                    spokenSummary: request.spokenSummary,
+                    precomputedCallId: pending.call.id
+                )
+            }
         }
-        return .requestInputResult(outcome, sessionNote: sessionNote)
+        return .askConfirmPending(pending.call, sessionNote: sessionNote)
+    }
+
+    private struct PendingRequestInputSubmission: Sendable {
+        let call: AgentCall
+        let isFresh: Bool
     }
 
     // MARK: - AVB-6 registerSession dispatch
 
-    /// Validate and dispatch a `registerSession` request. Bridges the actor-
-    /// isolated `AgentSessionRegistry` via the same Task-plus-pump mechanism
-    /// `handleAskOrConfirm`/`handleRequestInput` already use — registration
-    /// itself is fast/in-memory (no mic, no human round-trip, no realistic
-    /// timeout risk), but the actor hop still requires an `await`, which
-    /// cannot happen inside `MainActor.assumeIsolated`'s synchronous closure.
-    /// Reusing the existing, already-reviewed pump primitive here is
-    /// deliberate: a second bridging mechanism just for this one case would
-    /// add risk without adding safety. The main thread is never blocked
-    /// either way — this call simply resolves within the pump's first poll
-    /// slice in practice. [decision: AVB-6]
+    /// Validate and dispatch a `registerSession` request.
+    ///
+    /// Previously bridged through the same Task-plus-pump mechanism
+    /// `handleAskOrConfirm`/`handleRequestInput` use, on the theory that the
+    /// actor-isolated `AgentSessionRegistry` needed an `await` that couldn't
+    /// happen inside `MainActor.assumeIsolated`'s synchronous closure. In
+    /// practice that bridge starved: live-log evidence (2026-08-01) showed the
+    /// dispatched `Task{@MainActor}` reliably did not run until
+    /// `pumpUntilResult`'s timeout had already elapsed, so
+    /// `speak_register_session` failed on every call despite the underlying
+    /// work being trivial in-memory state. `AgentSessionRegistry` is now
+    /// `@MainActor`-isolated instead of a separate `actor`, so this call is
+    /// direct and synchronous — no Task, no pump, no timeout race.
+    /// [decision: AVB-6-pump-fix]
     private func handleRegisterSession(_ request: CLIRequest, handler: any CLICommandHandler) -> CLIReply {
         guard let provider = request.provider, !provider.isEmpty else {
             return .failure("registerSession requires a non-empty provider")
@@ -563,31 +632,42 @@ public final class CLIPortServer {
             return .failure("registerSession requires a non-empty label")
         }
 
-        let box = CLIPendingResultBox<(sessionId: String, capabilities: [String])>()
-        Task { @MainActor in
-            let result = await handler.cliRegisterSession(
-                sessionId: request.sessionId,
-                provider: provider,
-                label: label,
-                workingDirectory: request.workingDirectory,
-                requestedCapabilities: request.requestedCapabilities ?? []
-            )
-            box.set(result)
-        }
-        guard let result = CLIPortServer.pumpUntilResult(timeoutSeconds: 5.0, poll: box.get) else {
-            SpeakLog.cli.error("CLIPortServer: registerSession pump exhausted without a result.")
-            return .failure("speak_register_session did not complete")
-        }
+        let result = handler.cliRegisterSession(
+            sessionId: request.sessionId,
+            provider: provider,
+            label: label,
+            workingDirectory: request.workingDirectory,
+            requestedCapabilities: request.requestedCapabilities ?? []
+        )
         return .registered(sessionId: result.sessionId, capabilities: result.capabilities)
     }
 
     // MARK: - AVB-7 submitCall / getCall dispatch
 
-    /// Validate and dispatch a `submitCall` request. Reuses the exact
-    /// Task-plus-pump primitive `handleRegisterSession` already uses (5 s hard
-    /// deadline) — neither this nor `handleGetCall` waits on speech, so both
-    /// resolve within the pump's first poll slice in practice.
-    /// [decision: AVB-7 orchestrator amendment 2]
+    /// Bridge a `nonisolated async` store hop from this synchronous, main-thread
+    /// CFMessagePort callback without parking AppKit on a semaphore.
+    ///
+    /// `Task.detached` runs the SQLite actor work off the main actor; `pumpUntilResult`
+    /// slices the main run loop so HUD/timers keep ticking while we wait — the same
+    /// H-3 pump pattern, but without requiring a `Task { @MainActor }` (which starves
+    /// inside `MainActor.assumeIsolated`). [decision: AVB-7-pump-fix — strengthen:
+    /// replace semaphore.wait which contradicted the no-main-thread-block hard rule]
+    private static func bridgeToStore<T: Sendable>(
+        timeoutSeconds: TimeInterval,
+        _ work: @Sendable @escaping () async -> T
+    ) -> T? {
+        let box = CLIPendingResultBox<T>()
+        Task.detached {
+            let outcome = await work()
+            box.set(outcome)
+        }
+        return pumpUntilResult(timeoutSeconds: timeoutSeconds, poll: box.get)
+    }
+
+    /// Validate and dispatch a `submitCall` request. Session-registration is
+    /// checked synchronously first (no Task, no pump); only the genuine
+    /// `agentCallStore` actor-hop is bridged, via `bridgeToStore`.
+    /// [decision: AVB-7-pump-fix]
     private func handleSubmitCall(_ request: CLIRequest, handler: any CLICommandHandler) -> CLIReply {
         guard let requestId = request.requestId, !requestId.isEmpty else {
             return .failure("submitCall requires a non-empty requestId")
@@ -608,7 +688,15 @@ public final class CLIPortServer {
         // own default-applying parse. [decision: AVB-7]
         let expiresInSeconds = request.expiresInSeconds ?? AgentCallDefaults.defaultExpirySeconds
 
-        let args = SubmitCallArguments(
+        guard let sessionId = request.sessionId, handler.cliIsSessionKnown(sessionId) else {
+            SpeakLog.cli.info("CLIPortServer: submitCall refused — unregistered session.")
+            return .failure(
+                "register a session first (speak_register_session) before using speak_submit_call.")
+        }
+
+        let expiresAt = Date().addingTimeInterval(expiresInSeconds)
+        let submission = AgentCallSubmission(
+            sessionId: sessionId,
             requestId: requestId,
             idempotencyKey: request.idempotencyKey,
             prompt: prompt,
@@ -617,16 +705,31 @@ public final class CLIPortServer {
             consequence: request.consequence,
             spokenSummary: request.spokenSummary,
             urgency: urgency,
-            expiresInSeconds: expiresInSeconds,
-            sessionId: request.sessionId
+            expiresAt: expiresAt
         )
-        let box = CLIPendingResultBox<CLISubmitCallOutcome>()
-        Task { @MainActor in
-            let outcome = await handler.cliSubmitCall(args)
-            box.set(outcome)
-        }
-        guard let outcome = CLIPortServer.pumpUntilResult(timeoutSeconds: 5.0, poll: box.get) else {
-            SpeakLog.cli.error("CLIPortServer: submitCall pump exhausted without a result.")
+        let store = handler.agentCallStore
+        guard let outcome = CLIPortServer.bridgeToStore(
+            timeoutSeconds: CLIContract.storeBridgeTimeoutSeconds,
+            { () async -> CLISubmitCallOutcome in
+            do {
+                switch try await store.submit(submission) {
+                case .created(let call):
+                    return .created(call)
+                case .duplicateSubmission(let existingCallId):
+                    guard let existing = try await store.get(id: existingCallId, requestingSessionId: sessionId) else {
+                        SpeakLog.storage.error("CLIPortServer: submitCall duplicate lookup found no row.")
+                        return .internalError("duplicate call record not found")
+                    }
+                    return .duplicate(existing)
+                }
+            } catch {
+                SpeakLog.storage.error(
+                    "CLIPortServer: submitCall failed — \(error.localizedDescription, privacy: .public)"
+                )
+                return .internalError(error.localizedDescription)
+            }
+        }) else {
+            SpeakLog.cli.error("CLIPortServer: submitCall store bridge timed out without a result.")
             return .failure("speak_submit_call did not complete")
         }
         switch outcome {
@@ -642,20 +745,40 @@ public final class CLIPortServer {
         }
     }
 
-    /// Validate and dispatch a `getCall` request. Same pump shape as `handleSubmitCall`.
-    /// [decision: AVB-7]
+    /// Validate and dispatch a `getCall` request. Session-registration is
+    /// checked synchronously first; only the store read is bridged.
+    /// [decision: AVB-7-pump-fix]
     private func handleGetCall(_ request: CLIRequest, handler: any CLICommandHandler) -> CLIReply {
         guard let callIdString = request.callId, let callId = UUID(uuidString: callIdString) else {
             return .failure("getCall requires a valid 'callId'")
         }
-
-        let box = CLIPendingResultBox<CLIGetCallOutcome>()
-        Task { @MainActor in
-            let outcome = await handler.cliGetCall(sessionId: request.sessionId, callId: callId)
-            box.set(outcome)
+        // A nil sessionId is a legitimate "anonymous" caller — `speak_ask`/
+        // `speak_confirm`/`speak_request_input` (unlike `speak_submit_call`)
+        // don't require prior `speak_register_session`, and their durable rows
+        // are submitted with `sessionId: nil` to match. Only reject when a
+        // sessionId WAS supplied but isn't registered. [decision: AVB-7-ask-confirm-pump-fix]
+        let sessionId = request.sessionId
+        if let sessionId, !handler.cliIsSessionKnown(sessionId) {
+            SpeakLog.cli.info("CLIPortServer: getCall refused — unregistered session.")
+            return .failure(
+                "register a session first (speak_register_session) before using speak_get_call.")
         }
-        guard let outcome = CLIPortServer.pumpUntilResult(timeoutSeconds: 5.0, poll: box.get) else {
-            SpeakLog.cli.error("CLIPortServer: getCall pump exhausted without a result.")
+
+        let store = handler.agentCallStore
+        guard let outcome = CLIPortServer.bridgeToStore(
+            timeoutSeconds: CLIContract.storeBridgeTimeoutSeconds,
+            {
+            do {
+                let call = try await store.get(id: callId, requestingSessionId: sessionId)
+                return CLIGetCallOutcome.call(call)
+            } catch {
+                SpeakLog.storage.error(
+                    "CLIPortServer: getCall failed — \(error.localizedDescription, privacy: .public)"
+                )
+                return CLIGetCallOutcome.call(nil)
+            }
+        }) else {
+            SpeakLog.cli.error("CLIPortServer: getCall store bridge timed out without a result.")
             return .failure("speak_get_call did not complete")
         }
         switch outcome {
@@ -675,11 +798,28 @@ public final class CLIPortServer {
     static func pumpUntilResult<T>(timeoutSeconds: TimeInterval, poll: () -> T?) -> T? {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         let pollSlice: TimeInterval = 0.02  // 20 ms — short enough to stay responsive
+        // [probe: AVB-7-pump-diag] one-shot instrumentation to discriminate between
+        // (a) nested-runloop/MainActor-executor starvation vs (b) this callback simply
+        // not running on CFRunLoopGetMain() at all. Remove once the root cause is settled.
+        let isMainRunLoop = CFRunLoopGetCurrent() === CFRunLoopGetMain()
+        var iterations = 0
+        SpeakLog.cli.debug("CLIPortServer: pumpUntilResult starting — isMainRunLoop=\(isMainRunLoop, privacy: .public), thread=\(Thread.current.description, privacy: .public)")
         while Date() < deadline {
             if let result = poll() { return result }
+            if Task.isCancelled { break }
             RunLoop.current.run(mode: RunLoop.Mode.common, before: Date().addingTimeInterval(pollSlice))
+            iterations += 1
         }
-        return poll()
+        let finalResult = poll()
+        SpeakLog.cli.debug(
+            """
+            CLIPortServer: pumpUntilResult exiting — \
+            isMainRunLoop=\(isMainRunLoop, privacy: .public) \
+            iterations=\(iterations, privacy: .public) \
+            gotResult=\(finalResult != nil, privacy: .public)
+            """
+        )
+        return finalResult
     }
 
     // MARK: - Encode reply to CFData

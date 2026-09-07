@@ -1,5 +1,9 @@
 # SM-2 Phase0b eval-metric redesign — review of `pe/sm-2-metric` (commit `366d01f`)
 
+> **Research header** — Question: "does the `pe/sm-2-metric` branch's tokenizer/scorer
+> redesign improve on master's eval metric, and is it safe to merge?" · Date: 2026-07-04
+> · Status: **evidence**
+
 > Read-only evidence + decision record. This branch predates the repo reorg and was
 > never merged as a whole (a raw merge would have clobbered master's independently-
 > evolved rubric-scorer and `EvalHarnessTests.swift`). Reviewed 2026-07-04 with a

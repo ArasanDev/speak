@@ -1,0 +1,83 @@
+name: Bug report
+description: Something in speak is broken or not behaving as documented.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. `speak` requires **macOS 26 (Tahoe)** on
+        **Apple Silicon** — most reports on other configurations are actually
+        a platform mismatch, so please fill in the fields below precisely.
+
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      description: "Apple menu -> About This Mac. speak requires macOS 26 (Tahoe) — FoundationModels/SpeechAnalyzer do not resolve on earlier versions."
+      placeholder: "e.g. macOS 26.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: chip
+    attributes:
+      label: Chip
+      description: speak requires Apple Silicon (no Intel support).
+      options:
+        - Apple Silicon (M1)
+        - Apple Silicon (M2)
+        - Apple Silicon (M3)
+        - Apple Silicon (M4 or later)
+        - Intel
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: speak-version
+    attributes:
+      label: speak version or commit
+      description: "There is no `speak --version` command yet. If you built from source, run `git rev-parse --short HEAD` in the repo and paste the result. If you installed a release, paste the release tag."
+      placeholder: "e.g. commit 1588a2f, or v0.x tag"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: permissions
+    attributes:
+      label: OS permissions granted
+      description: speak needs exactly two permissions — nothing else (no Input Monitoring, no Screen Recording).
+      options:
+        - label: Microphone is granted (System Settings -> Privacy & Security -> Microphone)
+        - label: Accessibility is granted (System Settings -> Privacy & Security -> Accessibility)
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: What did you do, what did you expect, what happened instead?
+      placeholder: |
+        1. Double-tap Fn to start dictation
+        2. Say "..."
+        3. Single-tap Fn to stop
+        4. Expected: ...
+        5. Actual: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Stream logs live with `make logs` **while reproducing the bug** —
+        `.info`/`.debug` log levels are not persisted, so `log show` after the
+        fact will not see the dictation flow. Paste the relevant excerpt here.
+      render: shell
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots, screen recordings, or other context.

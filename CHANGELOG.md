@@ -38,32 +38,15 @@ release. The version ladder (v0 → v3+) is defined in `docs/product.md` §9.
 - `make install-mcp-user` — relocatable `speak-mcp` + `SpeakCore` / `SpeakLLM`
   framework layout under `~/Library/Application Support/speak/mcp/`
 
-### Human-Agent Workspace (Loops #53–68)
+### Agent tag-routing system (Loops #53–68)
 
 - `TagRegistry` actor — thread-safe `@tag` agent registry (`@Claude`, `@terminal`,
   `@github`); `PluginTagAdapter` protocol; `EvidencePayload` rich media cards
-- `WorkspaceStore` SQLite actor — channels (`#general`, `#core-engine`), spoken
-  threads, and evidence cards; `searchMessagesFTS` FTS5 full-text search engine
 - `VoiceCommandParser+Tags.swift` — spoken/typed `@tag` mention parsing
-- `WorkspaceMainView` — Slack-style dual-mode workspace: channel sidebar, message
-  threading, emoji reaction bar (👀 ✅ 🎙️ 🚀), pronged action trigger system
-  (⚡ Run / 🔍 Inspect / 🛡️ Audit / 🗣️ Speak), voice huddles, TTS readback
-- `EvidenceCardView` + `CodeDiffInspectorView` — line-by-line syntax-highlighted
-  diffs; 5-status task checklist (pending / inProgress / done / blocked / failed)
-- `QuickSwitcherModalView` (Cmd+K) — spotlight-style search over channels, agents,
-  SQLite messages
-- `ChannelCanvasView` — pinned spec/checklist side-sheet; quick action shortcuts
-- `NewChannelModalView` — channel creation wired to `WorkspaceStore`
-- Direct Messages sidebar — 1-on-1 private agent conversations
-- `ApprovalCardView` — interactive Approve / Decline cards for high-risk actions
-- `UserProfileModalView` — handle, role, privacy moat metrics, active tag roster
 - `CustomAgentDefinition` + `DynamicCustomTagAdapter` — hackable `@tag` agent
   definitions without touching core code; `registerCustomAgent` in `TagRegistry`
 - Multi-agent swarm broadcaster — `@team` / `@engineers` / `@qa` broadcast across
   `@Claude`, `@builder-qa`, `@terminal` via `resolveSwarmTags`
-- Dual-mode `DashboardView` — `AppMode.dictation` vs `AppMode.workspace` with
-  hidden `NavigationSplitView` sidebar in workspace mode
-- `TopSegmentedBarView` — ⚡ Dictation Engine / 💬 Agent Workspace toggle
 
 ### Local Inference Server (P15 — Loop #75)
 

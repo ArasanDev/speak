@@ -3,14 +3,12 @@
 > **Your voice is the new keyboard.** macOS-native, 100% local, free, open-source
 > voice dictation with AI neat-writing — speech → on-device AI → pasted at cursor.
 
-[![CI](https://img.shields.io/badge/CI-passing-green)](docs/progress.md)
-[![Release](https://img.shields.io/badge/release-v0.0.1-orange)](CHANGELOG.md)
-[![Platform](https://img.shields.io/badge/platform-macOS%2026%2B-lightgrey)](#build-from-source)
+[![CI](https://github.com/ArasanDev/speak/actions/workflows/ci.yml/badge.svg)](https://github.com/ArasanDev/speak/actions/workflows/ci.yml)
+[![Platform](https://img.shields.io/badge/platform-macOS%2026%2B-lightgrey)](#quick-start)
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange)](#tech-stack)
-[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-black)](#build-from-source)
+[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-black)](#quick-start)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Moat audit](https://img.shields.io/badge/moat%20audit-7%2F7-green)](#privacy)
-[![Discord](https://img.shields.io/badge/Discord-coming%20soon-5865F2)](#contributing)
 
 <!-- Demo GIF coming soon — recording pending human verification of live paste flow. -->
 <!-- Replace this comment with: ![speak demo](docs/assets/demo.gif) -->
@@ -57,22 +55,34 @@ without abandoning their business model: **fully local, free, open, and private*
 
 ## Quick start
 
-### Homebrew (recommended)
+Requirements: macOS 26 (Tahoe), Apple Silicon, Xcode 26+ (full install, not just
+Command Line Tools).
+
+### One-line install (recommended)
+
+Builds from source on your machine, ad-hoc signs, installs to `/Applications`,
+and clears the Gatekeeper quarantine flag automatically — no prompt, no manual
+`xattr` step, no Apple Developer account needed:
 
 ```bash
-brew tap speak-dev/speak
-brew install speak
+curl -fsSL https://raw.githubusercontent.com/ArasanDev/speak/master/scripts/install.sh | bash
 ```
 
-> The tap publishes at first tag (`v0.0.1`). Until then, build from source below.
+Reviewing a `curl | bash` before running it is always reasonable — the script
+is [scripts/install.sh](scripts/install.sh), ~80 lines, does exactly what the
+manual steps below do.
 
-### Build from source
+> **Official Homebrew Cask: not yet published.** `dist/speak.cask.rb` is a
+> scaffold, inert until a signed + notarized release exists (`docs/roadmap.md`
+> P11-b, currently deferred). The one-liner above and the manual/build-from-source
+> tap below don't need that — Gatekeeper only inspects downloaded binaries,
+> never a local source build, so no cert is required either way.
 
-Requirements: macOS 26 (Tahoe), Apple Silicon, Xcode 26+.
+### Build from source (manual)
 
 ```bash
 brew install xcodegen swiftlint xcbeautify
-git clone https://github.com/speak-dev/speak.git && cd speak
+git clone https://github.com/ArasanDev/speak.git && cd speak
 make build     # generates Speak.xcodeproj, builds Speak.app
 make test      # full test suite
 make run       # launch the menubar app
@@ -182,18 +192,38 @@ The server auto-discovers available local inference backends:
 ## MCP Setup
 
 `speak-mcp` is a native Swift binary that serves the Model Context Protocol over
-stdio for any MCP-capable agent (Claude Code, Cursor, Windsurf).
+stdio for any MCP-capable agent (Claude Code, Codex, Cursor, Windsurf).
 
-### Claude Code
+### Two commands
 
-Add to your Claude Code MCP settings:
+```sh
+make install-mcp-user    # install the relocatable bridge under ~/Library/Application Support/speak/
+make register-mcp        # preview: which agent CLIs were found, what would change (writes nothing)
+make register-mcp-apply  # register with every detected agent CLI, idempotently
+```
+
+`register-mcp-apply` writes **user-level agent config outside this repo**
+(`~/.claude.json`, `~/.codex/config.toml`), touching only the single `speak-app`
+server entry. Re-running replaces that entry rather than duplicating it. Run
+`make register-mcp` first if you want to see the exact commands before anything
+is written.
+
+Verify with `claude mcp list` — expect `speak-app ... ✔ Connected`. The menubar
+app must be running: it owns the microphone and text-to-speech; `speak-mcp` owns
+no audio or UI of its own.
+
+### Manual setup (any other MCP client)
+
+The bridge lives at `~/Library/Application Support/speak/mcp/bin/speak-mcp`. That
+path contains a space, so launch it through a shell to keep quoting correct in
+every client:
 
 ```json
 {
   "mcpServers": {
-    "speak": {
-      "command": "/usr/local/bin/speak-mcp",
-      "args": []
+    "speak-app": {
+      "command": "/bin/zsh",
+      "args": ["-lc", "exec \"$HOME/Library/Application Support/speak/mcp/bin/speak-mcp\""]
     }
   }
 }
@@ -201,16 +231,17 @@ Add to your Claude Code MCP settings:
 
 ### Available tools
 
+Canonical contract: `specs/agent-voice-bridge.md` §5.
+
 | Tool | Description |
 |---|---|
-| `speak_register_session` | Bind an agent session to the speak daemon |
-| `speak_notify` | Visual HUD alert + auditory tone |
-| `speak_say` | Read text aloud via speech synthesis |
-| `speak_ask` | Prompt user with spoken question, capture voice response |
-| `speak_confirm` | Binary Yes/No voice/HUD confirmation |
-| `speak_request_input` | Trigger dictation to gather developer prompt text |
-| `speak_status` | Return current state machine phase |
-| `speak_submit_call` / `speak_get_call` | Async function call dispatch |
+| `speak_register_session` | Session registration + capability negotiation |
+| `speak_status` | App / mic / engine availability |
+| `speak_notify` | Attention-worthy spoken outcome (semantic `kind`); speaks a concise summary via local TTS |
+| `speak_request_input` | Structured human input — `freeform` / `choice` / `approval`, with typed outcomes |
+| `speak_submit_call` / `speak_get_call` | Durable agent-call inbox (async; requires a registered session) |
+| `speak_say` | Compatibility TTS primitive |
+| `speak_ask` / `speak_confirm` | Compatibility wrappers over `speak_request_input` |
 
 ---
 
@@ -319,3 +350,5 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). We welcome:
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
+
+<!-- bughunter dogfood 20260729143949 -->

@@ -1,5 +1,13 @@
 # `speak` — The Profile Engine (design spec)
 
+**Status:** active/binding — locked product thesis, substrate shipped (`docs/roadmap.md`
+"North star": "Already landed: the Profile Engine substrate") · **Binds:** the three-layer
+immutable ordering (base core → default Clean profile → Profile Engine extension) ·
+**Owner:** orchestrator · **Depends on:** `docs/product.md`, `docs/architecture.md`
+(`LLMCleaning` seam) · **Superseded by:** none (taxonomy detail refined by
+`specs/profile-taxonomy.md`; see contradiction note there) · **Last substantive change:**
+2026-06-29
+
 > **Status**: Locked product thesis (2026-06-29, human decision). This is the
 > spine the product is becoming: a **local-first, voice-driven, fully
 > customizable AI text engine**. Everything downstream — Agent Mode (V01-0),

@@ -36,29 +36,39 @@ public final class UserDefaultsBindingStore: BindingStoring, @unchecked Sendable
     /// affect the other.
     private let extraBindingsKey = "com.speak.extraHotkeyBindings"
 
+    /// [parallel-test-isolation] Injectable so tests can pass a UUID-suite
+    /// `UserDefaults` instance instead of racing on the shared `.standard`
+    /// domain (which is the same on-disk plist across concurrently-launched
+    /// `xctest` worker processes sharing the app's bundle ID). Defaults to
+    /// `.standard` — production call sites (`UserDefaultsBindingStore()`) are
+    /// unaffected.
+    private let defaults: UserDefaults
+
     // [Input-M2] JSONEncoder and JSONDecoder are NOT thread-safe (Apple docs).
     // `save()` is called from multiple threads (run-loop thread, main actor).
     // Create fresh instances per call to avoid data races under @unchecked Sendable.
 
-    public init() {}
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
 
     public func load() -> HotkeyBinding? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        guard let data = defaults.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(HotkeyBinding.self, from: data)
     }
 
     public func save(_ binding: HotkeyBinding) {
         guard let data = try? JSONEncoder().encode(binding) else { return }
-        UserDefaults.standard.set(data, forKey: key)
+        defaults.set(data, forKey: key)
     }
 
     public func loadExtraBindings() -> ExtraBindingSet? {
-        guard let data = UserDefaults.standard.data(forKey: extraBindingsKey) else { return nil }
+        guard let data = defaults.data(forKey: extraBindingsKey) else { return nil }
         return try? JSONDecoder().decode(ExtraBindingSet.self, from: data)
     }
 
     public func saveExtraBindings(_ set: ExtraBindingSet) {
         guard let data = try? JSONEncoder().encode(set) else { return }
-        UserDefaults.standard.set(data, forKey: extraBindingsKey)
+        defaults.set(data, forKey: extraBindingsKey)
     }
 }

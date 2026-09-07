@@ -11,8 +11,8 @@
 // handshake, and tool-call routing all live in SpeakCore, where they are unit
 // tested with no I/O; this file only owns reading/writing raw bytes.
 //
-// Transport: stdio only, newline-delimited JSON, no network listener. All five
-// tools talk to `speak.app` through the existing local CFMessagePort CLI IPC;
+// Transport: stdio only, newline-delimited JSON, no network listener. All
+// catalog tools talk to `speak.app` through the existing local CFMessagePort CLI IPC;
 // the app continues to own audio, microphone permission, and UI.
 //
 // Shutdown: per the MCP lifecycle spec, the client closes stdin to signal

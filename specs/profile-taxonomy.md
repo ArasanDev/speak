@@ -1,5 +1,15 @@
 # `speak` — Profile Taxonomy (LOCKED 2026-06-29)
 
+**Status:** active/binding, partially amended by later implementation — see contradiction
+below · **Binds:** the destination-first model (Agent/Write/Note/Raw) and Agent-only
+categories · **Owner:** orchestrator · **Depends on:** `specs/profile-system-prompts.md`,
+`specs/profile-engine.md` §2 · **Superseded by:** none as a decision, but
+`Speak/SpeakCore/Profiles/DefaultProfiles.swift` (V01-3, per-app context) added a fifth
+`Chat` destination for messaging apps that this spec's "3 destinations + Raw. No
+Clean/Chat/.../Commit as siblings" (line 17, below) explicitly rules out — the shipped
+code's own header comment documents this as a deliberate later decision, not drift, but
+the two documents now disagree in prose · **Last substantive change:** 2026-06-29
+
 > Supersedes the flat 7-profile set in `profile-system-prompts.md` / `profile-engine.md §2`.
 > Organize profiles by **destination** (who you're talking to), with **depth only where
 > it pays** — the coding/agent case. This is the coding-agents-first wedge made structural

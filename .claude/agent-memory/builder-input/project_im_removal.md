@@ -22,7 +22,7 @@ Input Monitoring was removed from v0 entirely (2026-06-22). The CGEventTap uses 
 
 **Docs still needing orchestrator update (out of builder-input scope):**
 - `AGENTS.md §2.2` — still says "exactly three permissions"
-- `.claude/skills/swift-code-review.md` — same
+- `.claude/skills/swift-code-review/SKILL.md` — same
 - `docs/architecture.md §6/§7.2` — may still list IM
 - `docs/product.md §7.3` — 5-step onboarding order
 - `specs/verification-ledger.md` line 39 — row mentions "Accessibility implicitly satisfies Input Monitoring"; needs update to say IM is not requested at all in v0

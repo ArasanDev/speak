@@ -234,42 +234,6 @@ public enum AgentBridgeTools {
         "required": ["callId", "sessionId"]
     ]
 
-    // MARK: - Layer 4 (specs/agent-voice-bridge.md Layer 4)
-
-    public static let askUserInputSchema: JSONValue = [
-        "type": "object",
-        "properties": [
-            "prompt": [
-                "type": "string",
-                "description": "The question or prompt to speak and present in the Magenta floating overlay UI."
-            ],
-            "mode": [
-                "type": "string",
-                "enum": ["fullDuplex", "pushToTalk", "gatedTurn"],
-                "description": "Optional conversation mode for turn-taking (defaults to fullDuplex)."
-            ],
-            "sessionId": sessionIdProperty
-        ],
-        "required": ["prompt"]
-    ]
-
-    public static let streamSpeechInputSchema: JSONValue = [
-        "type": "object",
-        "properties": [
-            "text": [
-                "type": "string",
-                "description": "Text content to speak via TTS and render in the streaming overlay UI."
-            ],
-            "isFinal": [
-                "type": "boolean",
-                "description": "Whether this speech chunk completes the agent response turn. Defaults to true."
-            ],
-            "sessionId": sessionIdProperty
-        ],
-        "required": ["text"]
-    ]
-
-
     public static let all: [MCPTool] = [
         MCPTool(
             name: "speak_register_session",
@@ -339,19 +303,6 @@ public enum AgentBridgeTools {
                 "presented, or a terminal outcome (answered/declined/cancelled/timedOut/expired). No " +
                 "server-side wait — poll on your own interval. Requires speak_register_session first.",
             inputSchema: getCallInputSchema
-        ),
-        MCPTool(
-            name: "speak_ask_user",
-            description: "Ask the user a question via speech readback and the Magenta overlay UI. " +
-                "Listens for the user's spoken or typed answer and returns it directly to the agent via async continuation (bypassing pasteboard). " +
-                "Requires speak.app to be running.",
-            inputSchema: askUserInputSchema
-        ),
-        MCPTool(
-            name: "speak_stream_speech",
-            description: "Stream agent text response to the TTS engine and update the overlay UI text display. " +
-                "Renders readback in real-time and updates conversation loop state.",
-            inputSchema: streamSpeechInputSchema
         )
     ]
 }

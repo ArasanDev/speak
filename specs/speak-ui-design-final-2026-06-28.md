@@ -1,8 +1,17 @@
 # speak — UI Design Specification (Final, Locked v0)
 
+**Status:** partially superseded — the sidebar/pane information architecture (Dashboard,
+History, Settings, Privacy, About) remains binding, but the visual identity/look this
+spec locks is explicitly superseded by `specs/frontend-identity.md` (2026-07-11), which
+states: "Supersedes the Wispr-Flow-derived look as the *default*; `HUDStyle.classic`
+remains available but is no longer the identity." · **Binds:** the five-surface IA (menubar,
+overlay HUD, dashboard, settings modal, privacy pane) · **Owner:** orchestrator · **Depends
+on:** `specs/ui-ux-strategic-research-2026-06-28.md`, `specs/landscape-analysis-2026-06-28.md`
+· **Superseded by:** `specs/frontend-identity.md` (visual identity only) · **Last substantive
+change:** 2026-06-28
+
 **Date**: 2026-06-28  
 **Version**: v0 (ship-ready)  
-**Status**: Locked design — implementation can now proceed  
 **Source**: Strategic UI/UX research (2026-06-28) + architect decision synthesis
 
 ---

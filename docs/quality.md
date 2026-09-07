@@ -1,5 +1,7 @@
 # `speak` — Quality, Risks & Ship Gates (VERIFY)
 
+> **Purpose**: How to verify the work — test categories, compatibility matrix, risk register, the v0 ship checklist. · **Audience**: contributor, AI agent, maintainer · **Status**: living · **Last reviewed**: 2026-07-11 (git log)
+
 > **Status**: How to verify the work. Every roadmap task gets test coverage
 > here. The ship checklist is the binary gate for v0.
 >

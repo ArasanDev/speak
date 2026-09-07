@@ -253,6 +253,25 @@ public actor CaptureSession {
         return nil
     }
 
+    // MARK: - VAD attachment (output-conversation-reconnect)
+
+    /// Attaches (or, passing `nil`, detaches) a `VoiceActivityDetector` to the
+    /// live `AudioCapture` behind this session's transcriber, mirroring the
+    /// `levels()` seam above: same `AudioCaptureProviding` cast, same narrow
+    /// coupling, no change to `Transcribing` or any other transcriber.
+    ///
+    /// Returns `true` if an `AudioCapture` was found to attach to, `false`
+    /// otherwise (e.g. a test fixture transcriber with no live capture).
+    @discardableResult
+    public func attachVoiceActivityDetector(_ vad: VoiceActivityDetector?) -> Bool {
+        guard let sttTranscriber = transcriber as? AudioCaptureProviding,
+              let audioCapture = sttTranscriber.audioCapture else {
+            return false
+        }
+        audioCapture.attachVoiceActivityDetector(vad)
+        return true
+    }
+
     // MARK: - Lifecycle
 
     /// Begin a new dictation. Transitions `.idle → .listening`. Throws
@@ -277,6 +296,31 @@ public actor CaptureSession {
         // the actor before the next is consumed, so `latestChunk` is
         // consistent at stop time. `await self?.ingest(...)` is the
         // synchronization point.
+        // TODO(system-state-resilience survey — CaptureSession.swift:299,
+        // left unfixed): if the transcriber's stream finishes WITHOUT
+        // throwing while the session is still `.listening` (e.g. AudioCapture
+        // torn down out from under the session by an unrecoverable device
+        // configuration change), the session is currently left wedged in
+        // `.listening` forever — it never reaches `.done`/`.error`, and
+        // `SpeakEngine`'s `[A3]` re-entrancy guard then permanently refuses
+        // the next `beginDictation()`.
+        //
+        // A "fail if still .listening when the stream ends" recovery was
+        // attempted here and reverted: `MockTranscriber` (the test double
+        // used by ~30 existing `CaptureSessionTests`/`PasteTests`/
+        // `VoiceActionsPipelineTests` cases) legitimately finishes its stream
+        // on its own, before the test calls `stop()` — unlike real
+        // `Transcribing` conformers, which only finish when `stop()` is
+        // called. Treating "stream ended while .listening" as an error is
+        // therefore indistinguishable, with the current mock contract, from
+        // dozens of correct fast-path completions, and produced 33 false
+        // failures. A real fix needs either (a) a mock overhaul so
+        // `MockTranscriber` only finishes on an explicit `stop()` signal,
+        // matching production semantics, or (b) a positive signal from
+        // `AudioCapture`/`AppleSpeechTranscriber` distinguishing "torn down
+        // externally" from "finished normally" that `CaptureSession` can key
+        // off instead of stream-completion-while-listening. Left as a TODO
+        // rather than guessing at either large change.
         let task = Task { [weak self] in
             do {
                 for try await chunk in stream {
@@ -321,12 +365,9 @@ public actor CaptureSession {
         // task below has something to wait for.
         await transcriber.stop()
 
-        // Wait for the stream task to complete (all chunks drained). The
-        // task awaits `ingest(_:)` on every chunk, so by the time this
-        // returns, `latestChunk` is the most recent chunk processed.
-        if let task = streamTask {
-            await task.value
-        }
+        // Wait for the stream task to complete (all chunks drained).
+        // Protected by a 5-second watchdog so a stalled audio stream cannot hang stop().
+        await awaitStreamDrainWithWatchdog()
 
         // t_transcript_ready: STT stream fully drained; raw text is available.
         let tTranscriptReady = DispatchTime.now().uptimeNanoseconds
@@ -701,5 +742,37 @@ public actor CaptureSession {
         state = .error(speakError)
         partialsContinuation?.finish()
         partialsContinuation = nil
+    }
+}
+
+extension CaptureSession {
+    /// Wait for `streamTask` to finish, or give up after the watchdog so a stalled
+    /// audio route cannot hang `stop()` indefinitely.
+    /// [decision: 5 s — Loop #77 AirPods/route hang; short of the STT finalization
+    ///  10 s window so stop() still returns; on fire we cancel the stream and log
+    ///  loudly rather than pretending drain completed.]
+    fileprivate func awaitStreamDrainWithWatchdog() async {
+        guard let task = streamTask else { return }
+        let watchdogNanoseconds: UInt64 = 5_000_000_000
+        let drained = await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                await task.value
+                return true
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: watchdogNanoseconds)
+                return false
+            }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+        if !drained {
+            SpeakLog.engine.error(
+                "CaptureSession: stream drain watchdog fired after 5s — canceling streamTask; transcript may be incomplete."
+            )
+            task.cancel()
+            streamTask = nil
+        }
     }
 }

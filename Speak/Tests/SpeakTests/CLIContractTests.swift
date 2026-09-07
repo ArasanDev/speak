@@ -493,7 +493,7 @@ private func idempotencyDecision(command: CLICommand, icon: MenubarIcon) -> Idem
     case .status:
         return .read
 
-    case .say, .ask, .confirm, .requestInput, .registerSession, .submitCall, .getCall, .askUser, .streamSpeech:
+    case .say, .ask, .confirm, .requestInput, .registerSession, .submitCall, .getCall:
         // H-3/AVB-5/AVB-6/AVB-7: say/ask/confirm/requestInput/registerSession/
         // submitCall/getCall are not gated by this idempotency table — say is
         // always dispatched (no icon precondition); the rest are handled by the
@@ -508,19 +508,39 @@ private func idempotencyDecision(command: CLICommand, icon: MenubarIcon) -> Idem
 // MARK: - StubCLITransport
 
 /// A test stub for `CLITransport` — records calls and returns pre-canned replies.
+///
+/// Supports the AVB-7 submit+poll shape: pass `replies:` (a non-empty array) to model
+/// the app replying `.askConfirmPending(pending)` on the first `send`, then returning
+/// the terminal `AgentCall` via `getCall` on subsequent sends (the `CLIBridgeBackend`
+/// polls `getCall` until the call is terminal). `sendCount` lets tests assert how many
+/// round-trips a poll actually took.
 final class StubCLITransport: CLITransport, @unchecked Sendable {
     private let stubbedReply: CLIReply?
     private let stubbedError: CLITransportError?
+    /// Scripted reply sequence — each `send` returns the next one; the last repeats.
+    private let replySequence: [CLIReply]
+    private(set) var sendCount: Int = 0
     private(set) var lastCommand: CLICommand?
 
     init(reply: CLIReply) {
         self.stubbedReply = reply
         self.stubbedError = nil
+        self.replySequence = []
+    }
+
+    /// Scripted sequence — each `send` returns the next reply; the final reply repeats
+    /// for any further sends. Models submit-then-poll: first send = pending, then polls.
+    init(replies: [CLIReply]) {
+        precondition(!replies.isEmpty, "StubCLITransport(replies:) requires at least one reply")
+        self.stubbedReply = nil
+        self.stubbedError = nil
+        self.replySequence = replies
     }
 
     init(error: CLITransportError) {
         self.stubbedReply = nil
         self.stubbedError = error
+        self.replySequence = []
     }
 
     private(set) var lastTimeoutSeconds: TimeInterval?
@@ -528,10 +548,13 @@ final class StubCLITransport: CLITransport, @unchecked Sendable {
     func send(_ request: CLIRequest, timeoutSeconds: TimeInterval) throws -> CLIReply {
         lastCommand = request.cmd
         lastTimeoutSeconds = timeoutSeconds
+        sendCount += 1
         if let stubbedErr = stubbedError { throw stubbedErr }
-        guard let reply = stubbedReply else {
-            throw CLITransportError.badReply("StubCLITransport: no reply configured")
+        if let reply = stubbedReply { return reply }
+        if !replySequence.isEmpty {
+            let idx = min(sendCount - 1, replySequence.count - 1)
+            return replySequence[idx]
         }
-        return reply
+        throw CLITransportError.badReply("StubCLITransport: no reply configured")
     }
 }

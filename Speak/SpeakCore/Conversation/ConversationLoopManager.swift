@@ -68,6 +68,16 @@ public final class ConversationLoopManager: ObservableObject {
     // MARK: - Configuration Parameters
 
     /// Silence timeout in seconds for `.fullDuplex` VAD auto-commit.
+    ///
+    /// **Not the endpointer when a `VoiceTurnCoordinator` drives the turn.**
+    /// Firing this commits whatever partial text is in `state` at that instant,
+    /// and E7 measured an utterance's last word arriving up to 753 ms after the
+    /// acoustic endpoint — so committing on a timer truncates exactly the slow
+    /// tails that most need protecting. The coordinator instead endpoints on the
+    /// detector and forces the transcriber to finalize, then commits the result.
+    /// Keep this well above the detector's silence window; tuning it down turns a
+    /// backstop into a second endpointer and re-creates that race.
+    /// See `specs/verification-ledger.md` §7 and `VoiceTurnCoordinator`.
     public var silenceTimeoutDuration: TimeInterval
 
     /// Maximum duration user can speak before turn auto-commits.

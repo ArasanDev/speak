@@ -1,0 +1,9 @@
+# CODEOWNERS — default to the repo owner for everything.
+# See https://docs.github.com/articles/about-code-owners
+#
+# This is deliberately a single blanket rule, not a list of per-directory
+# maintainers — there is no evidence in the repo of additional maintainers
+# beyond the GitHub org that owns the remote (github.com/ArasanDev/speak).
+# Split this out by directory once there are other maintainers to name.
+
+* @ArasanDev

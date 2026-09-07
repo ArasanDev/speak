@@ -1,4 +1,7 @@
 # Competitor Landscape
+
+> **Purpose**: Competitor feature/pricing comparison table, `speak`'s structural moat. · **Audience**: maintainer, contributor (positioning/README claims) · **Status**: current, but not re-verified since 2026-06-30 — competitor pricing/features can drift; re-check before quoting externally · **Last reviewed**: 2026-06-30 (git log)
+
 > Reference doc. Authority: `specs/verification-ledger.md` for any `[verified]` claim.
 > Read when: positioning, README claims, benchmark.md comparisons.
 

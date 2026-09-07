@@ -335,7 +335,7 @@ private struct ActiveAgentSessionsSection: View {
     private func refreshSessions() async {
         isLoading = true
         let registry = AgentSessionRegistry()
-        sessions = await registry.list()
+        sessions = registry.list()
         isLoading = false
     }
 

@@ -164,6 +164,55 @@ final class OverlayViewModel {
     /// W2.2: Short error reason shown in the error pill. Nil when not in `.error` state.
     var errorReason: String?
 
+    // MARK: Felt-speed — "settling" provisional state (input-felt-speed.md §3.3)
+
+    /// The raw transcript preserved during the `.processing` window. The user just spoke
+    /// these words — we keep them on screen (marked provisional) instead of wiping to a
+    /// blank spinner while cleanup runs. [decision: raw text is already in the panel at
+    /// stop; preserve it rather than clearing it. specs/input-felt-speed.md]
+    var settlingText: String = ""
+
+    /// `true` while the `.processing` window is showing `settlingText` as provisional.
+    /// Drives the "polishing…" copy + dimmed rendering. This is NOT capture — it must
+    /// never light `onAir` (specs/frontend-identity.md, frozen: onAir iff capturing).
+    var isSettling: Bool = false
+
+    /// `true` once cleanup has returned and we are animating raw→clean via the word diff.
+    /// Set by `OverlayController` when the transformed text arrives; `false` for the raw
+    /// (no-diff) fallback so the overlay shows a clean "Done" instead of a no-op diff.
+    var isDiffTransforming: Bool = false
+
+    /// The cleaned result to reveal. `nil` until cleanup returns. When non-nil,
+    /// `TranscriptOverlayView` renders the raw→clean diff (canceled words struck).
+    var revealedText: String?
+
+    // MARK: Filmstrip — kept for tests; listening UI no longer uses it.
+    // Product path is the 3-line FIFO window below. [decision: 2026-08-06 human —
+    // remove minimizing chips / floating outbound; FIFO in-panel only.]
+
+    /// Completed horizontal blocks (test / dormant filmstrip path).
+    var filmstripBlocks: [FilmstripBlock] = []
+
+    /// Live streaming remainder for the dormant filmstrip path.
+    var activeStreamText: String = ""
+
+    /// Dormant: filmstrip chips off. Listening uses the FIFO window instead.
+    var isFilmstripEnabled: Bool = false
+
+    // MARK: 3-line FIFO window (listening overflow)
+
+    /// Pure FIFO state machine: when the 3-line budget fills, oldest text leaves
+    /// first so newest speech keeps appending. Outbound chunks are discarded for
+    /// now (not shown on a second panel). [decision: 2026-08-06 human]
+    var textFlow = OverlayTextFlow()
+
+    /// The text currently visible in the 3-line overlay window (newest end of
+    /// the transcript). Updated on every partial ingest.
+    var windowText: String = ""
+
+    /// Unused mirror of flowed chunks (outbound ignored for now).
+    var flowedChunks: [FlowedChunk] = []
+
     /// W2.2: `true` when AI cleanup will run after capture; drives "Cleaning up…" vs "Pasting…".
     /// Set at `start()` time from `DictationController.settingsStore`.
     var isCleaningUp: Bool = true
@@ -496,20 +545,53 @@ struct TranscriptOverlayView: View {
         }
     }
 
-    /// The (only) listening layout: live waveform, partial text, elapsed timer, and the
-    /// single prompt-customization button. [decision P-Code v2: pixel-identical across
-    /// the entire `.listening` state — pressing the button never resizes or swaps this row.]
+    /// Layout (locked 2026-08-06 — 3-line FIFO window):
+    ///   [ waveform ] [ last ≤3 lines of speech — CENTER ] [ timer ] [ customize ] [ close ]
+    ///
+    /// Speech always appends. When the window fills, oldest text leaves (FIFO) so
+    /// the newest words stay visible. No filmstrip chips, no floating outbound panel.
     private var calmListeningRow: some View {
         HStack(alignment: .center, spacing: SpeakSpacing.sm) {
             WaveformView(level: model.level, isActive: true)
                 .frame(width: WaveformView.totalWidth)
-            textContent
+
+            fifoWindowContent
+                .frame(maxWidth: .infinity, alignment: .leading)
+
             Text(Self.durationLabel(model.elapsedSeconds))
                 .font(.speakMonoCaption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
             customizeButton
             closeButton
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// The fixed 3-line capture window. Shows `windowText` (FIFO remainder), not
+    /// the full accumulated transcript — so long dictation flows instead of growing.
+    @ViewBuilder
+    private var fifoWindowContent: some View {
+        if model.windowText.isEmpty {
+            Text("Listening\u{2026}")
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .accessibilityLabel("Listening for speech")
+                .accessibilityAddTraits(.updatesFrequently)
+        } else {
+            Text(model.windowText)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(.primary)
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+                .lineSpacing(2)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .contentTransition(.interpolate)
+                .animation(.easeOut(duration: 0.2), value: model.windowText)
+                .accessibilityLabel(model.windowText)
+                .accessibilityAddTraits(.updatesFrequently)
         }
     }
 
@@ -562,92 +644,69 @@ struct TranscriptOverlayView: View {
         return "\(s / 60):\(String(format: "%02d", s % 60))"
     }
 
-    @ViewBuilder
-    private var textContent: some View {
-        if model.partialText.isEmpty {
-            Text("Listening\u{2026}")
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(3)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel("Listening for speech")
-                .accessibilityAddTraits(.updatesFrequently)
-        } else {
-            Text(model.partialText)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(.primary)
-                .lineLimit(3)
-                .multilineTextAlignment(.leading)
-                .lineSpacing(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentTransition(.interpolate)
-                .accessibilityLabel(model.partialText)
-                .accessibilityAddTraits(.updatesFrequently)
-        }
-    }
-
     // MARK: - Processing state
 
+    /// Felt-speed (input-felt-speed.md §3.3): when the raw transcript is available
+    /// (`settlingText` non-empty) we show it marked provisional instead of a blank
+    /// spinner. Extracted to `SettlingOverlayContent.swift` for file_length lint cap.
     private var processingContent: some View {
-        HStack(spacing: SpeakSpacing.sm) {
-            ProgressView()
-                .scaleEffect(0.7)
-                .frame(width: 16, height: 16)
-            // W2.2: honest copy — "Cleaning up…" only when cleanup is actually running.
-            Text(model.isCleaningUp ? "Cleaning up\u{2026}" : "Pasting\u{2026}")
-                .font(.speakMonoBody)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
-            closeButton
-        }
-        .padding(.horizontal, SpeakSpacing.md)
-        .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityLabel(model.isCleaningUp ? "Cleaning up transcription" : "Pasting transcription")
+        SettlingProcessingContent(
+            model: model,
+            revealTextWhileProcessing: settingsStore.revealTextWhileProcessing
+        )
     }
 
     // MARK: - Done state
 
     private var doneContent: some View {
-        HStack(spacing: SpeakSpacing.sm) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .font(.system(size: 15))
-            Text("Done")
-                .font(.speakMonoBody)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
-            // [H-2] Read-back affordance: visible only when readbackEnabled is on.
-            // Same pattern as re-clean below — tapping toggles speak/stop, never queues.
-            if model.onReadback != nil {
-                Button {
-                    model.onReadback?()
-                } label: {
-                    Image(systemName: "speaker.wave.2")
-                        .font(.system(size: 13))
+        Group {
+            if model.isDiffTransforming, let cleaned = model.revealedText {
+                // Felt-speed (input-felt-speed.md §3.3): the AI's transformation, made
+                // visible via the raw→clean word diff. Extracted to
+                // `SettlingOverlayContent.swift` for file_length lint cap.
+                PolishedDiffContent(model: model, cleaned: cleaned)
+            } else {
+                HStack(spacing: SpeakSpacing.sm) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.system(size: 15))
+                    Text("Done")
+                        .font(.speakMonoBody)
                         .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    // [H-2] Read-back affordance: visible only when readbackEnabled is on.
+                    // Same pattern as re-clean below — tapping toggles speak/stop, never queues.
+                    if model.onReadback != nil {
+                        Button {
+                            model.onReadback?()
+                        } label: {
+                            Image(systemName: "speaker.wave.2")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Read this back aloud")
+                        .accessibilityLabel("Read the transcript back aloud")
+                    }
+                    // [PE-4] Re-clean affordance: visible only when a raw transcript is available.
+                    if model.onReclean != nil {
+                        Button {
+                            model.onReclean?()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Re-clean with current settings")
+                    }
                 }
-                .buttonStyle(.plain)
-                .help("Read this back aloud")
-                .accessibilityLabel("Read the transcript back aloud")
-            }
-            // [PE-4] Re-clean affordance: visible only when a raw transcript is available.
-            if model.onReclean != nil {
-                Button {
-                    model.onReclean?()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Re-clean with current settings")
+                .padding(.horizontal, SpeakSpacing.md)
+                .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel("Dictation complete")
             }
         }
-        .padding(.horizontal, SpeakSpacing.md)
-        .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityLabel("Dictation complete")
     }
 
     // MARK: - Error state (W2.2)
@@ -925,4 +984,3 @@ struct OverlayKnobsRow: View {
         .frame(width: 340, height: 60)
 }
 #endif
-

@@ -61,7 +61,7 @@ APP_BIN   := Speak.app/Contents/MacOS/Speak
 # Local history store (P9). `make history` dumps recent dictations (raw vs cleaned).
 HISTORY_DB := $$HOME/Library/Application Support/speak/history.sqlite
 
-.PHONY: all help generate build test eval study lint fmt run kill relaunch logs logs-show history doctor gates lsp clean install install-mcp-user github-release release verify-moat dev-cert reset-permissions release-preflight
+.PHONY: all help generate build test eval study lint fmt run kill relaunch logs logs-show history history-eval doctor gates lsp clean install install-mcp-user register-mcp register-mcp-apply github-release release verify-moat dev-cert reset-permissions release-preflight
 
 all: build
 
@@ -109,9 +109,52 @@ test: generate
 eval: generate
 	xcodebuild -project $(PROJECT) -scheme Eval -configuration $(CONFIG) -derivedDataPath $(DERIVED) test -only-testing:SpeakTests/EvalHarnessTests
 
+## history-eval: score real raw→cleaned history pairs (reference-free over-editing
+##               detection). Uses the Eval scheme with SPEAK_HISTORY_EVAL=1 baked in.
+history-eval: generate
+	xcodebuild -project $(PROJECT) -scheme Eval -configuration $(CONFIG) -derivedDataPath $(DERIVED) test -only-testing:SpeakTests/HistoryCleaningEvalTests
+
 ## study: run the Foundation Models limits study (live; writes RAW measurements)
 study: generate
 	SPEAK_STUDY=1 $(XCB) test -only-testing:SpeakTests/FoundationModelsStudyTests
+
+## measure-latency: E1 — conversational latency (TTS first-audio + model TTFT)
+## Standalone: needs no Xcode project, no app bundle, no permissions. Speaks a
+## few short lines aloud — that is the measurement. See specs/voice-agent-design.md §5.
+measure-latency:
+	@mkdir -p $(DERIVED)/tools
+	@xcrun swiftc -O -sdk "$$(xcrun --show-sdk-path --sdk macosx)" \
+	  -target arm64-apple-macos26.0 \
+	  scripts/measure-latency.swift -o $(DERIVED)/tools/measure-latency
+	@$(DERIVED)/tools/measure-latency
+	@echo ""
+	@echo "First turn after launch — fresh process per row, so prewarm() has"
+	@echo "something left to save (in-process reps do not)."
+	@$(DERIVED)/tools/measure-latency --first-turn-cold
+	@$(DERIVED)/tools/measure-latency --first-turn-prewarm
+
+## probe-partials: E6 — does the transcriber punctuate volatile (partial) results?
+## Gates the EndpointDecider rule set. Synthesizes its own audio and installs the
+## speech model itself, so it needs no microphone, no permissions, no fixtures,
+## and no prior dictation — re-runnable in a clean checkout.
+probe-partials:
+	@mkdir -p $(DERIVED)/tools
+	@xcrun swiftc -O -sdk "$$(xcrun --show-sdk-path --sdk macosx)" \
+	  -target arm64-apple-macos26.0 \
+	  scripts/probe-partials.swift -o $(DERIVED)/tools/probe-partials
+	@$(DERIVED)/tools/probe-partials
+
+## probe-latency: E7 — how long after speech stops does the volatile carrying the
+## last words arrive? Gates whether EndpointDecider can drive the VAD's silence
+## window at all. Feeds real silence at real time instead of finalizing early,
+## which is the difference between measuring the live pipeline and measuring a
+## forced flush. No microphone, no permissions, no fixtures.
+probe-latency:
+	@mkdir -p $(DERIVED)/tools
+	@xcrun swiftc -O -sdk "$$(xcrun --show-sdk-path --sdk macosx)" \
+	  -target arm64-apple-macos26.0 \
+	  scripts/probe-partial-latency.swift -o $(DERIVED)/tools/probe-partial-latency
+	@$(DERIVED)/tools/probe-partial-latency
 
 ## lint: SwiftLint over the source tree
 lint:
@@ -221,8 +264,27 @@ install-mcp-user: build
 	@rsync -a --delete "$(PRODUCTS)/SpeakLLM.framework/" "$(MCP_USER_DIR)/Frameworks/SpeakLLM.framework/"
 	@chmod +x "$(MCP_USER_DIR)/bin/speak-mcp"
 	@echo "install-mcp-user: installed $(MCP_USER_DIR)/bin/speak-mcp"
-	@echo "Add this stdio server to your agent's MCP configuration:"
+	@echo ""
+	@echo "Next: register it with your agent CLIs in one step —"
+	@echo "  make register-mcp        # preview the changes (writes nothing)"
+	@echo "  make register-mcp-apply  # register with every detected agent CLI"
+	@echo ""
+	@echo "Or add this stdio server manually to any other MCP client:"
 	@echo '  {"command":"$(MCP_USER_DIR)/bin/speak-mcp"}'
+
+## register-mcp: preview registering the installed bridge with detected agent CLIs.
+##
+## Writes nothing. Shows exactly which agent CLIs were found and what would change.
+register-mcp:
+	@MCP_USER_DIR="$(MCP_USER_DIR)" scripts/register-mcp.sh
+
+## register-mcp-apply: register the bridge with every detected agent CLI (idempotent).
+##
+## Blast radius: writes user-level agent config OUTSIDE this repo (~/.claude.json,
+## ~/.codex/config.toml), touching only the single 'speak-app' server entry.
+## Re-running replaces that entry rather than duplicating it.
+register-mcp-apply:
+	@MCP_USER_DIR="$(MCP_USER_DIR)" scripts/register-mcp.sh --apply
 
 ## github-release: build, ad-hoc sign, and zip into dist/ for a GitHub Releases artifact.
 ##

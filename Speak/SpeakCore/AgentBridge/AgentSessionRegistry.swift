@@ -2,15 +2,27 @@
 //
 // AVB-6 (specs/agent-voice-bridge.md §7.1): the in-memory registry backing
 // `speak_register_session` and sessionId threading through the rest of the
-// tool surface. An actor so every register/touch/list is a single
-// read-modify-write with no TOCTOU window — never check state outside the
-// actor then write inside it (the AVB-5 lesson this codebase already paid
-// for). In-memory only this slice; durability arrives with AVB-7's inbox
-// store — do not add SQLite/UserDefaults persistence here.
+// tool surface. `@MainActor`-isolated (not a separate `actor`) so every
+// register/touch/list is still a single read-modify-write with no TOCTOU
+// window — never check state outside the isolation domain then write inside
+// it (the AVB-5 lesson this codebase already paid for) — but callers on the
+// main thread (`CLIPortServer`'s CFMessagePort callback) can now call in
+// synchronously via `MainActor.assumeIsolated`, matching the `--status` path,
+// instead of bridging through a `Task{@MainActor}` + run-loop pump. That
+// bridge was found to starve: the dispatched Task reliably did not run until
+// `pumpUntilResult`'s timeout had already elapsed and given up, making
+// `speak_register_session` fail every time despite the underlying work being
+// trivial in-memory state (see AgentBridgeServerTests + live-log evidence,
+// 2026-08-01). A separate `actor` adds a genuine cross-domain hop for work
+// that never needed one; `@MainActor` keeps the same single-writer guarantee
+// with none of the bridging risk. In-memory only this slice; durability
+// arrives with AVB-7's inbox store — do not add SQLite/UserDefaults
+// persistence here.
 
 import Foundation
 
-public actor AgentSessionRegistry {
+@MainActor
+public final class AgentSessionRegistry {
 
     /// A session not registered/touched within this window reads as `.stale`
     /// from `list()`. 30 minutes: long enough to survive a coffee break
@@ -30,7 +42,7 @@ public actor AgentSessionRegistry {
     private let now: @Sendable () -> Date
 
     /// - Parameter now: injectable clock for staleness tests.
-    public init(now: @escaping @Sendable () -> Date = { Date() }) {
+    public nonisolated init(now: @escaping @Sendable () -> Date = { Date() }) {
         self.now = now
     }
 
@@ -60,6 +72,27 @@ public actor AgentSessionRegistry {
             state: .active,
             lastSeen: now()
         )
+        // TODO(agentbridge-protocol-edges survey, critical, left unfixed):
+        // `sessionsById` only ever grows — sessions become `.stale` after
+        // `staleThreshold` inactivity (see `list()` below) but are never
+        // actually removed from storage, so a long-running app with many
+        // short-lived agent sessions accumulates entries forever. Two
+        // candidate fixes, neither applied here because the choice affects
+        // in-flight lookups and needs a deliberate decision:
+        //   1. Evict-on-register: before inserting `session` here, sweep
+        //      `sessionsById` for entries past some hard eviction threshold
+        //      (longer than `staleThreshold`, e.g. 24h) and remove them —
+        //      zero extra scheduling, but only reclaims memory on the next
+        //      registration, not while the app sits idle.
+        //   2. Periodic sweep task: a `Task` (owned by whoever constructs
+        //      this actor) that wakes on an interval and calls a new
+        //      `evictStale(olderThan:)` method — reclaims memory even with
+        //      no new registrations, but adds another long-lived task whose
+        //      lifecycle must be managed (see the lifecycle-leaks survey
+        //      findings in DictationController/StatusBarController/
+        //      HistoryViewModel for why that bookkeeping matters here).
+        // Either way, `isKnown(sessionId:)`/`touch(sessionId:)`/`list()` must
+        // keep working for any session not yet evicted — no TOCTOU window.
         sessionsById[id] = session
         return session
     }

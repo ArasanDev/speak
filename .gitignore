@@ -70,3 +70,12 @@ tmp-logs.txt
 
 # Reference docs (Apple open-source; not part of the product)
 ai_docs/
+
+# External reference clone (VoiceStudio) — roadmap/product validation only
+ai_tmp/
+
+# Local agent-harness state (not part of the product)
+.agents/
+.commandcode/
+.qoder/
+skills-lock.json

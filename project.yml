@@ -184,7 +184,8 @@ schemes:
         SpeakTests: [test]
     test:
       targets:
-        - SpeakTests
+        - name: SpeakTests
+          parallelizable: true
     run:
       config: Debug
 
@@ -201,3 +202,4 @@ schemes:
         - SpeakTests
       environmentVariables:
         SPEAK_EVAL: "1"
+        SPEAK_HISTORY_EVAL: "1"

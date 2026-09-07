@@ -64,6 +64,11 @@ final class OverlayController {
     /// observe it without referencing the model directly.
     private(set) var partialText: String = ""
 
+    /// Felt-speed live per-block AI polish. Backing store for the `filmstripCleaner`
+    /// computed property in the felt-speed extension (kept out of the class body for
+    /// the type_body_length lint cap). Wired by `DictationController`.
+    var filmstripCleanerBacking: (any LLMCleaning)?
+
     // MARK: - Private
 
     /// H-UI: the shared settings store, forwarded to `TranscriptOverlayPanel`
@@ -75,6 +80,10 @@ final class OverlayController {
     private let settingsStore: SettingsStore
 
     private var panel: TranscriptOverlayPanel?
+    /// FIFO-out text flow: the transparent desktop panel that streams departed
+    /// text (bare words, black/white, fading as they rise). Created once, shown
+    /// per dictation. Pure display — never key, never interactive.
+    private var textFlowPanel: TextFlowDesktopPanel?
     /// P-Code: the second, dynamically-sized panel for the "Code" Agent category's
     /// real-time customization surface. Created lazily on first open (see
     /// `ensureCodingPanel()`) — mirrors `CaretOverlayController`'s lazy-panel pattern,
@@ -117,16 +126,8 @@ final class OverlayController {
 
     // MARK: - Panel setup (call once from startMonitoring)
 
-    /// Create the overlay panel. Call exactly once from `DictationController.startMonitoring()`.
-    /// Creating the panel here (not in init) matches the original timing: the NSHostingView
-    /// is expensive and we defer that cost until monitoring actually starts.
-    func createPanel() {
-        guard panel == nil else { return }
-        panel = TranscriptOverlayPanel(
-            overlayModel: overlayModel,
-            settingsStore: settingsStore
-        )
-    }
+    // createPanel / ingestWindowPartial / felt-speed reset live in the felt-speed
+    // extension below (type_body_length lint).
 
     // MARK: - PE-3 live-panel destination strip
 
@@ -280,6 +281,7 @@ final class OverlayController {
         overlayModel.onReclean = nil
         overlayModel.onReadback = nil              // [H-2] reset alongside onReclean — same lifetime
         overlayModel.customInstructions = ""       // P-Code v2: reset per-dictation prompt addition
+        resetFeltSpeedState()
         resetCodingPanel()                         // P-Code: always start with the panel closed
         partialText = ""
         panel?.show()
@@ -312,6 +314,11 @@ final class OverlayController {
                     self.overlayModel.partialText = displayed
                     self.partialText = displayed
                     self.onPartialTextUpdated?(displayed)
+                    // Classic HUD: keep a fixed 3-line FIFO window. Oldest leaves
+                    // when full; newest stays. Outbound text is discarded (no
+                    // floating panel, no filmstrip chips). [decision: 2026-08-06]
+                    guard self.settingsStore.hudStyle == .classic else { return }
+                    self.ingestWindowPartial(displayed)
                 }
             }
             SpeakLog.engine.info("OverlayController: partials stream finished.")
@@ -322,9 +329,23 @@ final class OverlayController {
     ///
     /// Cancels the partials + levels tasks when moving to `.processing` — no more
     /// chunks or level values will arrive once the engine transitions to cleanup.
+    ///
+    /// Felt-speed (input-felt-speed.md §3.3): when moving to `.processing`, the raw
+    /// transcript the user just spoke is PRESERVED into `settlingText` (marked
+    /// provisional) instead of being wiped to a blank spinner. This is the "progressive
+    /// reveal" form — the user sees their words while cleanup runs. When cleanup
+    /// returns, `showTransformation(_:)` swaps to the raw→clean diff animation.
+    /// `onAir` discipline is preserved: refinement is `.processing`, never capture.
     func transition(to state: OverlayState) {
         overlayModel.overlayState = state
         if state == .processing {
+            // Preserve the raw transcript the user just spoke as the "settling" text.
+            // [decision: the accumulated partialText is already on screen at stop; keep it
+            //  rather than clearing it. specs/input-felt-speed.md §3.3 progressive reveal.]
+            overlayModel.settlingText = overlayModel.partialText
+            overlayModel.isSettling = true
+            overlayModel.isDiffTransforming = false
+            overlayModel.revealedText = nil
             // No more partial text or level data will arrive once processing begins.
             partialsTask?.cancel()
             partialsTask = nil
@@ -359,6 +380,7 @@ final class OverlayController {
         overlayModel.level = 0.0
         overlayModel.errorReason = nil
         overlayModel.isCleaningUp = false
+        resetFeltSpeedState()
         overlayModel.isProfilePanelOpen = false   // PE-3c: reset the selector card
         overlayModel.isShowingAgentCategories = false
         overlayModel.showPinPrompt = false         // PE-3.2: reset pin banner
@@ -417,6 +439,7 @@ final class OverlayController {
         overlayModel.level = 0.0
         overlayModel.errorReason = nil
         overlayModel.isCleaningUp = false
+        resetFeltSpeedState()
         overlayModel.isProfilePanelOpen = false   // PE-3c: reset the selector card
         overlayModel.isShowingAgentCategories = false
         overlayModel.showPinPrompt = false         // PE-3.2: reset pin banner
@@ -579,5 +602,160 @@ final class OverlayController {
             NSEvent.removeMonitor(localMonitor)
             localEscapeMonitor = nil
         }
+    }
+}
+
+// MARK: - Felt-speed (input-felt-speed.md §3.3)
+//
+// [lint] `showTransformation` lives in an extension (not the class body) to keep
+// `OverlayController` under SwiftLint's `type_body_length` cap — pure code motion,
+// no behavior change. Same-file extension, so private class members stay reachable.
+
+extension OverlayController {
+
+    /// Create the overlay panel. Call exactly once from `DictationController.startMonitoring()`.
+    func createPanel() {
+        guard panel == nil else { return }
+        panel = TranscriptOverlayPanel(
+            overlayModel: overlayModel,
+            settingsStore: settingsStore
+        )
+        // No desktop floating panel — outbound FIFO text is discarded for now.
+    }
+
+    /// Feed a full transcript snapshot into the 3-line FIFO window.
+    /// Flushed (oldest) chunks are ignored — not shown elsewhere. [decision: 2026-08-06]
+    func ingestWindowPartial(_ snapshot: String) {
+        _ = overlayModel.textFlow.ingest(snapshot)
+        overlayModel.windowText = overlayModel.textFlow.windowText
+    }
+
+    /// Clear provisional / FIFO-window / dormant filmstrip state.
+    func resetFeltSpeedState() {
+        overlayModel.settlingText = ""
+        overlayModel.isSettling = false
+        overlayModel.isDiffTransforming = false
+        overlayModel.revealedText = nil
+        overlayModel.filmstripBlocks = []
+        overlayModel.activeStreamText = ""
+        overlayModel.textFlow.reset()
+        overlayModel.windowText = ""
+        overlayModel.flowedChunks = []
+        textFlowPanel?.hideAndReset()
+    }
+
+    /// Felt-speed live per-block AI polish. Wired by `DictationController` to the same
+    /// `defaultCleaner(for: settings)` used by the engine. Dormant while filmstrip is off. Invoked on each captured
+    /// filmstrip block so earlier blocks polish while the user keeps dictating.
+    /// Nil when cleanup is disabled — blocks stay raw. [decision: reuse the engine's
+    /// cleaner rather than a second instance, so availability + engine match.]
+    var filmstripCleaner: (any LLMCleaning)? {
+        get { filmstripCleanerBacking }
+        set { filmstripCleanerBacking = newValue }
+    }
+
+    /// Felt-speed (input-felt-speed.md §3.3): reveal the cleaned result by animating
+    /// the raw→clean word diff, then settle to `.done`. The `raw` text the diff is
+    /// computed against is kept in `settlingText` through the done flash so
+    /// `PolishedDiffContent` can seed `AnimatedTranscriptView(rawText:cleanedText:)`.
+    /// Clearing raw here would make every word look inserted. [decision: keep raw
+    /// until `stop()` / `cancelImmediate()` — same lifetime as the done flash]
+    func showTransformation(cleaned: String?, raw: String) {
+        let hadSettling = overlayModel.isSettling
+        let finalRaw = raw.isEmpty ? overlayModel.settlingText : raw
+        // Preserve the raw the diff is computed against for the view layer.
+        overlayModel.settlingText = finalRaw
+        if hadSettling, let cleaned, !cleaned.isEmpty, cleaned != finalRaw {
+            // Animate raw → clean via the diff (canceled words struck, inserted fade in).
+            overlayModel.revealedText = cleaned
+            overlayModel.isDiffTransforming = true
+        } else {
+            // No meaningful transformation (cleanup off/failed/identical) — show clean
+            // directly, no no-op diff.
+            overlayModel.revealedText = cleaned?.isEmpty == false ? cleaned : nil
+            overlayModel.isDiffTransforming = false
+        }
+        overlayModel.isSettling = false
+        overlayModel.overlayState = .done
+        let isDiff = overlayModel.isDiffTransforming
+        let revealedCharCount = overlayModel.revealedText?.count ?? -1
+        SpeakLog.engine.info(
+            "OverlayController: transformation revealed — isDiff=\(isDiff, privacy: .public) cleaned=\(revealedCharCount, privacy: .public) chars"
+        )
+    }
+
+    /// Felt-speed — horizontal filmstrip. `text` is a FULL display snapshot from
+    /// `OverlayTextAccumulator` (not a delta). Already-captured block text is the
+    /// committed prefix; only the uncaptured remainder is cut. Feeding cumulative
+    /// snapshots as deltas previously duplicated blocks and re-fired polish.
+    ///
+    /// Layout: live text left, completed blocks accumulate to the right (bounded).
+    /// The panel never grows vertically. `onAir` is never lit (not capture).
+    func ingestFilmstripPartial(_ text: String) {
+        guard overlayModel.isFilmstripEnabled else { return }
+        let capturedPrefix = overlayModel.filmstripBlocks.map(\.rawText).joined()
+        let remainder: String
+        if text.hasPrefix(capturedPrefix) {
+            remainder = String(text.dropFirst(capturedPrefix.count))
+        } else {
+            // Retraction / restart — rebuild from the new snapshot.
+            overlayModel.filmstripBlocks = []
+            remainder = text
+        }
+
+        let cutter = FilmstripCutter()
+        var remaining = remainder
+        var cut = cutter.blockCut(for: remaining)
+        while let blockText = cut {
+            let block = FilmstripBlock(rawText: blockText)
+            overlayModel.filmstripBlocks.append(block)
+            let consumed = blockText.count
+            let start = remaining.index(remaining.startIndex, offsetBy: min(consumed, remaining.count))
+            remaining = String(remaining[start...])
+            cut = cutter.blockCut(for: remaining)
+            polish(block)
+        }
+        overlayModel.activeStreamText = remaining
+    }
+
+    /// Send one captured block to the live per-block AI cleaner. Idempotent per block:
+    /// marks it polishing, cleans, then marks it polished (raw preserved as fallback).
+    private func polish(_ block: FilmstripBlock) {
+        guard let cleaner = filmstripCleaner else {
+            // Cleanup off — mark the block polished (raw text is the display).
+            markPolished(block, cleaned: nil)
+            return
+        }
+        markPolishing(block)
+        let raw = block.rawText
+        Task { [weak self] in
+            let cleaned: String?
+            if await cleaner.isAvailable {
+                cleaned = try? await cleaner.clean(raw, mode: .punctuation)
+            } else {
+                cleaned = nil
+            }
+            // Only update the block if it still exists (same id) — a stop/reset
+            // between capture and completion must not resurrect stale state.
+            await MainActor.run { [weak self] in
+                self?.markPolished(block, cleaned: cleaned)
+            }
+        }
+    }
+
+    /// Flip a block to `isPolishing = true` (the "Polishing…" affordance).
+    private func markPolishing(_ block: FilmstripBlock) {
+        guard let idx = overlayModel.filmstripBlocks.firstIndex(where: { $0.id == block.id }) else { return }
+        overlayModel.filmstripBlocks[idx].isPolishing = true
+    }
+
+    /// Flip a block to polished, storing the cleaned result (raw preserved as fallback).
+    private func markPolished(_ block: FilmstripBlock, cleaned: String?) {
+        guard let idx = overlayModel.filmstripBlocks.firstIndex(where: { $0.id == block.id }) else { return }
+        overlayModel.filmstripBlocks[idx].isPolishing = false
+        if let cleaned, !cleaned.isEmpty {
+            overlayModel.filmstripBlocks[idx].cleanedText = cleaned
+        }
+        overlayModel.filmstripBlocks[idx].isPolished = true
     }
 }

@@ -1,5 +1,7 @@
 # `speak` — Human-Verification Checklist (the live gates)
 
+> **Purpose**: Tracks ship-gate criteria that are physically impossible to verify headlessly — human-on-a-real-Mac checklist. · **Audience**: maintainer/human verifier, AI agent (reads bucket classification) · **Status**: living — actively updated as more seams land · **Last reviewed**: 2026-07-11 (git log; content reports live results through Loop-era P14, cross-check against `progress.md` for anything past 2026-07-24)
+
 > **Why this file exists.** The build runs autonomously, but several v0 ship-gate
 > criteria are **physically impossible to verify headlessly** — they need a human
 > on a real Mac to grant OS permissions, enable Apple Intelligence, and observe

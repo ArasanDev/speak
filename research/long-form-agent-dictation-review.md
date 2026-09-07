@@ -1,5 +1,9 @@
 # Long-form agentic dictation — prompt-optimization review (2026-07-04)
 
+> **Research header** — Question: "is the hardcoded 'Remove filler. 1–3 sentences
+> maximum' cap on `DefaultProfiles.agent.systemPrompt` valid for long-form spoken
+> agentic dictation, or should it be relaxed?" · Date: 2026-07-04 · Status: **evidence**
+
 > Read-only evidence + decision record for the change landed this loop to
 > `DefaultProfiles.agent.systemPrompt`. All numbers below are LIVE Foundation Models
 > runs on this dev Mac (Apple Intelligence enabled, greedy decoding — same plumbing

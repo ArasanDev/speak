@@ -1,5 +1,11 @@
 # Superseded Horizon: Voice Layer exploration `[decision 2026-07-06]`
 
+**Status:** superseded · **Binds:** nothing — implementation provenance only ·
+**Owner:** orchestrator · **Depends on:** none · **Superseded by:**
+`specs/agent-voice-bridge.md`, `docs/product.md` (confirmed by `docs/roadmap.md`
+"North star": "the former Voice OS exploration is historical") · **Last substantive
+change:** 2026-07-11
+
 > **Superseded 2026-07-11.** This exploration produced the implemented Voice
 > Actions, VoiceOut, and MCP bridge, but “Voice OS” is no longer the product
 > scope. The authoritative destination is the provider-neutral local

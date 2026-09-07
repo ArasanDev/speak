@@ -1,6 +1,8 @@
-> v0 surface catalog. Read when: implementing or modifying any UI surface. Authority: the REVISION blocks are the locked design; earlier sections are exploration.
-
 # speak — v0 UI Surfaces
+
+> **Purpose**: v0 surface-by-surface UI catalog (onboarding, settings, history, overlay, menubar). · **Audience**: contributor, AI agent (implementing/modifying a v0 UI surface) · **Status**: living — REVISION blocks are locked design, earlier sections are exploration · **Last reviewed**: 2026-06-30 (git log)
+
+> v0 surface catalog. Read when: implementing or modifying any UI surface. Authority: the REVISION blocks are the locked design; earlier sections are exploration.
 
 All surfaces below are built or partially built in v0. See `docs/ui/foundations.md` for tokens, motion, and accessibility rules.
 

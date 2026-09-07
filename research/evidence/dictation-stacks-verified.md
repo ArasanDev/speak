@@ -1,5 +1,9 @@
 # `speak` — Voice Dictation Companies: How They Actually Build the App
 
+> **Research header** — Question: "how do the major Mac voice-dictation companies
+> actually build their apps (language, STT engine, cloud vs local)?" · Date:
+> 2026-06-18 · Status: **evidence** (cited by `docs/architecture.md`)
+
 > **Status**: Primary-source verification. The user asked: *"how all voice dictation companies build the app."* This memo states the verified tech stack for each major player, with sources. **No assumptions.** Where I can't verify, I say "unverified."
 >
 > **Date**: 2026-06-18
