@@ -80,6 +80,24 @@ surface; the native attention and voice experience is the product.
 
 ---
 
+## v0.1 — VoiceStudio-inspired adaptation track `[decision 2026-09-08]`
+
+> Curated borrow-list + rationale: `specs/voicestudio-inspiration-plan.md`.
+> VoiceStudio (`ai_tmp/VoiceStudio`) is the local-first voice product reference.
+> Non-takes (clipboard reads, media-studio features, AGPL) are deliberate — see §3.
+
+- [x] **V01-W — Warm cleanup model** (Tier-1 #W01; landed `e4303f4`): prewarm
+      the Foundation Models engine so stop→clean latency on long dictations drops;
+      wiring + state unit-tested (`WarmCleanupModelTests`, 9 green), live latency
+      `[deferred — needs Apple Intelligence Mac]`.
+- [ ] **V01-X Diagnostics surface** (W07)
+- [ ] **V01-X Delivery honesty + session-bound paste audit** (W05 + W06)
+- [ ] **V01-X Per-session voice persona** (W08, needs AVB-8/9)
+- [ ] **V01-X Models Catalogue surface** (W02, needs v0.1 engines real)
+- [ ] **V01-X Steering phrase fallbacks** (W04, needs Transforms wiring)
+
+---
+
 ## P0 — Repo setup [~PARTIAL]
 
 **Sub-tasks**: `git init`, Xcode project (app + `SpeakCore.framework` + `SpeakTests`), layout per `architecture.md §5`, `README.md`, `LICENSE` (MIT), `.gitignore`, `.swift-version` (5.9+), `Makefile`, GitHub Actions CI.
