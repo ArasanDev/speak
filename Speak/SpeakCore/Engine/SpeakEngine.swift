@@ -206,9 +206,7 @@ public actor SpeakEngine {
         // boolean toggle). When level==.none, we log it clearly so diagnostics distinguish
         // "turned cleanup off" from "model unavailable". [decision W4.1]
         let cleanupLevelIsNone = settings.cleanupLevel == .none
-        if cleanupLevelIsNone {
-            SpeakLog.engine.info("SpeakEngine: cleanupLevel=.none — skipping cleanup, raw transcript will be used.")
-        }
+        if cleanupLevelIsNone { SpeakLog.engine.info("SpeakEngine: cleanupLevel=.none — skipping cleanup, raw transcript will be used.") }
         let activeCleaner: (any LLMCleaning)? = (settings.cleanupEnabled && !cleanupLevelIsNone) ? cleaner : nil
         let activeLocale: Locale = settings.language
         // Wave B / Wave 2.2: derive the neat-writing mode from settings at call time
@@ -315,15 +313,6 @@ public actor SpeakEngine {
 
         // [V01-W] Assemble the cleanup warm-up handler ONLY when cleanup will
         // actually run (same gating as the voice-command preprocessor above).
-        // When cleanup is off or level is `.none`, `nil` is passed so
-        // CaptureSession.start() spawns no warm-up task and the delivery path
-        // is byte-identical to pre-V01-W. The closure captures the active
-        // cleaner; `warmUp()` itself re-checks `isAvailable` and degrades to a
-        // logged no-op when the engine is unavailable.
-        var activeWarmUpHandler: CaptureSession.WarmUpHandler?
-        if let activeCleaner, settings.cleanupEnabled, !cleanupLevelIsNone {
-            activeWarmUpHandler = { await activeCleaner.warmUp() }
-        }
 
         // [H-1] Assemble the Voice Actions handler (specs/horizon-voice-os.md, Pillar 1)
         // ONLY when the feature is enabled. When disabled, `nil` is passed so
@@ -375,7 +364,7 @@ public actor SpeakEngine {
             expander: activeExpander,
             voiceCommandPreprocessor: activeVoiceCommandPreprocessor,
             voiceActionsHandler: activeVoiceActionsHandler,
-            warmUpHandler: activeWarmUpHandler
+            warmUpHandler: makeWarmUpHandler(cleaner: activeCleaner)
         )
         currentSession = session
         return session
@@ -773,5 +762,21 @@ public actor SpeakEngine {
     public func attachVoiceActivityDetector(_ vad: VoiceActivityDetector?) async -> Bool {
         guard let session = currentSession else { return false }
         return await session.attachVoiceActivityDetector(vad)
+    }
+}
+
+// MARK: - V01-W warm-up (extension: keeps the actor body under the type-body lint cap)
+
+private extension SpeakEngine {
+
+    /// [V01-W] Assemble the cleanup warm-up handler ONLY when cleanup will
+    /// actually run. `activeCleaner` already encodes the gate (nil when
+    /// cleanup is off or level is `.none`), so a nil cleaner → nil handler and
+    /// `CaptureSession.start()` spawns no warm-up task — delivery byte-identical
+    /// to pre-V01-W. The closure captures the active cleaner; `warmUp()` itself
+    /// re-checks `isAvailable` and degrades to a logged no-op when unavailable.
+    func makeWarmUpHandler(cleaner: (any LLMCleaning)?) -> CaptureSession.WarmUpHandler? {
+        guard let cleaner else { return nil }
+        return { await cleaner.warmUp() }
     }
 }
