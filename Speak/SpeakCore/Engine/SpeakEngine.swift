@@ -313,6 +313,18 @@ public actor SpeakEngine {
             }
         }
 
+        // [V01-W] Assemble the cleanup warm-up handler ONLY when cleanup will
+        // actually run (same gating as the voice-command preprocessor above).
+        // When cleanup is off or level is `.none`, `nil` is passed so
+        // CaptureSession.start() spawns no warm-up task and the delivery path
+        // is byte-identical to pre-V01-W. The closure captures the active
+        // cleaner; `warmUp()` itself re-checks `isAvailable` and degrades to a
+        // logged no-op when the engine is unavailable.
+        var activeWarmUpHandler: CaptureSession.WarmUpHandler?
+        if let activeCleaner, settings.cleanupEnabled, !cleanupLevelIsNone {
+            activeWarmUpHandler = { await activeCleaner.warmUp() }
+        }
+
         // [H-1] Assemble the Voice Actions handler (specs/horizon-voice-os.md, Pillar 1)
         // ONLY when the feature is enabled. When disabled, `nil` is passed so
         // CaptureSession.stop() runs the literal pre-H-1 delivery path (byte-identical
@@ -362,7 +374,8 @@ public actor SpeakEngine {
             cleanupMode: activeMode,
             expander: activeExpander,
             voiceCommandPreprocessor: activeVoiceCommandPreprocessor,
-            voiceActionsHandler: activeVoiceActionsHandler
+            voiceActionsHandler: activeVoiceActionsHandler,
+            warmUpHandler: activeWarmUpHandler
         )
         currentSession = session
         return session

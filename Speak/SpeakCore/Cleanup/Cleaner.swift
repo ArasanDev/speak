@@ -10,6 +10,20 @@ public protocol LLMCleaning: Sendable {
     var id: String { get }
     var isAvailable: Bool { get async }
     func clean(_ text: String, mode: CleanupMode) async throws -> String
+    /// Best-effort engine warm-up (V01-W warm cleanup model).
+    ///
+    /// Called once per dictation at capture start, concurrently with listening,
+    /// so the first real `clean()` after stop does not pay model cold-start
+    /// (weights ingestion + first-inference setup) latency. Must be a logged
+    /// no-op on failure — never throw, never affect any later `clean()` call.
+    /// Default: no-op (engines with no cold-start cost keep it).
+    func warmUp() async
+}
+
+public extension LLMCleaning {
+    /// Default warm-up: no-op. Engines with a real cold-start cost
+    /// (e.g. `FoundationModelsCleaner`) override this.
+    func warmUp() async {}
 }
 
 public enum CleanupMode: Sendable {

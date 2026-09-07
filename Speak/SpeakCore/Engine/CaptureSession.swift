@@ -77,6 +77,17 @@ public actor CaptureSession {
     public typealias VoiceActionsHandler = @Sendable (String) async -> VoiceActionOutcome
     private let voiceActionsHandler: VoiceActionsHandler?
 
+    /// [V01-W] Optional cleanup-engine warm-up trigger, fired once at `start()`
+    /// concurrently with listening so the first `clean()` after stop skips
+    /// model cold-start. Assembled in `SpeakEngine.newSession()` (it captures
+    /// the active cleaner) following the same inject-a-closure pattern as
+    /// `voiceCommandPreprocessor` / `voiceActionsHandler`.
+    ///
+    /// `nil` (default, and whenever cleanup will not run) means no warm-up task
+    /// is ever created and the session path is byte-identical to pre-V01-W.
+    public typealias WarmUpHandler = @Sendable () async -> Void
+    let warmUpHandler: WarmUpHandler?
+
     // MARK: - Mutable session state (actor-isolated)
 
     var state: State = .idle
@@ -101,6 +112,10 @@ public actor CaptureSession {
     /// cleanup path runs but paste delivery is skipped. [decision: Agent Voice Bridge]
     private var suppressPasteDelivery = false
     var streamTask: Task<Void, Never>?
+    /// [V01-W] In-flight warm-up task fired by `start()`. Cancelled (never
+    /// awaited) by `stop()`/`cancel()` so warm-up is never on the stop→clean
+    /// critical path. At most one is ever in flight (`start()` runs once).
+    private var warmUpTask: Task<Void, Never>?
     private var latestChunk: TranscriptChunk?
     /// Accumulates text from finalized (isFinal == true) chunks.
     ///
@@ -150,7 +165,8 @@ public actor CaptureSession {
                 cleanupMode: CleanupMode = .punctuation,
                 expander: (any SnippetExpanding)? = nil,
                 voiceCommandPreprocessor: VoiceCommandPreprocessor? = nil,
-                voiceActionsHandler: VoiceActionsHandler? = nil) {
+                voiceActionsHandler: VoiceActionsHandler? = nil,
+                warmUpHandler: WarmUpHandler? = nil) {
         self.transcriber = transcriber
         self.cleaner = cleaner
         self.inserter = inserter
@@ -160,7 +176,16 @@ public actor CaptureSession {
         self.expander = expander
         self.voiceCommandPreprocessor = voiceCommandPreprocessor
         self.voiceActionsHandler = voiceActionsHandler
+        self.warmUpHandler = warmUpHandler
     }
+
+    // MARK: - V01-W warm-up observation (unit-test seam)
+
+    /// `true` when a warm-up handler was injected (cleanup will run), `false`
+    /// when warm-up is disabled. Internal so unit tests can assert the wiring
+    /// without comparing closures. A `false` session provably spawns no warm-up
+    /// task — the delivery path is byte-identical to pre-V01-W.
+    var isWarmUpArmed: Bool { warmUpHandler != nil }
 
     // MARK: - PE-3 per-dictation cleanup override (live panel)
 
@@ -331,6 +356,16 @@ public actor CaptureSession {
             }
         }
         self.streamTask = task
+
+        // [V01-W] Fire the cleanup warm-up concurrently with listening. Returns
+        // immediately — never blocks start(). At most one in flight (start()
+        // runs once from .idle; defensively cancel any stale handle first).
+        // The handler is non-throwing by type, so a failed warm-up is a logged
+        // no-op inside the handler, never an error here.
+        if let warmUpHandler {
+            warmUpTask?.cancel()
+            warmUpTask = Task { await warmUpHandler() }
+        }
     }
 
     /// End the current dictation. Transitions `.listening → .processing → .done`.
@@ -352,6 +387,12 @@ public actor CaptureSession {
         }
         SpeakLog.engine.info("CaptureSession: stopping; finalizing transcript.")
         state = .processing
+
+        // [V01-W] Cancel any in-flight warm-up WITHOUT awaiting it — warm-up
+        // must never sit on the stop→clean critical path. The real clean()
+        // below uses its own fresh session, so a still-running warm-up task
+        // finishing in the background cannot affect it.
+        cancelWarmUp()
 
         // t_stop: monotonic instant when stop() was initiated.
         // DispatchTime.uptimeNanoseconds is a monotonic counter — immune to
@@ -600,6 +641,14 @@ public actor CaptureSession {
         )
     }
 
+    /// [V01-W] Cancel the in-flight warm-up task without awaiting it. Safe to
+    /// call when no warm-up is armed or already finished (nil / completed
+    /// handles are no-ops under `Task.cancel()`).
+    private func cancelWarmUp() {
+        warmUpTask?.cancel()
+        warmUpTask = nil
+    }
+
     /// Hard cancel — stop the STT immediately and move the session to `.error`.
     /// Used by the hotkey on cancel, or by the app on quit. Safe to call from
     /// any non-terminal state.
@@ -616,6 +665,7 @@ public actor CaptureSession {
         }
         SpeakLog.engine.info("CaptureSession: cancelling.")
         await transcriber.stop()
+        cancelWarmUp()
         streamTask?.cancel()
         streamTask = nil
         state = .error(.sessionCancelled)

@@ -24,7 +24,11 @@
 // Architecture §10a.2 says "reuse across dictations" — this deviates from that
 // guidance deliberately: for a stateless transform, per-call sessions are more
 // correct. Reuse is appropriate for multi-turn conversations, not cleanup.
-// [decision] Revisit in P13 dogfood if per-call latency budgets are not met.
+// [decision] V01-W re-verified this against the SDK swiftinterface (2026-09-08):
+// LanguageModelSession is a `final class` with mutable `transcript` state and a
+// `GenerationError.concurrentRequests` case — sharing one session across
+// dictations would leak prior context AND throw on concurrent warm-up + clean.
+// So warm-up (see `warmUp()`) also uses a throwaway session, never a shared one.
 //
 // Guardrails: `.permissiveContentTransformations` is used instead of the default
 // guardrails so that ordinary dictation about sensitive topics (code, security,
@@ -144,6 +148,47 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
                 "FoundationModelsCleaner: unexpected error — \(detail, privacy: .public)"
             )
             throw SpeakError.llmCleanupFailed(detail)
+        }
+    }
+
+    // MARK: - Warm-up (V01-W warm cleanup model)
+
+    /// The throwaway warm-up prompt: a single short word the model echoes through
+    /// the cleanup instructions. Long enough to exercise a real first inference,
+    /// short enough to cost ~nothing on-device. [decision V01-W]
+    private static let warmUpPromptText = "Ready."
+
+    /// Best-effort engine warm-up: load model assets + run one tiny first
+    /// inference on a throwaway session so the first real `clean()` after stop
+    /// does not pay cold-start latency (the P13 5–10 s finding on long dictations).
+    ///
+    /// Uses the SDK-sanctioned `LanguageModelSession.prewarm(promptPrefix:)`
+    /// primitive [verified via swiftc typecheck, 2026-09-08] followed by one
+    /// minimal `respond`, both on a throwaway session whose output is discarded —
+    /// so warm-up can never leak context into (or race with) a real `clean()`.
+    /// A failed warm-up is a logged no-op: never throws, never affects later calls.
+    public func warmUp() async {
+        guard await isAvailable else {
+            SpeakLog.cleanup.debug("FoundationModelsCleaner: warm-up skipped — model unavailable.")
+            return
+        }
+        // Throwaway session with neutral baseline instructions; discarded after.
+        // The warming effect lives in the shared `model` ivar's resident assets,
+        // not in session state. [decision V01-W]
+        let session = LanguageModelSession(
+            model: model,
+            instructions: Instructions(Self.instructions(for: .punctuation))
+        )
+        session.prewarm()
+        guard !Task.isCancelled else { return }
+        do {
+            let options = GenerationOptions(sampling: .greedy)
+            _ = try await session.respond(to: Prompt(Self.warmUpPromptText), options: options)
+            SpeakLog.cleanup.debug("FoundationModelsCleaner: warm-up complete.")
+        } catch {
+            SpeakLog.cleanup.debug(
+                "FoundationModelsCleaner: warm-up respond failed (logged no-op) — \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
 
