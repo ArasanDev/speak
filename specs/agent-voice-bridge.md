@@ -103,30 +103,50 @@ timeout, response parsing, and routing consistently. Common metadata includes
 `sessionId`, `idempotencyKey`, summary, semantic kind, response contract,
 expiration, and privacy hints.
 
-## 5. Current implementation `[verified from source 2026-07-11]`
+## 5. Current implementation `[verified from source 2026-07-30]`
 
-The installed `speak-mcp` process serves MCP over local stdio and talks to the
-running app through the existing local CFMessagePort CLI transport. Five tools
-exist:
+The installed `speak-mcp` process is the **only** MCP server: it serves MCP over
+local stdio and talks to the running app through the existing local CFMessagePort
+CLI transport. JSON-RPC / tool dispatch live in `SpeakCore/AgentBridge/
+AgentBridgeServer`; the App target owns mic, TTS, overlay, and permissions. There
+is no second MCP dispatcher inside the App. `[decision 2026-07-30]`
 
-- `speak_notify`
-- `speak_say`
-- `speak_ask`
-- `speak_confirm`
-- `speak_status`
+### Published tool catalog
+
+| Tool | Role |
+|---|---|
+| `speak_register_session` | Session registration + capability negotiation |
+| `speak_status` | App/mic/engine availability |
+| `speak_notify` | Attention-worthy spoken outcome (semantic kind) |
+| `speak_request_input` | Structured human input (`freeform` / `choice` / `approval`) |
+| `speak_submit_call` / `speak_get_call` | Durable inbox (async; requires session) |
+| `speak_say` | Compatibility TTS primitive |
+| `speak_ask` / `speak_confirm` | Compatibility wrappers over `speak_request_input` |
 
 `speak_notify` validates a semantic kind but currently behaves as queued TTS;
-its detail is not displayed or persisted. `speak_ask` and `speak_confirm` use a
-visible request-owned capture, suppress focused-field paste, and wait
-synchronously. Non-interrupting speech is serialized; interrupting speech
-replaces active and pending agent speech; human dictation cancels agent speech.
+its detail is not displayed or persisted. `speak_request_input` owns the
+visible capture, paste suppression, busy-on-concurrent, and typed outcomes.
+`speak_ask` / `speak_confirm` are thin adapters over that workflow. Non-
+interrupting speech is serialized; interrupting speech replaces active and
+pending agent speech; human dictation cancels agent speech.
 
-These five tools prove transport and the single-process voice loop. They are
-compatibility primitives, not the finished workflow surface.
+### Presentation (not MCP surface)
 
-## 6. Next implementation slice: structured input
+Conversation overlay (`ConversationLoopManager`, Magenta HUD, VAD helpers) is an
+optional **presentation backend** for `speak_request_input` and the agent speech
+queue. Conversation mode (`fullDuplex` / `pushToTalk` / `gatedTurn`) is a local
+Speak setting — never an MCP tool argument. Agents must not compose overlay,
+mic, or TTS primitives. `[decision 2026-07-30]`
 
-Implement `speak_request_input` before expanding to multi-agent UI. It accepts:
+### Withdrawn tools
+
+`speak_ask_user` and `speak_stream_speech` (Layer-4 experiment) are **withdrawn**
+from the MCP catalog. They duplicated `speak_request_input` / `speak_say` and
+leaked UI/audio primitives into the adapter surface. `[decision 2026-07-30]`
+
+## 6. Structured input `[done — AVB-5]`
+
+`speak_request_input` accepts:
 
 - request identifier and idempotency key;
 - prompt;
@@ -137,19 +157,14 @@ Implement `speak_request_input` before expanding to multi-agent UI. It accepts:
 
 It returns structured content containing exactly one outcome:
 `answered`, `declined`, `cancelled`, `timedOut`, or `busy`. It reuses the visible
-HUD and local STT, preserves paste suppression and request ownership, and
-rejects concurrent capture as `busy`. Existing `speak_ask` and `speak_confirm`
-become compatibility adapters over this workflow.
-
-Done when every outcome, simultaneous requests, cancellation, timeout,
-stale-answer isolation, and schema compatibility are tested, followed by one
-live Codex or Claude Code question-response round trip. `[decision]`
+HUD (classic or conversation presentation) and local STT, preserves paste
+suppression and request ownership, and rejects concurrent capture as `busy`.
 
 ## 7. Subsequent slices
 
-1. Session registration and capability negotiation.
-2. Durable Agent Calls with local inbox and response retrieval.
-3. Semantic progress/completion events and compact activity presentation.
+1. ~~Session registration and capability negotiation.~~ **Done (AVB-6).**
+2. ~~Durable Agent Calls with local inbox and response retrieval.~~ **Done (AVB-7).**
+3. Semantic progress/completion events and compact activity presentation (AVB-8).
 4. Human voice-turn delivery to a selected session with receipts.
 5. Amendment and cancellation of recent deliveries.
 6. Per-client enablement, cooldown, deduplication, quiet policy, and privacy.

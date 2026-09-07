@@ -34,6 +34,15 @@ the five-tool local MCP bridge. The former Voice OS exploration is historical;
 separate human-invoked feature and do not expand the agent bridge into general
 automation.
 
+**Felt speed (visible AI) — filmstrip + diff landed [Loop #80, 2026-08-03]:** `specs/input-felt-speed.md`
+§3.3 is implemented in two parts. (1) The `.processing` overlay preserves the raw
+transcript (provisional `settlingText`) instead of a blank spinner, and the raw→clean
+change animates via the word diff (canceled words struck). (2) The **horizontal filmstrip**:
+a fixed, never-growing panel that captures overflowing streaming text as miniaturized
+blocks sliding left, block by block, while the active area keeps streaming — each block
+gets live per-block AI polish. The streaming engine (C) — a streaming `LLMCleaning`
+variant so the AI visibly types the rewrite — is the planned follow-up.
+
 ### Agent Voice Bridge `[decision 2026-07-11]`
 
 Product contract: `specs/agent-voice-bridge.md`. MCP is the compatibility

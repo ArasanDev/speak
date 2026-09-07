@@ -25,7 +25,7 @@
 //   as a read-only side channel, alongside (not instead of) the RMS level feed and
 //   the PCM buffer stream. Unlike `levelsContinuation` (rebuilt each `start()`),
 //   the VAD attachment is held in `vadBox`, a lock-protected box that survives
-//   across `start()`/`stop()` calls so a caller (e.g. `AskUserToolHandler`) can
+//   across `start()`/`stop()` calls so a caller (e.g. agent-bridge capture path) can
 //   attach before capture begins or at any point during an already-running
 //   session. [decision]
 

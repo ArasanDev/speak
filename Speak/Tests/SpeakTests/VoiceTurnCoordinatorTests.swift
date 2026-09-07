@@ -67,7 +67,17 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
             return finalizedText
         }
 
-        func cancelTurnCapture() async { verbs.append(.cancel) }
+        /// Deliberately cancellation-honouring. A real teardown reaches audio
+        /// hardware through suspension points, and a suspension point inside a
+        /// cancelled task can no-op — so if the coordinator ever releases the
+        /// microphone from *within* the cancelled turn task, this records nothing
+        /// and the assertions below fail. That is exactly the bug worth catching:
+        /// a mic left open has no symptom except a recording indicator that never
+        /// goes out.
+        func cancelTurnCapture() async {
+            if Task.isCancelled { return }
+            verbs.append(.cancel)
+        }
     }
 
     /// A capture with no session able to host a detector.
@@ -119,12 +129,37 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
 
     /// Wait for the coordinator to attach its detector, so a test never races
     /// the turn's own start-up. Returns nil if it never arrives.
-    private func awaitDetector(from capture: CaptureDouble) async -> VoiceActivityDetector? {
+    private func awaitDetector(
+        from capture: CaptureDouble,
+        otherThan previous: VoiceActivityDetector? = nil
+    ) async -> VoiceActivityDetector? {
         for _ in 0..<200 {
-            if let detector = await capture.attachedDetector { return detector }
+            if let detector = await capture.attachedDetector, detector !== previous { return detector }
             try? await Task.sleep(for: .milliseconds(10))
         }
         return nil
+    }
+
+    /// Run `work` with a ceiling, returning false if it did not finish. Exists so
+    /// a coordinator that fails to observe cancellation fails a test instead of
+    /// hanging the suite until the harness gives up.
+    ///
+    /// Deliberately *not* a task group: a group awaits all its children, so a
+    /// hung child would hang the very call meant to detect the hang. The stray
+    /// task is abandoned instead — the test has already failed by then.
+    private func withDeadline(seconds: Double, _ work: @escaping @Sendable () async -> Void) async -> Bool {
+        let finished = Finished()
+        Task { await work(); await finished.raise() }
+        for _ in 0..<Int(seconds * 100) {
+            if await finished.value { return true }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return false
+    }
+
+    private actor Finished {
+        private(set) var value = false
+        func raise() { value = true }
     }
 
     // MARK: - The finding this design exists to encode
@@ -277,6 +312,66 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
 
         let verbs = await capture.verbs
         XCTAssertEqual(verbs.filter { $0 == .begin }.count, 1, "the refused turn must not have opened the mic")
+    }
+
+    // MARK: - Cancellation — the hotkey's escape hatch
+
+    /// `cancel()` is how the §8 rule "the hotkey always outranks and interrupts
+    /// agent TTS" is actually implemented, so it gets the same scrutiny as the
+    /// commit path. Three things must hold, and each has failed in some design:
+    /// the call must *return* (the turn's event loop has to notice cancellation
+    /// at all), the microphone must be released (from outside the cancelled task
+    /// — see `CaptureDouble.cancelTurnCapture`), and nothing may be flushed or
+    /// committed, because a cancelled turn has no transcript anyone asked for.
+    func testCancelReleasesTheMicrophoneAndCommitsNothing() async throws {
+        let capture = CaptureDouble()
+        let loop = ConversationLoopManager()
+        let coordinator = makeCoordinator(capture: capture, loop: loop)
+
+        let turn = Task { await coordinator.listen() }
+        let attached = await awaitDetector(from: capture)
+        let detector = try XCTUnwrap(attached, "detector was never attached")
+
+        // Mid-utterance: the human is speaking and has not endpointed.
+        let speech = try buffer(amplitude: 0.5)
+        for _ in 0..<5 { detector.processBuffer(speech) }
+        loop.handleVADTranscriptUpdated("wait no I meant")
+
+        // If cancellation does not propagate into the event loop this never
+        // returns, so bound it rather than hanging the whole suite.
+        let returned = await withDeadline(seconds: 2) { await coordinator.cancel() }
+        XCTAssertTrue(returned, "cancel() did not return — the turn never observed cancellation")
+
+        XCTAssertFalse(coordinator.isListening, "a cancelled turn must not stay in flight")
+
+        let outcome = await turn.value
+        XCTAssertEqual(outcome, .failed("cancelled"))
+
+        let verbs = await capture.verbs
+        XCTAssertEqual(verbs, [.begin, .attach, .detach, .cancel])
+        XCTAssertEqual(loop.state, .idle, "a cancelled turn must not leave a partial committed")
+    }
+
+    /// After a cancel the coordinator has to be usable again — otherwise one
+    /// hotkey press permanently disables agent turns until relaunch.
+    func testANewTurnCanStartAfterACancel() async throws {
+        let capture = CaptureDouble(finalizedText: "second turn")
+        let coordinator = makeCoordinator(capture: capture)
+
+        let first = Task { await coordinator.listen() }
+        let firstDetector = await awaitDetector(from: capture)
+        _ = await withDeadline(seconds: 2) { await coordinator.cancel() }
+        _ = await first.value
+
+        let second = Task { await coordinator.listen() }
+        // The double keeps the first turn's detector (detach passes nil and is not
+        // recorded as a new attachment), so wait for a *different* instance.
+        let attached = await awaitDetector(from: capture, otherThan: firstDetector)
+        let detector = try XCTUnwrap(attached, "a second turn never attached a detector")
+        try speakThenFallSilent(detector)
+
+        let outcome = await second.value
+        XCTAssertEqual(outcome, .committed("second turn"))
     }
 
     // MARK: - Configuration invariant

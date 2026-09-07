@@ -74,6 +74,11 @@ extension DictationController {
     /// `.cancelled` when the human stopped the capture (Escape/hotkey/user stop)
     /// before the deadline without saying anything. A non-empty transcript is
     /// mode-extracted via `RequestInputExtractor` into `.answered`/`.declined`.
+    /// `precomputedCallId`: when non-nil, `CLIPortServer` already submitted +
+    /// presented this call's durable row synchronously (via `bridgeToStore`)
+    /// before this method even started, and is polling `getCall` for the
+    /// terminal state — this method must resolve exactly that row rather than
+    /// creating a second one. [decision: AVB-7-ask-confirm-pump-fix]
     func cliRequestInput(
         requestId: String,
         idempotencyKey: String?,
@@ -82,12 +87,14 @@ extension DictationController {
         choices: [String],
         timeoutSeconds: TimeInterval,
         consequence: String?,
-        spokenSummary: String?
+        spokenSummary: String?,
+        precomputedCallId: UUID? = nil
     ) async -> HumanResponseOutcome {
         guard !RequestInputExtractor.isBusy(icon: icon) else {
             SpeakLog.engine.info(
                 "DictationController: cliRequestInput(\(requestId, privacy: .public)) refused — busy."
             )
+            await resolveDurableCall(precomputedCallId, outcome: .busy)
             return .busy
         }
 
@@ -98,13 +105,39 @@ extension DictationController {
         // resolves within its own call stack below — never lingers). Best-effort:
         // any failure here is logged and swallowed, never surfaces to the caller
         // or changes the returned outcome — existing AVB-5 behavior is unchanged.
-        let durableCallId = await recordDurableCallSubmission(
-            requestId: requestId, idempotencyKey: idempotencyKey, prompt: prompt, mode: mode,
-            choices: choices, consequence: consequence, spokenSummary: spokenSummary
+        // When `precomputedCallId` is supplied, the row already exists (submitted
+        // synchronously by `CLIPortServer`) — reuse it instead of submitting again.
+        let durableCallId: UUID?
+        if let precomputedCallId {
+            durableCallId = precomputedCallId
+        } else {
+            durableCallId = await recordDurableCallSubmission(
+                requestId: requestId, idempotencyKey: idempotencyKey, prompt: prompt, mode: mode,
+                choices: choices, consequence: consequence, spokenSummary: spokenSummary
+            )
+        }
+
+        let spoken = spokenSummary ?? prompt
+        // Clear before attach so a typed Send during TTS cannot be wiped by a
+        // late `lastTranscript = ""` after speak. [fix: presenter wipe race]
+        let previousTranscript = lastTranscript
+        lastTranscript = ""
+
+        let (presenter, interruptFlag) = attachRequestInputPresentation(
+            prompt: spoken,
+            timeoutSeconds: timeoutSeconds
         )
 
         await agentSpeechQueue.cancelAll()
-        await voiceOut.speak(spokenSummary ?? prompt, locale: settingsStore.language)
+        await voiceOut.speak(spoken, locale: settingsStore.language)
+        presenter.markListening()
+
+        if interruptFlag.value {
+            lastTranscript = previousTranscript
+            presenter.detach()
+            await resolveDurableCall(durableCallId, outcome: .cancelled)
+            return .cancelled
+        }
 
         // A hotkey dictation may have started while we were speaking — refuse
         // rather than stomp on it.
@@ -112,12 +145,12 @@ extension DictationController {
             SpeakLog.engine.info(
                 "DictationController: cliRequestInput(\(requestId, privacy: .public)) refused — busy after speaking."
             )
+            lastTranscript = previousTranscript
+            presenter.detach()
             await resolveDurableCall(durableCallId, outcome: .busy)
             return .busy
         }
 
-        let previousTranscript = lastTranscript
-        lastTranscript = ""
         // [decision: AVB-5 follow-up — fixes a check-then-act race] Check the
         // return value of beginDictation(), not `icon` afterward: SpeakEngine's
         // [A3] guard can silently no-op if another capture (hotkey or a second
@@ -133,40 +166,22 @@ extension DictationController {
                 "DictationController: cliRequestInput(\(requestId, privacy: .public)) — beginDictation did not start (\(String(describing: refusal), privacy: .public))."
             )
             lastTranscript = previousTranscript
+            presenter.detach()
             await resolveDurableCall(durableCallId, outcome: refusal)
             return refusal
         }
 
-        // The answer belongs to the requesting MCP client, never the focused app.
         await engine.suppressPasteForAgentResponse()
+        let reachedDeadline = await pollRequestInputUntilSettled(
+            timeoutSeconds: timeoutSeconds,
+            presenter: presenter
+        )
+        presenter.detach()
 
-        let deadline = Date().addingTimeInterval(max(0, timeoutSeconds))
-        let pollNanoseconds: UInt64 = 100_000_000
-        while Date() < deadline, [.listening, .processing].contains(icon) {
-            guard !Task.isCancelled else { break }
-            do {
-                try await Task.sleep(nanoseconds: pollNanoseconds)
-            } catch {
-                break
-            }
-        }
-        let reachedDeadline = Date() >= deadline
-
-        if icon == .listening {
-            await endDictation()
-        } else {
-            // An out-of-band stop may already be running endDictation(). Do not
-            // inspect shared transcript state until that request-owned stop settles
-            // — this is what makes a failed/aborted capture never return a stale
-            // earlier dictation (stale-answer isolation).
-            while icon == .processing {
-                guard !Task.isCancelled else { break }
-                do {
-                    try await Task.sleep(nanoseconds: pollNanoseconds)
-                } catch {
-                    break
-                }
-            }
+        if interruptFlag.value {
+            lastTranscript = previousTranscript
+            await resolveDurableCall(durableCallId, outcome: .cancelled)
+            return .cancelled
         }
 
         guard !lastTranscript.isEmpty else {
@@ -179,6 +194,77 @@ extension DictationController {
         let outcome = RequestInputExtractor.extract(transcript: lastTranscript, mode: mode, choices: choices)
         await resolveDurableCall(durableCallId, outcome: outcome)
         return outcome
+    }
+
+    /// Magenta conversation presentation for request_input — not an MCP mode.
+    /// Uses `.gatedTurn` so silence VAD cannot race the AVB-5 poll loop.
+    private func attachRequestInputPresentation(
+        prompt: String,
+        timeoutSeconds: TimeInterval
+    ) -> (ConversationInputPresenter, RequestInputInterruptFlag) {
+        let presenter = ConversationInputPresenter()
+        let interruptFlag = RequestInputInterruptFlag()
+        do {
+            try presenter.attach(
+                overlayController: overlayController,
+                prompt: prompt,
+                maxListeningDuration: timeoutSeconds,
+                onUserCommitted: { [weak self] text in
+                    guard let self else { return }
+                    self.lastTranscript = text
+                    Task { await self.endDictation() }
+                },
+                onInterrupted: { [weak self] in
+                    interruptFlag.value = true
+                    guard let self else { return }
+                    Task {
+                        await self.agentSpeechQueue.cancelAll()
+                        await self.endDictation()
+                    }
+                }
+            )
+        } catch {
+            SpeakLog.engine.error(
+                "DictationController: conversation presentation attach failed — \(error.localizedDescription, privacy: .public)"
+            )
+        }
+        return (presenter, interruptFlag)
+    }
+
+    /// Poll until the request-owned capture leaves listening/processing or the
+    /// deadline elapses. Returns whether the deadline was reached.
+    private func pollRequestInputUntilSettled(
+        timeoutSeconds: TimeInterval,
+        presenter: ConversationInputPresenter
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(max(0, timeoutSeconds))
+        let pollNanoseconds: UInt64 = 100_000_000  // 100 ms — [decision: AVB-5 poll cadence]
+        while Date() < deadline, [.listening, .processing].contains(icon) {
+            guard !Task.isCancelled else { break }
+            if !lastTranscript.isEmpty {
+                presenter.updateUserTranscript(lastTranscript)
+            }
+            do {
+                try await Task.sleep(nanoseconds: pollNanoseconds)
+            } catch {
+                break
+            }
+        }
+        let reachedDeadline = Date() >= deadline
+
+        if icon == .listening {
+            await endDictation()
+        } else {
+            while icon == .processing {
+                guard !Task.isCancelled else { break }
+                do {
+                    try await Task.sleep(nanoseconds: pollNanoseconds)
+                } catch {
+                    break
+                }
+            }
+        }
+        return reachedDeadline
     }
 
     // MARK: - AVB-7 request_input durable side effect
@@ -251,8 +337,8 @@ extension DictationController {
         label: String,
         workingDirectory: String?,
         requestedCapabilities: [String]
-    ) async -> (sessionId: String, capabilities: [String]) {
-        let session = await agentSessionRegistry.register(
+    ) -> (sessionId: String, capabilities: [String]) {
+        let session = agentSessionRegistry.register(
             sessionId: sessionId,
             provider: provider,
             label: label,
@@ -270,47 +356,18 @@ extension DictationController {
     /// routes through this so a call for an unrecognized session still
     /// proceeds — the note is attached one layer up (`CLIPortServer`).
     /// [decision: AVB-6]
-    func cliTouchSession(_ sessionId: String) async -> Bool {
-        await agentSessionRegistry.touch(sessionId: sessionId)
+    func cliTouchSession(_ sessionId: String) -> Bool {
+        agentSessionRegistry.touch(sessionId: sessionId)
     }
 
     // MARK: - AVB-7 (specs/avb7-durable-calls-design.md) durable calls
 
-    /// `speak_submit_call`: durably record a new `AgentCall`. Requires a known,
-    /// registered `sessionId` — the registry lives only in this (app) process,
-    /// so this check must happen here, never on the MCP side. [decision: AVB-7]
-    func cliSubmitCall(_ args: SubmitCallArguments) async -> CLISubmitCallOutcome {
-        guard let sessionId = args.sessionId, await agentSessionRegistry.isKnown(sessionId: sessionId) else {
-            SpeakLog.cli.info("DictationController: cliSubmitCall refused — unregistered session.")
-            return .unregistered
-        }
-        let expiresAt = Date().addingTimeInterval(args.expiresInSeconds)
-        do {
-            let result = try await agentCallStore.submit(AgentCallSubmission(
-                sessionId: sessionId, requestId: args.requestId, idempotencyKey: args.idempotencyKey,
-                prompt: args.prompt, mode: args.mode, choices: args.choices, consequence: args.consequence,
-                spokenSummary: args.spokenSummary, urgency: args.urgency, expiresAt: expiresAt
-            ))
-            switch result {
-            case .created(let call):
-                return .created(call)
-            case .duplicateSubmission(let existingCallId):
-                // The store's protocol only hands back the id — fetch the full
-                // call here so the wire reply needs no second round-trip.
-                guard let existing = try await agentCallStore.get(id: existingCallId, requestingSessionId: sessionId) else {
-                    // Practically unreachable: the row we just collided with must
-                    // exist for this sessionId.
-                    SpeakLog.storage.error("DictationController: cliSubmitCall duplicate lookup found no row.")
-                    return .internalError("duplicate call record not found")
-                }
-                return .duplicate(existing)
-            }
-        } catch {
-            SpeakLog.storage.error(
-                "DictationController: cliSubmitCall failed — \(error.localizedDescription, privacy: .public)"
-            )
-            return .internalError(error.localizedDescription)
-        }
+    /// Synchronous session-registration check backing `speak_submit_call`/
+    /// `speak_get_call` — split out so `CLIPortServer` can validate inline
+    /// (no Task, no pump) and touch `agentCallStore` directly for the actual
+    /// I/O. [decision: AVB-7-pump-fix]
+    func cliIsSessionKnown(_ sessionId: String) -> Bool {
+        agentSessionRegistry.isKnown(sessionId: sessionId)
     }
 
     /// AVB-7 inbox UI "Answer by voice" row action. Routes through the SAME
@@ -354,7 +411,7 @@ extension DictationController {
 
         let defaultAnswerTimeout: TimeInterval = 60
         let deadline = Date().addingTimeInterval(defaultAnswerTimeout)
-        let pollNanoseconds: UInt64 = 100_000_000
+        let pollNanoseconds: UInt64 = 100_000_000  // 100 ms — [decision: AVB-5 poll cadence]
         while Date() < deadline, [.listening, .processing].contains(icon) {
             try? await Task.sleep(nanoseconds: pollNanoseconds)
         }
@@ -391,24 +448,6 @@ extension DictationController {
         await resolveDurableCall(callId, outcome: .cancelled)
     }
 
-    /// `speak_get_call`: read-only poll. Requires a known, registered
-    /// `sessionId` — same reasoning as `cliSubmitCall`. [decision: AVB-7]
-    func cliGetCall(sessionId: String?, callId: UUID) async -> CLIGetCallOutcome {
-        guard let sessionId, await agentSessionRegistry.isKnown(sessionId: sessionId) else {
-            SpeakLog.cli.info("DictationController: cliGetCall refused — unregistered session.")
-            return .unregistered
-        }
-        do {
-            let call = try await agentCallStore.get(id: callId, requestingSessionId: sessionId)
-            return .call(call)
-        } catch {
-            SpeakLog.storage.error(
-                "DictationController: cliGetCall failed — \(error.localizedDescription, privacy: .public)"
-            )
-            return .call(nil)
-        }
-    }
-
     /// `speak_ask`: speak `question`, then run one full dictation round-trip on the
     /// SAME session path `beginDictation()`/`endDictation()` (hotkey, CLI --start/
     /// --stop) uses, and return the resulting transcript.
@@ -432,7 +471,7 @@ extension DictationController {
     /// is unreachable in freeform mode, but `.cancelled`/`.timedOut`/`.busy` all
     /// arise from "no answer arrived") maps to `.timedOut`, exactly like the
     /// original implementation collapsed every "no transcript" cause into one case.
-    func cliAsk(question: String, timeoutSeconds: TimeInterval) async -> CLIAskOutcome {
+    func cliAsk(question: String, timeoutSeconds: TimeInterval, precomputedCallId: UUID? = nil) async -> CLIAskOutcome {
         let outcome = await cliRequestInput(
             requestId: UUID().uuidString,
             idempotencyKey: nil,
@@ -441,7 +480,8 @@ extension DictationController {
             choices: [],
             timeoutSeconds: timeoutSeconds,
             consequence: nil,
-            spokenSummary: question
+            spokenSummary: question,
+            precomputedCallId: precomputedCallId
         )
         switch outcome {
         case .answered(let text, _):
@@ -459,7 +499,7 @@ extension DictationController {
     /// still carries — so it's recovered here via the same `YesNoCancelExtractor`
     /// the original implementation used, preserving byte-for-byte identical
     /// behavior for existing `speak_confirm` clients.
-    func cliConfirm(question: String, timeoutSeconds: TimeInterval) async -> CLIConfirmOutcome {
+    func cliConfirm(question: String, timeoutSeconds: TimeInterval, precomputedCallId: UUID? = nil) async -> CLIConfirmOutcome {
         let outcome = await cliRequestInput(
             requestId: UUID().uuidString,
             idempotencyKey: nil,
@@ -468,7 +508,8 @@ extension DictationController {
             choices: [],
             timeoutSeconds: timeoutSeconds,
             consequence: nil,
-            spokenSummary: question
+            spokenSummary: question,
+            precomputedCallId: precomputedCallId
         )
         switch outcome {
         case .answered(let text, let choice):
@@ -489,36 +530,4 @@ extension DictationController {
         }
     }
 
-    // MARK: - Layer 4 askUser / streamSpeech
-
-    func cliAskUser(prompt: String, mode: String?) async -> CLIAskOutcome {
-        var args: [String: JSONValue] = ["prompt": .string(prompt)]
-        if let mode = mode {
-            args["mode"] = .string(mode)
-        }
-        guard let validCall = MCPToolCallRequest(params: .object(["name": .string("speak_ask_user"), "arguments": .object(args)])) else {
-            return .timedOut
-        }
-        let result = await speakMCPServer.handleToolCall(validCall)
-        if result.isError {
-            return .timedOut
-        }
-        let responseText = result.content.compactMap { block -> String? in
-            if case .text(let t) = block { return t }
-            return nil
-        }.joined(separator: "\n")
-        return .answered(responseText)
-    }
-
-    func cliStreamSpeech(text: String, isFinal: Bool) async -> String {
-        let args: [String: JSONValue] = ["text": .string(text), "isFinal": .bool(isFinal)]
-        guard let validCall = MCPToolCallRequest(params: .object(["name": .string("speak_stream_speech"), "arguments": .object(args)])) else {
-            return "error: invalid tool request"
-        }
-        let result = await speakMCPServer.handleToolCall(validCall)
-        return result.content.compactMap { block -> String? in
-            if case .text(let t) = block { return t }
-            return nil
-        }.joined(separator: "\n")
-    }
 }

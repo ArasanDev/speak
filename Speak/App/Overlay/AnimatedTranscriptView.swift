@@ -9,8 +9,26 @@ import SwiftUI
 struct AnimatedTranscriptView: View {
     let text: String
     @State private var previousText: String = ""
-    @State private var diffTokens: [DiffToken] = []
+    /// Internal for `@testable` access in `AnimatedTranscriptViewTests` — the resolved
+    /// raw→clean diff tokens. The pure diff classification is unit-tested; the SwiftUI
+    /// rendering (strikethrough animation, flow layout) is a live-visual surface.
+    @State var diffTokens: [DiffToken] = []
     @State private var cleanupTask: Task<Void, Never>?
+
+    /// Felt-speed (input-felt-speed.md §3.3): initialize from a raw→clean pair so the
+    /// diff runs once on appear — canceled raw words get the animated strikethrough,
+    /// inserted clean words fade in. This makes the AI's edit visible. `rawText` is the
+    /// preserved provisional transcript (`settlingText`), `cleanedText` the final result.
+    init(rawText: String, cleanedText: String) {
+        self.text = cleanedText
+        self._previousText = State(initialValue: rawText)
+        self._diffTokens = State(initialValue: TextDiffResolver().resolve(raw: rawText, cleaned: cleanedText))
+    }
+
+    /// Streaming form: tracks `text` over time and diffs each update against the prior.
+    init(text: String) {
+        self.text = text
+    }
 
     var body: some View {
         ScrollViewReader { _ in
@@ -24,9 +42,12 @@ struct AnimatedTranscriptView: View {
             }
         }
         .onAppear {
-            previousText = text
-            let resolver = TextDiffResolver()
-            diffTokens = resolver.resolve(raw: "", cleaned: text)
+            // For the streaming form only: initialize from raw→text when no explicit
+            // raw was provided (previousText empty + tokens empty ⇒ initial resolve).
+            if previousText.isEmpty && diffTokens.isEmpty && !text.isEmpty {
+                let resolver = TextDiffResolver()
+                diffTokens = resolver.resolve(raw: "", cleaned: text)
+            }
         }
         .onChange(of: text) { _, newText in
             let resolver = TextDiffResolver()

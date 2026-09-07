@@ -61,7 +61,7 @@ APP_BIN   := Speak.app/Contents/MacOS/Speak
 # Local history store (P9). `make history` dumps recent dictations (raw vs cleaned).
 HISTORY_DB := $$HOME/Library/Application Support/speak/history.sqlite
 
-.PHONY: all help generate build test eval study lint fmt run kill relaunch logs logs-show history doctor gates lsp clean install install-mcp-user register-mcp register-mcp-apply github-release release verify-moat dev-cert reset-permissions release-preflight
+.PHONY: all help generate build test eval study lint fmt run kill relaunch logs logs-show history history-eval doctor gates lsp clean install install-mcp-user register-mcp register-mcp-apply github-release release verify-moat dev-cert reset-permissions release-preflight
 
 all: build
 
@@ -108,6 +108,11 @@ test: generate
 ## (xcodebuild shell-prefix does not propagate to the test host on macOS 26). [decision: SM-2]
 eval: generate
 	xcodebuild -project $(PROJECT) -scheme Eval -configuration $(CONFIG) -derivedDataPath $(DERIVED) test -only-testing:SpeakTests/EvalHarnessTests
+
+## history-eval: score real raw→cleaned history pairs (reference-free over-editing
+##               detection). Uses the Eval scheme with SPEAK_HISTORY_EVAL=1 baked in.
+history-eval: generate
+	xcodebuild -project $(PROJECT) -scheme Eval -configuration $(CONFIG) -derivedDataPath $(DERIVED) test -only-testing:SpeakTests/HistoryCleaningEvalTests
 
 ## study: run the Foundation Models limits study (live; writes RAW measurements)
 study: generate

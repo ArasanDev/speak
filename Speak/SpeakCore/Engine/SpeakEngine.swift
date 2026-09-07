@@ -754,7 +754,7 @@ public actor SpeakEngine {
     /// Attach (or, passing `nil`, detach) a `VoiceActivityDetector` to the
     /// current session's live `AudioCapture` — mirrors `currentLevels()` above.
     /// Returns `false` when no session is active or the transcriber does not
-    /// expose an `AudioCapture` (fixture mode); the caller (`AskUserToolHandler`)
+    /// expose an `AudioCapture` (fixture mode); the caller (agent bridge / tests)
     /// uses this to know whether real audio is actually feeding the VAD.
     @discardableResult
     public func attachVoiceActivityDetector(_ vad: VoiceActivityDetector?) async -> Bool {

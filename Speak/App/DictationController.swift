@@ -277,9 +277,6 @@ final class DictationController: CLICommandHandler {
     /// CLI IPC server (W2.3): owns the named CFMessagePort server for the `speak` CLI tool.
     private let cliPortServer = CLIPortServer()
 
-    /// Layer 4: MCP Server managing ask_user and stream_speech tools.
-    let speakMCPServer: SpeakMCPServer
-
     // MARK: - Settings store
 
     private(set) var settingsStore: SettingsStore
@@ -389,6 +386,10 @@ final class DictationController: CLICommandHandler {
         let store = SettingsStore()
         self.settingsStore = store
         self.overlayController = OverlayController(settingsStore: store)
+        // Felt-speed filmstrip: reuse the engine's cleaner for live per-block AI polish.
+        // `defaultCleaner(for:)` is the same stateless factory the engine uses, so
+        // availability + engine selection always match. [decision: felt-speed]
+        overlayController.filmstripCleaner = defaultCleaner(for: store)
         self.permissionManager = PermissionManager()
 
         let historyStore: any HistoryStoring
@@ -449,15 +450,6 @@ final class DictationController: CLICommandHandler {
         activeBinding = updatedBinding
         lastAppliedTrigger = initialTrigger  // [validation-fix NEW-7] seed the dedupe baseline
         SpeakLog.hotkey.info("DictationController: trigger mode applied at init — \(initialTrigger.rawValue, privacy: .public)")
-
-        // Layer 4: Construct SpeakMCPServer for Layer 4 MCP tools
-        self.speakMCPServer = SpeakMCPServer(
-            overlayController: self.overlayController,
-            settingsStore: store,
-            voiceOut: speechSynthesizer,
-            agentSpeechQueue: self.agentSpeechQueue
-        )
-        self.speakMCPServer.setDictationController(self)
 
         // Start observing future trigger-mode changes from SettingsView.
         // Uses withObservationTracking — fires only on triggerMode mutations.

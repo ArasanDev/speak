@@ -266,10 +266,10 @@ final class TextDiffTests: XCTestCase {
     }
 
     @available(macOS 26.0, *)
-    func testPromptMapping_mediumHasSentenceTightening() {
+    func testPromptMapping_mediumHasVerbatimPreservation() {
         let prompt = FoundationModelsCleaner.styledInstructions(style: .default, level: .medium)
-        XCTAssertTrue(prompt.lowercased().contains("tighten"),
-                      "Medium level must mention tightening sentences.")
+        XCTAssertTrue(prompt.lowercased().contains("verbatim"),
+                      "Medium level must instruct verbatim word preservation (preservation-first, no tightening).")
     }
 
     @available(macOS 26.0, *)

@@ -131,22 +131,6 @@ final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
         return getCallResult.map { BridgeOutcome($0, sessionNote: sessionNote) }
     }
 
-    var askUserResult: Result<String, BridgeUnavailable> = .success("user answer")
-    var streamSpeechResult: Result<String, BridgeUnavailable> = .success("speech streamed")
-
-    func askUser(
-        prompt: String, mode: String?, sessionId: String?
-    ) async -> Result<BridgeOutcome<String>, BridgeUnavailable> {
-        lastSessionId = sessionId
-        return askUserResult.map { BridgeOutcome($0, sessionNote: sessionNote) }
-    }
-
-    func streamSpeech(
-        text: String, isFinal: Bool, sessionId: String?
-    ) async -> Result<BridgeOutcome<String>, BridgeUnavailable> {
-        lastSessionId = sessionId
-        return streamSpeechResult.map { BridgeOutcome($0, sessionNote: sessionNote) }
-    }
 }
 
 // MARK: - JSONValue codec
@@ -340,9 +324,10 @@ struct AgentBridgeServerToolsListTests {
         let names = Set(tools.compactMap { $0.objectValue?["name"]?.stringValue })
         #expect(names == [
             "speak_register_session", "speak_notify", "speak_say", "speak_ask", "speak_confirm",
-            "speak_request_input", "speak_status", "speak_submit_call", "speak_get_call",
-            "speak_ask_user", "speak_stream_speech"
+            "speak_request_input", "speak_status", "speak_submit_call", "speak_get_call"
         ])
+        #expect(!names.contains("speak_ask_user"))
+        #expect(!names.contains("speak_stream_speech"))
     }
 
     @Test("speak_notify requires a summary and constrains notification kinds")
@@ -874,26 +859,60 @@ struct CLIBridgeBackendTests {
         #expect(reason.description.contains("no voice output"))
     }
 
-    @Test("ask() maps a CLIReply with an answer to success, using the long ask/confirm timeout")
+    /// Build a pending `AgentCall` to return from the `.askConfirmPending` first reply.
+    private func pendingCall(
+        id: UUID = UUID(), sessionId: String? = nil, requestId: String = "req-1"
+    ) -> AgentCall {
+        AgentCall(
+            id: id, sessionId: sessionId, requestId: requestId, idempotencyKey: nil, prompt: "p",
+            mode: .freeform, choices: [], consequence: nil, spokenSummary: nil, urgency: .normal,
+            state: .pending, createdAt: Date(), expiresAt: Date().addingTimeInterval(86_400)
+        )
+    }
+
+    /// Terminal `.answered` for pollUntilTerminal.
+    private func answeredCall(_ call: AgentCall, text: String, choice: String? = nil) -> AgentCall {
+        var resolved = call
+        resolved.state = .answered
+        resolved.response = .answered(text: text, choice: choice)
+        return resolved
+    }
+
+    /// Terminal `.declined` — production shape for approval "no".
+    private func declinedCall(_ call: AgentCall) -> AgentCall {
+        var resolved = call
+        resolved.state = .declined
+        resolved.response = .declined
+        return resolved
+    }
+
+    @Test("ask() maps answered call to success")
     func askMapsAnsweredToSuccess() async {
-        let stub = StubCLITransport(reply: .asked("blue please"))
+        let pending = pendingCall()
+        let stub = StubCLITransport(replies: [
+            .askConfirmPending(pending),
+            .callStatus(answeredCall(pending, text: "blue please"))
+        ])
         let backend = CLIBridgeBackend(transport: stub)
         let result = await backend.ask(question: "coffee or tea?", timeoutSeconds: 10, sessionId: nil)
         guard case .success(let outcome) = result else {
-            Issue.record("expected success, got \(result)")
-            return
+            Issue.record("expected success, got \(result)"); return
         }
         #expect(outcome.value == "blue please")
-        #expect(stub.lastCommand == .ask)
-        #expect(stub.lastTimeoutSeconds == 15)  // caller's 10s + the 5s wire-call buffer
+        #expect(stub.lastCommand == .getCall)
+        #expect(stub.lastTimeoutSeconds == CLIContract.getCallSendTimeoutSeconds)
     }
 
-    @Test("ask() falls back to CLIContract.askConfirmDefaultTimeoutSeconds when the caller supplies none")
+    @Test("ask() uses default timeout when nil")
     func askUsesDefaultTimeoutWhenNilRequested() async {
-        let stub = StubCLITransport(reply: .asked("ok"))
+        let pending = pendingCall()
+        let stub = StubCLITransport(replies: [
+            .askConfirmPending(pending),
+            .callStatus(answeredCall(pending, text: "ok"))
+        ])
         let backend = CLIBridgeBackend(transport: stub)
         _ = await backend.ask(question: "q?", timeoutSeconds: nil, sessionId: nil)
-        #expect(stub.lastTimeoutSeconds == CLIContract.askConfirmDefaultTimeoutSeconds + 5)
+        #expect(stub.lastTimeoutSeconds == CLIContract.getCallSendTimeoutSeconds)
     }
 
     @Test("ask() maps a transport timeout to .timedOut")
@@ -918,9 +937,13 @@ struct CLIBridgeBackendTests {
         #expect(reason == .appNotRunning)
     }
 
-    @Test("confirm() maps confirmed=true to success(true)")
+    @Test("confirm() maps an answered 'approved' call to success(true)")
     func confirmMapsTrue() async {
-        let stub = StubCLITransport(reply: .confirmed(true))
+        let pending = pendingCall()
+        let stub = StubCLITransport(replies: [
+            .askConfirmPending(pending),
+            .callStatus(answeredCall(pending, text: "yes please", choice: "approved"))
+        ])
         let backend = CLIBridgeBackend(transport: stub)
         let result = await backend.confirm(question: "proceed?", sessionId: nil)
         guard case .success(let outcome) = result else {
@@ -928,12 +951,17 @@ struct CLIBridgeBackendTests {
             return
         }
         #expect(outcome.value == true)
-        #expect(stub.lastCommand == .confirm)
+        #expect(stub.lastCommand == .getCall)   // last send is the final poll
     }
 
-    @Test("confirm() maps confirmed=false to success(false)")
+    @Test("confirm() maps a declined call (spoken no) to success(false)")
     func confirmMapsFalse() async {
-        let backend = CLIBridgeBackend(transport: StubCLITransport(reply: .confirmed(false)))
+        let pending = pendingCall()
+        let stub = StubCLITransport(replies: [
+            .askConfirmPending(pending),
+            .callStatus(declinedCall(pending))
+        ])
+        let backend = CLIBridgeBackend(transport: stub)
         let result = await backend.confirm(question: "proceed?", sessionId: nil)
         guard case .success(let outcome) = result else {
             Issue.record("expected success, got \(result)")
@@ -942,9 +970,14 @@ struct CLIBridgeBackendTests {
         #expect(outcome.value == false)
     }
 
-    @Test("confirm() maps ok=true/confirmed=nil (unclear answer) to a failure, never a guessed bool")
+    @Test("confirm() maps an unclear answered call to a failure, never a guessed bool")
     func confirmMapsUnclearToFailure() async {
-        let backend = CLIBridgeBackend(transport: StubCLITransport(reply: .confirmed(nil)))
+        let pending = pendingCall()
+        let stub = StubCLITransport(replies: [
+            .askConfirmPending(pending),
+            .callStatus(answeredCall(pending, text: "maybe"))
+        ])
+        let backend = CLIBridgeBackend(transport: stub)
         let result = await backend.confirm(question: "proceed?", sessionId: nil)
         guard case .failure(let reason) = result else {
             Issue.record("expected failure, got \(result)")

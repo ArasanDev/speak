@@ -175,12 +175,6 @@ public actor AgentBridgeServer {
         case "speak_get_call":
             return await runGetCallTool(call, sessionId: sessionId)
 
-        case "speak_ask_user":
-            return await runAskUserTool(call, sessionId: sessionId)
-
-        case "speak_stream_speech":
-            return await runStreamSpeechTool(call, sessionId: sessionId)
-
         default:
             // Unreachable: handleToolsCall already checked membership in
             // AgentBridgeTools.all before calling runTool.

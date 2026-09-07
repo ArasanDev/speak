@@ -365,12 +365,9 @@ public actor CaptureSession {
         // task below has something to wait for.
         await transcriber.stop()
 
-        // Wait for the stream task to complete (all chunks drained). The
-        // task awaits `ingest(_:)` on every chunk, so by the time this
-        // returns, `latestChunk` is the most recent chunk processed.
-        if let task = streamTask {
-            await task.value
-        }
+        // Wait for the stream task to complete (all chunks drained).
+        // Protected by a 5-second watchdog so a stalled audio stream cannot hang stop().
+        await awaitStreamDrainWithWatchdog()
 
         // t_transcript_ready: STT stream fully drained; raw text is available.
         let tTranscriptReady = DispatchTime.now().uptimeNanoseconds
@@ -745,5 +742,37 @@ public actor CaptureSession {
         state = .error(speakError)
         partialsContinuation?.finish()
         partialsContinuation = nil
+    }
+}
+
+extension CaptureSession {
+    /// Wait for `streamTask` to finish, or give up after the watchdog so a stalled
+    /// audio route cannot hang `stop()` indefinitely.
+    /// [decision: 5 s — Loop #77 AirPods/route hang; short of the STT finalization
+    ///  10 s window so stop() still returns; on fire we cancel the stream and log
+    ///  loudly rather than pretending drain completed.]
+    fileprivate func awaitStreamDrainWithWatchdog() async {
+        guard let task = streamTask else { return }
+        let watchdogNanoseconds: UInt64 = 5_000_000_000
+        let drained = await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                await task.value
+                return true
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: watchdogNanoseconds)
+                return false
+            }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+        if !drained {
+            SpeakLog.engine.error(
+                "CaptureSession: stream drain watchdog fired after 5s — canceling streamTask; transcript may be incomplete."
+            )
+            task.cancel()
+            streamTask = nil
+        }
     }
 }

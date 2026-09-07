@@ -21,6 +21,7 @@ If anything in `docs/` contradicts something here, `docs/` wins.
 | `dictation-stacks-verified.md` | Verified Swift-native stacks for 8 Mac dictation apps | `docs/architecture.md` |
 | `agent-instruction-anatomy.md` | Anatomy of effective agent instructions and briefing patterns | `AGENTS.md` |
 | `small-model-prompting-eval.md` | Prompting eval data for small on-device models | `docs/benchmark.md` |
+| `wispr-flow-local-cleanup.md` | Wispr Flow architecture deconstruction + local-first cleanup direction | `docs/competitors.md` |
 | `tech-stack-judgment.md` | Meta-lesson: Rust recommendation was a category error; Swift verdict | `docs/architecture.md` |
 | `agent-mode-prompting-synthesis.md` | Synthesis of agent-mode prompting strategies | `AGENTS.md` |
 

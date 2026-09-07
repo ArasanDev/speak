@@ -85,6 +85,25 @@ public enum CLIContract {
     /// hanging the CLI process forever. [decision: H-3]
     public static let askConfirmDefaultTimeoutSeconds: TimeInterval = 60.0
 
+    /// Timeout bound for CFMessagePort → `AgentCallStore` actor hops
+    /// (`submitCall`/`getCall`/ask-confirm durable submit). Local SQLite is
+    /// typically low-ms; 5 s is a hard ceiling so a wedged store cannot hang the
+    /// port callback forever. [decision: AVB-7-pump-fix]
+    public static let storeBridgeTimeoutSeconds: TimeInterval = 5.0
+
+    /// Extra seconds added to the human ask/confirm timeout when the MCP client
+    /// polls `getCall` for a terminal state — covers one wire RTT past the human
+    /// deadline. [decision: AVB-7-ask-confirm-pump-fix]
+    public static let terminalPollSlackSeconds: TimeInterval = 5.0
+
+    /// Interval between `getCall` polls while waiting for a durable call to reach
+    /// a terminal state (~1.4 polls/s). [decision: AVB-7-ask-confirm-pump-fix]
+    public static let terminalPollIntervalNanoseconds: UInt64 = 700_000_000
+
+    /// Wire-send timeout for `getCall` polls — slightly above `sendTimeoutSeconds`
+    /// so a slow reply still lands. [decision: AVB-7-ask-confirm-pump-fix]
+    public static let getCallSendTimeoutSeconds: TimeInterval = sendTimeoutSeconds + terminalPollSlackSeconds
+
     /// The compiled-in version of this wire contract. Bump whenever `CLICommand`,
     /// `CLIRequest`, or `CLIReply` gains/changes a field in a way that would make an
     /// old binary on either end of the port silently misinterpret the other's
@@ -136,10 +155,6 @@ public enum CLICommand: String, Codable, Sendable {
     /// AVB-7: `speak_get_call`. Same shape as `.submitCall` — no server-side wait,
     /// caller polls on its own interval. [decision: AVB-7]
     case getCall
-    /// Layer 4: speak_ask_user in Magenta conversation mode.
-    case askUser
-    /// Layer 4: speak_stream_speech for response readback and overlay text stream.
-    case streamSpeech
 }
 
 /// The JSON envelope wrapping a `CLICommand` over the wire.
@@ -409,6 +424,21 @@ public struct CLIReply: Codable, Sendable {
     /// not-found/isolation-mismatch (never an error — spec §8). [decision: AVB-7]
     public static func callStatus(_ call: AgentCall?) -> CLIReply {
         CLIReply(ok: true, error: nil, state: nil, binding: nil, agentCall: call)
+    }
+
+    /// `ask`/`confirm`/`requestInput` reply carrying the just-submitted, still-`
+    /// .pending`/`.presented` `AgentCall` — the round-trip (speak → mic → STT →
+    /// resolve) continues in the background and durably resolves this same call
+    /// via `AgentCallStore.resolve(id:outcome:)`. The client (`CLIBridgeBackend`)
+    /// polls `getCall` for the terminal state instead of the app blocking this
+    /// reply on the round-trip finishing. Replaces the old design where the app's
+    /// port callback synchronously waited (via a nested `RunLoop` pump) for a
+    /// `Task{@MainActor}` to resolve — confirmed (2026-08-01, live log evidence)
+    /// to starve indefinitely: the dispatched Task never got scheduled onto the
+    /// MainActor executor from inside the nested pump, so the tool timed out
+    /// before the human was ever even asked the question. [decision: AVB-7-ask-confirm-pump-fix]
+    public static func askConfirmPending(_ call: AgentCall, sessionNote: String? = nil) -> CLIReply {
+        CLIReply(ok: true, error: nil, state: nil, binding: nil, sessionNote: sessionNote, agentCall: call)
     }
 
     /// Decode a `requestInput` reply's `outcome`/`answer`/`choice` fields back

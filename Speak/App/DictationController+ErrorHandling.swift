@@ -235,7 +235,10 @@ extension DictationController {
             //  without stalling the workflow; matches Wispr's micro-dwell. benchmark.md §7]
             let processingDwellNanoseconds: UInt64 = 200_000_000  // 200 ms [decision W2.3]
             try? await Task.sleep(nanoseconds: processingDwellNanoseconds)
-            overlayController.transition(to: .done)
+            // Felt-speed (input-felt-speed.md §3.3): reveal the transformation — animate
+            // raw→clean via the word diff when cleanup produced a real change, else settle
+            // straight to "Done". `result.rawText` is the source the diff is computed from.
+            overlayController.showTransformation(cleaned: result.cleanedText, raw: result.rawText)
             SpeakLog.engine.info("DictationController: endDictation succeeded → .done")
             // 600ms done-flash — roadmap.md P8 [decision].
             let doneFlashNanoseconds: UInt64 = 600_000_000  // [decision] roadmap.md P8

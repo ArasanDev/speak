@@ -101,10 +101,12 @@ public final class VoiceTurnCoordinator {
         /// never accumulated (`VoiceActivityDetector.processBuffer` only counts
         /// it once `speechActive`, :159) and `.speechEnded` can never fire.
         ///
-        /// **Invariant: must stay well above `detector.silenceThresholdDuration`.**
-        /// This is a backstop for "the detector said nothing", not a second
-        /// endpointer. Tuning it near the silence window re-creates the race
-        /// this design exists to remove — the detector is authoritative.
+        /// **Must stay well above `detector.silenceThresholdDuration`.** This is a
+        /// backstop for "the detector said nothing", not a second endpointer.
+        /// Tuning it near the silence window re-creates the race this design
+        /// exists to remove — the detector is authoritative. Not enforced by the
+        /// initializer (tests need tight watchdogs to reach the timeout path);
+        /// `VoiceTurnCoordinator.init` logs an error when it is violated.
         public var watchdog: TimeInterval
 
         public init(
@@ -115,8 +117,8 @@ public final class VoiceTurnCoordinator {
             self.watchdog = watchdog
         }
 
-        /// The invariant stated as code so a test can assert it rather than a
-        /// comment asking politely.
+        /// The rule above stated as code, so a test can assert it and `init` can
+        /// complain about it rather than a comment asking politely.
         public var watchdogClearsDetector: Bool {
             watchdog >= detector.silenceThresholdDuration * 2
         }
@@ -141,6 +143,20 @@ public final class VoiceTurnCoordinator {
         self.loop = loop
         self.metrics = metrics
         self.configuration = configuration
+
+        // The watchdog invariant is documented on `Configuration` but cannot be
+        // enforced there — tests legitimately construct tight watchdogs to reach
+        // the timeout path in bounded time. Say so loudly instead of pretending
+        // the type guarantees it.
+        if !configuration.watchdogClearsDetector {
+            SpeakLog.conversation.error(
+                """
+                VoiceTurnCoordinator: watchdog \(configuration.watchdog, privacy: .public)s is inside 2x the \
+                detector's \(configuration.detector.silenceThresholdDuration, privacy: .public)s silence window \
+                — it will act as a second endpointer and truncate slow tails.
+                """
+            )
+        }
     }
 
     public var isListening: Bool { activeTurn != nil }
@@ -193,7 +209,7 @@ public final class VoiceTurnCoordinator {
         guard await capture.attachTurnDetector(detector) else {
             // No session could host the detector. Finishing without it would
             // silently degrade to a blind timeout, which is worse than saying so.
-            await capture.cancelTurnCapture()
+            await releaseMicrophone()
             SpeakLog.conversation.error("VoiceTurnCoordinator: no session accepted the detector — turn abandoned.")
             return .failed("capture session would not accept a detector")
         }
@@ -208,12 +224,12 @@ public final class VoiceTurnCoordinator {
 
         switch endpoint {
         case .cancelled:
-            await capture.cancelTurnCapture()
+            await releaseMicrophone()
             loop.resetToIdle()
             return .failed("cancelled")
 
         case .timedOut:
-            await capture.cancelTurnCapture()
+            await releaseMicrophone()
             loop.resetToIdle()
             SpeakLog.conversation.info("VoiceTurnCoordinator: watchdog expired with no speech — turn abandoned.")
             return .timedOut
@@ -221,6 +237,19 @@ public final class VoiceTurnCoordinator {
         case .speechEnded:
             return await commitFinalizedTurn()
         }
+    }
+
+    /// Release the capture, in a task that does not inherit cancellation.
+    ///
+    /// `cancel()` cancels the turn task, and every teardown below then runs
+    /// *inside* a cancelled task. Anything on the way to the microphone that
+    /// honours cancellation would no-op there and leave the mic open — a failure
+    /// mode with no user-visible symptom other than a recording indicator that
+    /// never goes away. An unstructured `Task` inherits actor context and
+    /// priority but **not** cancellation, so this always completes.
+    private func releaseMicrophone() async {
+        let capture = self.capture
+        await Task { await capture.cancelTurnCapture() }.value
     }
 
     /// Wait for the human to stop, or for the watchdog, whichever comes first.
