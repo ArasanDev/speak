@@ -100,6 +100,9 @@ extension CaptureSession {
             case timedOut
         }
 
+        let coordinator = self.streamingCoordinator
+        let matchesFinalized = (rawText == self.finalizedText)
+
         let outcome: CleanupOutcome = await withCheckedContinuation { continuation in
             // `resumeOnce` guards the continuation against double-resume: both the
             // cleanup task and the timeout task race to resume it; only the first
@@ -117,7 +120,16 @@ extension CaptureSession {
             // finishes (or hangs) in the background without blocking the session.
             let cleanTask = Task {
                 do {
-                    let cleaned = try await cleaner.clean(rawText, mode: mode)
+                    let cleaned: String
+                    if let coordinator, matchesFinalized, await coordinator.chunkCount > 0 {
+                        let count = await coordinator.chunkCount
+                        SpeakLog.cleanup.info(
+                            "CaptureSession: using progressive streaming coordinator with \(count, privacy: .public) chunks."
+                        )
+                        cleaned = await coordinator.finalizeAndStitch(trailingRawText: nil)
+                    } else {
+                        cleaned = try await cleaner.clean(rawText, mode: mode)
+                    }
                     resumeOnce.withLock { alreadyResumed in
                         guard !alreadyResumed else { return }
                         alreadyResumed = true
@@ -144,6 +156,8 @@ extension CaptureSession {
                 }
             }
         }
+
+        self.streamingCoordinator = nil
 
         // t_cleanupEnd: captured immediately after the continuation resumes (whether by
         // success, failure, or timeout). The delta is the real user-experienced latency

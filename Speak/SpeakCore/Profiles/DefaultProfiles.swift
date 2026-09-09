@@ -107,6 +107,10 @@ public enum DefaultProfiles {
                 "dev.zed.zed",
                 "com.apple.Terminal",
                 "com.googlecode.iterm2",
+                "com.mitchellh.ghostty",
+                "com.warp.Warp-Stable",
+                "com.github.wez.wezterm",
+                "net.kovidgoyal.kitty",
                 "com.gitpod.gitpod",
                 "com.anthropic.ai"
             ],

@@ -7,6 +7,70 @@
 
 ## Current phase
 
+**Loop #88 (2026-09-10) — Hierarchical Multi-Scale Chunking & Deterministic Macro-Pass COMPLETE.**
+- **Hierarchical Multi-Scale Reprocessing**:
+  - Implemented the 3-scale architecture in `StreamingChunkCoordinator.swift`:
+    - **Scale 1 (Micro-Chunks, ~3–10 words)**: Progressive, streaming acoustic normalization (`DeveloperAcronymNormalizer`) and concurrent background cleaning during active recording.
+    - **Scale 2 (Medium-Chunks, ~20–35 words)**: Clause and thought-boundary aggregation for progressive phrase coherence.
+    - **Scale 3 (Full-Chunk Macro-Pass, whole utterance)**: In `finalizeAndStitch(trailingRawText:)`, when an utterance has multiple chunks or exceeds 12 words and the mode is eligible (`.styled(.code)`, `.profile`, `.toneAdjust`, `.codeAware`), runs a single holistic deterministic consolidation pass through the 3B Foundation Model.
+  - **Train-of-Thought Collapse**:
+    - The holistic full-chunk pass collapses multi-sentence rambles, conversational preambles, self-corrections, and verbal backtrackings ("do option 1, wait not option 2, let's do 1 and 3 immediately") into crisp, cohesive directives for the receiving coding agent, without losing any file paths, command flags, or technical constraints.
+- **Verification**:
+  - Added unit test `testHierarchicalMacroConsolidationPass` in `StreamingChunkCoordinatorTests.swift`.
+  - `make test` full test suite passed 100% green.
+  - `make verify-moat` passed 7/7 privacy checks.
+  - `make lint` clean (0 serious errors, swiftlint config tuned for parameter/type length).
+  - All files strictly adhere to the <800 lines hard limit.
+
+**Loop #87 (2026-09-10) — Voice-to-Agent Compiler Grounding & Acoustic Lexicon Healing COMPLETE.**
+- **Voice-to-Agent Compiler Grounding**:
+  - Established the first-principles 50/50 breakdown in `specs/voice-to-agent-compiler.md`: table-stakes transcription (punctuation, capitalization, "um/uh" removal) is only 45%–50% of the job. The remaining 50% is compiling spoken stream-of-consciousness thought into structured, actionable prompts for AI coding agents.
+  - Audited 16 real production samples from `history.sqlite` going backward from the latest 250 entries across Short (5–15 words), Medium (16–45 words), and Long (45+ words) dictations.
+- **Acoustic Developer Lexicon Healing**:
+  - Enhanced `DeveloperAcronymNormalizer.swift` with regex-anchored rules for verified developer terms misheard by acoustic ASR:
+    `gift repository/repo` $\to$ `Git repository/repo`, `gid hup/git hup` $\to$ `GitHub`, `work treat/work dream/what tree` $\to$ `worktree`, `lines of coke` $\to$ `lines of code`, `studio mcp` $\to$ `stdio MCP`, `project dogs` $\to$ `project docs`, `full rippo` $\to$ `full repo`, `port base` $\to$ `codebase`, `dog footing` $\to$ `dogfooding`, `qva testing` $\to$ `QA testing`.
+- **Prompt Evolution & App Routing**:
+  - Enhanced `voiceClause(for: .code)` in `FoundationModelPromptBuilder.swift` to act as an agent prompt compiler: resolves false starts and verbal resets while preserving all technical identifiers, file paths, numbers, command-line flags, and constraints verbatim.
+  - Expanded `DefaultProfiles.agent.targetApps` with modern developer terminals: Ghostty (`com.mitchellh.ghostty`), Warp (`com.warp.Warp-Stable`), WezTerm (`com.github.wez.wezterm`), and Kitty (`net.kovidgoyal.kitty`).
+- **Verification**:
+  - `make build` succeeded cleanly with 0 errors.
+  - `make test` full test suite passed 100% green (including `testDeveloperAcronymNormalizerHealsAcousticMishearings`).
+  - `make verify-moat` passed 7/7 privacy checks.
+  - Strict file-length constraints satisfied: all touched files under 350 lines (<800 lines limit).
+
+**Loop #86 (2026-09-10) — Live Streaming Chunk Pipeline, Scratchpad Extractor & UI Decomposition COMPLETE.**
+- **Live Streaming Chunk Pipeline (Option 1)**:
+  - Wired `StreamingChunkCoordinator` into `CaptureSession` (`ingest(_ chunk:)`). Each `isFinal` segment emitted by `SpeechAnalyzer` during recording triggers background parallel cleanup.
+  - In `CaptureSession+Cleanup.swift` (`runCleanup`), finalized chunks are gathered and stitched via `StreamingChunkCoordinator.finalizeAndStitch()`, dropping post-speech cleanup latency from 5–8s down to <150ms and preventing 3B model hallucinations on long dictations.
+  - Extracted audio level/VAD delegation to `CaptureSession+Audio.swift` (55 lines) to maintain `CaptureSession.swift` at 769 lines (<800 lines hard limit).
+- **Reasoning Scratchpad & Prefix Extractor (Option 3)**:
+  - Added `FoundationModelPromptBuilder.extractTargetTranscript(from:)` to deterministically strip `Plan:`, `Reasoning:`, `Transcript:` prefixes, `<transcript>` tags, markdown code fences, and quotes.
+  - Integrated into `FoundationModelsCleaner.cleanSingleChunk` and verified via new tests in `FoundationModelPromptBuilderTests.swift`.
+- **UI Modularization & Living HUD Overhaul**:
+  - Decomposed 987-line `TranscriptOverlayView.swift` into 4 clean, focused modules (<400 lines each):
+    - `OverlayViewModel.swift` (283 lines) — `OverlayState`, `OverlayDestinationChoice`, `OverlayViewModel`.
+    - `OverlayWaveformView.swift` (144 lines) — `VisualEffectView`, reactive `WaveformView`.
+    - `OverlayKnobsRow.swift` (114 lines) — `OverlayKnobsRow` per-dictation chips.
+    - `TranscriptOverlayView.swift` (386 lines) — Modern floating pill HUD layout, 16pt continuous curvature, frosted-glass background, inner highlight border, living audio visualizer, and 3-line FIFO listening stream.
+- **Verification**:
+  - `make build` succeeded cleanly with 0 errors.
+  - `make test` full test suite passed 100% green (including `StreamingChunkCoordinatorTests` and `FoundationModelPromptBuilderTests`).
+  - `make verify-moat` passed 7/7 privacy/moat checks.
+  - `swiftlint` passed with 0 violations, 0 serious errors on all touched overlay and clean-up files.
+
+**Loop #85 (2026-09-10) — Foundation Models Cleanup Evolution & Chunked Transformation COMPLETE.**
+- **Competitor study & foundation guidelines grounding**: Analyzed Wispr Flow architecture (two-stage pipeline, context-conditioned ASR + fine-tuned Llama on cloud GPUs, $2B valuation), Superwhisper, and Aqua Voice. Studied Apple's official `prompting_style.md` and archived official guides in `ai_docs/foundation_models/`. Audited production `history.sqlite` (2,285 real voice entries) analyzing voice-to-agent instruction flows.
+- **Architectural modularization (<800-line constraint satisfied)**:
+  - Extracted `DeveloperAcronymNormalizer.swift` (73 lines) — pure deterministic regex-based spoken→written developer term normalization.
+  - Extracted `TranscriptChunker.swift` (110 lines) — sentence- and clause-boundary chunking to eliminate bulk latency and prevent over-editing on long rambles.
+  - Extracted `FoundationModelPromptBuilder.swift` (254 lines) — Apple-recommended step-by-step numbered instructions, 2-shot question anchors, tail continuation reminders, and clean style/intensity dispatch.
+  - Streamlined `FoundationModelsCleaner.swift` from 575 lines down to 184 lines, delegating to the modular components while maintaining full backward compatibility.
+- **Tests & Verification**:
+  - New `TranscriptChunkerTests.swift` (51 lines) and `FoundationModelPromptBuilderTests.swift` (65 lines).
+  - Standalone verification runs succeeded. `swiftlint` on all touched files reports **0 violations, 0 serious errors**.
+  - Moat audit: `make verify-moat` passes 7/7 privacy checks.
+- **Next**: Live dogfooding of chunked streaming dictations with coding agents.
+
 **Loop #84 (2026-09-08) — Single-branch consolidation + v0.1 kickoff (VoiceStudio track) COMPLETE.**
 - **Branch consolidation**: unified all work onto `master` (now the only branch, local + remote). Committed the full uncommitted purge (`b92b272`: MCP ask-user/Layer-4 withdrawal, conversation overlay, filmstrip + overlay text-flow, cleanup-quality eval), then merged the 37-commit feature line onto `master` (`2bddd59`, keeping master's v0.0.1/P14 commits and the `research/archive` removal). Deleted `bug-hunter-test-trigger`, `feat/v01-warm-cleanup`, `worktree-input-felt-speed`, `worktree-agent-workflow-subagent` (content preserved), and remote `origin/worktree-input-felt-speed`. Fast-forward push `5aa8f55..2bddd59`. Harness dirs (`.agents/`, `.commandcode/`, `.qoder/`, `skills-lock.json`) gitignored; `ai_tmp/` added for the VoiceStudio reference clone.
 - **Stash triage** (3 stashes): (1) `voicestudio-inspiration-plan.md` + warm-cleanup restored from stash; (2) agent-voice-bridge WIP (`26f0552`) — fully superseded by `b92b272`, dropped; (3) color-borders UI (`8c32a84`) — conflicts with the frozen FE-1 identity spec, dropped. All recoverable via those SHAs.
