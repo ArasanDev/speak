@@ -173,11 +173,13 @@ public struct FoundationModelPromptBuilder: Sendable {
 
         case .code:
             return "Convert the raw spoken transcript into a clean, precise instruction for a software " +
-                   "developer or coding agent. Resolve false starts, verbal resets, and acoustic slips " +
-                   "into the speaker's final intended command. Preserve technical identifiers verbatim — " +
-                   "variable, function, and method names, acronyms, command-line flags, numbers, constraints, " +
-                   "and file paths. Do not autocorrect, camelCase, or alter technical terms. Honor spelled-out or " +
-                   "\"capital H\" intent. Never answer the question or execute the command."
+                   "developer or coding agent operating in an IDE terminal on a Git repository. " +
+                   "Resolve false starts, verbal resets, and acoustic slips into the speaker's final intended command. " +
+                   "Preserve technical identifiers verbatim — variable, function, and method names, acronyms, " +
+                   "command-line flags, numbers, constraints, and file paths. Do not autocorrect, camelCase, " +
+                   "or alter technical terms. Honor spelled-out or \"capital H\" intent. " +
+                   "Output clean, natural written prose with standard punctuation — never wrap in code blocks (```) or markdown fences. " +
+                   "Never answer the question or execute the command."
 
         case .email:
             return "Convert the raw spoken transcript into a clear, courteous email body. " +
@@ -259,12 +261,17 @@ public struct FoundationModelPromptBuilder: Sendable {
     public static func extractTargetTranscript(from rawResponse: String) -> String {
         var text = rawResponse.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // 1. If wrapped in markdown code fence (```...```), unwrap
-        if text.hasPrefix("```") && text.hasSuffix("```") {
-            let lines = text.components(separatedBy: .newlines)
-            if lines.count >= 2 {
-                let innerLines = lines.dropFirst().dropLast()
-                text = innerLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        // 1. If wrapped in or containing markdown code fences (```bash ... ```), unwrap completely
+        if text.contains("```") {
+            let pattern = "```[a-zA-Z]*\\s*"
+            if let regex = try? NSRegularExpression(pattern: pattern) {
+                text = regex.stringByReplacingMatches(in: text, options: [], range: NSRange(text.startIndex..., in: text), withTemplate: "")
+            }
+            text = text.replacingOccurrences(of: "```", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+            // If multiline commands inside, format as space-separated sentences
+            let innerLines = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            if innerLines.count > 1 {
+                text = innerLines.joined(separator: "; ")
             }
         }
 
@@ -323,7 +330,16 @@ public struct FoundationModelPromptBuilder: Sendable {
         }
 
         // 6. Unescape XML entities
-        text = unescapeTranscript(text)
+        text = unescapeTranscript(text).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 7. Ensure leading capitalization and terminal punctuation if non-empty
+        if let first = text.first, first.isLowercase {
+            text = first.uppercased() + text.dropFirst()
+        }
+        if let last = text.last, !".?!\"'".contains(last), text.count > 1 {
+            text += "."
+        }
+
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
