@@ -28,16 +28,11 @@ struct TranscriptOverlayView: View {
             ZStack {
                 // Frosted-glass background — pulls from behind the panel.
                 VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-                // Subtle inner border highlight for depth
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.white.opacity(0.12), lineWidth: 0.75)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                 contentLayer
             }
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 6)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
             // Animated border layer — switches based on settingsStore.borderAnimationStyle
             borderLayer
@@ -56,7 +51,7 @@ struct TranscriptOverlayView: View {
 
         case .fullGlow:
             AnimatedGradientBorder(
-                shape: RoundedRectangle(cornerRadius: 16, style: .continuous),
+                shape: RoundedRectangle(cornerRadius: 14, style: .continuous),
                 state: model.overlayState,
                 level: model.level,
                 reduceMotion: reduceMotion
@@ -64,7 +59,7 @@ struct TranscriptOverlayView: View {
 
         case .edgeFlow:
             EdgeFlowBorder(
-                shape: RoundedRectangle(cornerRadius: 16, style: .continuous),
+                shape: RoundedRectangle(cornerRadius: 14, style: .continuous),
                 state: model.overlayState,
                 level: model.level,
                 speed: settingsStore.borderFlowSpeed,
@@ -135,20 +130,20 @@ struct TranscriptOverlayView: View {
     private var fifoWindowContent: some View {
         if model.windowText.isEmpty {
             Text("Listening\u{2026}")
-                .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel("Listening for speech")
                 .accessibilityAddTraits(.updatesFrequently)
         } else {
             Text(model.windowText)
-                .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(.primary)
                 .lineLimit(3)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(2)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .contentTransition(.interpolate)
                 .animation(.easeOut(duration: 0.2), value: model.windowText)
                 .accessibilityLabel(model.windowText)
