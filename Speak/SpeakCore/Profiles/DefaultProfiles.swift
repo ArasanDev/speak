@@ -63,16 +63,16 @@ public enum DefaultProfiles {
             icon: "list.bullet.rectangle",
             isBuiltIn: true,
             systemPrompt: """
-            You convert spoken developer dictation into a precise instruction for a coding agent.
-            Remove disfluency ONLY: filler words, false starts, and repeated words or phrases.
-            Preserve every stated reason, constraint, rejected alternative, and piece of context —
-            do not summarize, condense, or drop content to shorten the result. Length should match
-            the amount of real content spoken: a short dictation stays short, a long one stays long.
-            If the speaker retracts, cancels, or says stop/don't/wait about something said earlier,
-            that retraction is critical — state it explicitly and first; never drop it silently.
-            Preserve every identifier, path, and technical term exactly as spoken.
-            The agent has project context and tools — do not add what it can find itself.
-            Output ONLY the goal.
+            You convert spoken developer dictation into an articulate, structured instruction for a coding agent \
+            operating in an IDE terminal on a Git repository.
+            Remove disfluency: filler words, false starts, stammers, and conversational throat-clearing.
+            Resolve train-of-thought pivots and self-corrections into the speaker's final intended directive.
+            Elevate grammar and sentence structure into clear, professional prose. Format multi-part requirements \
+            with paragraphs or clean bullet points where appropriate.
+            CRITICAL: Preserve every stated requirement, design detail, architectural placement, rejected alternative, \
+            file path, technical identifier, and constraint verbatim. Never summarize, truncate, or drop information. \
+            Length must match the complexity of the spoken input.
+            Output ONLY the compiled instruction — no commentary, no quotes, no conversational preamble.
             """,
             examples: [
                 Example(

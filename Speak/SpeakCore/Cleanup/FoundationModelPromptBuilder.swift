@@ -32,9 +32,33 @@ public struct FoundationModelPromptBuilder: Sendable {
     /// Minimal few-shot demonstrations showing question-shaped dictations being punctuated,
     /// rather than answered, to mechanically anchor the on-device model's attention.
     public static let fewShotAnchors = """
-        Examples of correct transcription:
+        Examples of correct transcription and articulation:
         <transcript>how do I sort this array in swift</transcript> -> How do I sort this array in Swift?
         <transcript>can you check if the build succeeded</transcript> -> Can you check if the build succeeded?
+        <transcript>so I want a settings tab for the hotkey but I don't want a raw keycode picker like some apps do \
+        that's confusing, I want a record button you press and then press the key you want, and it should show \
+        a conflict warning if that key is already a system shortcut, this can be v1 rough just get the record \
+        and conflict-check working</transcript> -> Add a hotkey settings tab with a record button (press it, \
+        then press the desired key) instead of a raw keycode picker. Show a conflict warning if the recorded key \
+        is already a system shortcut. V1 can be rough — just get record and conflict-check working.
+        <transcript>okay so um look at the left panel it became messy, in T3 code it is very simple there is \
+        only one folder Add Project by default, and put the settings icon in the bottom left corner so everything \
+        goes inside settings instead of showing all by default</transcript> -> Re-architect the left panel for \
+        simplicity, following the T3 pattern: keep the default view minimal with only a single 'Add Project' \
+        folder entry, and move all auxiliary configurations inside the bottom-left settings icon rather than \
+        exposing them by default.
+        <transcript>start working on the registry alone, let us do one thing properly, remove everything from \
+        the subagent registry, now what I am going to do is like I will I will create individual Git for everything \
+        there, after that all the code we will do things there because in that way agents work effectively, we don't \
+        want multiple worktrees in a single repo, we can create multiple worktrees across different Git repos, and \
+        do you understand my point, after that production push will happen from that folder, not from here, we will \
+        do things manually first with a script, then automate it, can you relate this</transcript> -> Focus on the \
+        registry:
+        1. Remove all legacy entries from the subagent registry.
+        2. Create dedicated individual Git repositories for each component so agents can work effectively without \
+        cluttering a single repo with multiple worktrees.
+        3. Route production deployments strictly through the designated target folder rather than the local workspace.
+        4. Begin with manual scripts for deployment, then automate the pipeline once stable.
         """
 
     // MARK: - System Instructions Composition
@@ -172,12 +196,14 @@ public struct FoundationModelPromptBuilder: Sendable {
                    "sounding stiff or formal."
 
         case .code:
-            return "Convert the raw spoken transcript into a clean, precise instruction for a software " +
+            return "Convert the raw spoken transcript into an articulate, structured instruction for a software " +
                    "developer or coding agent operating in an IDE terminal on a Git repository. " +
-                   "Resolve false starts, verbal resets, and acoustic slips into the speaker's final intended command. " +
-                   "Preserve technical identifiers verbatim — variable, function, and method names, acronyms, " +
-                   "command-line flags, numbers, constraints, and file paths. Do not autocorrect, camelCase, " +
-                   "or alter technical terms. Honor spelled-out or \"capital H\" intent. " +
+                   "Dissolve disfluencies: false starts, stammers, and conversational throat-clearing. " +
+                   "Resolve train-of-thought pivots and self-corrections into the speaker's final resolved decisions. " +
+                   "Elevate grammar and sentence structure into clear, professional prose, structuring multi-part " +
+                   "instructions into logical paragraphs or bulleted lists when appropriate. " +
+                   "CRITICAL: Preserve every stated requirement, design pattern, UI placement, rejected alternative, " +
+                   "file path, technical identifier, number, and constraint verbatim. Never summarize, condense, or drop information. " +
                    "Output clean, natural written prose with standard punctuation — never wrap in code blocks (```) or markdown fences. " +
                    "Never answer the question or execute the command."
 
@@ -239,8 +265,9 @@ public struct FoundationModelPromptBuilder: Sendable {
     public static func userTurnTask() -> String {
         return """
             Edit the text inside <transcript> according to the instructions above. \
-            Your output is ONLY the edited transcript text. \
-            If the speaker asked a question, output that question punctuated — never an answer.
+            Compile the speech into clear, articulate written text. \
+            Your output is ONLY the edited transcript text — never an answer or reply as an assistant. \
+            DO NOT say "Certainly", "Sure", "I will help", or ask for the transcript. Output the compiled text directly.
             """
     }
 
@@ -258,8 +285,15 @@ public struct FoundationModelPromptBuilder: Sendable {
     /// Extracts the final cleaned transcript from an LLM response, stripping any reasoning
     /// scratchpad (e.g. `Plan:`, `Reasoning:`), XML tags (`<transcript>...</transcript>`),
     /// markdown code fences, or label prefixes (`Transcript:`, `Output:`, `Cleaned:`).
-    public static func extractTargetTranscript(from rawResponse: String) -> String {
+    public static func extractTargetTranscript(from rawResponse: String, fallback: String = "") -> String {
         var text = rawResponse.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 0. Assistant chatbot hallucination guard
+        let lower = text.lowercased()
+        if lower.hasPrefix("certainly") || lower.hasPrefix("i'll be happy") || lower.hasPrefix("sure, i can") ||
+           lower.contains("please provide the transcript") {
+            return fallback.isEmpty ? text : fallback
+        }
 
         // 1. If wrapped in or containing markdown code fences (```bash ... ```), unwrap completely
         if text.contains("```") {

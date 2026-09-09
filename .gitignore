@@ -60,6 +60,9 @@ buildServer.json
 # Machine-local signing override (written by `make dev-cert`)
 Signing.local.xcconfig
 
+# Evaluation run logs
+eval_reports/eval_*.json
+
 # Local competitor reference screenshots (personal-account data; design ref only)
 wisperflow.png
 *.ref.png

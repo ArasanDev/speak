@@ -7,6 +7,27 @@
 
 ## Current phase
 
+**Loop #89 (2026-09-10) — Voice Articulation Engine, Automated SQLite Evaluation & Purpose Manifesto COMPLETE.**
+- **Purpose Manifesto & Philosophy (`docs/purpose.md`)**:
+  - Authored the foundational document anchoring the project's transformation contract: rejecting lossy over-condensation in favor of high-fidelity voice articulation on Apple's on-device 3B Foundation Model with a 4K context window.
+  - Defined the 3 core principles: 100% substance fidelity (zero omitted requirements, paths, numbers, or constraints), disfluency dissolution (stripping vocal fillers, stammers, and throat-clearing preambles), and structural elevation (transforming sprawling speech into crisp paragraphs or numbered lists).
+- **Automated SQLite Evaluation Engine (`scripts/evaluate-compiler.swift`)**:
+  - Built an automated evaluation harness with direct SQLite access to `~/Library/Application Support/speak/history.sqlite` (2,375 real speech dictations).
+  - Implemented stratified random sampling across short, medium, and long turns, scoring both Table Stakes (punctuation, capitalization, filler stripping) and Voice-to-Agent Compilation (train-of-thought resolution, directive stance, technical fidelity).
+  - Every evaluation run writes timestamped JSON reports to `eval_reports/eval_<timestamp>.json` and `eval_reports/latest.json`.
+- **Acoustic Lexicon Healing & Guardrails**:
+  - Discovered and healed real acoustic ASR mishearings in `DeveloperAcronymNormalizer.swift`:
+    `fable model` $\to$ `Apple model`, `workries`/`workways` $\to$ `worktrees`, `gear project`/`get repose` $\to$ `Git project`/`Git repos`, `gate repository`/`repo` $\to$ `Git repository`/`repo`, `landing beach` $\to$ `landing page`, `one king properly` $\to$ `one thing properly`, `processing foster` $\to$ `processing faster`.
+  - Added chatbot hallucination detection and fallbacks in `FoundationModelPromptBuilder.extractTargetTranscript(from:fallback:)` to suppress conversational openings ("Certainly", "I will be happy to help", "Please provide the transcript").
+- **Verification & Review**:
+  - Conducted personal review across 10 stratified random samples:
+    - Composite score: **95.9 / 100** (Table Stakes: 49.3/50, Compilation: 46.6/50).
+    - Average latency: **1,373 ms** on Apple Silicon on-device 3B model.
+    - Zero truncated substance: all technical parameters, model names (Luna, Terra, S-O-L), VPS/Git targets, and file paths preserved intact.
+  - `make verify-moat` passed 7/7 checks.
+  - `swiftlint` passed with 0 errors across all modified files.
+  - All files strictly adhere to the <800 lines hard limit.
+
 **Loop #88 (2026-09-10) — Hierarchical Multi-Scale Chunking & Deterministic Macro-Pass COMPLETE.**
 - **Hierarchical Multi-Scale Reprocessing**:
   - Implemented the 3-scale architecture in `StreamingChunkCoordinator.swift`:

@@ -97,7 +97,7 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
         do {
             let options = GenerationOptions(sampling: .greedy)
             let response = try await session.respond(to: Prompt(promptText), options: options)
-            let cleaned = FoundationModelPromptBuilder.extractTargetTranscript(from: response.content)
+            let cleaned = FoundationModelPromptBuilder.extractTargetTranscript(from: response.content, fallback: text)
             return cleaned
         } catch let genError as LanguageModelSession.GenerationError {
             let detail = genError.localizedDescription
