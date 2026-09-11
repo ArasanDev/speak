@@ -52,45 +52,5 @@ final class FeatureIntegrityIntegrationTests: XCTestCase {
         XCTAssertTrue(instructions.contains(profile.systemPrompt))
         XCTAssertTrue(instructions.contains("\"FTS5\""))
         XCTAssertTrue(instructions.contains("\"SQLite\""))
-
-        // ── Component 5: Pip Pet Mascot State Transitions & Priority ────────────
-        // 1. Idle state
-        let idleInputs = PetStateInputs(
-            engineAvailable: true, isListening: false, isProcessing: false,
-            isSpeaking: false, isAgentWorking: false, hasAttention: false
-        )
-        XCTAssertEqual(PetState.resolve(from: idleInputs), .idle)
-
-        // 2. Listening state (Mic active during dictation)
-        let listeningInputs = PetStateInputs(
-            engineAvailable: true, isListening: true, isProcessing: false,
-            isSpeaking: false, isAgentWorking: false, hasAttention: false
-        )
-        XCTAssertEqual(PetState.resolve(from: listeningInputs), .listening)
-
-        // 3. Processing state (AI cleanup active)
-        let processingInputs = PetStateInputs(
-            engineAvailable: true, isListening: false, isProcessing: true,
-            isSpeaking: false, isAgentWorking: false, hasAttention: false
-        )
-        XCTAssertEqual(PetState.resolve(from: processingInputs), .processing)
-
-        // 4. Speaking state (TTS response active)
-        let speakingInputs = PetStateInputs(
-            engineAvailable: true, isListening: false, isProcessing: false,
-            isSpeaking: true, isAgentWorking: false, hasAttention: false
-        )
-        XCTAssertEqual(PetState.resolve(from: speakingInputs), .speaking)
-
-        // 5. Priority rule test: Listening (human mic) beats Speaking, Attention, AgentWorking, Processing
-        let conflictInputs = PetStateInputs(
-            engineAvailable: true, isListening: true, isProcessing: true,
-            isSpeaking: true, isAgentWorking: true, hasAttention: true
-        )
-        XCTAssertEqual(
-            PetState.resolve(from: conflictInputs),
-            .listening,
-            "Listening must win over all agent signals (listening > speaking > attention > agentWorking > processing > idle > dormant)."
-        )
     }
 }

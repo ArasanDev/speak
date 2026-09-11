@@ -7,6 +7,18 @@
 
 ## Current phase
 
+**Loop #97 (2026-09-11) — Dead Code & Mascot Subsystem Pruning for Clean Architecture Foundation COMPLETE.**
+- **Subsystem Pruning**:
+  - Completely excised the experimental "Voice Desktop Pet" subsystem (`App/Pet/`, `PetView`, `PetPanelController`, `PetState`, `PetGeometry`, `DictationController+Pet.swift`, `PetSection.swift`).
+  - Removed corresponding unit tests (`PetGeometryTests.swift`, `PetStateTests.swift`, `PetViewMathTests.swift`, and pet mascot assertions in `FeatureIntegrityIntegrationTests.swift`).
+  - Cleaned `SettingsStore` (`petEnabled`, `petPositions`) and updated `SettingsStoreTests.swift` and `SettingsStoreResetAndMiscTests.swift`.
+  - Retained `ai_tmp/` for reference and retained all Speech Synthesizers / TTS infrastructure untouched per user instruction.
+- **Verification & Moat**:
+  - `make build`: Clean build (0 errors, 0 compiler warnings).
+  - `make test-fast`: Green (✓ SUCCESS, 0 warnings).
+  - `make verify-moat`: 7/7 checks passed.
+  - `make lint`: 0 serious violations.
+
 **Loop #96 (2026-09-11) — Bottom Sidebar Icon Toolbar, Self-Healing Action & Zero-Warning Swift Concurrency COMPLETE.**
 - **Bottom-Left Sidebar Icon Evolution**:
   - Replaced the vertical text list item for Settings in `DashboardView.swift` with a compact, dedicated bottom toolbar (`sidebarBottomToolbar` and `sidebarRailBottomToolbar`).

@@ -180,8 +180,6 @@ public final class SettingsStore: @unchecked Sendable {
         static let borderFlowCount       = "speak.settings.borderFlowCount"
         static let voiceActionsEnabled   = "speak.settings.voiceActionsEnabled"
         static let voiceActionsPrefix    = "speak.settings.voiceActionsPrefix"
-        static let petEnabled            = "speak.settings.petEnabled"
-        static let petPositions          = "speak.settings.petPositions"
         static let readbackEnabled       = "speak.settings.readbackEnabled"
         static let revealTextWhileProcessing = "speak.settings.revealTextWhileProcessing"
         static let ttsVoiceIdentifier    = "speak.settings.ttsVoiceIdentifier"
@@ -237,7 +235,6 @@ public final class SettingsStore: @unchecked Sendable {
             // just not hiding text we already have. OFF reproduces the pre-slice
             // spinner-only `.processing` view exactly.
             Keys.revealTextWhileProcessing: true,
-            Keys.petEnabled: false,
             Keys.ttsVoiceIdentifier: "",
             Keys.ttsSpeechRate: AVSpeechUtteranceDefaultSpeechRate,
             Keys.ttsPitchMultiplier: Float(1.0),
@@ -669,7 +666,6 @@ public final class SettingsStore: @unchecked Sendable {
         access(keyPath: \.readbackEnabled)
         access(keyPath: \.extraBindings)
         access(keyPath: \.revealTextWhileProcessing)
-        access(keyPath: \.petPositions)
 
         withMutation(keyPath: \.voiceActionsEnabled) {
             defaults.set(false, forKey: Keys.voiceActionsEnabled)
@@ -679,9 +675,6 @@ public final class SettingsStore: @unchecked Sendable {
         }
         withMutation(keyPath: \.readbackEnabled) {
             defaults.set(true, forKey: Keys.readbackEnabled)
-        }
-        withMutation(keyPath: \.petEnabled) {
-            defaults.set(true, forKey: Keys.petEnabled)
         }
         // [bug fix, survey: permissions-persistence/medium] extraBindings (up to 4
         // custom hotkey bindings per action, V01-5) was accessed above but never
@@ -695,12 +688,6 @@ public final class SettingsStore: @unchecked Sendable {
         // Documented default is `true`.
         withMutation(keyPath: \.revealTextWhileProcessing) {
             defaults.set(true, forKey: Keys.revealTextWhileProcessing)
-        }
-        // [bug fix, survey: permissions-persistence/low] petPositions (per-display
-        // saved pet drag positions) was accessed above but never reset — survived
-        // "Reset to Defaults". removeObject restores the getter's default ([:]).
-        withMutation(keyPath: \.petPositions) {
-            defaults.removeObject(forKey: Keys.petPositions)
         }
     }
 
@@ -927,48 +914,7 @@ extension SettingsStore {
         }
     }
 
-    /// FE-1: Voice Desktop Pet the pet enabled state. Controls whether the floating 56x36pt
-    /// edge-snapping mascot lozenge (`PetPanelController`) is visible.
-    /// [doc fix, survey: permissions-persistence/low] Fresh-install default is
-    /// actually `false` (see the registration default and this getter's fallback);
-    /// it only becomes `true` after the user explicitly clicks "Reset to Defaults"
-    /// (`resetToDefaults()` sets it to `true` — the "always-on companion" behavior
-    /// applies post-reset, not on first launch). This comment previously claimed
-    /// `true` was the fresh-install default, which did not match the implementation.
-    public var petEnabled: Bool {
-        get {
-            access(keyPath: \.petEnabled)
-            return defaults.object(forKey: Keys.petEnabled) as? Bool ?? false
-        }
-        set {
-            withMutation(keyPath: \.petEnabled) {
-                defaults.set(newValue, forKey: Keys.petEnabled)
-            }
-        }
-    }
-
-    /// Voice Desktop Pet's last dragged-to position, keyed by display UUID (spec §5:
-    /// "position persisted per display UUID in SettingsStore"). JSON-encoded,
-    /// same pattern as `cleanupEngine`/`sttEngine` — `CGPoint` is `Codable` on
-    /// Apple platforms so no custom coding is needed.
-    public var petPositions: [String: CGPoint] {
-        get {
-            access(keyPath: \.petPositions)
-            guard let data = defaults.data(forKey: Keys.petPositions),
-                  let decoded = try? JSONDecoder().decode([String: CGPoint].self, from: data) else {
-                return [:]
-            }
-            return decoded
-        }
-        set {
-            withMutation(keyPath: \.petPositions) {
-                if let data = try? JSONEncoder().encode(newValue) {
-                    defaults.set(data, forKey: Keys.petPositions)
-                } else {
-                    SpeakLog.storage.error("SettingsStore: failed to encode petPositions — value not persisted.")
-                }
-            }
-        }
-    }
 }
+
+
 

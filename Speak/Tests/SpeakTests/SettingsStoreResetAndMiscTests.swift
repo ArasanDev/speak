@@ -75,16 +75,6 @@ final class SettingsStoreResetAndMiscTests: XCTestCase {
             "resetToDefaults() must restore revealTextWhileProcessing to true.")
     }
 
-    func testResetToDefaultsRestoresPetPositionsToEmpty() throws {
-        // [bug fix, survey: permissions-persistence/low] petPositions used to
-        // survive resetToDefaults() untouched.
-        let store = freshStore(on: try makeIsolatedDefaults())
-        store.petPositions = ["display-A": CGPoint(x: 42, y: 99)]
-        store.resetToDefaults()
-        XCTAssertEqual(store.petPositions, [:],
-            "resetToDefaults() must restore petPositions to an empty dictionary.")
-    }
-
     func testResetToDefaultsRestoresAgentPrefixStyle() throws {
         let store = freshStore(on: try makeIsolatedDefaults())
         store.agentPrefixStyle = .voiceSTT
