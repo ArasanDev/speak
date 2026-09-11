@@ -274,47 +274,7 @@ final class StatusBarController: NSObject {
 
         menu.addItem(NSMenuItem.separator())
 
-        // Open speak.
-        let openItem = NSMenuItem()
-        openItem.title = "Open speak…"
-        openItem.keyEquivalent = "o"
-        openItem.target = self
-        openItem.action = #selector(handleOpenSpeak)
-        menu.addItem(openItem)
-
-        // AI Studio.
-        let aiItem = NSMenuItem()
-        aiItem.title = "AI Studio…"
-        aiItem.target = self
-        aiItem.action = #selector(handleOpenAIStudio)
-        menu.addItem(aiItem)
-
-        // AVB-7: Agent Inbox. Opens the dashboard; deep-linking straight to the
-        // Agent Inbox pane is left for a follow-up (same TODO shape as AI Studio
-        // below — `showDashboard()` doesn't yet expose an `initialSection` hook).
-        let inboxTitle = agentInboxCount > 0 ? "Agent Inbox (\(agentInboxCount))…" : "Agent Inbox…"
-        let inboxItem = NSMenuItem()
-        inboxItem.title = inboxTitle
-        inboxItem.target = self
-        inboxItem.action = #selector(handleOpenSpeak)
-        menu.addItem(inboxItem)
-
-        // History.
-        let historyItem = NSMenuItem()
-        historyItem.title = "History…"
-        historyItem.target = self
-        historyItem.action = #selector(handleOpenHistory)
-        menu.addItem(historyItem)
-
-        // Paste Last Transcript.
-        let pasteItem = NSMenuItem()
-        pasteItem.title = "Paste Last Transcript"
-        pasteItem.keyEquivalent = "v"
-        pasteItem.keyEquivalentModifierMask = [.command, .control]
-        pasteItem.isEnabled = !controller.lastTranscript.isEmpty
-        pasteItem.target = self
-        pasteItem.action = #selector(handlePasteLast)
-        menu.addItem(pasteItem)
+        addNavigationItems(to: menu)
 
         // Re-check & Re-arm Hotkey Tap (Self-Repair).
         let rearmItem = NSMenuItem()
@@ -361,6 +321,53 @@ final class StatusBarController: NSObject {
         menu.addItem(quitItem)
 
         return menu
+    }
+
+    /// Appends the navigation group — Open speak, AI Studio, Agent Inbox,
+    /// History, Paste Last Transcript. Extracted from `buildMenu()` to keep it
+    /// under the function-body length gate.
+    private func addNavigationItems(to menu: NSMenu) {
+        // Open speak.
+        let openItem = NSMenuItem()
+        openItem.title = "Open speak…"
+        openItem.keyEquivalent = "o"
+        openItem.target = self
+        openItem.action = #selector(handleOpenSpeak)
+        menu.addItem(openItem)
+
+        // AI Studio.
+        let aiItem = NSMenuItem()
+        aiItem.title = "AI Studio…"
+        aiItem.target = self
+        aiItem.action = #selector(handleOpenAIStudio)
+        menu.addItem(aiItem)
+
+        // AVB-7: Agent Inbox. Opens the dashboard; deep-linking straight to the
+        // Agent Inbox pane is left for a follow-up (same TODO shape as AI Studio
+        // below — `showDashboard()` doesn't yet expose an `initialSection` hook).
+        let inboxTitle = agentInboxCount > 0 ? "Agent Inbox (\(agentInboxCount))…" : "Agent Inbox…"
+        let inboxItem = NSMenuItem()
+        inboxItem.title = inboxTitle
+        inboxItem.target = self
+        inboxItem.action = #selector(handleOpenSpeak)
+        menu.addItem(inboxItem)
+
+        // History.
+        let historyItem = NSMenuItem()
+        historyItem.title = "History…"
+        historyItem.target = self
+        historyItem.action = #selector(handleOpenHistory)
+        menu.addItem(historyItem)
+
+        // Paste Last Transcript.
+        let pasteItem = NSMenuItem()
+        pasteItem.title = "Paste Last Transcript"
+        pasteItem.keyEquivalent = "v"
+        pasteItem.keyEquivalentModifierMask = [.command, .control]
+        pasteItem.isEnabled = !controller.lastTranscript.isEmpty
+        pasteItem.target = self
+        pasteItem.action = #selector(handlePasteLast)
+        menu.addItem(pasteItem)
     }
 
     /// Return the status line text for the current icon state.

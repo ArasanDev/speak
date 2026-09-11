@@ -58,8 +58,14 @@ format_stream() {
             if [ -n "$target" ]; then
                 draw_step "Target" "$target"
             fi
-        # Only treat REAL Swift / compiler errors as errors
-        elif echo "$line" | grep -qE "\.swift:[0-9]+:[0-9]+: error:|error: \-[[^\ ]+"; then
+        # Treat ALL real failure markers as errors — not just `.swift:N:N:`:
+        # `error:` also matches xcodebuild/linker/codesign errors that carry no
+        # file coordinate (`xcodebuild: error:`, `ld: error:`, `error: Signing`),
+        # and the TEST/BUILD FAILED banners + failed Test Case lines mean the
+        # run was red even when no compiler diagnostic exists. Without these,
+        # a fully red test run printed "✓ SUCCESS" and exited 0 — the filter
+        # manufactured green. [fix: audit item — honest gate]
+        elif echo "$line" | grep -qE "(^|[[:space:]:])error:|TEST FAILED|BUILD FAILED|Test Case '-\[[^]]+\]' failed"; then
             errors=$((errors + 1))
             printf "${RED}│ ✖ %s${RESET}\n" "$line"
         elif echo "$line" | grep -qE "\.swift:[0-9]+:[0-9]+: warning:"; then
@@ -69,6 +75,11 @@ format_stream() {
             draw_step "Status" "${GREEN}Build Succeeded Cleanly${RESET}"
         elif echo "$line" | grep -q "TEST SUCCEEDED"; then
             draw_step "Status" "${GREEN}Test Suite Passed Cleanly${RESET}"
+        # Pass the XCTest summary line through (dimmed) so `make gates` and
+        # humans can see the "Executed N tests, with M failures" verdict the
+        # filter would otherwise swallow.
+        elif echo "$line" | grep -qE "Executed [0-9]+ tests"; then
+            printf "${GRAY}│ %s${RESET}\n" "$line"
         # Per-suite progress so a long `make test` run stays diagnosable instead
         # of going silent for hours (was the actual blocker debugging a slow CI
         # run — individual `Test Case` lines are too noisy to print one-by-one
@@ -86,8 +97,6 @@ format_stream() {
         elif echo "$line" | grep -qE "Test Suite '[^']+' failed at"; then
             suite=$(echo "$line" | grep -o "Test Suite '[^']*" | cut -d"'" -f2)
             draw_step "Suite" "${RED}✗ $suite${RESET}"
-        elif echo "$line" | grep -qE "Test Case '-\[[^]]+\]' failed"; then
-            printf "${RED}│ ✖ %s${RESET}\n" "$line"
         fi
     done
 

@@ -43,7 +43,14 @@ fi
 # networking-symbol check honest for the CLI binary. The CLI binary itself is
 # not a GUI app and uses FileHandle for output (not os.Logger), but it must
 # still be free of networking symbols and third-party imports. [decision: W2.3]
-SOURCE_DIRS=("$REPO_ROOT/Speak/SpeakCore" "$REPO_ROOT/Speak/App" "$REPO_ROOT/Speak/CLI")
+# MCP/ is included for the same reason — `speak-mcp` is a shipping stdio server
+# binary and was silently outside every audit. [fix: audit coverage drift]
+SOURCE_DIRS=(
+    "$REPO_ROOT/Speak/SpeakCore"
+    "$REPO_ROOT/Speak/App"
+    "$REPO_ROOT/Speak/CLI"
+    "$REPO_ROOT/Speak/MCP"
+)
 PASS_COUNT=0
 FAIL_COUNT=0
 
@@ -97,15 +104,23 @@ ALLOWED_IMPORTS=(
     "CoreAudio"         # Apple; HAL audio device monitoring
     "AudioToolbox"      # Apple; AudioObjectPropertyAddress / listener
     "ServiceManagement" # Apple; SMAppService for Launch at Login
+    "Observation"       # Apple; @Observable macro (matches MoatAuditTests allowlist)
+    "CoreFoundation"    # Apple; CFRunLoop in HotkeyMonitor (matches MoatAuditTests)
 )
 
 IMPORT_VIOLATIONS=0
 while IFS= read -r line; do
-    # Extract module name from `import Module` or `import Module.Sub`.
-    # Skip comments.
-    trimmed="${line#*:}"   # strip "file:linenum:" prefix from grep -n output
+    # `line` is grep -rn output: "path/file.swift:LINENUM:content". Strip the
+    # "file:" AND "linenum:" prefixes separately — the old code stripped only
+    # "file:", leaving "42:import Foo", which never matched `import ` and made
+    # this whole allowlist check pass vacuously. [fix: dead audit check]
+    trimmed="${line#*:}"     # strip "path:"
+    trimmed="${trimmed#*:}"  # strip "linenum:"
     trimmed="${trimmed#"${trimmed%%[![:space:]]*}"}"  # ltrim
     [[ "$trimmed" == //* ]] && continue
+    # Normalize `@preconcurrency import Foo` → `import Foo` so the attribute
+    # cannot bypass the allowlist prefix check.
+    [[ "$trimmed" == "@preconcurrency "* ]] && trimmed="${trimmed#@preconcurrency }"
     [[ "$trimmed" == "import "* ]] || continue
     module="${trimmed#import }"
     module="${module%% *}"   # take first word
@@ -117,7 +132,7 @@ while IFS= read -r line; do
         fail "Non-allowlist import '$module' in: $line"
         IMPORT_VIOLATIONS=$((IMPORT_VIOLATIONS + 1))
     fi
-done < <(grep_source -E "^[[:space:]]*import " || true)
+done < <(grep_source -E "^[[:space:]]*(@preconcurrency[[:space:]]+)?import " || true)
 
 [[ $IMPORT_VIOLATIONS -eq 0 ]] && pass "All imports are Apple-framework allowlist members."
 
