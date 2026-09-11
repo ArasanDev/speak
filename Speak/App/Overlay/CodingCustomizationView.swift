@@ -89,6 +89,8 @@ struct CodingCustomizationView: View {
             // Dominant, first element — see LAYOUT decision above.
             customInstructionsSection
 
+            agentPrefixSection
+
             disclosureToggle(
                 title: "View system prompt",
                 systemImage: "text.alignleft",
@@ -186,6 +188,58 @@ struct CodingCustomizationView: View {
                     .fill(Color.primary.opacity(0.06))
             )
             .accessibilityLabel("Additional instructions appended to the prompt for this dictation")
+        }
+    }
+
+    /// Segmented selector for agent prompt tagging ([Off | [speak] | [voice]]).
+    /// Allows the developer to tag the dictation output so coding agents apply the Speak skill.
+    private var agentPrefixSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Agent Prompt Tag")
+                    .font(.speakMonoCaption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("Tags prompt for Speak agent skill")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            HStack(spacing: 4) {
+                ForEach(AgentPrefixStyle.allCases, id: \.self) { style in
+                    let isSelected = model.agentPrefixStyle == style
+                    Button {
+                        model.agentPrefixStyle = style
+                        model.onKnobChanged?()
+                    } label: {
+                        Text(style.displayName)
+                            .font(.speakMonoCaption)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 3)
+                            .background(
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .fill(isSelected ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.06))
+                            )
+                            .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Agent Prompt Tag \(style.displayName)")
+                    .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+                }
+            }
+            if model.agentPrefixStyle != .none {
+                Toggle(isOn: Binding(
+                    get: { model.agentPrefixIncludeState },
+                    set: {
+                        model.agentPrefixIncludeState = $0
+                        model.onKnobChanged?()
+                    }
+                )) {
+                    Text("Include state tag (:clean / :raw)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .toggleStyle(.checkbox)
+            }
         }
     }
 

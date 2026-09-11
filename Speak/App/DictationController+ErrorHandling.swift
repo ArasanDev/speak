@@ -86,6 +86,8 @@ extension DictationController {
             // prompt-customization panel (read-only) so the user can see what actually
             // governs cleanup for this dictation before adding to it.
             overlayController.overlayModel.defaultSystemPrompt = activeDestination.systemPrompt
+            overlayController.overlayModel.agentPrefixStyle = settingsStore.agentPrefixStyle
+            overlayController.overlayModel.agentPrefixIncludeState = settingsStore.agentPrefixIncludeState
             guard try await engine.beginDictation(frontmostBundleID: frontmostBundleID) else {
                 // [A3] collision: another capture is already in flight. Not an error —
                 // leave every bit of state (icon, overlay, transcript) untouched, since
@@ -220,28 +222,26 @@ extension DictationController {
                     )
                 }
             }
+            let agentPrefixStyle = overlayController.overlayModel.agentPrefixStyle
+            let includeState = overlayController.overlayModel.agentPrefixIncludeState
+            await engine.setAgentPrefix(style: agentPrefixStyle, includeState: includeState)
             let result = try await engine.endDictation()
             // Remember the finished text for "Paste Last Transcript" (Wispr's re-paste).
-            lastTranscript = result.cleanedText ?? result.rawText
+            let baseText = result.cleanedText ?? result.rawText
+            let isCleaned = result.cleanedText != nil
+            let prefix = agentPrefixStyle.formattedPrefix(isCleaned: isCleaned, includeState: includeState)
+            lastTranscript = prefix.isEmpty ? baseText : "\(prefix)\(baseText)"
             // [PE-4] Store the raw transcript so the user can re-run cleanup with new knobs.
             lastRawTranscript = result.rawText
             icon = .done
             // Phase C: show done state briefly before hiding the panel.
-            // W2.3: Enforce a minimum processing dwell of 200 ms so "Cleaning up…"
-            // / "Pasting…" is always visible before transitioning to .done.
-            // Paste has already happened inside endDictation(), so this dwell
-            // adds zero text-delivery latency — it only affects the visual transition.
-            // [decision W2.3: 200 ms minimum dwell — enough to read "Cleaning up…"
-            //  without stalling the workflow; matches Wispr's micro-dwell. benchmark.md §7]
-            let processingDwellNanoseconds: UInt64 = 200_000_000  // 200 ms [decision W2.3]
+            // Snappy post-paste dwell: 60ms micro-dwell + 300ms confirmation flash.
+            // Paste has already occurred, so this purely governs how fast the HUD clears.
+            let processingDwellNanoseconds: UInt64 = 60_000_000  // 60 ms
             try? await Task.sleep(nanoseconds: processingDwellNanoseconds)
-            // Felt-speed (input-felt-speed.md §3.3): reveal the transformation — animate
-            // raw→clean via the word diff when cleanup produced a real change, else settle
-            // straight to "Done". `result.rawText` is the source the diff is computed from.
             overlayController.showTransformation(cleaned: result.cleanedText, raw: result.rawText)
             SpeakLog.engine.info("DictationController: endDictation succeeded → .done")
-            // 600ms done-flash — roadmap.md P8 [decision].
-            let doneFlashNanoseconds: UInt64 = 600_000_000  // [decision] roadmap.md P8
+            let doneFlashNanoseconds: UInt64 = 300_000_000  // 300 ms
             try? await Task.sleep(nanoseconds: doneFlashNanoseconds)
             overlayController.stop()
             caretOverlay.hide()

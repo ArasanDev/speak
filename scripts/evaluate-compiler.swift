@@ -91,6 +91,58 @@ struct DeveloperAcronymNormalizer {
         }
     }()
 
+    /// Collapses immediate repeated word stutters (e.g. "I will I will" -> "I will", "For, for" -> "For", "you, you" -> "you").
+    public static func collapseStutters(_ text: String) -> String {
+        var result = text
+        let pattern = "\\b([A-Za-z0-9_'-]+(?:\\s+[A-Za-z0-9_'-]+){0,2})(?:,\\s*|\\s+)\\1\\b"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return result
+        }
+        for _ in 0..<3 {
+            let range = NSRange(result.startIndex..., in: result)
+            let replaced = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "$1")
+            if replaced == result { break }
+            result = replaced
+        }
+        return result
+    }
+
+    /// Prunes conversational throat-clearing preambles and confirmation questions.
+    public static func pruneConversationalPaddings(_ text: String) -> String {
+        var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let tailPatterns = [
+            "(?i)\\s*[,;]?\\s*(and\\s+)?\\b(do you understand my point|can you relate this|do you understand|can you understand this|is it clear|got it)\\b[?.!]*\\s*$"
+        ]
+        for pattern in tailPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern) {
+                let range = NSRange(result.startIndex..., in: result)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+
+        let headPatterns = [
+            "^(?i)(So\\s+)?(Now\\s+)?what I (want to tell you|am telling|feel) is like[,:]?\\s*",
+            "^(?i)Here is the information I want to give you[:.]?\\s*",
+            "^(?i)Okay,\\s*correct[.]\\s*",
+            "^(?i)Now\\s+what I am going to do is like[,:]?\\s*"
+        ]
+        for pattern in headPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern) {
+                let range = NSRange(result.startIndex..., in: result)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+
+        if let first = result.first, first.isLowercase {
+            result = first.uppercased() + result.dropFirst()
+        }
+
+        return result
+    }
+
     static func normalize(_ text: String) -> String {
         var result = text
         for (regex, written) in compiledRules {
@@ -102,6 +154,8 @@ struct DeveloperAcronymNormalizer {
                 withTemplate: template
             )
         }
+        result = collapseStutters(result)
+        result = pruneConversationalPaddings(result)
         return result
     }
 }
@@ -123,30 +177,11 @@ struct CompilerPrompt {
     Examples of correct compilation:
     <transcript>how do I sort this array in swift</transcript> -> How do I sort this array in Swift?
     <transcript>can you check if the build succeeded</transcript> -> Can you check if the build succeeded?
-    <transcript>so I want a settings tab for the hotkey but I don't want a raw keycode picker like some apps do \
-    that's confusing, I want a record button you press and then press the key you want, and it should show \
-    a conflict warning if that key is already a system shortcut, this can be v1 rough just get the record \
-    and conflict-check working</transcript> -> Add a hotkey settings tab with a record button (press it, \
-    then press the desired key) instead of a raw keycode picker. Show a conflict warning if the recorded key \
-    is already a system shortcut. V1 can be rough — just get record and conflict-check working.
-    <transcript>okay so um look at the left panel it became messy, in T3 code it is very simple there is \
-    only one folder Add Project by default, and put the settings icon in the bottom left corner so everything \
-    goes inside settings instead of showing all by default</transcript> -> Re-architect the left panel for \
-    simplicity, following the T3 pattern: keep the default view minimal with only a single 'Add Project' \
-    folder entry, and move all auxiliary configurations inside the bottom-left settings icon rather than \
-    exposing them by default.
-    <transcript>start working on the registry alone, let us do one thing properly, remove everything from \
-    the subagent registry, now what I am going to do is like I will I will create individual Git for everything \
-    there, after that all the code we will do things there because in that way agents work effectively, we don't \
-    want multiple worktrees in a single repo, we can create multiple worktrees across different Git repos, and \
-    do you understand my point, after that production push will happen from that folder, not from here, we will \
-    do things manually first with a script, then automate it, can you relate this</transcript> -> Focus on the \
-    registry:
-    1. Remove all legacy entries from the subagent registry.
-    2. Create dedicated individual Git repositories for each component so agents can work effectively without \
-    cluttering a single repo with multiple worktrees.
-    3. Route production deployments strictly through the designated target folder rather than the local workspace.
-    4. Begin with manual scripts for deployment, then automate the pipeline once stable.
+    <transcript>now what I am telling you is like I will I will create the endpoint and do you understand</transcript> -> Create the endpoint.
+    <transcript>first update the database schema then run the migrations and finally test the login route</transcript> -> 1. Update the database schema.
+    2. Run the migrations.
+    3. Test the login route.
+    <transcript>set the timeout to 30 seconds wait no make it 60 seconds because network latency is high</transcript> -> Set the timeout to 60 seconds due to high network latency.
     """
 
     static func wrap(_ text: String) -> String {
@@ -289,7 +324,7 @@ struct CompilerEvaluator {
             puncScore -= 5.0
             feedback.append("Missing terminal punctuation")
         }
-        let tableStakesTotal = max(0, min(50, capScore + fillerScore + puncScore))
+        var tableStakesTotal = max(0, min(50, capScore + fillerScore + puncScore))
 
         // Part 2: Voice-to-Agent Compilation (0–50)
         // 2.1 Preamble Pruning (0–10)
@@ -323,6 +358,37 @@ struct CompilerEvaluator {
             if !compNumbers.contains(num) && !compiled.contains("3B") && !compiled.contains("800") {
                 techScore -= 4.0
                 feedback.append("Potential dropped numeric constraint: '\(num)'")
+            }
+        }
+
+        // 2.3b Substance Fidelity & Content Retention
+        let stopWords: Set<String> = [
+            "that", "this", "what", "with", "from", "have", "here", "there", "then", "when",
+            "where", "which", "will", "would", "could", "should", "your", "they", "them",
+            "their", "some", "also", "about", "into", "more", "other", "just", "like", "only",
+            "want", "need", "make", "take", "give", "tell", "look", "know"
+        ]
+        let rawContentWords = Set(
+            raw.lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { $0.count >= 4 && !stopWords.contains($0) }
+        )
+        let compContentWords = Set(
+            compiled.lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { $0.count >= 4 }
+        )
+
+        if !rawContentWords.isEmpty {
+            let shared = rawContentWords.intersection(compContentWords)
+            let recall = Double(shared.count) / Double(rawContentWords.count)
+            if recall < 0.20 {
+                techScore = 0.0
+                tableStakesTotal = 0.0 // Zero out table stakes if it completely hallucinated unrelated text
+                feedback.append(String(format: "Catastrophic substance failure: only %.0f%% content words retained (hallucination or anchor leak)", recall * 100))
+            } else if recall < 0.40 {
+                techScore -= 6.0
+                feedback.append(String(format: "Low content retention: %.0f%% key words found", recall * 100))
             }
         }
         techScore = max(0, techScore)
@@ -473,9 +539,6 @@ func main() async {
         exit(1)
     }
 
-    let session = LanguageModelSession(instructions: Instructions(CompilerPrompt.instructions))
-    session.prewarm()
-
     var results: [EvaluationResult] = []
     let timestamp = ISO8601DateFormatter().string(from: Date())
 
@@ -494,11 +557,12 @@ func main() async {
         let normalizedRaw = DeveloperAcronymNormalizer.normalize(s.raw)
         let prompt = CompilerPrompt.wrap(normalizedRaw)
 
+        let session = LanguageModelSession(instructions: Instructions(CompilerPrompt.instructions))
         var response = ""
         do {
-            for try await snapshot in session.streamResponse(to: prompt) {
-                response = snapshot.content
-            }
+            let options = GenerationOptions(sampling: .greedy)
+            let res = try await session.respond(to: Prompt(prompt), options: options)
+            response = res.content
         } catch {
             response = normalizedRaw
         }

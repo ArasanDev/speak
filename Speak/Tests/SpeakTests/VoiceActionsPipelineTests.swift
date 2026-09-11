@@ -235,6 +235,7 @@ final class VoiceActionsPipelineTests: XCTestCase {
         let settings = SettingsStore(defaults: defaults)
         settings.voiceActionsEnabled = voiceActionsEnabled
         settings.voiceActionsPrefix = "hey speak"
+        settings.agentPrefixStyle = .none
         return settings
     }
 

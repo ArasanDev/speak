@@ -301,6 +301,14 @@ final class StatusBarController: NSObject {
         pasteItem.action = #selector(handlePasteLast)
         menu.addItem(pasteItem)
 
+        // Re-check & Re-arm Hotkey Tap (Self-Repair).
+        let rearmItem = NSMenuItem()
+        rearmItem.title = "Re-check & Re-arm Hotkey Tap"
+        rearmItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh")
+        rearmItem.target = self
+        rearmItem.action = #selector(handleRearmHotkey)
+        menu.addItem(rearmItem)
+
         // Settings.
         let settingsItem = NSMenuItem()
         settingsItem.title = "Settings…"
@@ -369,6 +377,10 @@ final class StatusBarController: NSObject {
 
     @objc private func handlePasteLast() {
         controller.pasteLastTranscript()
+    }
+
+    @objc private func handleRearmHotkey() {
+        controller.monitor.start()
     }
 
     @objc private func handleOpenSettings() {

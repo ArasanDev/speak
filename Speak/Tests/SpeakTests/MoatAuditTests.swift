@@ -139,7 +139,10 @@ final class MoatAuditTests: XCTestCase {
                             // this permits the *import statement* in SpeakCore/App; it does
                             // NOT exempt any networking/auth symbol from testNoNetworkEgress
                             // or testNoAccountOrAuthCode, which still scan every SpeakCore/App line.
-        "CoreFoundation"   // CFRunLoop, CFRunLoopTimer — used in HotkeyMonitor for the tap thread
+        "CoreFoundation",  // CFRunLoop, CFRunLoopTimer — used in HotkeyMonitor for the tap thread
+        "CoreAudio",        // Apple framework; HAL audio device monitoring
+        "AudioToolbox",     // Apple framework; AudioObjectPropertyAddress / listener
+        "ServiceManagement" // Apple framework; SMAppService for Launch at Login
     ]
 
     /// BEAT §3 / AGENTS.md §2.4 — No third-party dependencies.

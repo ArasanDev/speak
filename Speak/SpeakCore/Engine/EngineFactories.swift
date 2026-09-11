@@ -26,7 +26,7 @@ import Foundation
 public func defaultTranscriber(for settings: SettingsStore) -> any Transcribing {
     switch settings.sttEngine {
     case .appleSpeech:
-        return AppleSpeechTranscriber()
+        return AppleSpeechTranscriber(vocabulary: settings.customVocabulary)
 
     case .whisperKit:
         // [decision] WhisperKit is v0.1 — not built in v0. Falls back to Apple Speech.
@@ -34,14 +34,14 @@ public func defaultTranscriber(for settings: SettingsStore) -> any Transcribing 
         SpeakLog.stt.error(
             "defaultTranscriber: .whisperKit requested but not built in v0 — using AppleSpeechTranscriber."
         )
-        return AppleSpeechTranscriber()
+        return AppleSpeechTranscriber(vocabulary: settings.customVocabulary)
 
     case .whisperCpp:
         // [decision] whisper.cpp is v1 — not built in v0. Falls back to Apple Speech.
         SpeakLog.stt.error(
             "defaultTranscriber: .whisperCpp requested but not built in v0 — using AppleSpeechTranscriber."
         )
-        return AppleSpeechTranscriber()
+        return AppleSpeechTranscriber(vocabulary: settings.customVocabulary)
     }
 }
 

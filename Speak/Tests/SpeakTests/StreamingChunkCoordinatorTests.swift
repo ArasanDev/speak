@@ -21,7 +21,7 @@ private final class MockChunkCleaner: LLMCleaning, @unchecked Sendable {
 
 final class StreamingChunkCoordinatorTests: XCTestCase {
 
-    func testIngestAndFinalizeStitching() async {
+    func testIngestAndFinalizeStitching() async throws {
         let mock = MockChunkCleaner()
         mock.cleanedResults["hello world"] = "Hello world."
         mock.cleanedResults["how are you"] = "How are you?"
@@ -34,11 +34,11 @@ final class StreamingChunkCoordinatorTests: XCTestCase {
         let count = await coordinator.chunkCount
         XCTAssertEqual(count, 2)
 
-        let result = await coordinator.finalizeAndStitch()
+        let result = try await coordinator.finalizeAndStitch()
         XCTAssertEqual(result, "Hello world. How are you?")
     }
 
-    func testFinalizeWithTrailingRawText() async {
+    func testFinalizeWithTrailingRawText() async throws {
         let mock = MockChunkCleaner()
         mock.cleanedResults["first sentence"] = "First sentence."
         mock.cleanedResults["trailing segment"] = "Trailing segment."
@@ -46,7 +46,7 @@ final class StreamingChunkCoordinatorTests: XCTestCase {
         let coordinator = StreamingChunkCoordinator(cleaner: mock, mode: .punctuation)
 
         await coordinator.ingestChunk("first sentence")
-        let result = await coordinator.finalizeAndStitch(trailingRawText: "trailing segment")
+        let result = try await coordinator.finalizeAndStitch(trailingRawText: "trailing segment")
 
         XCTAssertEqual(result, "First sentence. Trailing segment.")
     }
@@ -67,7 +67,7 @@ final class StreamingChunkCoordinatorTests: XCTestCase {
         XCTAssertEqual(count, 0)
     }
 
-    func testHierarchicalMacroConsolidationPass() async {
+    func testHierarchicalMacroConsolidationPass() async throws {
         let mock = MockChunkCleaner()
         mock.cleanedResults["we will do option one"] = "We will do option one."
         mock.cleanedResults["actually not option two do option one and three immediately"] =
@@ -80,7 +80,7 @@ final class StreamingChunkCoordinatorTests: XCTestCase {
         await coordinator.ingestChunk("we will do option one")
         await coordinator.ingestChunk("actually not option two do option one and three immediately")
 
-        let result = await coordinator.finalizeAndStitch()
+        let result = try await coordinator.finalizeAndStitch()
         XCTAssertEqual(result, "Implement option 1 and option 3 immediately.")
     }
 }

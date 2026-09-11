@@ -317,42 +317,7 @@ public actor SpeakEngine {
         // [H-1] Assemble the Voice Actions handler (specs/horizon-voice-os.md, Pillar 1)
         // ONLY when the feature is enabled. When disabled, `nil` is passed so
         // CaptureSession.stop() runs the literal pre-H-1 delivery path (byte-identical
-        // dictation — the coordinator's internal `guard enabled` is a second line of
-        // defence, not the one relied on here). Read once per session, like every other
-        // setting above. The router prefix is read now so a Settings change applies on
-        // the next dictation without an engine restart. The closure fetches the action
-        // catalog from the executor (an async OS call) and delegates to the coordinator,
-        // whose "never lose words" contract owns every degrade-to-dictation path.
-        var activeVoiceActionsHandler: CaptureSession.VoiceActionsHandler?
-        if settings.voiceActionsEnabled {
-            let prefix = settings.voiceActionsPrefix
-            let executor = voiceActionsExecutor
-            let router = PrefixActionRouter(prefix: prefix)
-            let coordinator = VoiceActionsCoordinator(
-                router: router,
-                executor: executor,
-                commandService: voiceActionsCommandService,
-                enabled: true
-            )
-            activeVoiceActionsHandler = { rawText in
-                // Cheap prefix gate FIRST — keep the (subprocess-spawning) `shortcuts list`
-                // catalog fetch OFF the stop→paste critical path for the common case
-                // (plain, non-prefixed dictation). `route(_, [])` returns `.dictation`
-                // exactly when the prefix did not match (with an empty catalog a matched
-                // prefix can only yield `.command`, never `.action`), so a `.dictation`
-                // here means "not a voice action" — return immediately, no catalog fetch.
-                guard case .dictation = router.route(rawText, knownActionNames: []) else {
-                    let knownActionNames = await executor?.listActionNames() ?? []
-                    return await coordinator.handle(transcript: rawText, knownActionNames: knownActionNames)
-                }
-                return .dictation(text: rawText)
-            }
-            let executorState = executor != nil ? "wired" : "none"
-            let commandState = voiceActionsCommandService != nil ? "wired" : "none"
-            SpeakLog.voiceActions.info(
-                "SpeakEngine: Voice Actions enabled — prefix='\(prefix, privacy: .public)', executor=\(executorState, privacy: .public), commandService=\(commandState, privacy: .public)."
-            )
-        }
+        let activeVoiceActionsHandler = makeVoiceActionsHandler()
 
         let session = CaptureSession(
             transcriber: transcriber,
@@ -364,7 +329,10 @@ public actor SpeakEngine {
             expander: activeExpander,
             voiceCommandPreprocessor: activeVoiceCommandPreprocessor,
             voiceActionsHandler: activeVoiceActionsHandler,
-            warmUpHandler: makeWarmUpHandler(cleaner: activeCleaner)
+            warmUpHandler: makeWarmUpHandler(cleaner: activeCleaner),
+            agentPrefix: settings.agentPrefixStyle.prefix,
+            agentPrefixStyle: settings.agentPrefixStyle,
+            agentPrefixIncludeState: settings.agentPrefixIncludeState
         )
         currentSession = session
         return session
@@ -431,6 +399,18 @@ public actor SpeakEngine {
         guard let session = currentSession else { return }
         await session.suppressPasteForAgentResponse()
         SpeakLog.agentBridge.info("SpeakEngine: agent response will not paste into the focused app.")
+    }
+
+    /// Set or update the agent prefix for the active session.
+    public func setAgentPrefix(_ prefix: String) async {
+        guard let session = currentSession else { return }
+        await session.setAgentPrefix(prefix)
+    }
+
+    /// Set or update the agent prefix style and state inclusion for the active session.
+    public func setAgentPrefix(style: AgentPrefixStyle, includeState: Bool) async {
+        guard let session = currentSession else { return }
+        await session.setAgentPrefix(style: style, includeState: includeState)
     }
 
     // MARK: - Profile preview (PE-2: AI Studio live-test box; reused by #40 eval harness)
@@ -778,5 +758,31 @@ private extension SpeakEngine {
     func makeWarmUpHandler(cleaner: (any LLMCleaning)?) -> CaptureSession.WarmUpHandler? {
         guard let cleaner else { return nil }
         return { await cleaner.warmUp() }
+    }
+
+    /// [H-1] Assemble the Voice Actions handler when enabled in settings.
+    func makeVoiceActionsHandler() -> CaptureSession.VoiceActionsHandler? {
+        guard settings.voiceActionsEnabled else { return nil }
+        let prefix = settings.voiceActionsPrefix
+        let executor = voiceActionsExecutor
+        let router = PrefixActionRouter(prefix: prefix)
+        let coordinator = VoiceActionsCoordinator(
+            router: router,
+            executor: executor,
+            commandService: voiceActionsCommandService,
+            enabled: true
+        )
+        let executorState = executor != nil ? "wired" : "none"
+        let commandState = voiceActionsCommandService != nil ? "wired" : "none"
+        SpeakLog.voiceActions.info(
+            "SpeakEngine: Voice Actions enabled — prefix='\(prefix, privacy: .public)', executor=\(executorState, privacy: .public), commandService=\(commandState, privacy: .public)."
+        )
+        return { rawText in
+            guard case .dictation = router.route(rawText, knownActionNames: []) else {
+                let knownActionNames = await executor?.listActionNames() ?? []
+                return await coordinator.handle(transcript: rawText, knownActionNames: knownActionNames)
+            }
+            return .dictation(text: rawText)
+        }
     }
 }

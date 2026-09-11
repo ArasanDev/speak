@@ -157,7 +157,7 @@ public final class SettingsStore: @unchecked Sendable {
 
     // MARK: - UserDefaults key namespace
 
-    private enum Keys {
+    enum Keys {
         // Prefix matches the bundle id convention; stable across versions.
         static let cleanupEnabled        = "speak.settings.cleanupEnabled"
         static let cleanupEngine         = "speak.settings.cleanupEngine"
@@ -188,13 +188,15 @@ public final class SettingsStore: @unchecked Sendable {
         static let ttsSpeechRate         = "speak.settings.ttsSpeechRate"
         static let ttsPitchMultiplier    = "speak.settings.ttsPitchMultiplier"
         static let ttsVolume             = "speak.settings.ttsVolume"
+        static let agentPrefixStyle          = "speak.settings.agentPrefixStyle"
+        static let agentPrefixIncludeState   = "speak.settings.agentPrefixIncludeState"
     }
 
     // MARK: - Injected defaults (the testability seam)
 
     /// The backing `UserDefaults` instance. Production uses `.standard`;
     /// tests inject a named suite so `.standard` is never polluted.
-    private let defaults: UserDefaults
+    let defaults: UserDefaults
 
     // MARK: - Init
 
@@ -239,7 +241,9 @@ public final class SettingsStore: @unchecked Sendable {
             Keys.ttsVoiceIdentifier: "",
             Keys.ttsSpeechRate: AVSpeechUtteranceDefaultSpeechRate,
             Keys.ttsPitchMultiplier: Float(1.0),
-            Keys.ttsVolume: Float(1.0)
+            Keys.ttsVolume: Float(1.0),
+            Keys.agentPrefixStyle: AgentPrefixStyle.speakSTT.rawValue,
+            Keys.agentPrefixIncludeState: false
         ])
         // Enum defaults are handled via `?? fallback` at the getter level because
         // Codable JSON cannot be registered as a `[String: Any]` literal.
@@ -363,6 +367,37 @@ public final class SettingsStore: @unchecked Sendable {
         set {
             withMutation(keyPath: \.pasteMode) {
                 defaults.set(newValue.rawValue, forKey: Keys.pasteMode)
+            }
+        }
+    }
+
+    // MARK: - Agent prompt tagging prefix
+
+    /// Prefix prepended to delivered text when pasting into applications or coding agents.
+    /// Default: `.speakSTT` ("[speak-stt]").
+    public var agentPrefixStyle: AgentPrefixStyle {
+        get {
+            access(keyPath: \.agentPrefixStyle)
+            let raw = defaults.string(forKey: Keys.agentPrefixStyle) ?? AgentPrefixStyle.speakSTT.rawValue
+            return AgentPrefixStyle(rawValue: raw) ?? .speakSTT
+        }
+        set {
+            withMutation(keyPath: \.agentPrefixStyle) {
+                defaults.set(newValue.rawValue, forKey: Keys.agentPrefixStyle)
+            }
+        }
+    }
+
+    /// Whether to append the transcript state (`:clean` or `:raw`) inside the agent prefix tag.
+    /// Default: `false`.
+    public var agentPrefixIncludeState: Bool {
+        get {
+            access(keyPath: \.agentPrefixIncludeState)
+            return defaults.bool(forKey: Keys.agentPrefixIncludeState)
+        }
+        set {
+            withMutation(keyPath: \.agentPrefixIncludeState) {
+                defaults.set(newValue, forKey: Keys.agentPrefixIncludeState)
             }
         }
     }
@@ -550,6 +585,8 @@ public final class SettingsStore: @unchecked Sendable {
         access(keyPath: \.cleanupLevel)
         access(keyPath: \.streamingRawTextEnabled)
         access(keyPath: \.streamingMode)
+        access(keyPath: \.agentPrefixStyle)
+        access(keyPath: \.agentPrefixIncludeState)
 
         withMutation(keyPath: \.cleanupEnabled) {
             defaults.set(true, forKey: Keys.cleanupEnabled)
@@ -589,6 +626,12 @@ public final class SettingsStore: @unchecked Sendable {
         }
         withMutation(keyPath: \.streamingMode) {
             defaults.set(StreamingMode.keystrokeInjection.rawValue, forKey: Keys.streamingMode)
+        }
+        withMutation(keyPath: \.agentPrefixStyle) {
+            defaults.set(AgentPrefixStyle.speakSTT.rawValue, forKey: Keys.agentPrefixStyle)
+        }
+        withMutation(keyPath: \.agentPrefixIncludeState) {
+            defaults.set(false, forKey: Keys.agentPrefixIncludeState)
         }
     }
 
@@ -927,63 +970,5 @@ extension SettingsStore {
             }
         }
     }
-
-    // MARK: - TTS Voice Settings
-
-    /// Selected TTS voice identifier (e.g. `com.apple.speech.synthesis.voice.samantha`). Empty string = system default.
-    public var ttsVoiceIdentifier: String {
-        get {
-            access(keyPath: \.ttsVoiceIdentifier)
-            return defaults.string(forKey: Keys.ttsVoiceIdentifier) ?? ""
-        }
-        set {
-            withMutation(keyPath: \.ttsVoiceIdentifier) {
-                defaults.set(newValue, forKey: Keys.ttsVoiceIdentifier)
-            }
-        }
-    }
-
-    /// TTS speech rate multiplier (0.1 to 1.0, default: `AVSpeechUtteranceDefaultSpeechRate` ~0.5).
-    public var ttsSpeechRate: Float {
-        get {
-            access(keyPath: \.ttsSpeechRate)
-            let val = defaults.float(forKey: Keys.ttsSpeechRate)
-            return val > 0 ? val : AVSpeechUtteranceDefaultSpeechRate
-        }
-        set {
-            withMutation(keyPath: \.ttsSpeechRate) {
-                defaults.set(newValue, forKey: Keys.ttsSpeechRate)
-            }
-        }
-    }
-
-    /// TTS pitch multiplier (0.5 to 2.0, default: 1.0).
-    public var ttsPitchMultiplier: Float {
-        get {
-            access(keyPath: \.ttsPitchMultiplier)
-            let val = defaults.float(forKey: Keys.ttsPitchMultiplier)
-            return val > 0 ? val : 1.0
-        }
-        set {
-            withMutation(keyPath: \.ttsPitchMultiplier) {
-                defaults.set(newValue, forKey: Keys.ttsPitchMultiplier)
-            }
-        }
-    }
-
-    /// TTS volume (0.0 to 1.0, default: 1.0).
-    public var ttsVolume: Float {
-        get {
-            access(keyPath: \.ttsVolume)
-            if defaults.object(forKey: Keys.ttsVolume) == nil {
-                return 1.0
-            }
-            return defaults.float(forKey: Keys.ttsVolume)
-        }
-        set {
-            withMutation(keyPath: \.ttsVolume) {
-                defaults.set(newValue, forKey: Keys.ttsVolume)
-            }
-        }
-    }
 }
+

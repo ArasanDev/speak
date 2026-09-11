@@ -94,6 +94,9 @@ ALLOWED_IMPORTS=(
                         # networking/auth symbol from the greps below, which still
                         # scan every line of SpeakCore/App/CLI source.
     "Combine"           # Apple; ObservableObject in SpeakCore
+    "CoreAudio"         # Apple; HAL audio device monitoring
+    "AudioToolbox"      # Apple; AudioObjectPropertyAddress / listener
+    "ServiceManagement" # Apple; SMAppService for Launch at Login
 )
 
 IMPORT_VIOLATIONS=0

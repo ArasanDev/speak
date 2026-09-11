@@ -22,31 +22,27 @@
 
 cask "speak" do
   version "0.0.1"
-  sha256 "PLACEHOLDER_SHA256_REPLACE_AFTER_MAKE_RELEASE"
+  sha256 "ad8ad3e6486af076602bb7211b8e3b66b9cea0456b8c2c7fc6ba49fb90b96a65"
 
   url "https://github.com/ArasanDev/speak/releases/download/v#{version}/Speak.dmg"
   name "speak"
   desc "Local-first, free, open-source AI voice dictation for macOS"
   homepage "https://github.com/ArasanDev/speak"
 
-  # macOS 26 (Tahoe) minimum — speak requires SpeechAnalyzer + Foundation Models,
-  # both macOS 26-only. :tahoe == "26" [verified: Homebrew macos_version.rb].
+  # macOS 26 (Tahoe) minimum on Apple Silicon
   depends_on macos: ">= :tahoe"
+  depends_on arch: :arm64
 
   app "Speak.app"
 
-  # Post-install: open System Preferences so the user can grant required permissions
-  # (Accessibility + Input Monitoring + Microphone). speak prompts for these on
-  # first launch, so this caveats block is informational only.
+  # Post-install: inform the user about the two macOS permissions
   caveats <<~EOS
-    speak requires three permissions before it can transcribe:
-      • Microphone     — for audio capture
-      • Accessibility  — to detect the hotkey while other apps have focus
-      • Input Monitoring — to monitor the Fn key globally
+    speak requires two permissions before it can transcribe:
+      • Microphone    — for on-device audio capture
+      • Accessibility — to detect the hotkey globally and insert text
 
-    On first launch, speak will walk you through granting each one.
-
-    Note: speak runs 100% on-device. No audio ever leaves your Mac.
+    On first launch, speak will guide you to grant each permission.
+    All transcription and AI neat-writing run 100% locally on Apple Silicon.
   EOS
 
   zap trash: [

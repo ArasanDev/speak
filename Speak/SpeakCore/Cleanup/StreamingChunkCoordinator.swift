@@ -20,6 +20,8 @@ public actor StreamingChunkCoordinator {
     private let mode: CleanupMode
     private var chunkTasks: [Task<String, Never>] = []
     private var rawChunks: [String] = []
+    private var chunkErrors: [String] = []
+    private var lastTask: Task<String, Never>?
 
     public init(cleaner: any LLMCleaning, mode: CleanupMode) {
         self.cleaner = cleaner
@@ -31,7 +33,16 @@ public actor StreamingChunkCoordinator {
         chunkTasks.count
     }
 
+    public var hasFailed: Bool {
+        !chunkErrors.isEmpty
+    }
+
+    func recordError(_ description: String) {
+        chunkErrors.append(description)
+    }
+
     /// Ingests a finalized raw text chunk during active speech and fires an asynchronous cleanup task.
+    /// Serializes tasks using a task chain to prevent concurrent contention on the Neural Engine.
     ///
     /// - Parameter chunkText: The stabilized text emitted by the speech recognizer.
     public func ingestChunk(_ chunkText: String) {
@@ -41,19 +52,28 @@ public actor StreamingChunkCoordinator {
         rawChunks.append(trimmed)
         let cleanerRef = self.cleaner
         let modeRef = self.mode
+        let priorTask = self.lastTask
 
-        // Fire asynchronous cleanup for this chunk immediately in the background.
-        let task = Task<String, Never> {
+        // Chain the task onto the prior task to ensure strict single-lane execution
+        // while still processing continuously in the background during active speech.
+        let task = Task<String, Never> { [weak self] in
+            _ = await priorTask?.value
+            guard await cleanerRef.isAvailable else {
+                return trimmed
+            }
             do {
                 let cleaned = try await cleanerRef.clean(trimmed, mode: modeRef)
-                return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+                let extracted = FoundationModelPromptBuilder.extractTargetTranscript(from: cleaned, fallback: trimmed)
+                return extracted.trimmingCharacters(in: .whitespacesAndNewlines)
             } catch {
+                await self?.recordError(error.localizedDescription)
                 SpeakLog.cleanup.warning(
                     "StreamingChunkCoordinator: chunk clean failed, falling back to raw — \(error.localizedDescription, privacy: .public)"
                 )
                 return trimmed
             }
         }
+        self.lastTask = task
         chunkTasks.append(task)
     }
 
@@ -78,7 +98,14 @@ public actor StreamingChunkCoordinator {
     ///
     /// - Parameter trailingRawText: Any final volatile or remaining text not captured in earlier chunks.
     /// - Returns: The stitched, normalized, and macro-consolidated full transcript.
-    public func finalizeAndStitch(trailingRawText: String? = nil) async -> String {
+    public func finalizeAndStitch(trailingRawText: String? = nil) async throws -> String {
+        for task in chunkTasks {
+            _ = await task.value
+        }
+        if let firstError = chunkErrors.first {
+            throw SpeakError.llmCleanupFailed("Chunk cleanup failed: \(firstError)")
+        }
+
         var cleanedChunks: [String] = []
 
         for task in chunkTasks {
@@ -90,14 +117,9 @@ public actor StreamingChunkCoordinator {
 
         // If there is trailing raw text (e.g. from the final volatile window), clean it now.
         if let trailing = trailingRawText?.trimmingCharacters(in: .whitespacesAndNewlines), !trailing.isEmpty {
-            let normalizedTrailing = DeveloperAcronymNormalizer.normalize(trailing)
-            do {
-                let cleanedTrailing = try await cleaner.clean(normalizedTrailing, mode: mode)
-                let extracted = FoundationModelPromptBuilder.extractTargetTranscript(from: cleanedTrailing)
-                cleanedChunks.append(extracted.isEmpty ? normalizedTrailing : extracted)
-            } catch {
-                cleanedChunks.append(normalizedTrailing)
-            }
+            let cleanedTrailing = try await cleaner.clean(trailing, mode: mode)
+            let extracted = FoundationModelPromptBuilder.extractTargetTranscript(from: cleanedTrailing)
+            cleanedChunks.append(extracted.isEmpty ? trailing : extracted)
         }
 
         let stitched = TranscriptChunker.stitch(cleanedChunks)
@@ -106,7 +128,7 @@ public actor StreamingChunkCoordinator {
         // Tier 3: Deterministic Full-Chunk Macro-Consolidation Pass
         // Only run when multiple chunks or extended thoughts exist (> 12 words) and mode is eligible.
         let wordCount = normalizedDraft.split(whereSeparator: { $0.isWhitespace }).count
-        guard isMacroConsolidationEligible, (chunkTasks.count > 1 || wordCount > 12) else {
+        guard isMacroConsolidationEligible, chunkTasks.count > 1 || wordCount > 12 else {
             return normalizedDraft
         }
 
@@ -131,10 +153,13 @@ public actor StreamingChunkCoordinator {
 
     /// Resets all accumulated chunk state (e.g. on session cancel).
     public func reset() {
+        lastTask?.cancel()
+        lastTask = nil
         for task in chunkTasks {
             task.cancel()
         }
         chunkTasks.removeAll()
+        chunkErrors.removeAll()
         rawChunks.removeAll()
     }
 }

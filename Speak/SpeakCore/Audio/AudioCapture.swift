@@ -64,6 +64,8 @@ public final class AudioCapture: @unchecked Sendable {
     private var pendingLevelStream: AsyncStream<Double>?
     /// Observer for hardware configuration changes (device plug/unplug, Bluetooth route changes).
     private var configObserver: (any NSObjectProtocol)?
+    /// Observer token for CoreAudio HAL default input device changes.
+    private var monitorToken: UUID?
 
     /// Serializes `stop()` against the `.AVAudioEngineConfigurationChange`
     /// handler, which fires on an arbitrary CoreAudio callback thread. Without
@@ -115,15 +117,20 @@ public final class AudioCapture: @unchecked Sendable {
     ///
     /// W2.1: Also starts the parallel level stream (accessible via `startLevelStream()`).
     public func start() throws -> AsyncStream<AVAudioPCMBuffer> {
+        engine.reset()
+
         let input = engine.inputNode
-        let inputFormat = input.outputFormat(forBus: bus)
-        guard inputFormat.sampleRate > 0 else {
-            throw SpeakError.unknown("No audio input device available")
+        if let currentDev = CoreAudioDeviceMonitor.shared.currentDefaultInputDevice() {
+            try? input.auAudioUnit.setDeviceID(currentDev.id)
         }
-        guard let targetFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
-                                               sampleRate: Constants.targetSampleRate,
-                                               channels: Constants.targetChannels,
-                                               interleaved: false) else {
+
+        let inputFormat = try resolveInputFormat(for: input)
+        guard let targetFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: Constants.targetSampleRate,
+            channels: Constants.targetChannels,
+            interleaved: false
+        ) else {
             throw SpeakError.unknown("Could not build 16 kHz mono target format")
         }
         guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
@@ -134,125 +141,27 @@ public final class AudioCapture: @unchecked Sendable {
         let (stream, continuation) = AsyncStream<AVAudioPCMBuffer>.makeStream()
         self.continuation = continuation
 
-        // W2.1: Prepare the level stream continuation so the tap can yield levels
-        // from the very first buffer. The stream itself is handed to callers via
-        // `startLevelStream()`, which must be called after `start()`.
         let (levelStream, levelsContinuation) = AsyncStream<Double>.makeStream()
         self.levelsContinuation = levelsContinuation
-        // levelStream is retained for callers — stored as ivar so `startLevelStream`
-        // can return it. We rebuild it each `start()` call.
         self.pendingLevelStream = levelStream
 
-        // Thread-safe state capture for tap callback & dynamic format re-sync.
-        // `ConverterBox` (declared below, at class scope so it can also be a
-        // parameter type on `reconfigureAfterRouteChangeLocked`) is a
-        // lock-protected reference so the tap callback (real-time audio
-        // thread) and the config-change closure (arbitrary CoreAudio thread)
-        // can both read/replace the active converter without racing.
         let converterBox = ConverterBox(converter)
-        let currentContinuation = continuation
-        let currentLevelsContinuation = levelsContinuation
-        let vadBox = self.vadBox
-        let bus = self.bus
-
-        // Installs (or reinstalls) the tap for `format`. Defensively guards
-        // against invalid/zero-rate formats — calling `installTap` with such
-        // a format is what raises an uncatchable NSException in AVFoundation.
-        // Returns `false` if `format` is not usable (caller must not proceed
-        // to `engine.start()` in that case).
-        let installTap: @Sendable (AVAudioFormat) -> Bool = { format in
-            guard format.sampleRate > 0, format.channelCount > 0 else {
-                SpeakLog.audio.error("""
-                    AudioCapture: refusing to install tap — invalid format \
-                    (\(format.sampleRate, privacy: .public)Hz / \(format.channelCount, privacy: .public)ch).
-                    """)
-                return false
-            }
-            input.removeTap(onBus: bus)
-            input.installTap(onBus: bus, bufferSize: Constants.tapBufferSize, format: format) { buffer, _ in
-                let rms = Self.rmsLevel(buffer: buffer)
-                currentLevelsContinuation.yield(rms)
-
-                // VAD feed: read-only side channel on the same raw input buffer,
-                // independent of the RMS level feed and the PCM buffer stream.
-                vadBox.get()?.processBuffer(buffer)
-
-                // Defensive guard: a malformed/zero-rate buffer format must
-                // never reach AVAudioConverter — building or using a
-                // converter with such a format is another uncatchable
-                // NSException path.
-                guard buffer.format.sampleRate > 0, buffer.format.channelCount > 0 else {
-                    return
-                }
-
-                // Dynamic format re-sync: if device sample rate changed mid-stream
-                // (e.g. Bluetooth profile switch from 48kHz to 16kHz SCO), rebuild converter on the fly.
-                var activeConv = converterBox.get()
-                if buffer.format.sampleRate != activeConv.inputFormat.sampleRate ||
-                   buffer.format.channelCount != activeConv.inputFormat.channelCount {
-                    if let newConv = AVAudioConverter(from: buffer.format, to: targetFormat) {
-                        converterBox.set(newConv)
-                        activeConv = newConv
-                        SpeakLog.audio.info("AudioCapture: dynamic format re-sync to \(buffer.format.sampleRate, privacy: .public)Hz")
-                    } else {
-                        // Rebuild failed (e.g. incompatible channel layout). Do
-                        // NOT fall through to convert() with the stale
-                        // converter — that mismatch is the other uncatchable
-                        // NSException path (AVAudioConverterFillComplexBuffer).
-                        // Drop this buffer; the config-change handler (or the
-                        // next buffer, if the mismatch was transient) will
-                        // recover the converter.
-                        SpeakLog.audio.error("""
-                            AudioCapture: dynamic format re-sync FAILED for \
-                            \(buffer.format.sampleRate, privacy: .public)Hz/\(buffer.format.channelCount, privacy: .public)ch — dropping buffer.
-                            """)
-                        return
-                    }
-                }
-
-                Self.convert(buffer, to: targetFormat, using: activeConv, yielding: currentContinuation)
-            }
-            return true
-        }
+        let installTap = makeTapInstaller(
+            input: input,
+            targetFormat: targetFormat,
+            converterBox: converterBox,
+            continuation: continuation,
+            levelsContinuation: levelsContinuation
+        )
 
         _ = installTap(inputFormat)
 
-        // Register for engine configuration changes (Bluetooth headphones
-        // connect/disconnect, sample-rate/route changes). Rebuilds the tap
-        // AND the converter against the new hardware format before
-        // restarting the engine — restarting with a stale tap/converter is
-        // the confirmed crash root cause.
-        if configObserver == nil {
-            configObserver = NotificationCenter.default.addObserver(
-                forName: .AVAudioEngineConfigurationChange,
-                object: nil, // nil (not `engine`): lets tests post a synthetic
-                             // notification without reflection access to the
-                             // private `engine` ivar; in production there is
-                             // one `AudioCapture`/engine per active session so
-                             // this is not meaningfully broader in practice.
-                queue: nil
-            ) { [weak self] notification in
-                guard let self else { return }
-                // Ignore notifications that are unambiguously about a
-                // *different* engine instance (production safety net now
-                // that we listen broadly).
-                if let object = notification.object as AnyObject?,
-                   object !== self.engine {
-                    return
-                }
-                // Runs on an arbitrary CoreAudio thread — serialize against
-                // `stop()` via `stateQueue`.
-                self.stateQueue.sync {
-                    self.reconfigureAfterRouteChangeLocked(
-                        input: input,
-                        bus: bus,
-                        targetFormat: targetFormat,
-                        converterBox: converterBox,
-                        installTap: installTap
-                    )
-                }
-            }
-        }
+        setupObservers(
+            input: input,
+            targetFormat: targetFormat,
+            converterBox: converterBox,
+            installTap: installTap
+        )
 
         engine.prepare()
         do {
@@ -271,6 +180,109 @@ public final class AudioCapture: @unchecked Sendable {
             \(Constants.targetSampleRate, privacy: .public)Hz mono
             """)
         return stream
+    }
+
+    private func resolveInputFormat(for input: AVAudioInputNode) throws -> AVAudioFormat {
+        var inputFormat = input.outputFormat(forBus: bus)
+        if inputFormat.sampleRate <= 0 || inputFormat.channelCount <= 0 {
+            for _ in 0..<3 {
+                Thread.sleep(forTimeInterval: 0.05)
+                inputFormat = input.outputFormat(forBus: bus)
+                if inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 { break }
+            }
+        }
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            throw SpeakError.unknown("No audio input device available")
+        }
+        return inputFormat
+    }
+
+    private func makeTapInstaller(
+        input: AVAudioInputNode,
+        targetFormat: AVAudioFormat,
+        converterBox: ConverterBox,
+        continuation: AsyncStream<AVAudioPCMBuffer>.Continuation,
+        levelsContinuation: AsyncStream<Double>.Continuation
+    ) -> @Sendable (AVAudioFormat) -> Bool {
+        let vadBox = self.vadBox
+        let bus = self.bus
+
+        return { format in
+            guard format.sampleRate > 0, format.channelCount > 0 else {
+                SpeakLog.audio.error("""
+                    AudioCapture: refusing to install tap — invalid format \
+                    (\(format.sampleRate, privacy: .public)Hz / \(format.channelCount, privacy: .public)ch).
+                    """)
+                return false
+            }
+            input.removeTap(onBus: bus)
+            input.installTap(onBus: bus, bufferSize: Constants.tapBufferSize, format: format) { buffer, _ in
+                let rms = Self.rmsLevel(buffer: buffer)
+                levelsContinuation.yield(rms)
+                vadBox.get()?.processBuffer(buffer)
+
+                guard buffer.format.sampleRate > 0, buffer.format.channelCount > 0 else { return }
+
+                var activeConv = converterBox.get()
+                if buffer.format.sampleRate != activeConv.inputFormat.sampleRate ||
+                   buffer.format.channelCount != activeConv.inputFormat.channelCount {
+                    if let newConv = AVAudioConverter(from: buffer.format, to: targetFormat) {
+                        converterBox.set(newConv)
+                        activeConv = newConv
+                        SpeakLog.audio.info("AudioCapture: dynamic format re-sync to \(buffer.format.sampleRate, privacy: .public)Hz")
+                    } else {
+                        SpeakLog.audio.error("AudioCapture: dynamic format re-sync FAILED — dropping buffer.")
+                        return
+                    }
+                }
+
+                Self.convert(buffer, to: targetFormat, using: activeConv, yielding: continuation)
+            }
+            return true
+        }
+    }
+
+    private func setupObservers(
+        input: AVAudioInputNode,
+        targetFormat: AVAudioFormat,
+        converterBox: ConverterBox,
+        installTap: @escaping @Sendable (AVAudioFormat) -> Bool
+    ) {
+        let bus = self.bus
+        if configObserver == nil {
+            configObserver = NotificationCenter.default.addObserver(
+                forName: .AVAudioEngineConfigurationChange,
+                object: nil,
+                queue: nil
+            ) { [weak self] notification in
+                guard let self else { return }
+                if let object = notification.object as AnyObject?, object !== self.engine { return }
+                self.stateQueue.sync {
+                    self.reconfigureAfterRouteChangeLocked(
+                        input: input,
+                        bus: bus,
+                        targetFormat: targetFormat,
+                        converterBox: converterBox,
+                        installTap: installTap
+                    )
+                }
+            }
+        }
+
+        if monitorToken == nil {
+            monitorToken = CoreAudioDeviceMonitor.shared.registerCallback { [weak self] _ in
+                guard let self else { return }
+                self.stateQueue.sync {
+                    self.reconfigureAfterRouteChangeLocked(
+                        input: input,
+                        bus: bus,
+                        targetFormat: targetFormat,
+                        converterBox: converterBox,
+                        installTap: installTap
+                    )
+                }
+            }
+        }
     }
 
     /// W2.1: Returns the live level stream (0…1 RMS values). Must be called after
@@ -315,7 +327,7 @@ public final class AudioCapture: @unchecked Sendable {
         converterBox: ConverterBox,
         installTap: @escaping @Sendable (AVAudioFormat) -> Bool
     ) {
-        SpeakLog.audio.info("AudioCapture: AVAudioEngineConfigurationChange received — rebuilding tap for new hardware format.")
+        SpeakLog.audio.info("AudioCapture: route/device change received — rebuilding tap for new hardware format.")
 
         // Tear down first — the OS may have already invalidated the old
         // tap/engine graph.
@@ -323,8 +335,21 @@ public final class AudioCapture: @unchecked Sendable {
         if engine.isRunning {
             engine.stop()
         }
+        engine.reset()
 
-        let newInputFormat = input.outputFormat(forBus: bus)
+        if let currentDev = CoreAudioDeviceMonitor.shared.currentDefaultInputDevice() {
+            try? input.auAudioUnit.setDeviceID(currentDev.id)
+        }
+
+        var newInputFormat = input.outputFormat(forBus: bus)
+        if newInputFormat.sampleRate <= 0 || newInputFormat.channelCount <= 0 {
+            for _ in 0..<3 {
+                Thread.sleep(forTimeInterval: 0.05)
+                newInputFormat = input.outputFormat(forBus: bus)
+                if newInputFormat.sampleRate > 0 && newInputFormat.channelCount > 0 { break }
+            }
+        }
+
         guard newInputFormat.sampleRate > 0, newInputFormat.channelCount > 0 else {
             SpeakLog.audio.error("AudioCapture: no valid input format after configuration change — stopping capture.")
             stopLocked()
@@ -368,8 +393,13 @@ public final class AudioCapture: @unchecked Sendable {
             NotificationCenter.default.removeObserver(observer)
             configObserver = nil
         }
+        if let token = monitorToken {
+            CoreAudioDeviceMonitor.shared.unregisterCallback(token)
+            monitorToken = nil
+        }
         engine.inputNode.removeTap(onBus: bus)
         if engine.isRunning { engine.stop() }
+        engine.reset()
         continuation?.finish()
         continuation = nil
         levelsContinuation?.finish()

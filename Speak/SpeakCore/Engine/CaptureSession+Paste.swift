@@ -27,7 +27,16 @@ extension CaptureSession {
     /// No-op when `inserter == nil`.
     func runPaste(_ result: TranscriptionResult) async throws {
         guard let inserter = inserter else { return }
-        let textToInsert = result.cleanedText ?? result.rawText
+        let baseText = result.cleanedText ?? result.rawText
+        guard !baseText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let isCleaned = result.cleanedText != nil
+        let prefixToUse: String
+        if agentPrefixStyle != .none {
+            prefixToUse = agentPrefixStyle.formattedPrefix(isCleaned: isCleaned, includeState: agentPrefixIncludeState)
+        } else {
+            prefixToUse = agentPrefix
+        }
+        let textToInsert = prefixToUse.isEmpty ? baseText : "\(prefixToUse)\(baseText)"
         do {
             try await inserter.insert(textToInsert)
         } catch {

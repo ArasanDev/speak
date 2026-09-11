@@ -40,10 +40,10 @@ struct FilmstripView: View {
         HStack(spacing: SpeakSpacing.xs) {
             // The active streaming text at full size (the live capture) — the anchor.
             Text(model.activeStreamText.isEmpty ? "Listening\u{2026}" : model.activeStreamText)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .font(.speakMono(9.5, weight: .medium))
                 .foregroundStyle(.primary)
-                .lineLimit(3)
-                .lineSpacing(2)
+                .lineLimit(4)
+                .lineSpacing(1.5)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .contentTransition(.interpolate)
                 .accessibilityLabel(model.activeStreamText)
@@ -125,12 +125,12 @@ struct SettlingProcessingContent: View {
                         // Provisional raw transcript — dimmed + italic to signal it's
                         // not final. The transformation (diff) replaces it on reveal.
                         Text(model.settlingText)
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .font(.speakMono(9.5, weight: .medium))
                             .foregroundStyle(.secondary.opacity(0.8))
                             .italic()
-                            .lineLimit(3)
+                            .lineLimit(4)
                             .multilineTextAlignment(.leading)
-                            .lineSpacing(2)
+                            .lineSpacing(1.5)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .accessibilityLabel("Polishing transcription: \(model.settlingText)")
                     }

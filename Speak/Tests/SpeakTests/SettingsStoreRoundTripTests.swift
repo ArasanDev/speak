@@ -158,4 +158,59 @@ final class SettingsStoreRoundTripTests: XCTestCase {
         XCTAssertEqual(reloaded.cleanupEngine, .foundationModels,
             "Overwriting .mlx with .foundationModels must persist correctly.")
     }
+
+    // MARK: - agentPrefixStyle & agentPrefixIncludeState
+
+    func testAgentPrefixStyleDefaultIsSpeakSTT() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertEqual(store.agentPrefixStyle, .speakSTT,
+            "agentPrefixStyle default must be .speakSTT.")
+    }
+
+    func testAgentPrefixStyleSpeakSTTRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.agentPrefixStyle = .speakSTT
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.agentPrefixStyle, .speakSTT,
+            ".speakSTT must round-trip across store reloads.")
+    }
+
+    func testAgentPrefixStyleVoiceSTTRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.agentPrefixStyle = .voiceSTT
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.agentPrefixStyle, .voiceSTT,
+            ".voiceSTT must round-trip across store reloads.")
+    }
+
+    func testAgentPrefixStyleSTTInputAndPromptRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.agentPrefixStyle = .sttInput
+
+        var reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.agentPrefixStyle, .sttInput)
+
+        store.agentPrefixStyle = .sttPrompt
+        reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.agentPrefixStyle, .sttPrompt)
+
+        store.agentPrefixStyle = .none
+        reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.agentPrefixStyle, .none)
+    }
+
+    func testAgentPrefixIncludeStateRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        XCTAssertFalse(store.agentPrefixIncludeState, "Default must be false.")
+
+        store.agentPrefixIncludeState = true
+        let reloaded = freshStore(on: defaults)
+        XCTAssertTrue(reloaded.agentPrefixIncludeState, "Must persist true across reload.")
+    }
 }

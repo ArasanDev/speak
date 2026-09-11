@@ -37,7 +37,8 @@ extension CaptureSession {
     func fireWarmUp() {
         guard var warmUp = warmUp else { return }
         warmUp.task?.cancel()
-        warmUp.task = Task { await warmUp.handler() }
+        let handler = warmUp.handler
+        warmUp.task = Task { await handler() }
         self.warmUp = warmUp
     }
 

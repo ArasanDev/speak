@@ -49,13 +49,13 @@ public final class SpeechPrewarmer: Sendable {
     ///   - On `NSWorkspaceDidWakeNotification`.
     ///
     /// Failure is logged via `os.Logger` and never propagated.
-    public func prewarm() {
+    public func prewarm(locale: Locale = Locale(identifier: "en-US")) {
         guard SpeechTranscriber.isAvailable else { // [verified]
             SpeakLog.stt.info("SpeechPrewarmer: SpeechTranscriber not available — skipping prewarm.")
             return
         }
         Task.detached(priority: .background) {
-            await Self.warmModel()
+            await Self.warmModel(locale: locale)
         }
     }
 
@@ -66,10 +66,9 @@ public final class SpeechPrewarmer: Sendable {
     /// model; the static bestAvailableAudioFormat query alone does not guarantee it.
     /// [STT-H1] [verified: SpeechAnalyzer(modules:options:) + Options(priority:modelRetention:)
     ///  + ModelRetention.processLifetime — arm64e-apple-macos.swiftinterface, MacOSX26.5.sdk]
-    private static func warmModel() async {
-        let locale = Locale(identifier: "en-US")
+    private static func warmModel(locale: Locale) async {
         guard let resolvedLocale = await SpeechTranscriber.supportedLocale(equivalentTo: locale) else {
-            SpeakLog.stt.info("SpeechPrewarmer: en-US not a supported locale — skipping prewarm.")
+            SpeakLog.stt.info("SpeechPrewarmer: \(locale.identifier, privacy: .public) not a supported locale — skipping prewarm.")
             return
         }
         let transcriber = SpeechTranscriber(locale: resolvedLocale, preset: .progressiveTranscription)

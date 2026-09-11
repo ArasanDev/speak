@@ -37,12 +37,11 @@ public struct OverlayTextFlow: Sendable, Equatable {
     /// these (fading upward); they are the "outward text" the user described.
     public private(set) var flowedChunks: [FlowedChunk] = []
 
-    /// Maximum characters the 3-line window holds before text flows out.
-    /// [decision: ~120 chars ≈ 3 lines at 11pt mono in the center lane of the
-    ///  520pt panel. Traced to the panel's fixed size; revisit with live dogfood.]
+    /// Maximum characters the window holds before text flows out.
+    /// ~220 chars ≈ 4–5 lines at 9.5pt mono in the center lane of the 520pt panel.
     public var maxWindowChars: Int
 
-    public init(maxWindowChars: Int = 120) {
+    public init(maxWindowChars: Int = 220) {
         self.maxWindowChars = maxWindowChars
     }
 

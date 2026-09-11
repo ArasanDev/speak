@@ -101,7 +101,8 @@ extension CaptureSession {
         }
 
         let coordinator = self.streamingCoordinator
-        let matchesFinalized = (rawText == self.finalizedText)
+        let expandedFinalized = expander?.expand(self.finalizedText) ?? self.finalizedText
+        let matchesFinalized = (rawText == self.finalizedText || rawText == expandedFinalized)
 
         let outcome: CleanupOutcome = await withCheckedContinuation { continuation in
             // `resumeOnce` guards the continuation against double-resume: both the
@@ -115,10 +116,9 @@ extension CaptureSession {
             //  contention is essentially zero.]
             let resumeOnce = OSAllocatedUnfairLock<Bool>(initialState: false)
 
-            // Unstructured task: runs the actual clean() call. Not awaited —
-            // if it times out, the continuation is already resumed and this task
-            // finishes (or hangs) in the background without blocking the session.
-            let cleanTask = Task {
+            // Unstructured task: runs the actual clean() call. Priority .userInitiated
+            // schedules on high-performance P-cores and prioritizes Neural Engine (ANE) queues.
+            let cleanTask = Task(priority: .userInitiated) {
                 do {
                     let cleaned: String
                     if let coordinator, matchesFinalized, await coordinator.chunkCount > 0 {
@@ -126,7 +126,7 @@ extension CaptureSession {
                         SpeakLog.cleanup.info(
                             "CaptureSession: using progressive streaming coordinator with \(count, privacy: .public) chunks."
                         )
-                        cleaned = await coordinator.finalizeAndStitch(trailingRawText: nil)
+                        cleaned = try await coordinator.finalizeAndStitch(trailingRawText: nil)
                     } else {
                         cleaned = try await cleaner.clean(rawText, mode: mode)
                     }

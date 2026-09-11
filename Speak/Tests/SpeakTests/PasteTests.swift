@@ -561,6 +561,134 @@ final class SecureFieldGuardTests: XCTestCase {
         XCTAssertEqual(recorder.postedEventCount, 4,
                        "Fail-safe: paste must proceed when secure-field query fails")
     }
+
+    // MARK: - Agent Prompt Prefix delivery
+
+    func testAgentPrefixPrependedToPastedTextWhenConfigured() async throws {
+        let transcriber = PasteMockTranscriber(script: chunks(["implement login"]))
+        let inserter = MockInserter()
+        let session = CaptureSession(
+            transcriber: transcriber,
+            inserter: inserter,
+            agentPrefix: "[speak] "
+        )
+        try await session.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        _ = try await session.stop()
+
+        XCTAssertEqual(inserter.snapshot(), ["[speak] implement login"],
+                       "When agentPrefix is configured, delivered text must have the prefix prepended.")
+    }
+
+    func testAgentPrefixEmptyDoesNotPrepend() async throws {
+        let transcriber = PasteMockTranscriber(script: chunks(["implement login"]))
+        let inserter = MockInserter()
+        let session = CaptureSession(
+            transcriber: transcriber,
+            inserter: inserter,
+            agentPrefix: ""
+        )
+        try await session.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        _ = try await session.stop()
+
+        XCTAssertEqual(inserter.snapshot(), ["implement login"],
+                       "When agentPrefix is empty, delivered text must not have any prefix.")
+    }
+
+    func testSetAgentPrefixDynamicallyOverridesPrefix() async throws {
+        let transcriber = PasteMockTranscriber(script: chunks(["build features"]))
+        let inserter = MockInserter()
+        let session = CaptureSession(
+            transcriber: transcriber,
+            inserter: inserter,
+            agentPrefix: ""
+        )
+        try await session.start()
+        await session.setAgentPrefix("[voice] ")
+        try await Task.sleep(nanoseconds: 50_000_000)
+        _ = try await session.stop()
+
+        XCTAssertEqual(inserter.snapshot(), ["[voice] build features"],
+                       "Dynamic setAgentPrefix call must update the delivered text prefix.")
+    }
+
+    func testAgentPrefixStylePrependsFormattedTag() async throws {
+        let transcriber = PasteMockTranscriber(script: chunks(["code review"]))
+        let inserter = MockInserter()
+        let session = CaptureSession(
+            transcriber: transcriber,
+            inserter: inserter,
+            agentPrefixStyle: .speakSTT,
+            agentPrefixIncludeState: false
+        )
+        try await session.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        _ = try await session.stop()
+
+        XCTAssertEqual(inserter.snapshot(), ["[speak-stt] code review"],
+                       "agentPrefixStyle .speakSTT must prepend [speak-stt].")
+    }
+
+    func testAgentPrefixStyleIncludesCleanStateWhenCleaned() async throws {
+        let transcriber = PasteMockTranscriber(script: chunks(["um clean this"]))
+        let cleaner = PasteMockCleaner(
+            id: "cleaner",
+            available: true,
+            cleanResult: "Clean this.",
+            errorToThrow: nil
+        )
+        let inserter = MockInserter()
+        let session = CaptureSession(
+            transcriber: transcriber,
+            cleaner: cleaner,
+            inserter: inserter,
+            agentPrefixStyle: .voiceSTT,
+            agentPrefixIncludeState: true
+        )
+        try await session.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        _ = try await session.stop()
+
+        XCTAssertEqual(inserter.snapshot(), ["[voice-stt:clean] Clean this."],
+                       "When includeState is true and cleanedText is non-nil, tag must include :clean.")
+    }
+
+    func testAgentPrefixStyleIncludesRawStateWhenNotCleaned() async throws {
+        let transcriber = PasteMockTranscriber(script: chunks(["raw transcript"]))
+        let inserter = MockInserter()
+        let session = CaptureSession(
+            transcriber: transcriber,
+            cleaner: nil,
+            inserter: inserter,
+            agentPrefixStyle: .sttPrompt,
+            agentPrefixIncludeState: true
+        )
+        try await session.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        _ = try await session.stop()
+
+        XCTAssertEqual(inserter.snapshot(), ["[stt-prompt:raw] raw transcript"],
+                       "When includeState is true and cleanedText is nil, tag must include :raw.")
+    }
+
+    func testSetAgentPrefixStyleDynamicallyOverridesPrefixAndState() async throws {
+        let transcriber = PasteMockTranscriber(script: chunks(["dynamic test"]))
+        let inserter = MockInserter()
+        let session = CaptureSession(
+            transcriber: transcriber,
+            inserter: inserter,
+            agentPrefixStyle: .none,
+            agentPrefixIncludeState: false
+        )
+        try await session.start()
+        await session.setAgentPrefix(style: .sttInput, includeState: true)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        _ = try await session.stop()
+
+        XCTAssertEqual(inserter.snapshot(), ["[stt-input:raw] dynamic test"],
+                       "Dynamic setAgentPrefix(style:includeState:) must update the delivered text prefix.")
+    }
 }
 
 // MARK: - State == State (Equatable for assertions — mirrors CaptureSessionTests.swift)

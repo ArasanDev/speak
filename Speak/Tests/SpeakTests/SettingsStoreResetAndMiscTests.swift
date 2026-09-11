@@ -85,6 +85,17 @@ final class SettingsStoreResetAndMiscTests: XCTestCase {
             "resetToDefaults() must restore petPositions to an empty dictionary.")
     }
 
+    func testResetToDefaultsRestoresAgentPrefixStyle() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        store.agentPrefixStyle = .voiceSTT
+        store.agentPrefixIncludeState = true
+        store.resetToDefaults()
+        XCTAssertEqual(store.agentPrefixStyle, .speakSTT,
+            "resetToDefaults() must restore agentPrefixStyle to .speakSTT.")
+        XCTAssertFalse(store.agentPrefixIncludeState,
+            "resetToDefaults() must restore agentPrefixIncludeState to false.")
+    }
+
     // MARK: - defaultTranscriber(for:) factory
 
     func testDefaultTranscriberReturnsAppleSpeechForAppleSpeech() throws {

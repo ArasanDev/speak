@@ -120,8 +120,22 @@ private struct GeneralSettingsTab: View {
     @State private var showLanguageResetAlert = false
     @State private var pendingResetLocale: Locale?
 
+    @ObservedObject private var launchAtLogin = LaunchAtLoginManager.shared
+
     var body: some View {
         Form {
+            Section {
+                Toggle("Launch at Login", isOn: Binding(
+                    get: { launchAtLogin.isEnabled },
+                    set: { launchAtLogin.setEnabled($0) }
+                ))
+                Text("Start speak automatically in the background when you log in to your Mac.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Startup")
+            }
+
             Section {
                 Picker("Appearance", selection: Binding(
                     get: { store.appTheme },
@@ -214,6 +228,37 @@ private struct GeneralSettingsTab: View {
                     .foregroundStyle(.secondary)
             } header: {
                 Text("Text Insertion")
+            }
+
+            Section {
+                Picker("Agent Prompt Tag", selection: Binding(
+                    get: { store.agentPrefixStyle },
+                    set: { store.agentPrefixStyle = $0 }
+                )) {
+                    ForEach(AgentPrefixStyle.allCases, id: \.self) { style in
+                        Text(style.displayName).tag(style)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                if store.agentPrefixStyle != .none {
+                    Toggle("Include transcript state (:clean / :raw)", isOn: Binding(
+                        get: { store.agentPrefixIncludeState },
+                        set: { store.agentPrefixIncludeState = $0 }
+                    ))
+                    Text(
+                        "Appends ':clean' or ':raw' to signal whether AI cleanup " +
+                        "polished the text."
+                    )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("Prepends an explicit STT origin tag to pasted text so coding agents know this prompt was voice-dictated and apply the Speak skill.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Agent Integration")
             }
 
             Section {
@@ -374,8 +419,10 @@ private struct HotkeyInputSettingsTab: View {
                     }
                 }
 
-                Button("Re-check & Re-arm Hotkey Tap") {
+                Button {
                     controller.monitor.start()
+                } label: {
+                    Label("Re-check & Re-arm Hotkey Tap", systemImage: "arrow.clockwise")
                 }
                 .font(.caption)
             } header: {
@@ -405,9 +452,44 @@ private struct HotkeyInputSettingsTab: View {
 private struct TranscriptionSettingsTab: View {
     let store: SettingsStore
     @State private var newTerm: String = ""
+    @State private var currentDevice: CoreAudioDeviceMonitor.DeviceInfo?
+    @State private var monitorToken: UUID?
 
     var body: some View {
         Form {
+            Section {
+                if let dev = currentDevice {
+                    HStack(spacing: SpeakSpacing.sm) {
+                        Image(systemName: "mic.fill")
+                            .foregroundStyle(.blue)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(dev.name)
+                                .font(.body)
+                            Text("\(Int(dev.sampleRate)) Hz · \(dev.channelCount) channel\(dev.channelCount == 1 ? "" : "s")")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text("Active")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    }
+                } else {
+                    HStack(spacing: SpeakSpacing.sm) {
+                        Image(systemName: "mic.fill")
+                            .foregroundStyle(.secondary)
+                        Text("System Default Microphone")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Microphone Input")
+            } footer: {
+                Text("Automatically detects and switches to connected headphones, AirPods, or external microphones in real time.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 Picker("Speech Engine", selection: Binding(
                     get: { store.sttEngine },
@@ -491,6 +573,22 @@ private struct TranscriptionSettingsTab: View {
         }
         .formStyle(.grouped)
         .padding(SpeakSpacing.md)
+        .onAppear {
+            currentDevice = CoreAudioDeviceMonitor.shared.currentDefaultInputDevice()
+            if monitorToken == nil {
+                monitorToken = CoreAudioDeviceMonitor.shared.registerCallback { dev in
+                    Task { @MainActor in
+                        currentDevice = dev
+                    }
+                }
+            }
+        }
+        .onDisappear {
+            if let token = monitorToken {
+                CoreAudioDeviceMonitor.shared.unregisterCallback(token)
+                monitorToken = nil
+            }
+        }
     }
 
     private func addTerm() {
@@ -817,179 +915,6 @@ private struct AIStudioSettingsTab: View {
 }
 
 // MARK: - 5. Privacy & Data
-
-/// Privacy & Data: the structural moat (four on-device guarantees) + data controls.
-/// This is marketing AND trust: a local-first app's clearest differentiator.
-/// [decision: P11-c — add export/clear/reset buttons for P11 compliance]
-private struct PrivacyDataSettingsTab: View {
-    let store: SettingsStore
-    let controller: DictationController
-
-    @State private var showResetConfirmation = false
-    @State private var resetError: String?
-    @State private var showResetError = false
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
-
-                // Badge block — lock icon + headline
-                HStack(alignment: .top, spacing: SpeakSpacing.md) {
-                    Image(systemName: "lock.shield.fill")
-                        .font(.system(size: 40))
-                        .foregroundStyle(.green)
-                    VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                        Text("100% On-Device")
-                            .font(.speakMonoTitle)
-                        Text("speak never sends your voice, your words, or your clipboard anywhere.")
-                            .font(.speakMonoCaption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(SpeakSpacing.lg)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.speakSurface)
-                )
-
-                // Four guarantee rows
-                VStack(alignment: .leading, spacing: SpeakSpacing.md) {
-                    PrivacyGuaranteeRow(
-                        icon: "mic.slash.fill",
-                        title: "No cloud audio",
-                        detail: "Speech is processed by Apple SpeechAnalyzer entirely on your Mac. Audio never leaves the device."
-                    )
-                    Divider()
-                    PrivacyGuaranteeRow(
-                        icon: "brain.head.profile",
-                        title: "No cloud AI",
-                        detail: "Neat-writing uses Apple Foundation Models — the neural engine on your chip. No API call, no account, no quota."
-                    )
-                    Divider()
-                    PrivacyGuaranteeRow(
-                        icon: "person.slash",
-                        title: "No account required",
-                        detail: "speak is free, open-source, and MIT-licensed. There is no sign-in, no subscription, and no usage metering."
-                    )
-                    Divider()
-                    PrivacyGuaranteeRow(
-                        icon: "clipboard.fill",
-                        title: "Never reads your clipboard",
-                        detail: "speak only writes to the clipboard to paste your dictation. It never reads what is already there."
-                    )
-                }
-                .padding(SpeakSpacing.lg)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.speakSurface)
-                )
-
-                // Data controls — reset settings, clear history, export data.
-                VStack(alignment: .leading, spacing: SpeakSpacing.md) {
-                    Text("Data Management")
-                        .font(.headline)
-
-                    Button(action: { showResetConfirmation = true }) {
-                        HStack {
-                            Image(systemName: "arrow.counterclockwise")
-                            Text("Reset All Settings to Defaults")
-                            Spacer()
-                        }
-                        .foregroundStyle(.primary)
-                    }
-                    .padding(.vertical, SpeakSpacing.sm)
-                    .padding(.horizontal, SpeakSpacing.md)
-                    .background(Color.speakSurface)
-                    .cornerRadius(6)
-
-                    Button(action: {
-                        Task {
-                            do {
-                                try await controller.historyStore.clear()
-                                SpeakLog.app.info("History cleared via Settings")
-                            } catch {
-                                resetError = error.localizedDescription
-                                showResetError = true
-                            }
-                        }
-                    }) {
-                        HStack {
-                            Image(systemName: "trash")
-                            Text("Clear All History")
-                            Spacer()
-                        }
-                        .foregroundStyle(.primary)
-                    }
-                    .padding(.vertical, SpeakSpacing.sm)
-                    .padding(.horizontal, SpeakSpacing.md)
-                    .background(Color.speakSurface)
-                    .cornerRadius(6)
-
-                    Button(action: {
-                        Task {
-                            do {
-                                let exported = try await controller.historyStore.export()
-                                let pasteboard = NSPasteboard.general
-                                pasteboard.clearContents()
-                                pasteboard.setString(exported, forType: .string)
-                                SpeakLog.app.info("History exported via Settings")
-                            } catch {
-                                resetError = error.localizedDescription
-                                showResetError = true
-                            }
-                        }
-                    }) {
-                        HStack {
-                            Image(systemName: "square.and.arrow.up")
-                            Text("Export History as JSON")
-                            Spacer()
-                        }
-                        .foregroundStyle(.primary)
-                    }
-                    .padding(.vertical, SpeakSpacing.sm)
-                    .padding(.horizontal, SpeakSpacing.md)
-                    .background(Color.speakSurface)
-                    .cornerRadius(6)
-
-                    Text("History is stored locally on your Mac. Export creates a JSON backup on your clipboard.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(SpeakSpacing.lg)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.speakSurface)
-                )
-            }
-            .padding(SpeakSpacing.lg)
-        }
-        .alert(
-            "Reset Settings?",
-            isPresented: $showResetConfirmation,
-            actions: {
-                Button("Cancel", role: .cancel) { }
-                Button("Reset", role: .destructive) {
-                    store.resetToDefaults()
-                }
-            },
-            message: {
-                Text("This will reset all settings to their defaults. History is not affected.")
-            }
-        )
-        .alert(
-            "Error",
-            isPresented: $showResetError,
-            actions: {
-                Button("OK", role: .cancel) { resetError = nil }
-            },
-            message: {
-                if let error = resetError {
-                    Text(error)
-                }
-            }
-        )
-    }
-}
-
-
+//
+// `PrivacyDataSettingsTab` lives in `PrivacyDataSettingsTab.swift` (split out to
+// keep this file under SwiftLint's file_length cap).

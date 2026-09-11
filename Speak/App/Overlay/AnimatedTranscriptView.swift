@@ -78,7 +78,7 @@ private struct TokenView: View {
 
     var body: some View {
         Text(token.text)
-            .font(.speakMonoBody)
+            .font(.speakMono(9.5, weight: .medium))
             .foregroundStyle(token.state == .canceled ? .secondary : .primary)
             .overlay(
                 Group {

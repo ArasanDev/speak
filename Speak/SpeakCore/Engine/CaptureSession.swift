@@ -54,7 +54,7 @@ public actor CaptureSession {
     let streamingInserter: (any StreamingRawTextInserting)?
     /// Optional snippet expander applied to the raw transcript BEFORE cleanup.
     /// `nil` (default) means no expansion — behavior is identical to pre-Wave-B.
-    private let expander: (any SnippetExpanding)?
+    let expander: (any SnippetExpanding)?
 
     /// [PE-3.1] Optional voice-command preprocessor applied AFTER snippet expansion
     /// and BEFORE cleanup. Takes the raw transcript, returns a (stripped transcript,
@@ -126,6 +126,12 @@ public actor CaptureSession {
     private var sessionStartTime: Date?
     var partialsContinuation: AsyncStream<TranscriptChunk>.Continuation?
 
+    /// Optional prefix prepended to delivered text (e.g. "[speak] " or "[voice] ")
+    /// to signal coding agents that the prompt originated from speech-to-text.
+    public private(set) var agentPrefix: String = ""
+    public private(set) var agentPrefixStyle: AgentPrefixStyle = .none
+    public private(set) var agentPrefixIncludeState: Bool = false
+
     // MARK: - Init
 
     /// Create a new CaptureSession for one dictation.
@@ -149,6 +155,9 @@ public actor CaptureSession {
     ///   - cleanupMode: `CleanupMode` passed to the cleaner. Default: `.punctuation`.
     ///   - expander: Optional snippet expander applied to the raw transcript before
     ///     cleanup. `nil` (default) = no expansion.
+    ///   - agentPrefix: Optional prompt prefix for coding agents. Default: "" (none).
+    ///   - agentPrefixStyle: Structured STT origin tag style. Default: .none.
+    ///   - agentPrefixIncludeState: Whether to append :clean or :raw to the tag. Default: false.
     public init(transcriber: any Transcribing,
                 cleaner: (any LLMCleaning)? = nil,
                 inserter: (any TextInserting)? = nil,
@@ -158,7 +167,10 @@ public actor CaptureSession {
                 expander: (any SnippetExpanding)? = nil,
                 voiceCommandPreprocessor: VoiceCommandPreprocessor? = nil,
                 voiceActionsHandler: VoiceActionsHandler? = nil,
-                warmUpHandler: WarmUpHandler? = nil) {
+                warmUpHandler: WarmUpHandler? = nil,
+                agentPrefix: String = "",
+                agentPrefixStyle: AgentPrefixStyle = .none,
+                agentPrefixIncludeState: Bool = false) {
         self.transcriber = transcriber
         self.cleaner = cleaner
         self.inserter = inserter
@@ -169,6 +181,20 @@ public actor CaptureSession {
         self.voiceCommandPreprocessor = voiceCommandPreprocessor
         self.voiceActionsHandler = voiceActionsHandler
         self.warmUp = warmUpHandler.map { WarmUpState(handler: $0) }
+        self.agentPrefix = agentPrefix
+        self.agentPrefixStyle = agentPrefixStyle
+        self.agentPrefixIncludeState = agentPrefixIncludeState
+    }
+
+    /// Set or update the agent prefix prepended to delivered text at paste time.
+    public func setAgentPrefix(_ prefix: String) {
+        self.agentPrefix = prefix
+    }
+
+    /// Set or update the agent prefix style and state inclusion at paste time.
+    public func setAgentPrefix(style: AgentPrefixStyle, includeState: Bool) {
+        self.agentPrefixStyle = style
+        self.agentPrefixIncludeState = includeState
     }
 
     // MARK: - PE-3 per-dictation cleanup override (live panel)
@@ -253,6 +279,12 @@ public actor CaptureSession {
         sessionStartTime = Date()
         latestChunk = nil
         finalizedText = ""
+
+        if let cleaner, !forcedRaw {
+            if await cleaner.isAvailable {
+                streamingCoordinator = StreamingChunkCoordinator(cleaner: cleaner, mode: effectiveCleanupMode)
+            }
+        }
 
         let stream = transcriber.startStream(locale: locale)
 
@@ -645,16 +677,9 @@ public actor CaptureSession {
                 finalizedText += " " + chunk.text
             }
 
-            // Proactive chunk cleanup: feed stabilized chunk into StreamingChunkCoordinator
-            if !forcedRaw, let cleaner = cleaner {
-                if streamingCoordinator == nil {
-                    streamingCoordinator = StreamingChunkCoordinator(cleaner: cleaner, mode: effectiveCleanupMode)
-                }
-                let coordinator = streamingCoordinator
-                let chunkText = chunk.text
-                Task {
-                    await coordinator?.ingestChunk(chunkText)
-                }
+            if let coordinator = streamingCoordinator {
+                let textToIngest = expander?.expand(chunk.text) ?? chunk.text
+                Task(priority: .userInitiated) { await coordinator.ingestChunk(textToIngest) }
             }
 
             // Stream finalized chunk if keystroke streaming is enabled.

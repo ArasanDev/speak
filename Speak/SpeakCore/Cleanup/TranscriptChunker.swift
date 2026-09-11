@@ -10,14 +10,14 @@ import Foundation
 public struct TranscriptChunker: Sendable {
 
     /// Default word count threshold above which chunking is activated.
-    /// Dictations shorter than this threshold are processed in a single pass.
-    public static let defaultChunkWordThreshold = 25
+    /// Dictations shorter than this threshold are processed in a single pass (under 1s).
+    public static let defaultChunkWordThreshold = 90
 
     /// Splits `text` into natural sentence chunks using Foundation's linguistic boundary engine.
     ///
     /// - Parameters:
     ///   - text: The raw transcript text to segment.
-    ///   - wordThreshold: Minimum word count to trigger chunking (default 25).
+    ///   - wordThreshold: Minimum word count to trigger chunking (default 90).
     /// - Returns: An array of trimmed, non-empty chunk strings.
     public static func chunk(_ text: String, wordThreshold: Int = defaultChunkWordThreshold) -> [String] {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -30,6 +30,8 @@ public struct TranscriptChunker: Sendable {
         }
 
         var detectedChunks: [String] = []
+        var currentChunkSentences: [String] = []
+        var currentChunkWords = 0
         let nsString = trimmed as NSString
         let fullRange = NSRange(location: 0, length: nsString.length)
 
@@ -37,7 +39,19 @@ public struct TranscriptChunker: Sendable {
             guard let sentence = substring?.trimmingCharacters(in: .whitespacesAndNewlines), !sentence.isEmpty else {
                 return
             }
-            detectedChunks.append(sentence)
+            let sentenceWords = sentence.split(whereSeparator: { $0.isWhitespace }).count
+            if currentChunkWords + sentenceWords > wordThreshold && !currentChunkSentences.isEmpty {
+                detectedChunks.append(currentChunkSentences.joined(separator: " "))
+                currentChunkSentences = [sentence]
+                currentChunkWords = sentenceWords
+            } else {
+                currentChunkSentences.append(sentence)
+                currentChunkWords += sentenceWords
+            }
+        }
+
+        if !currentChunkSentences.isEmpty {
+            detectedChunks.append(currentChunkSentences.joined(separator: " "))
         }
 
         // If sentence enumeration didn't split (e.g. no punctuation in raw ASR),

@@ -87,17 +87,22 @@ public final class FoundationModelsCleaner: LLMCleaning, Sendable {
 
     /// Cleans an individual, bounded chunk of text using a fresh LanguageModelSession.
     private func cleanSingleChunk(_ text: String, mode: CleanupMode) async throws -> String {
+        // Pass 1: Deterministic Lexical Pre-Cleaning (0ms Swift regex pass)
+        // Collapses repeated stutters ("I will I will" -> "I will") and prunes throat-clearing
+        // preambles so the 3B model attention window is primed with clean text.
+        let preCleaned = DeveloperAcronymNormalizer.normalize(text)
+
         let systemInstructions = FoundationModelPromptBuilder.instructions(for: mode)
         let session = LanguageModelSession(
             model: model,
             instructions: Instructions(systemInstructions)
         )
 
-        let promptText = FoundationModelPromptBuilder.userPrompt(text)
+        let promptText = FoundationModelPromptBuilder.userPrompt(preCleaned)
         do {
             let options = GenerationOptions(sampling: .greedy)
             let response = try await session.respond(to: Prompt(promptText), options: options)
-            let cleaned = FoundationModelPromptBuilder.extractTargetTranscript(from: response.content, fallback: text)
+            let cleaned = FoundationModelPromptBuilder.extractTargetTranscript(from: response.content, fallback: preCleaned)
             return cleaned
         } catch let genError as LanguageModelSession.GenerationError {
             let detail = genError.localizedDescription

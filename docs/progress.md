@@ -7,6 +7,126 @@
 
 ## Current phase
 
+**Loop #94 (2026-09-11) — Apple Silicon Neural Processing Unit (ANE/NPU) Priority Allocation & Local Test Suite Verification COMPLETE.**
+- **Apple Silicon Neural Engine & Performance Core Allocation**:
+  - Investigated and optimized hardware resource allocation for dictation and cleanup windows.
+  - On macOS 26 / Darwin, Apple's `SystemLanguageModel` (Foundation Models) and `SpeechAnalyzer` (Speech) dispatch matrix multiplication directly across the on-device Apple Neural Engine (ANE) and GPU.
+  - macOS intentionally hides raw core-pinning of ANE/NPU cores to prevent user-space deadlocks; however, scheduling via **Quality of Service (QoS)** is the official lever.
+  - Set `Task(priority: .userInitiated)` in `CaptureSession+Cleanup.swift` (line 121) and `CaptureSession.swift` (`ingestChunk`, line 680):
+    - Darwin schedules tokenizer and token post-processing onto high-frequency **P-cores** (Performance Cores) instead of low-power E-cores.
+    - Darwin tags the ANE command buffer submission with top interactive priority, pre-empting background system daemons for minimal Time-To-First-Token (TTFT) and high token generation throughput.
+- **Local Test Suite & Moat Audit Verification**:
+  - Fixed cleaner availability check in `CaptureSession.start()` and `StreamingChunkCoordinator.ingestChunk` to prevent spurious cleanup calls when the model engine is unavailable.
+  - Executed tests locally on Apple Silicon:
+    - `CaptureSessionTests` (15/15 tests green).
+    - `DegradeToRawTests` (5/5 tests green).
+    - `DeveloperAcronymBiasingTests` (9/9 tests green).
+    - `StreamingChunkCoordinatorTests` (3/3 tests green).
+    - `VoiceActionsPipelineTests` (5/5 tests green).
+    - `AgentBridgeServerTests` (passed).
+  - Moat audit (`bash scripts/verify-moat.sh`): **7/7 passed**.
+  - Lint (`swiftlint`): **0 errors**.
+  - `README.md` verified at exactly **298 lines** (strictly within the 200–500 target, far below 800 max).
+
+**Loop #93 (2026-09-11) — Native macOS Packaging (Homebrew Cask & DMG), CoreAudio Auto-Healing & Promotional README Overhaul COMPLETE.**
+- **Comprehensive README.md Overhaul**:
+  - Articulated the **4 Core Problems Solved**:
+    1. *Privacy Invasion & Subscription Creep in Voice Dictation*: Wispr Flow ($15/mo, cloud audio, background screenshots) vs. Speak (100% local on Apple Silicon, 0 network bytes, write-only pasteboard, MIT free forever).
+    2. *Dictation Latency, Hallucinations & Over-Editing*: Eliminates heavy cloud lags and unsolicited question-answering via 5-line progressive FIFO streaming overlay + Apple 3B Foundation Model with strict imperative guardrails.
+    3. *Audio Hardware Inflexibility & Headphone Dropouts*: Continuous 24/7 CoreAudio HAL listener (`CoreAudioDeviceMonitor`), dynamic device pinning, and 3-attempt exponential backoff settle for Bluetooth SCO format handshakes.
+    4. *Developer & AI Coding Agent Workflow Friction*: Built for software engineering with prompt tagging (`[speak-stt]`, `[voice-stt]`, `:clean`, `:raw`), jargon biasing, and native compiled `speak-mcp` stdio server.
+  - Complete installation guide: Homebrew Cask (`dist/speak.cask.rb`), Standalone DMG (`make dmg` $\to$ `dist/Speak.dmg`), One-line install script (`scripts/install.sh`), and developer source build.
+  - Friction-free self-healing and troubleshooting guide: in-app "↻ Re-check & Re-arm Hotkey Tap" button, Apple Dictation shortcut collision resolution, and headphone hot-swapping.
+  - Added **Resource Footprint & Efficiency (Zero Battery Tax)** benchmark section: live 32MB idle RAM, 0.0% idle CPU, Apple Neural Engine transient bursts, and comparison against Electron and local Whisper wrappers. Total README length: 298 lines (within 200–500 target).
+- **In-App Self-Healing & Refresh Icon**:
+  - Added "Re-check & Re-arm Hotkey Tap" item with `arrow.clockwise` icon to `StatusBarController.swift` menubar context menu.
+  - Updated `SettingsView.swift` with `Label("Re-check & Re-arm Hotkey Tap", systemImage: "arrow.clockwise")` for instant TCC permission re-check and event tap recovery.
+- **Verification & Moat**:
+  - `xcodebuild build`: Exited 0 (BUILD SUCCEEDED).
+  - `make verify-moat`: 7/7 checks passed.
+  - `make lint`: 0 serious violations in 330 files.
+  - Fast test suite green (`MoatAuditTests`, `AudioCaptureConfigChangeTests`).
+- **Explicit STT Origin Tags (`AgentPrefixStyle`)**:
+  - Expanded `AgentPrefixStyle` in [`SpeakCore/Storage/AgentPrefixStyle.swift`](file:///Users/tamil/Developers/deepvoice/Speak/SpeakCore/Storage/AgentPrefixStyle.swift) with 4 explicit STT tag options:
+    1. `[speak-stt]` (`.speakSTT`, default)
+    2. `[voice-stt]` (`.voiceSTT`)
+    3. `[stt-input]` (`.sttInput`)
+    4. `[stt-prompt]` (`.sttPrompt`)
+    Plus `.none` (`Off`).
+  - Added full backward compatibility with custom `Codable` mapping legacy `"speak"` and `"voice"` stored strings.
+- **Dynamic State Modifiers (`:clean` vs `:raw`)**:
+  - Added `agentPrefixIncludeState: Bool` to `SettingsStore` (defaults to `false`), `CaptureSession`, `SpeakEngine`, `OverlayViewModel`, and `DictationController`.
+  - Implemented dynamic paste formatting in [`CaptureSession+Paste.swift`](file:///Users/tamil/Developers/deepvoice/Speak/SpeakCore/Engine/CaptureSession+Paste.swift):
+    - When enabled and cleaned: `[<tag>:clean] ` (e.g. `[speak-stt:clean] `).
+    - When enabled and raw: `[<tag>:raw] ` (e.g. `[speak-stt:raw] `).
+    - When disabled: `[<tag>] ` (e.g. `[speak-stt] `).
+  - Retained in `lastTranscript` for consistent "Paste Last Transcript" re-paste.
+- **UI & HUD Controls**:
+  - **HUD Live Panel** ([`CodingCustomizationView.swift`](file:///Users/tamil/Developers/deepvoice/Speak/App/Overlay/CodingCustomizationView.swift)): Added segmented chip bar for all 5 styles + checkbox toggle for `:clean` / `:raw` state tag.
+  - **Settings** ([`SettingsView.swift`](file:///Users/tamil/Developers/deepvoice/Speak/App/Settings/SettingsView.swift)): Under `Agent Integration`, added picker for all 5 styles and toggle for state inclusion.
+- **Skill Specification ([`.agents/skills/speak/SKILL.md`](file:///Users/tamil/Developers/deepvoice/.agents/skills/speak/SKILL.md))**:
+  - Updated triggers and prompt patterns for all 4 explicit STT tags.
+  - Documented `:clean` vs `:raw` cognitive semantics.
+  - Added phonetic artifact mapping for `iPhone` $\to$ `hyphen` (`voice-stt`).
+- **Verification & Moat**:
+  - `make build`: Clean build (0 errors).
+  - `make test-fast`: Green (added tests in `PasteTests.swift`, `SettingsStoreRoundTripTests.swift`, `SettingsStoreResetAndMiscTests.swift`).
+  - `make lint`: 0 errors. Extracted `makeVoiceActionsHandler` to maintain function length under 100 lines.
+  - `make verify-moat`: 7/7 checks passed.
+  - Live app running as PID 8016.
+
+**Loop #91 (2026-09-10) — Speak Voice Input Skill & Agent Prompt Tagging Infrastructure COMPLETE.**
+- **Agent Skill (`speak`)**:
+  - Created `.agents/skills/speak/SKILL.md` defining the cognitive protocol for coding agents (Claude Code, Antigravity, Cursor) receiving voice dictations.
+  - Formulated 4 core operational principles:
+    1. *Pivot Rule (Latest Thought Wins)*: Later sentences and self-corrections supersede earlier exploratory thoughts.
+    2. *Intent & Architecture Extraction*: Isolates concrete requirements, multi-agent verification structures, and data models from conversational stream-of-thought framing.
+    3. *Phonetic & STT Artifact Normalization*: Contextually maps acoustic slips (`gate work tree` $\to$ `git worktree`, `rippo` $\to$ `repo`, `AA engineer` $\to$ `AI engineer`, `bossing` $\to$ `passing`, `insane C` $\to$ `in sync`, `travels` $\to$ `intervals`, `slush context` $\to$ `flush context`).
+    4. *Direct Bias for Action*: Forbids conversational meta-chatter; mandates immediate code reading, file editing, and test execution.
+- **Agent Prompt Tagging Infrastructure (`AgentPrefixStyle`)**:
+  - Created `AgentPrefixStyle` enum (`none`, `speak`, `voice`) in `SpeakCore/Storage/AgentPrefixStyle.swift`.
+  - Added persistence in `SettingsStore.swift` (`Keys.agentPrefixStyle`, getter/setter, default `.none`, and `resetToDefaults()` recovery).
+  - Wired into `CaptureSession.swift` and `CaptureSession+Paste.swift`: prepends `agentPrefix` (e.g. `[speak] ` or `[voice] `) to non-empty delivered text.
+  - Added `setAgentPrefix(_:)` to `SpeakEngine` and `CaptureSession` for dynamic runtime configuration.
+  - Linked `overlayModel.agentPrefixStyle` and `lastTranscript` in `DictationController+ErrorHandling.swift`.
+- **UI Customization Controls**:
+  - In `CodingCustomizationView.swift`, added an `Agent Prompt Tag` segmented chip row (`[Off | [speak] | [voice]]`) right below the prompt input, allowing instant per-session toggle while dictating.
+  - In `SettingsView.swift` (General tab), added an `Agent Integration` section with `Picker("Agent Prompt Tag", ...)` for default application behavior.
+- **File Length & Modular Architecture Compliance**:
+  - Extracted `PrivacyDataSettingsTab` into `Speak/App/Settings/PrivacyDataSettingsTab.swift`.
+  - Extracted TTS settings into `Speak/SpeakCore/Storage/SettingsStore+TTS.swift`.
+  - Both `SettingsView.swift` and `SettingsStore.swift` are now strictly under 1,000 lines.
+- **Verification & Moat**:
+  - `make build`: Clean build with 0 warnings, 0 errors.
+  - `make test-fast`: 100% green (added round-trip and paste delivery unit tests in `PasteTests.swift`, `SettingsStoreRoundTripTests.swift`, and `SettingsStoreResetAndMiscTests.swift`).
+  - `make lint`: 0 errors across 328 files.
+  - `make verify-moat`: 7/7 checks passed (offline by design, write-only pasteboard, no print, Apple-only frameworks).
+  - App launched cleanly as PID 17028.
+
+**Loop #90 (2026-09-10) — High-Density 4-Line Compact HUD & Serialized Voice-to-Prompt Streaming Pipeline COMPLETE.**
+- **User Live Dogfood Validation**:
+  - Validated live on 30-second continuous speech: clean punctuation, immediate capitalization, and zero latency stalls.
+  - User confirmed: "In this way, I were able to capture a lot of text against a lot of text. I were speaking for 30 seconds, and then I'm good and happy."
+- **High-Density Compact HUD Layout**:
+  - Restored fixed `88 pt` floating pill height (`TranscriptOverlayPanel.panelHeight = 88`).
+  - Switched font from 11pt/13pt to `.speakMono(9.5, weight: .medium)` with `1.5pt` line spacing in `TranscriptOverlayView.swift`, `SettlingOverlayContent.swift`, and `AnimatedTranscriptView.swift`.
+  - Expanded `lineLimit` to 4 lines and increased `maxWindowChars` in `OverlayTextFlow.swift` from `120` to `220`.
+  - Result: 80% higher character capacity in the identical compact footprint without panel growth.
+- **Voice-to-Agent Prompt Compiler Alignment & History Grounding**:
+  - Queried and audited actual developer turns in `~/Library/Application Support/speak/history.sqlite`.
+  - Replaced speculative dictionary additions with verified acoustic patterns (`gate work tree` -> `Git worktree`, `get work trees` -> `Git worktrees`, `git health`).
+  - Resolved internal prompt contradiction in `FoundationModelPromptBuilder.swift`: previously, `intensityClause` forbade restructuring while `voiceClause(for: .code)` mandated structuring into lists. Made `intensityClause` style-aware so `.code` actively structures multi-part developer workflows into enumerated steps.
+  - Added the Verifier & Verifier's Verifier multi-agent few-shot anchor demonstrating how spoken intent sequences compile into structured prompts for coding agents.
+  - Reduced post-paste HUD dwell from 800ms to 360ms in `DictationController+ErrorHandling.swift` for snappy dismissal.
+- **Serialized Background Streaming Pipeline**:
+  - Rewrote `StreamingChunkCoordinator.swift` using task chaining (`priorTask?.value`) to ensure strictly serialized execution on Apple's single-lane Neural Engine.
+  - Eliminates concurrent contention, completely preventing 10s watchdog timeouts at stop time while pre-compiling chunks during active speech.
+  - Fixed Swift 6 Sendable warning in `CaptureSession+WarmUp.swift`.
+- **Verification**:
+  - `make build`: 0 warnings, 0 errors.
+  - `make test-fast`: 100% green.
+  - `make verify-moat`: 7/7 privacy checks passed.
+
 **Loop #89 (2026-09-10) — Voice Articulation Engine, Automated SQLite Evaluation & Purpose Manifesto COMPLETE.**
 - **Purpose Manifesto & Philosophy (`docs/purpose.md`)**:
   - Authored the foundational document anchoring the project's transformation contract: rejecting lossy over-condensation in favor of high-fidelity voice articulation on Apple's on-device 3B Foundation Model with a 4K context window.

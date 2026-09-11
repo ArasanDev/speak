@@ -85,6 +85,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Create and retain the NSStatusItem controller after monitoring is armed.
         self.statusBarController = StatusBarController(controller: ctrl)
+
+        // Prewarm speech recognition model ~2s after launch without blocking startup render.
+        let language = ctrl.settingsStore.language
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            SpeechPrewarmer.shared.prewarm(locale: language)
+        }
     }
 
     /// Open the dashboard window when the user "re-opens" the already-running app —

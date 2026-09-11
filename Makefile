@@ -61,7 +61,7 @@ APP_BIN   := Speak.app/Contents/MacOS/Speak
 # Local history store (P9). `make history` dumps recent dictations (raw vs cleaned).
 HISTORY_DB := $$HOME/Library/Application Support/speak/history.sqlite
 
-.PHONY: all help generate build test eval study lint fmt run kill relaunch logs logs-show history history-eval doctor gates lsp clean install install-mcp-user register-mcp register-mcp-apply github-release release verify-moat dev-cert reset-permissions release-preflight
+.PHONY: all help generate generate-force build test test-fast eval study lint fmt run kill relaunch logs logs-show history history-eval doctor gates lsp clean install install-mcp-user register-mcp register-mcp-apply github-release release verify-moat dev-cert reset-permissions release-preflight
 
 all: build
 
@@ -71,8 +71,15 @@ help:
 	@echo ""
 	@grep -E '^## ' $(MAKEFILE_LIST) | sed -e 's/^## /  /'
 
-## generate: (re)create Speak.xcodeproj from project.yml
+## generate: (re)create Speak.xcodeproj from project.yml (incremental: only if project.yml changed)
 generate:
+	@if [ ! -d "$(PROJECT)" ] || [ project.yml -nt "$(PROJECT)" ]; then \
+		echo "⚙️  project.yml changed or project missing — running xcodegen generate..."; \
+		xcodegen generate; \
+	fi
+
+## generate-force: unconditionally recreate Speak.xcodeproj
+generate-force:
 	xcodegen generate
 
 ## build: produce a runnable Speak.app (signed per Signing.xcconfig — cert if
@@ -99,9 +106,13 @@ reset-permissions:
 	-tccutil reset Microphone $(BUNDLE_ID)
 	@echo "reset-permissions: cleared Accessibility / Input-Monitoring / Microphone for $(BUNDLE_ID)."
 
-## test: run the unit test suite (SpeakTests)
+## test: run the full unit test suite (SpeakTests, all ~80 test suites)
 test: generate
 	@$(XCB) test 2>&1 | bash scripts/pretty-output.sh test
+
+## test-fast: run only prompt & cleanup unit tests (~3s iteration loop)
+test-fast: generate
+	@$(XCB) test -only-testing:SpeakTests/DeveloperAcronymBiasingTests -only-testing:SpeakTests/FoundationModelPromptBuilderTests -only-testing:SpeakTests/FoundationModelsCleanerTests 2>&1 | bash scripts/pretty-output.sh test
 
 ## eval: run the small-models eval harness (live Foundation Models scoring)
 ## Uses the Eval scheme which bakes SPEAK_EVAL=1 into the test-action environment
@@ -306,6 +317,27 @@ github-release:
 	@echo ""
 	@echo "    Upload to GitHub Releases. Users run once after download:"
 	@echo "      xattr -dr com.apple.quarantine Speak.app"
+	@echo ""
+
+## dmg: build Release Speak.app and package it into a drag-and-drop dist/Speak.dmg disk image.
+dmg:
+	$(MAKE) build CONFIG=Release
+	@echo "==> dmg: staging Speak.app and /Applications symlink ..."
+	@rm -rf build/dmg_staging
+	@mkdir -p build/dmg_staging dist
+	@cp -R "$(RELEASE_APP)" build/dmg_staging/
+	@ln -s /Applications build/dmg_staging/Applications
+	@rm -f dist/Speak.dmg "dist/Speak-$(VERSION).dmg"
+	@echo "==> dmg: creating dist/Speak.dmg (UDZO compressed) ..."
+	@hdiutil create -volname "Speak" -srcfolder build/dmg_staging -ov -format UDZO dist/Speak.dmg
+	@cp dist/Speak.dmg "dist/Speak-$(VERSION).dmg"
+	@echo ""
+	@echo "==> dmg: SUCCESS"
+	@echo "    Artifact: dist/Speak.dmg"
+	@shasum -a 256 dist/Speak.dmg
+	@echo ""
+	@echo "    To test the Homebrew Cask locally:"
+	@echo "      brew install --cask dist/speak.cask.rb"
 	@echo ""
 
 ## lsp: configure sourcekit-lsp (buildServer.json) so editors/agents get SDK-correct

@@ -125,4 +125,33 @@ final class DeveloperAcronymBiasingTests: XCTestCase {
         let transcriber = AppleSpeechTranscriber(vocabulary: customTerms)
         XCTAssertEqual(transcriber.vocabulary, customTerms)
     }
+
+    func testCollapseStuttersRemovesRepeatedWordsAndPhrases() {
+        let cases: [(input: String, expected: String)] = [
+            ("I will I will create a repo", "I will create a repo"),
+            ("For, for water at all", "For water at all"),
+            ("go, go back-end system", "go back-end system"),
+            ("anything you, you ask the model", "anything you ask the model"),
+            ("the the primary key", "the primary key")
+        ]
+        for (input, expected) in cases {
+            let collapsed = DeveloperAcronymNormalizer.collapseStutters(input)
+            XCTAssertEqual(collapsed, expected, "collapseStutters failed for '\(input)'")
+        }
+    }
+
+    func testPruneConversationalPaddingsStripsPreambleAndTailQuestions() {
+        let cases: [(input: String, expected: String)] = [
+            ("Now what I want to tell you is like please fix the bug", "Please fix the bug"),
+            ("Here is the information I want to give you: check the logs", "Check the logs"),
+            ("Okay, correct. We should deploy today", "We should deploy today"),
+            ("We can create multiple worktrees, and do you understand my point?", "We can create multiple worktrees"),
+            ("Automate the pipeline once stable, can you relate this?", "Automate the pipeline once stable"),
+            ("Check if the tests pass, is it clear?", "Check if the tests pass")
+        ]
+        for (input, expected) in cases {
+            let pruned = DeveloperAcronymNormalizer.pruneConversationalPaddings(input)
+            XCTAssertEqual(pruned, expected, "pruneConversationalPaddings failed for '\(input)'")
+        }
+    }
 }

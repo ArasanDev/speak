@@ -280,4 +280,12 @@ final class OverlayViewModel {
     /// append-only "custom addition" field, not full prompt replacement — the user's
     /// stated preference for simplicity + correctness of wiring.]
     var customInstructions: String = ""
+
+    /// Per-dictation agent prompt tagging style (Off, [speak-stt], [voice-stt], etc.).
+    /// Initialized at dictation start from `SettingsStore.agentPrefixStyle`.
+    var agentPrefixStyle: AgentPrefixStyle = .none
+
+    /// Whether to append :clean or :raw state to the agent prompt tag.
+    /// Initialized at dictation start from `SettingsStore.agentPrefixIncludeState`.
+    var agentPrefixIncludeState: Bool = false
 }
