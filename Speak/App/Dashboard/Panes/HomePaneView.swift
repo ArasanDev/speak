@@ -78,11 +78,17 @@ struct HomePaneView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task { await loadInitialData() }
-        .onAppear { updatePermissionStatus() }
+        .onAppear {
+            updatePermissionStatus()
+            if let isDictating = context.isDictating {
+                isRecording = isDictating()
+            }
+        }
 
         if let publisher = context.dictationCompletedPublisher {
             contentView
                 .onReceive(publisher) { _ in
+                    isRecording = false
                     Task { await loadInitialData() }
                 }
         } else {
@@ -224,25 +230,28 @@ struct HomePaneView: View {
     }
 
     private func startDictation() {
-        guard let engine = context.speakEngine else { return }
-
         if isRecording {
             Task {
-                do {
-                    _ = try await engine.endDictation()
-                } catch {
-                    os.Logger(subsystem: "speak", category: "dashboard").error("Stop dictation failed: \(error.localizedDescription)")
+                if let onStop = context.onStopDictation {
+                    await onStop()
+                } else if let engine = context.speakEngine {
+                    _ = try? await engine.endDictation()
                 }
                 isRecording = false
             }
         } else {
             Task {
-                do {
-                    _ = try await engine.beginDictation()
-                    isRecording = true
-                } catch {
-                    os.Logger(subsystem: "speak", category: "dashboard").error("Start dictation failed: \(error.localizedDescription)")
-                    isRecording = false
+                if let onStart = context.onStartDictation {
+                    await onStart()
+                    isRecording = context.isDictating?() ?? true
+                } else if let engine = context.speakEngine {
+                    do {
+                        _ = try await engine.beginDictation()
+                        isRecording = true
+                    } catch {
+                        SpeakLog.engine.error("Start dictation failed: \(error.localizedDescription)")
+                        isRecording = false
+                    }
                 }
             }
         }

@@ -533,6 +533,11 @@ public actor SpeakEngine {
             SpeakLog.engine.info("SpeakEngine: beginDictation refused — microphone is muted.")
             throw SpeakError.microphoneMuted
         }
+        // If microphone permission has not yet been determined, trigger the system prompt
+        // so the user is asked for access rather than failing immediately.
+        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+            _ = await AVCaptureDevice.requestAccess(for: .audio)
+        }
         // Mic-permission gate: without this, a denied/revoked TCC grant lets
         // AVAudioEngine.start() succeed while CoreAudio silently feeds zeroed
         // buffers — a session that runs to .done with an empty transcript and

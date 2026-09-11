@@ -143,6 +143,15 @@ final class WindowPresenter {
             },
             onSelfHeal: { [weak self] in
                 self?.dictationController?.selfHeal()
+            },
+            onStartDictation: { [weak self] in
+                _ = await self?.dictationController?.beginDictation()
+            },
+            onStopDictation: { [weak self] in
+                await self?.dictationController?.endDictation()
+            },
+            isDictating: { [weak self] in
+                self?.dictationController?.icon == .listening
             }
         )
         let controller = DashboardWindowController(context: context)
@@ -165,7 +174,16 @@ final class WindowPresenter {
             speakEngine: dictationController?.engine,
             permissionManager: permissionManager,
             dictationCompletedPublisher: dictationController?.dictationCompletedPublisher,
-            activeExtraBindings: dictationController?.activeExtraBindings
+            activeExtraBindings: dictationController?.activeExtraBindings,
+            onStartDictation: { [weak self] in
+                _ = await self?.dictationController?.beginDictation()
+            },
+            onStopDictation: { [weak self] in
+                await self?.dictationController?.endDictation()
+            },
+            isDictating: { [weak self] in
+                self?.dictationController?.icon == .listening
+            }
         )
         controller.show()
     }
