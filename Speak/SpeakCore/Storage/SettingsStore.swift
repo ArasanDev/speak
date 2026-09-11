@@ -87,10 +87,7 @@ public enum PasteMode: String, Codable, Sendable, Equatable {
 }
 
 /// Whether to stream cleaned text as keystrokes during active dictation.
-/// [doc fix, survey: permissions-persistence/low] Actual v0 default is
-/// `.keystrokeInjection` (see `Keys.streamingMode` registration and the
-/// getter's fallback below) — this comment previously said `.off`, which no
-/// longer matched the implementation.
+/// Default is `.keystrokeInjection`.
 public enum StreamingMode: String, Codable, Sendable, Equatable {
     /// Streaming disabled. Cleaned text is pasted all at once after dictation ends.
     case off = "off"
@@ -591,12 +588,7 @@ public final class SettingsStore: @unchecked Sendable {
         withMutation(keyPath: \.sttEngine) {
             defaults.removeObject(forKey: Keys.sttEngine)
         }
-        // [bug fix, survey: permissions-persistence/high] cleanupEngine was accessed
-        // above but never actually reset — a user's configured cloud engine (e.g.
-        // OpenAI-compatible with an API key) survived "Reset to Defaults", which
-        // contradicts both the setting's stated default (`.foundationModels`,
-        // see its doc comment) and the app's "100% local by default" posture.
-        // removeObject restores the getter's fallback (`.foundationModels`).
+        // Restores the default local cleanup engine (.foundationModels).
         withMutation(keyPath: \.cleanupEngine) {
             defaults.removeObject(forKey: Keys.cleanupEngine)
         }
@@ -676,16 +668,11 @@ public final class SettingsStore: @unchecked Sendable {
         withMutation(keyPath: \.readbackEnabled) {
             defaults.set(true, forKey: Keys.readbackEnabled)
         }
-        // [bug fix, survey: permissions-persistence/medium] extraBindings (up to 4
-        // custom hotkey bindings per action, V01-5) was accessed above but never
-        // reset — survived "Reset to Defaults". removeObject restores the getter's
-        // documented default (`.empty`).
+        // Reset extra hotkey bindings back to default empty.
         withMutation(keyPath: \.extraBindings) {
             defaults.removeObject(forKey: Keys.extraBindings)
         }
-        // [bug fix, survey: permissions-persistence/low] revealTextWhileProcessing
-        // was accessed above but never reset — survived "Reset to Defaults".
-        // Documented default is `true`.
+        // Reset revealTextWhileProcessing back to default (true).
         withMutation(keyPath: \.revealTextWhileProcessing) {
             defaults.set(true, forKey: Keys.revealTextWhileProcessing)
         }

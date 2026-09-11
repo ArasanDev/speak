@@ -116,8 +116,8 @@ public actor HistoryStore: HistoryStoring {
     // MARK: - HistoryStoring
 
     public func save(_ entry: HistoryEntry) throws {
-        // [bug fix, survey: storage-durability/HIGH] INSERT and the capacity-enforcing
-        // DELETE (trimToCapacity) used to be two independent statements: if the DELETE
+        // INSERT and the capacity-enforcing DELETE (trimToCapacity) are executed in
+        // one SQLite transaction to ensure atomicity.
         // threw (disk-full, permission error, etc.) after the INSERT already committed,
         // the new entry persisted but the maxEntries cap silently went unenforced, with
         // no error surfaced distinguishing "trim failed" from "trim succeeded". Wrapping
@@ -415,10 +415,8 @@ public actor HistoryStore: HistoryStoring {
             ))
             stepResult = sqlite3_step(stmt)
         }
-        // [bug fix, survey: storage-durability/MEDIUM] The loop used to be
-        // `while sqlite3_step(stmt) == SQLITE_ROW`, which cannot distinguish
-        // "query completed" (stepResult == SQLITE_DONE) from "query aborted
-        // mid-read due to lock contention" (SQLITE_BUSY/SQLITE_LOCKED) — both
+        // Distinguish query completed (SQLITE_DONE) from query aborted mid-read
+        // due to lock contention (SQLITE_BUSY/SQLITE_LOCKED). A non-DONE exit throws.
         // just fall out of the loop and silently return whatever rows were read
         // so far. Now a non-DONE exit throws so the caller can see the failure
         // instead of mistaking a partial result for a complete one.

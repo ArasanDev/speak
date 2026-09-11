@@ -1,6 +1,6 @@
 // Speak/SpeakCore/Engine/CaptureSession+WarmUp.swift
 //
-// [V01-W] Warm-cleanup machinery (specs/voicestudio-inspiration-plan.md W01).
+// Cleanup engine warm-up machinery.
 // Lives in an extension so the actor's own body stays under the type-body lint
 // cap; only the optional stored state (`warmUp`) lives in CaptureSession.swift.
 

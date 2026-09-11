@@ -1,11 +1,9 @@
 // App/Dashboard/Panes/SnippetsPaneView.swift
 //
 // The Snippets pane — manage trigger→expansion text snippets applied to a transcript
-// BEFORE the LLM cleanup pass (verified Wispr behavior). Binds to the shared
-// `SnippetStore`; the engine reads it at dictation start (SpeakEngine.newSession).
-//
-// Matches the verified Wispr Snippets screen: a trigger field + an expansion field +
-// the list of saved snippets with delete.
+// before the LLM cleanup pass. Binds to the shared `SnippetStore`; the engine reads it
+// at dictation start (SpeakEngine.newSession). Provides trigger and expansion inputs with
+// deletion actions for saved snippets.
 
 import SpeakCore
 import SwiftUI

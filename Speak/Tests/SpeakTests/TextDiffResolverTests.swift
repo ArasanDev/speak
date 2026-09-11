@@ -1,6 +1,6 @@
 // SpeakTests/TextDiffResolverTests.swift
 //
-// Unit tests for `TextDiffResolver` (Wispr-grade self-correction resolution).
+// Unit tests for `TextDiffResolver` (real-time stream self-correction resolution).
 
 @testable import SpeakCore
 import XCTest

@@ -467,10 +467,8 @@ public actor AgentBridgeServer {
     }
 }
 
-// [bug, survey: agentbridge-protocol-edges/medium] `encodeOutbound()` can throw;
-// returning `nil` here (unlike `handle(_:)`'s legitimate no-reply `nil`) leaves
-// the MCP client with no bytes for a request it expected a reply to, so it hangs
-// until its own timeout — violates JSON-RPC 2.0. Mirrors `CLIPortServer.encodeReply`'s
+// Encode outbound JSON-RPC data, returning a valid error response payload if encoding fails
+// so connected clients never hang waiting for a response. Mirrors `CLIPortServer.encodeReply`.
 // fallback: log, then hand back a minimal JSON-RPC error response instead of `nil`.
 // Free function (not an actor member) so it doesn't grow `AgentBridgeServer`'s
 // type body further past SwiftLint's cap.

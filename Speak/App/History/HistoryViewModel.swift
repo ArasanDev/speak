@@ -71,8 +71,7 @@ final class HistoryViewModel {
         self.store = store
     }
 
-    // [bug, survey: lifecycle-leaks/high] Cancel the in-flight reload task on
-    // dealloc so it doesn't keep spinning past this view model's lifetime.
+    // Cancel any in-flight reload task on dealloc so it doesn't spin past view model lifetime.
     deinit {
         reloadTask?.cancel()
     }

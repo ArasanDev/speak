@@ -13,14 +13,14 @@
 //
 // THREADING: @MainActor throughout — NSWindow is main-thread-only.
 //
-// HYBRID FULL-APP ACTIVATION (verified Wispr pattern, 2026-06-21):
+// HYBRID FULL-APP ACTIVATION:
 //   speak ships LSUIElement=true → it lives in the menubar as the always-on dictation
 //   listener with no Dock icon. But the dashboard is the *main application window*, so
 //   while it is open the app promotes itself to a regular, Dock-present app with a
 //   standard app menu (`NSApp.setActivationPolicy(.regular)`), then demotes back to
 //   `.accessory` (menubar-only) when the window closes. This is the macOS-native
 //   "menubar tool that becomes a real windowed app on demand" model. We are the
-//   NSWindowDelegate so we can observe the close. [decision: research/wispr-flow-ui-verified.md]
+//   NSWindowDelegate so we can observe the close.
 
 import AppKit
 import Combine

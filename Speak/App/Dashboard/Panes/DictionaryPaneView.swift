@@ -5,9 +5,7 @@
 // `SettingsStore.customVocabulary` (the H4 seam, already wired into
 // AppleSpeechTranscriber.AnalysisContext.contextualStrings); edit rules live in the
 // pure `CustomVocabulary` helper (unit-tested).
-//
-// Matches the verified Wispr Dictionary: add a term, see the list, delete a term.
-// (Auto-learned ✨ words are a future enhancement once STT surfaces them.)
+// Provides user controls to add terms, view the existing vocabulary list, and delete entries.
 
 import SpeakCore
 import SwiftUI

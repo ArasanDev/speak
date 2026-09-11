@@ -522,7 +522,7 @@ final class WERHarnessTests: XCTestCase {
             """)
 
         // We assert the WER is a valid number in [0, ∞) and < 2.0 (not infinity).
-        // We do NOT assert it meets the §4 gate (T_wer = Wispr WER + 3 pts).
+        // We do NOT assert it meets the §4 gate (T_wer target threshold).
         // That gate requires the corpus, which is a human-supplied data dependency.
         XCTAssertFalse(wer.isNaN, "WER must be a valid number.")
         XCTAssertFalse(wer.isInfinite, "WER must not be infinite (check reference/hypothesis lengths).")
@@ -551,8 +551,8 @@ final class WERHarnessTests: XCTestCase {
         //       must be supplied by a human and stored in repo.
         //     • Reference transcripts for each clip must be authored.
         //     • Re-run this test suite after corpus is in place — the harness
-        //       will compute WER vs the §7 gate: WER ≤ Wispr WER + T_wer (3 pts).
-        //     • Wispr WER itself must be measured on the same corpus for a fair
+        //       will compute WER vs the §7 gate: WER ≤ baseline WER + T_wer (3 pts).
+        //     • Baseline WER itself must be measured on the same corpus for a fair
         //       apples-to-apples comparison [benchmark.md §6].
         //
         // Until the corpus arrives, the benchmark.md §4 accuracy row is:

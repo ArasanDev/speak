@@ -1,8 +1,7 @@
 // App/Dashboard/Panes/ScratchpadPaneView.swift
 //
-// The Scratchpad pane — a free-form Monaco note you can type or (later) dictate into.
-// In Wispr this doubles as the paste-failure safety net; speak adopts the same role in
-// Wave D (a failed paste lands the transcript here to edit + Copy).
+// The Scratchpad pane — a free-form local note you can type or review text in,
+// serving as a safety buffer when an accessibility paste target is unavailable.
 //
 // v0: a single persistent pad backed by `@AppStorage` (UserDefaults) so the note
 // survives relaunch — no cloud, no account (the local-first moat). Multi-tab notes are a

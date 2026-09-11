@@ -134,7 +134,7 @@ final class DictationController: CLICommandHandler {
 
     let engine: SpeakEngine
     let monitor: HotkeyMonitor
-    // nonisolated(unsafe): reachable from deinit. [bug, survey: lifecycle-leaks/critical]
+    // nonisolated(unsafe): reachable from deinit for task cancellation.
     @ObservationIgnored
     nonisolated(unsafe) var eventTask: Task<Void, Never>?
     @ObservationIgnored
@@ -176,7 +176,7 @@ final class DictationController: CLICommandHandler {
     let agentCallStore: any AgentCallStoring
 
     /// The most recent finished transcript (cleaned if available, else raw). Drives the
-    /// "Paste Last Transcript" menu item (Wispr's Ctrl+Cmd+V re-paste); empty until the
+    /// "Paste Last Transcript" menu item; empty until the
     /// first dictation completes. Observed reactively so the menu enables/disables.
     var lastTranscript: String = ""
 
@@ -734,7 +734,7 @@ final class DictationController: CLICommandHandler {
     // `handle(_:)`) moved to `DictationController+Session.swift` ([lint] type_body_length)
     // — pure code motion, no behavior change.
 
-    // [bug, survey: lifecycle-leaks/critical] cancel every owned Task loop.
+    // Cancel every active Task loop on deallocation.
     deinit {
         triggerModeObserverTask?.cancel()
         appearanceObserverTask?.cancel()

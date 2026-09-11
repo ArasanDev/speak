@@ -13,9 +13,8 @@
 // orthogonal per-dictation knobs, unrelated to the (now-removed) Agent-category picker,
 // so they stay useful here. Both bind the same `OverlayViewModel` instance as the base HUD.
 //
-// LAYOUT [decision, redesign pass]: shipped precedent surveyed across Apple Writing
-// Tools, Raycast, Spotlight, Superwhisper, and Wispr Flow is unanimous — exactly ONE
-// control is dominant (a free-text field), and every secondary option is deferred behind
+// LAYOUT: modern macOS productivity interfaces keep exactly ONE
+// control dominant (a free-text field), and every secondary option deferred behind
 // progressive disclosure. This panel's core purpose is the custom-instructions text box,
 // so it is now the first, largest, auto-focused element; the read-only system-prompt box
 // and the 14 format/tone/length preset chips are both collapsed by default behind small

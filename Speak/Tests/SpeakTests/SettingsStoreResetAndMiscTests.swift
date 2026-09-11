@@ -43,9 +43,7 @@ final class SettingsStoreResetAndMiscTests: XCTestCase {
     }
 
     func testResetToDefaultsRestoresCleanupEngineToFoundationModels() throws {
-        // [bug fix, survey: permissions-persistence/high] cleanupEngine used to
-        // survive resetToDefaults() untouched — a configured cloud engine (with an
-        // API key) would persist through "Reset to Defaults".
+        // cleanupEngine must revert to default on reset.
         let store = freshStore(on: try makeIsolatedDefaults())
         store.cleanupEngine = .openAICompatible(preset: .openAI, model: "gpt-4o-mini")
         store.resetToDefaults()
@@ -54,8 +52,7 @@ final class SettingsStoreResetAndMiscTests: XCTestCase {
     }
 
     func testResetToDefaultsRestoresExtraBindingsToEmpty() throws {
-        // [bug fix, survey: permissions-persistence/medium] extraBindings used to
-        // survive resetToDefaults() untouched.
+        // extraBindings must revert to empty on reset.
         let store = freshStore(on: try makeIsolatedDefaults())
         store.extraBindings = ExtraBindingSet(bindings: [
             ExtraBinding(source: .modifierKey(58), action: .activate)
@@ -66,8 +63,7 @@ final class SettingsStoreResetAndMiscTests: XCTestCase {
     }
 
     func testResetToDefaultsRestoresRevealTextWhileProcessingToTrue() throws {
-        // [bug fix, survey: permissions-persistence/low] revealTextWhileProcessing
-        // used to survive resetToDefaults() untouched.
+        // revealTextWhileProcessing must revert to true on reset.
         let store = freshStore(on: try makeIsolatedDefaults())
         store.revealTextWhileProcessing = false
         store.resetToDefaults()

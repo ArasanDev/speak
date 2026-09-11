@@ -1,6 +1,6 @@
 // SpeakTests/WarmCleanupModelTests.swift
 //
-// V01-W (specs/voicestudio-inspiration-plan.md W01) — warm cleanup model.
+// Unit tests for warm cleanup model initialization and prewarming.
 //
 // Contract under test:
 //   • Warm-up armed (non-nil handler, cleanup will run) → handler fires on start().

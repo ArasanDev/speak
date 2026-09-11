@@ -2,8 +2,7 @@
 //
 // The single source of truth for the local Scratchpad note's storage key + an append
 // helper. The Scratchpad pane binds to this key via @AppStorage; the dictation flow
-// appends to it when a paste fails so the text is never lost (verified Wispr behavior:
-// "if paste fails, the transcript lands in the Scratchpad").
+// appends to it when a paste fails so the text is never lost.
 
 import Foundation
 

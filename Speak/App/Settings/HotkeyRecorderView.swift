@@ -225,7 +225,7 @@ struct HotkeyRecorderView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.md) {
 
-            // Title & Description (Wispr Flow modal style)
+            // Header
             VStack(alignment: .leading, spacing: 4) {
                 Text("Shortcuts")
                     .font(.system(size: 18, weight: .bold))
@@ -285,7 +285,7 @@ struct HotkeyRecorderView: View {
             }
         }
         .padding(SpeakSpacing.lg)
-        .frame(minWidth: 440, minHeight: 280) // [decision: fits Wispr-style shortcut card, W1.1]
+        .frame(minWidth: 440, minHeight: 280)
         .background(Color(nsColor: .windowBackgroundColor))
         .onDisappear {
             stopMonitor()

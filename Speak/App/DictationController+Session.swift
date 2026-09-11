@@ -39,8 +39,8 @@ extension DictationController {
         }
     }
 
-    /// Re-paste the most recent finished transcript at the current cursor (Wispr's
-    /// "Paste Last Transcript" / Ctrl+Cmd+V). No-op until the first dictation completes.
+    /// Re-paste the most recent finished transcript at the current cursor
+    /// ("Paste Last Transcript" / Ctrl+Cmd+V). No-op until the first dictation completes.
     /// On AX-denied, the text is still placed on the clipboard (PasteboardWriter's
     /// clipboard floor) and the permissions hint is surfaced.
     func pasteLastTranscript() {

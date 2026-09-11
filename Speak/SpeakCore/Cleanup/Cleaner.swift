@@ -101,8 +101,7 @@ public enum CleanupStyle: String, Codable, Sendable, CaseIterable, Equatable {
 
 /// The neat-writing *intensity* — how aggressively the transcript is rewritten.
 ///
-/// **W4.1 transparency moat** — 4-level intensity ladder matching the market
-/// pattern (Wispr Auto Cleanup, competitor-research finding #4):
+/// **W4.1 transparency moat** — 4-level intensity ladder:
 ///   - `.none`   → raw passthrough; no model call. `SpeakEngine.newSession()` skips
 ///                 the cleaner entirely when this is selected, exactly as if
 ///                 `cleanupEnabled == false`. [decision: "no cleanup" is a level,

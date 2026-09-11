@@ -1,8 +1,7 @@
 // SpeakCore/Snippets/Snippet.swift
 //
 // A text snippet: a spoken `trigger` that expands into longer `expansion` text,
-// applied to the transcript BEFORE the LLM cleanup pass (acceleration-plan.md Wave B;
-// verified Wispr behavior — trigger → expansion). Pure value type; persisted by
+// applied to the transcript before the LLM cleanup pass. Pure value type; persisted by
 // `SnippetStore`, expanded by `SnippetExpander`.
 
 import Foundation

@@ -226,7 +226,7 @@ extension DictationController {
             let includeState = overlayController.overlayModel.agentPrefixIncludeState
             await engine.setAgentPrefix(style: agentPrefixStyle, includeState: includeState)
             let result = try await engine.endDictation()
-            // Remember the finished text for "Paste Last Transcript" (Wispr's re-paste).
+            // Remember the finished text for "Paste Last Transcript" re-paste action.
             let baseText = result.cleanedText ?? result.rawText
             let isCleaned = result.cleanedText != nil
             let prefix = agentPrefixStyle.formattedPrefix(isCleaned: isCleaned, includeState: includeState)
@@ -256,7 +256,7 @@ extension DictationController {
             // Mirror the `.microphoneMuted` soft-catch pattern: hide overlay,
             // stay idle, surface the permissions hint via `permissionsNeeded`.
             // Also route the text to the Scratchpad so it's never lost and is
-            // immediately editable (verified Wispr paste-failure behavior).
+            // immediately editable.
             overlayController.stop()
             caretOverlay.hide()
             icon = .idle

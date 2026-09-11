@@ -1,12 +1,9 @@
 // App/Dashboard/Panes/TransformsPaneView.swift
 //
-// The Transforms pane — highlight any text, press a shortcut, and have speak rewrite it
-// on-device (verified Wispr pattern: built-ins "Polish" and "Prompt Engineer"). This is
-// the read-side catalog of transforms; the live highlight→rewrite action is Wave D
-// (Command Mode shares the same on-device cleanup seam).
+// The Transforms pane — highlight text, invoke the transform action, and have speak rewrite it
+// on-device using local language models. This provides a catalog of built-in and custom rewrite presets.
 //
-// SCAFFOLD: lists the built-in transforms so the IA is complete and discoverable. The
-// per-transform run/edit + custom-transform authoring lands in Wave D. Keep the PaneHeader.
+// Lists built-in transforms so the interface is discoverable and ready for custom authoring.
 
 import SpeakCore
 import SwiftUI
@@ -55,8 +52,8 @@ struct TransformsPaneView: View {
 
 // MARK: - BuiltInTransform
 
-/// The built-in transforms speak ships with (mirrors Wispr's Polish / Prompt Engineer).
-/// Pure presentation data for now; wired to the on-device cleanup seam in Wave D.
+/// The built-in rewrite transforms speak ships with (e.g., Polish, Prompt Engineer).
+/// Presentation models wired to the on-device cleanup engine.
 private struct BuiltInTransform: Identifiable {
     let id: String
     let name: String
