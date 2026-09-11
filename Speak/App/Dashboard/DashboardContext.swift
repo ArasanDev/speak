@@ -97,6 +97,15 @@ struct DashboardContext {
     /// Triggers complete self-healing, hotkey tap re-arm, and engine recovery.
     var onSelfHeal: (() -> Void)?
 
+    /// Start dictation via DictationController (opens HUD, streams levels/partials, AI clean).
+    var onStartDictation: (() async -> Void)?
+
+    /// Stop dictation via DictationController (triggers neat-writing and pastes at cursor).
+    var onStopDictation: (() async -> Void)?
+
+    /// Query whether dictation is actively recording.
+    var isDictating: (() -> Bool)?
+
     /// Explicit init with optional engine/permission manager/publisher (P11-c).
     /// Previews can create a minimal context without these dependencies.
     init(
@@ -119,7 +128,10 @@ struct DashboardContext {
         answerAgentCallByVoice: ((AgentCall) async -> HumanResponseOutcome)? = nil,
         declineAgentCall: ((UUID) async -> Void)? = nil,
         dismissAgentCall: ((UUID) async -> Void)? = nil,
-        onSelfHeal: (() -> Void)? = nil
+        onSelfHeal: (() -> Void)? = nil,
+        onStartDictation: (() async -> Void)? = nil,
+        onStopDictation: (() async -> Void)? = nil,
+        isDictating: (() -> Bool)? = nil
     ) {
         self.settingsStore = settingsStore
         self.historyStore = historyStore
@@ -141,5 +153,8 @@ struct DashboardContext {
         self.declineAgentCall = declineAgentCall
         self.dismissAgentCall = dismissAgentCall
         self.onSelfHeal = onSelfHeal
+        self.onStartDictation = onStartDictation
+        self.onStopDictation = onStopDictation
+        self.isDictating = isDictating
     }
 }

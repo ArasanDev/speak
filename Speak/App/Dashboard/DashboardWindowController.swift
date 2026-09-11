@@ -70,7 +70,10 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
         showOnboarding: (() -> Void)? = nil,
         dictationCompletedPublisher: AnyPublisher<Void, Never>? = nil,
         onSelfHeal: (() -> Void)? = nil,
-        activeExtraBindings: ExtraBindingSet? = nil
+        activeExtraBindings: ExtraBindingSet? = nil,
+        onStartDictation: (() async -> Void)? = nil,
+        onStopDictation: (() async -> Void)? = nil,
+        isDictating: (() -> Bool)? = nil
     ) {
         if let hotkeyCombo { context.hotkeyCombo = hotkeyCombo }
         if let activeBinding { context.activeBinding = activeBinding }
@@ -81,6 +84,9 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
         if let dictationCompletedPublisher { context.dictationCompletedPublisher = dictationCompletedPublisher }
         if let onSelfHeal { context.onSelfHeal = onSelfHeal }
         if let activeExtraBindings { context.activeExtraBindings = activeExtraBindings }
+        if let onStartDictation { context.onStartDictation = onStartDictation }
+        if let onStopDictation { context.onStopDictation = onStopDictation }
+        if let isDictating { context.isDictating = isDictating }
     }
 
     /// Legacy method — calls updateContext with hotkeyCombo only. Kept for compatibility.

@@ -228,6 +228,21 @@ final class StatusBarController: NSObject {
         statusLine.isEnabled = false
         menu.addItem(statusLine)
 
+        // Start / Stop Dictation
+        let dictationItem = NSMenuItem()
+        if controller.icon == .listening {
+            dictationItem.title = "Stop Dictation & Paste"
+            dictationItem.image = NSImage(systemSymbolName: "stop.circle.fill", accessibilityDescription: "Stop")
+            dictationItem.target = self
+            dictationItem.action = #selector(handleStopDictation)
+        } else {
+            dictationItem.title = "Start Dictation (\(controller.currentHotkeyDisplayString))"
+            dictationItem.image = NSImage(systemSymbolName: "mic.circle.fill", accessibilityDescription: "Record")
+            dictationItem.target = self
+            dictationItem.action = #selector(handleStartDictation)
+        }
+        menu.addItem(dictationItem)
+
         // Grant Accessibility Permission (if needed).
         if controller.permissionsNeeded {
             menu.addItem(NSMenuItem.separator())
@@ -360,6 +375,18 @@ final class StatusBarController: NSObject {
     }
 
     // MARK: - Menu actions
+
+    @objc private func handleStartDictation() {
+        Task { [weak self] in
+            await self?.controller.beginDictation()
+        }
+    }
+
+    @objc private func handleStopDictation() {
+        Task { [weak self] in
+            await self?.controller.endDictation()
+        }
+    }
 
     @objc private func openAccessibilitySettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {

@@ -22,7 +22,7 @@ struct GeneralAudioSettingsView: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
             startupCard
             LanguageCard(store: store)
-            MicrophoneCard()
+            MicrophoneCard(context: context)
             insertionCard
             voiceOutCard
         }
@@ -195,8 +195,10 @@ private struct LanguageCard: View {
 /// Live readout of the current default input device, driven by
 /// `CoreAudioDeviceMonitor` — same source the old Transcription tab used.
 private struct MicrophoneCard: View {
+    let context: DashboardContext
     @State private var currentDevice: CoreAudioDeviceMonitor.DeviceInfo?
     @State private var monitorToken: UUID?
+    @State private var micStatus: PermissionState = .notDetermined
 
     var body: some View {
         SettingsSectionCard(title: "Microphone", systemImage: "mic") {
@@ -213,8 +215,30 @@ private struct MicrophoneCard: View {
                     description: "Automatically follows connected headphones, AirPods, or external mics."
                 )
             }
+
+            SettingsRowSeparator()
+
+            SettingsRow(
+                "Microphone Permission",
+                description: "Required for on-device voice dictation. Audio never leaves your Mac."
+            ) {
+                if micStatus == .granted {
+                    SettingsStatusPill(text: "Granted")
+                } else {
+                    HStack(spacing: SpeakSpacing.sm) {
+                        SettingsStatusPill(text: "Missing", tint: .orange)
+                        Button("Grant Access") {
+                            Task {
+                                await context.permissionManager?.requestMicrophone()
+                                updateStatus()
+                            }
+                        }
+                    }
+                }
+            }
         }
         .onAppear {
+            updateStatus()
             currentDevice = CoreAudioDeviceMonitor.shared.currentDefaultInputDevice()
             if monitorToken == nil {
                 monitorToken = CoreAudioDeviceMonitor.shared.registerCallback { dev in
@@ -230,5 +254,9 @@ private struct MicrophoneCard: View {
                 monitorToken = nil
             }
         }
+    }
+
+    private func updateStatus() {
+        micStatus = context.permissionManager?.status(.microphone) ?? .notDetermined
     }
 }
