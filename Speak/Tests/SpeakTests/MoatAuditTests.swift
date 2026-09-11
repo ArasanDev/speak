@@ -53,11 +53,14 @@ final class MoatAuditTests: XCTestCase {
         return dir
     }
 
-    /// Returns the paths of all `.swift` source files under the two production
-    /// directories: `SpeakCore/` and `App/`. Test files are excluded because
-    /// they legitimately use `try!`, `as!`, etc. per the coding rules.
+    /// Returns the paths of all `.swift` source files under the four production
+    /// directories: `SpeakCore/`, `App/`, `CLI/`, `MCP/`. Test files are excluded
+    /// because they legitimately use `try!`, `as!`, etc. per the coding rules.
     private func productionSwiftFiles() throws -> [URL] {
-        let sourceDirs = ["Speak/SpeakCore", "Speak/App"].map { repoRoot.appendingPathComponent($0) }
+        // Speak/CLI and Speak/MCP are shipping binaries (IPC surface) and must
+        // satisfy the same moat rules — they were silently outside the audit.
+        // [fix: audit coverage drift]
+        let sourceDirs = ["Speak/SpeakCore", "Speak/App", "Speak/CLI", "Speak/MCP"].map { repoRoot.appendingPathComponent($0) }
         var result: [URL] = []
         for dir in sourceDirs {
             guard let enumerator = FileManager.default.enumerator(
@@ -156,7 +159,13 @@ final class MoatAuditTests: XCTestCase {
 
         for (url, lines) in sourceLines {
             for (idx, line) in lines.enumerated() {
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                // Normalize `@preconcurrency import Foo` → `import Foo` so the
+                // attribute cannot bypass the allowlist prefix check.
+                var trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.hasPrefix("@preconcurrency ") {
+                    trimmed = String(trimmed.dropFirst("@preconcurrency ".count))
+                        .trimmingCharacters(in: .whitespaces)
+                }
                 // Match `import Module` or `import Module.SubModule`.
                 // Ignore `// import ...` comments.
                 guard trimmed.hasPrefix("import "),

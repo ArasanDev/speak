@@ -204,3 +204,4 @@ schemes:
       environmentVariables:
         SPEAK_EVAL: "1"
         SPEAK_HISTORY_EVAL: "1"
+        SPEAK_STUDY: "1"

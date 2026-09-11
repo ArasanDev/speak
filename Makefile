@@ -16,7 +16,21 @@ APP      := $(DERIVED)/Build/Products/$(CONFIG)/Speak.app
 PRODUCTS := $(DERIVED)/Build/Products/$(CONFIG)
 MCP_USER_DIR ?= $$HOME/Library/Application Support/speak/mcp
 
-XCB := xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration $(CONFIG) -derivedDataPath $(DERIVED)
+# -destination pins the run to this Mac's arm64 slice — without it xcodebuild
+# sees "multiple matching destinations" (My Mac arm64 + x86_64 + Any Mac) and
+# races parallel LaunchServices test-host launches, which fail with error 20
+# and emit `** TEST FAILED **` even when every test passes.
+# -parallel-testing-enabled NO serializes the test-host launches — the parallel
+# LaunchServices launcher attempts race and fail (IDELaunchErrorDomain 20) even
+# on a single destination. [fix: audit — gate-manufacturing flake]
+XCB := xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration $(CONFIG) -derivedDataPath $(DERIVED) -destination 'platform=macOS,arch=arm64' -parallel-testing-enabled NO
+
+# Recipes run under bash with pipefail so `xcodebuild | pretty-output` and the
+# `gates` summary pipelines propagate the LEFT command's exit status — without
+# this, a red build/test run exits 0 (the pipeline reports the filter's status)
+# and the gates can never fail. [fix: audit item — gates manufactured green]
+SHELL      := /bin/bash
+.SHELLFLAGS := -o pipefail -c
 
 # ── Release variables ─────────────────────────────────────────────────────────
 # These must be set in your environment (or on the make command line) before
@@ -126,8 +140,12 @@ history-eval: generate
 	xcodebuild -project $(PROJECT) -scheme Eval -configuration $(CONFIG) -derivedDataPath $(DERIVED) test -only-testing:SpeakTests/HistoryCleaningEvalTests
 
 ## study: run the Foundation Models limits study (live; writes RAW measurements)
+## Uses the Eval scheme which bakes SPEAK_STUDY=1 into the test-action
+## environment (xcodebuild shell-prefix does not propagate to the test host on
+## macOS 26 — the old env-prefixed invocation silently XCTSkip'd every study
+## test and reported green). [decision: SM-2]
 study: generate
-	SPEAK_STUDY=1 $(XCB) test -only-testing:SpeakTests/FoundationModelsStudyTests
+	xcodebuild -project $(PROJECT) -scheme Eval -configuration $(CONFIG) -derivedDataPath $(DERIVED) test -only-testing:SpeakTests/FoundationModelsStudyTests
 
 ## measure-latency: E1 — conversational latency (TTS first-audio + model TTFT)
 ## Standalone: needs no Xcode project, no app bundle, no permissions. Speaks a
@@ -176,7 +194,7 @@ lint:
 ## container project. Run before committing; CI will gate on this when wired.
 fmt:
 	@which swift-format > /dev/null || (echo "swift-format not installed. Run: brew install swift-format" && exit 1)
-	swift-format format --recursive --configuration .swift-format --in-place Speak/App Speak/SpeakCore Speak/Tests/SpeakTests
+	swift-format format --recursive --configuration .swift-format --in-place Speak/App Speak/SpeakCore Speak/SpeakLLM Speak/CLI Speak/MCP Speak/Tests/SpeakTests
 	@echo "fmt: done."
 
 # ── Dev loop (agent-friendly) ───────────────────────────────────────────────
@@ -251,12 +269,15 @@ doctor:
 	@echo "  TCC grant state isn't queryable; if hotkey/paste fail after a re-sign: make reset-permissions"
 
 ## gates: run the full merge gate in order — build, test, lint, moat. The loop's done-check.
+## pipefail (.SHELLFLAGS) makes each `make <gate> | tail` pipeline fail when the
+## sub-make fails, so `gates` exits non-zero on the FIRST red gate instead of
+## always reaching "done". The tail keeps the failing gate's summary visible.
 gates:
 	@echo "==> [1/4] build ..."       && $(MAKE) --no-print-directory build >/dev/null && echo "    build: OK"
-	@echo "==> [2/4] test ..."        && $(MAKE) --no-print-directory test  2>&1 | grep -E "Executed .* tests|TEST (SUCCEEDED|FAILED)" | tail -2
-	@echo "==> [3/4] lint ..."        && $(MAKE) --no-print-directory lint  2>&1 | tail -1
-	@echo "==> [4/4] verify-moat ..." && $(MAKE) --no-print-directory verify-moat | tail -2
-	@echo "==> gates: done (review the four results above)."
+	@echo "==> [2/4] test ..."        && $(MAKE) --no-print-directory test  2>&1 | tail -8
+	@echo "==> [3/4] lint ..."        && $(MAKE) --no-print-directory lint  2>&1 | tail -3
+	@echo "==> [4/4] verify-moat ..." && $(MAKE) --no-print-directory verify-moat 2>&1 | tail -4
+	@echo "==> gates: all four gates green."
 
 ## install: build Speak.app and install it to /Applications/ (dev/test path, no signing needed).
 ##

@@ -28,6 +28,8 @@
 // the `.pasteRequiresAccessibility` soft-catch pattern. `permissionsNeeded` is NOT
 // set (no permission is missing; this is a safety decision, not a permission gap).
 
+import Foundation
+
 public enum SpeakError: Error, Sendable {
     case microphoneDenied
     case accessibilityDenied
@@ -99,4 +101,13 @@ public enum SpeakError: Error, Sendable {
             return "Unknown error: \(detail)."
         }
     }
+}
+
+// LocalizedError conformance so `error.localizedDescription` emits the real
+// recovery copy instead of the generic
+// "The operation couldn't be completed. (SpeakCore.SpeakError error N.)" —
+// without it, every `SpeakLog.*.error("...: \(error.localizedDescription)")`
+// and agent-facing failure string is meaningless. [fix: audit item — dead copy]
+extension SpeakError: LocalizedError {
+    public var errorDescription: String? { recoverySuggestion }
 }
