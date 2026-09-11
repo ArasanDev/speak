@@ -52,6 +52,9 @@ struct DashboardContext {
     /// `var` so that `DashboardWindowController.updateContext()` can refresh it at show-time.
     var dictationCompletedPublisher: AnyPublisher<Void, Never>?
 
+    /// Publisher to programmatically navigate to a dashboard section or .settings mode.
+    var navigateToSectionPublisher: AnyPublisher<DashboardSection, Never>?
+
     /// The active hotkey combo, pre-rendered as keycap labels (e.g. ["Fn", "Fn"]).
     /// Supplied by the controller from the live `HotkeyMonitor.binding`.
     var hotkeyCombo: [String]
@@ -107,6 +110,7 @@ struct DashboardContext {
         permissionManager: PermissionManager? = nil,
         showOnboarding: (() -> Void)? = nil,
         dictationCompletedPublisher: AnyPublisher<Void, Never>? = nil,
+        navigateToSectionPublisher: AnyPublisher<DashboardSection, Never>? = nil,
         rebindHotkey: ((HotkeyBinding) -> Void)? = nil,
         activeExtraBindings: ExtraBindingSet = .empty,
         rebindExtraBindings: ((ExtraBindingSet) -> Void)? = nil,
@@ -127,6 +131,7 @@ struct DashboardContext {
         self.permissionManager = permissionManager
         self.showOnboarding = showOnboarding
         self.dictationCompletedPublisher = dictationCompletedPublisher
+        self.navigateToSectionPublisher = navigateToSectionPublisher
         self.rebindHotkey = rebindHotkey
         self.activeExtraBindings = activeExtraBindings
         self.rebindExtraBindings = rebindExtraBindings

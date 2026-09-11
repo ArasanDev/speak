@@ -14,9 +14,10 @@
     via `openSettings()` (spring animation, remembers `lastDeskSection`); `Esc`, `Cmd+[`, and the
     `‹ Dashboard` back button return to the desk where you were. `WindowPresenter.showSettings()`
     still lands directly in Settings via `show(initialSection: .settings)`.
-  - Note: when the dashboard window is already visible, `show(initialSection:)` only re-orders to
-    front (pre-existing behavior) — menubar "Settings…" does not yet force-switch an open window
-    into Settings mode.
+  - Dynamic Mode Jump on Visible Window: Wired `navigateToSectionPublisher` through
+    `DashboardContext` and `DashboardWindowController.navigationSubject`. When the dashboard is
+    already open, menubar "Settings…" instantly and smoothly jumps into Settings mode (`.settings`)
+    without requiring a window re-open.
 - **New files** (`App/Settings/`):
   - `SettingsCategory.swift` — 8 rail destinations grouped into System / Intelligence / Experience.
   - `SettingsChrome.swift` — `SettingsSectionCard`, `SettingsRow` (title+description left, control
