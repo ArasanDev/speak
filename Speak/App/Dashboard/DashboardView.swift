@@ -378,7 +378,6 @@ struct DashboardView: View {
         case .history:    HistoryPaneView(context: context)
         case .agentInbox: AgentInboxPaneView(context: context)
         case .mcpAgents:  MCPAgentPaneView(context: context)
-        case .privacy:    PrivacyPaneView(context: context)
 
         // `.settings` never reaches the desk detail — `body` swaps the whole
         // window to `SettingsExperienceView` before `detail(for:)` is called.
