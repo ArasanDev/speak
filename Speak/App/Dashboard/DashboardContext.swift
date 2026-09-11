@@ -64,6 +64,14 @@ struct DashboardContext {
     /// `DictationController.rebindHotkey(_:)`. Nil in preview contexts.
     var rebindHotkey: ((HotkeyBinding) -> Void)?
 
+    /// The current extra (additive) hotkey bindings — mouse buttons and extra
+    /// modifier shortcuts (V01-5). Read by the Settings Hotkeys category.
+    var activeExtraBindings: ExtraBindingSet
+
+    /// Called when the user edits the extra-bindings set. Routes to
+    /// `DictationController.rebindExtraBindings(_:)`. Nil in preview contexts.
+    var rebindExtraBindings: ((ExtraBindingSet) -> Void)?
+
     /// AVB-7 (specs/avb7-durable-calls-design.md): the durable-call store backing
     /// the Agent Inbox pane and the menubar badge count. Nil only in preview
     /// contexts. [decision: AVB-7]
@@ -100,6 +108,8 @@ struct DashboardContext {
         showOnboarding: (() -> Void)? = nil,
         dictationCompletedPublisher: AnyPublisher<Void, Never>? = nil,
         rebindHotkey: ((HotkeyBinding) -> Void)? = nil,
+        activeExtraBindings: ExtraBindingSet = .empty,
+        rebindExtraBindings: ((ExtraBindingSet) -> Void)? = nil,
         agentCallStore: (any AgentCallStoring)? = nil,
         conversationStore: (any ConversationStoring)? = nil,
         answerAgentCallByVoice: ((AgentCall) async -> HumanResponseOutcome)? = nil,
@@ -118,6 +128,8 @@ struct DashboardContext {
         self.showOnboarding = showOnboarding
         self.dictationCompletedPublisher = dictationCompletedPublisher
         self.rebindHotkey = rebindHotkey
+        self.activeExtraBindings = activeExtraBindings
+        self.rebindExtraBindings = rebindExtraBindings
         self.agentCallStore = agentCallStore
         self.conversationStore = conversationStore
         self.answerAgentCallByVoice = answerAgentCallByVoice

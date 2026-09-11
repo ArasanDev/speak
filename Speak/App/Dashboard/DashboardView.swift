@@ -13,7 +13,7 @@ struct DashboardView: View {
     private struct SidebarToggleButton: View {
         let action: () -> Void
         @State private var isHovering = false
-        
+
         var body: some View {
             Button(action: action) {
                 Image(systemName: "sidebar.left")
@@ -38,7 +38,13 @@ struct DashboardView: View {
     }
 
     /// The selected sidebar section. Seeded from `initialSection` (defaults to Home).
+    /// `.settings` is the sentinel for the dedicated two-panel Settings
+    /// experience — it is not a `mainSections` row, so when it is selected the
+    /// whole window swaps to `SettingsExperienceView` instead of a desk pane.
     @State private var selection: DashboardSection
+    /// The desk section to return to when leaving Settings. Updated each time a
+    /// real desk section is selected so "‹ Dashboard" restores where you were.
+    @State private var lastDeskSection: DashboardSection = .home
     @State private var isSidebarManuallyToggled = false
     @State private var selfHealRotation: Double = 0
     @State private var isSelfHealed: Bool = false
@@ -49,8 +55,26 @@ struct DashboardView: View {
     init(context: DashboardContext, initialSection: DashboardSection = .home) {
         self.context = context
         _selection = State(initialValue: initialSection)
+        if initialSection != .settings {
+            _lastDeskSection = State(initialValue: initialSection)
+        }
     }
-    
+
+    /// Enter the dedicated Settings experience, remembering the desk section.
+    private func openSettings() {
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+            lastDeskSection = selection
+            selection = .settings
+        }
+    }
+
+    /// Leave Settings and restore the desk section the user came from.
+    private func closeSettings() {
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+            selection = lastDeskSection
+        }
+    }
+
     private func effectiveSidebarMode(for width: CGFloat) -> SidebarDisplayMode {
         if width < 600 {
             return isSidebarManuallyToggled ? .full : .hidden
@@ -68,12 +92,44 @@ struct DashboardView: View {
     }
 
     var body: some View {
+        Group {
+            if selection == .settings {
+                // Mode B — the dedicated two-panel Settings experience.
+                SettingsExperienceView(
+                    context: context,
+                    onBack: closeSettings,
+                    onOpenSection: { section in
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                            selection = section
+                        }
+                    }
+                )
+            } else {
+                // Mode A — the main application desk.
+                desk
+            }
+        }
+        .frame(minWidth: 480, minHeight: 480)
+        .background(Color.speakWindowCanvas)
+        .ignoresSafeArea(.all, edges: .top)
+        .onChange(of: selection) { _, newValue in
+            if newValue != .settings { lastDeskSection = newValue }
+        }
+        .background(
+            Button(action: toggleSidebar) { EmptyView() }
+                .keyboardShortcut("s", modifiers: [.command, .control])
+                .opacity(0)
+        )
+    }
+
+    /// Mode A layout: sidebar + detail canvas (the pre-Settings desk).
+    private var desk: some View {
         GeometryReader { geo in
             let width = geo.size.width
             let mode = effectiveSidebarMode(for: width)
             let isRail = mode == .rail
             let sidebarWidth: CGFloat = mode == .full ? 220 : (isRail ? 54 : 0)
-            
+
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
                     HStack {
@@ -84,7 +140,7 @@ struct DashboardView: View {
                         Spacer()
                     }
                     .frame(height: 28)
-                    
+
                     List(selection: $selection) {
                         ForEach(DashboardSection.mainSections) { section in
                             if isRail {
@@ -101,13 +157,13 @@ struct DashboardView: View {
                     }
                     .listStyle(.sidebar)
                     .scrollContentBackground(.hidden)
-                    
+
                     Spacer(minLength: 0)
-                    
+
                     Divider()
                         .padding(.horizontal, isRail ? 8 : 16)
                         .opacity(0.4)
-                    
+
                     if isRail {
                         sidebarRailBottomToolbar
                     } else {
@@ -118,22 +174,22 @@ struct DashboardView: View {
                 .opacity(mode == .hidden ? 0 : 1)
                 .clipped()
                 .tint(Color.speakSidebarSelection)
-                
+
                 VStack(spacing: 0) {
                     HStack(spacing: 12) {
                         if mode != .full {
                             SidebarToggleButton(action: toggleSidebar)
                         }
-                        
+
                         Text(selection.title)
                             .font(.headline)
                             .foregroundColor(.primary)
-                        
+
                         Spacer()
                     }
                     .padding(.leading, mode == .hidden ? 80 : 16)
                     .frame(height: mode == .full ? 44 : 36)
-                    
+
                     detail(for: selection)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -148,24 +204,15 @@ struct DashboardView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 480, minHeight: 480)
-        .background(Color.speakWindowCanvas)
-        .ignoresSafeArea(.all, edges: .top)
-        .background(
-            Button(action: toggleSidebar) { EmptyView() }
-                .keyboardShortcut("s", modifiers: [.command, .control])
-                .opacity(0)
-        )
     }
 
     // MARK: - Sidebar Bottom Toolbars
-    
+
     private var sidebarBottomToolbar: some View {
         HStack(spacing: 0) {
-            // Settings Icon Button (bottom left)
-            Button(action: {
-                selection = .settings
-            }) {
+            // Settings Icon Button (bottom left) — enters the dedicated
+            // two-panel Settings experience (Mode B).
+            Button(action: openSettings) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundColor(selection == .settings ? Color.speakAccent : .secondary)
@@ -234,9 +281,7 @@ struct DashboardView: View {
 
     private var sidebarRailBottomToolbar: some View {
         VStack(spacing: 8) {
-            Button(action: {
-                selection = .settings
-            }) {
+            Button(action: openSettings) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundColor(selection == .settings ? Color.speakAccent : .secondary)
@@ -323,7 +368,10 @@ struct DashboardView: View {
         case .agentInbox: AgentInboxPaneView(context: context)
         case .mcpAgents:  MCPAgentPaneView(context: context)
         case .privacy:    PrivacyPaneView(context: context)
-        case .settings:   SettingsPaneView(context: context)
+
+        // `.settings` never reaches the desk detail — `body` swaps the whole
+        // window to `SettingsExperienceView` before `detail(for:)` is called.
+        case .settings:   EmptyView()
         }
     }
 }

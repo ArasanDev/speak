@@ -66,7 +66,8 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
         permissionManager: PermissionManager? = nil,
         showOnboarding: (() -> Void)? = nil,
         dictationCompletedPublisher: AnyPublisher<Void, Never>? = nil,
-        onSelfHeal: (() -> Void)? = nil
+        onSelfHeal: (() -> Void)? = nil,
+        activeExtraBindings: ExtraBindingSet? = nil
     ) {
         if let hotkeyCombo { context.hotkeyCombo = hotkeyCombo }
         if let activeBinding { context.activeBinding = activeBinding }
@@ -76,6 +77,7 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
         if let showOnboarding { context.showOnboarding = showOnboarding }
         if let dictationCompletedPublisher { context.dictationCompletedPublisher = dictationCompletedPublisher }
         if let onSelfHeal { context.onSelfHeal = onSelfHeal }
+        if let activeExtraBindings { context.activeExtraBindings = activeExtraBindings }
     }
 
     /// Legacy method — calls updateContext with hotkeyCombo only. Kept for compatibility.
