@@ -75,6 +75,12 @@ struct DashboardContext {
     /// `DictationController.rebindExtraBindings(_:)`. Nil in preview contexts.
     var rebindExtraBindings: ((ExtraBindingSet) -> Void)?
 
+    /// AVB-6: the app's live agent-session registry — the SAME instance
+    /// `CLIPortServer`/`AgentBridgeServer` touches on every `speak-mcp` call,
+    /// so the Settings ▸ Agent Bridge heartbeat reflects real `lastSeen`
+    /// activity. Nil only in preview contexts.
+    var agentSessionRegistry: AgentSessionRegistry?
+
     /// AVB-7 (specs/avb7-durable-calls-design.md): the durable-call store backing
     /// the Agent Inbox pane and the menubar badge count. Nil only in preview
     /// contexts. [decision: AVB-7]
@@ -123,6 +129,7 @@ struct DashboardContext {
         rebindHotkey: ((HotkeyBinding) -> Void)? = nil,
         activeExtraBindings: ExtraBindingSet = .empty,
         rebindExtraBindings: ((ExtraBindingSet) -> Void)? = nil,
+        agentSessionRegistry: AgentSessionRegistry? = nil,
         agentCallStore: (any AgentCallStoring)? = nil,
         conversationStore: (any ConversationStoring)? = nil,
         answerAgentCallByVoice: ((AgentCall) async -> HumanResponseOutcome)? = nil,
@@ -147,6 +154,7 @@ struct DashboardContext {
         self.rebindHotkey = rebindHotkey
         self.activeExtraBindings = activeExtraBindings
         self.rebindExtraBindings = rebindExtraBindings
+        self.agentSessionRegistry = agentSessionRegistry
         self.agentCallStore = agentCallStore
         self.conversationStore = conversationStore
         self.answerAgentCallByVoice = answerAgentCallByVoice

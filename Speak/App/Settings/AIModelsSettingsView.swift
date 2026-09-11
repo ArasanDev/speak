@@ -25,17 +25,12 @@ struct AIModelsSettingsView: View {
 
     @State private var showOllamaSetup = false
     @State private var showKeyEntry = false
-
-    /// Fixed raw transcript for the diff preview — chosen so all four intensity
-    /// levels produce meaningfully different outputs.
-    private let sampleRaw =
-        "um I was thinking that maybe we should like move the meeting to thursday " +
-        "because you know on wednesday I have a conflict with another thing"
+    @State private var sandbox = VoiceSandboxModel()
 
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
             intensityCard
-            previewCard
+            sandboxCard
             voiceCard
             engineCard
             contextCard
@@ -47,6 +42,9 @@ struct AIModelsSettingsView: View {
             if case .openAICompatible(let preset, _) = store.cleanupEngine {
                 CleanupEngineSheet(isPresented: $showKeyEntry, preset: preset)
             }
+        }
+        .onDisappear {
+            Task { await sandbox.cancel() }
         }
     }
 
@@ -75,42 +73,111 @@ struct AIModelsSettingsView: View {
         }
     }
 
-    // MARK: - Diff preview (W4.1 transparency moat)
+    // MARK: - Test My Voice sandbox
 
-    private var previewCard: some View {
-        SettingsSectionCard(title: "Preview", systemImage: "text.badge.checkmark") {
-            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                CleanupDiffView(
-                    rawText: sampleRaw,
-                    cleanedText: sampleCleaned(for: store.effectiveCleanupLevel)
-                )
-                .frame(minHeight: 160)
+    /// Live sandbox: a real `CaptureSession` (settings-derived locale, vocab +
+    /// corrections, snippets, cleanup mode) with `inserter: nil` — nothing is
+    /// pasted; the diff shows exactly what the current engine/level does.
+    private var sandboxCard: some View {
+        SettingsSectionCard(title: "Test My Voice", systemImage: "waveform.and.mic") {
+            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+                HStack(spacing: SpeakSpacing.md) {
+                    HoldToTalkPill(
+                        model: sandbox,
+                        isEnabled: context.permissionManager?.status(.microphone) == .granted
+                    ) {
+                        await sandbox.begin(settings: store, snippetStore: context.snippetStore)
+                    } onEnd: {
+                        await sandbox.end()
+                    }
 
-                Text("Illustrative preview — live diffs from real dictations appear in History.")
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(.tertiary)
+                    VUMeterView(level: sandbox.level)
+                        .opacity(sandbox.phase == .listening ? 1 : 0.35)
+
+                    Spacer()
+
+                    if sandbox.phase == .listening {
+                        Text(String(format: "%.1fs", sandbox.elapsed))
+                            .font(.speakMonoCaption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                sandboxContent
             }
             .padding(.horizontal, SpeakSpacing.md)
             .padding(.vertical, SpeakSpacing.sm + 4)
         }
     }
 
-    /// Canned cleaned output per level, matching `CleanupLevel.levelDescription`.
-    private func sampleCleaned(for level: CleanupLevel) -> String? {
-        switch level {
-        case .none:
-            return nil
+    @ViewBuilder
+    private var sandboxContent: some View {
+        switch sandbox.phase {
+        case .idle:
+            if context.permissionManager?.status(.microphone) != .granted {
+                Label("Microphone permission is required to test your voice.", systemImage: "mic.slash")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Hold the pill (or tap once) and say a sentence — e.g. “um open the rippo and run cubectl get pods”. The on-device model cleans it; nothing is pasted.")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(.secondary)
+            }
 
-        case .light:
-            return "I was thinking that maybe we should like move the meeting to Thursday, " +
-                   "because on Wednesday I have a conflict with another thing."
+        case .listening, .processing:
+            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                ScrollView {
+                    Text(sandbox.transcriptText.isEmpty ? "Listening…" : sandbox.transcriptText)
+                        .font(.speakMonoBody)
+                        .foregroundStyle(sandbox.transcriptText.isEmpty ? .tertiary : .primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(minHeight: 44, maxHeight: 96)
 
-        case .medium:
-            return "I think we should move the meeting to Thursday. " +
-                   "I have a conflict on Wednesday."
+                if sandbox.phase == .processing {
+                    HStack(spacing: SpeakSpacing.xs) {
+                        ProgressView().controlSize(.small)
+                        Text("Cleaning on-device…")
+                            .font(.speakBody(.caption))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
 
-        case .high:
-            return "Let\u{2019}s move the meeting to Thursday. I have a scheduling conflict on Wednesday."
+        case .done:
+            if let result = sandbox.result {
+                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                    CleanupDiffView(rawText: result.rawText, cleanedText: result.cleanedText)
+                        .frame(minHeight: 120)
+
+                    HStack(spacing: SpeakSpacing.xs) {
+                        if let ms = sandbox.processingMilliseconds {
+                            Text(result.cleanedText == nil
+                                 ? "delivered raw — cleanup off or engine unavailable"
+                                 : "cleaned in \(ms) ms by \(result.engineId)")
+                                .font(.speakMonoCaption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        Spacer()
+                        Button("Test again") { sandbox.reset() }
+                            .font(.speakBody(.caption))
+                            .buttonStyle(.borderless)
+                    }
+                }
+            }
+
+        case .failed(let message):
+            HStack(spacing: SpeakSpacing.xs) {
+                Image(systemName: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                Text(message)
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Try again") { sandbox.reset() }
+                    .font(.speakBody(.caption))
+                    .buttonStyle(.borderless)
+            }
         }
     }
 

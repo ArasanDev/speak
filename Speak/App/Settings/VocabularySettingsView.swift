@@ -21,9 +21,112 @@ struct VocabularySettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
+            AcousticCorrectionsCard(store: context.settingsStore)
             CustomVocabularyCard(store: context.settingsStore)
             SnippetsCard(store: context.snippetStore)
         }
+    }
+}
+
+// MARK: - AcousticCorrectionsCard
+
+/// The "what you say → what gets typed" table. Corrections run as a whole-word
+/// replacement pass on the raw transcript BEFORE snippets and AI cleanup, and
+/// each `typed` term is also fed to the recognizer + cleanup prompt as a
+/// contextual hint (`SettingsStore.effectiveVocabulary`). [decision]
+private struct AcousticCorrectionsCard: View {
+    let store: SettingsStore
+    @State private var heard = ""
+    @State private var typed = ""
+
+    var body: some View {
+        SettingsSectionCard(title: "Acoustic Corrections", systemImage: "ear.badge.waveform") {
+            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+                HStack(spacing: SpeakSpacing.sm) {
+                    TextField("What you say (e.g. “cubectl”)", text: $heard)
+                        .textFieldStyle(.plain)
+                        .font(.speakMonoBody)
+                        .frame(width: 190)
+                        .onSubmit(addCorrection)
+                    Image(systemName: "arrow.right")
+                        .foregroundStyle(.tertiary)
+                    TextField("What gets typed (e.g. “kubectl”)", text: $typed)
+                        .textFieldStyle(.plain)
+                        .font(.speakMonoBody)
+                        .onSubmit(addCorrection)
+                    Button("Add", action: addCorrection)
+                        .disabled(!canAdd)
+                }
+
+                Text("Fixes systematic mishearings before cleanup — and biases the recognizer toward the corrected term. Applies to the next dictation.")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(.secondary)
+
+                let rows = store.acousticCorrections
+                if !rows.isEmpty {
+                    Divider()
+
+                    // Column header — t3code-style table chrome.
+                    HStack(spacing: SpeakSpacing.sm) {
+                        Text("YOU SAY")
+                            .frame(width: 190, alignment: .leading)
+                        Image(systemName: "arrow.right")
+                            .font(.speakMonoCaption)
+                        Text("GETS TYPED")
+                        Spacer()
+                    }
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(.tertiary)
+
+                    ForEach(rows) { correction in
+                        HStack(spacing: SpeakSpacing.sm) {
+                            Text(correction.heard)
+                                .font(.speakMonoBody)
+                                .frame(width: 190, alignment: .leading)
+                            Image(systemName: "arrow.right")
+                                .font(.speakMonoCaption)
+                                .foregroundStyle(.tertiary)
+                            Text(correction.typed)
+                                .font(.speakMonoBody)
+                                .foregroundStyle(Color.speakAccent)
+                            Spacer()
+                            Button {
+                                remove(correction)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Remove \(correction.heard) → \(correction.typed)")
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, SpeakSpacing.md)
+            .padding(.vertical, SpeakSpacing.sm + 4)
+        }
+    }
+
+    private var canAdd: Bool {
+        !heard.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func addCorrection() {
+        store.acousticCorrections = AcousticCorrections.upsert(
+            heard: heard,
+            typed: typed,
+            in: store.acousticCorrections
+        )
+        heard = ""
+        typed = ""
+    }
+
+    private func remove(_ correction: AcousticCorrection) {
+        store.acousticCorrections = AcousticCorrections.removing(
+            heard: correction.heard,
+            from: store.acousticCorrections
+        )
     }
 }
 

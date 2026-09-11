@@ -112,6 +112,20 @@ final class DictationController: CLICommandHandler {
         didSet {
             if icon == .listening, oldValue != .listening {
                 _hotkeySubject.send()
+                // Sensory edge: engage chime/haptic (Settings ▸ Hotkeys ▸ Feedback).
+                DictationFeedback.play(
+                    .engaged,
+                    soundsEnabled: settingsStore.dictationFeedbackSounds,
+                    hapticsEnabled: settingsStore.dictationFeedbackHaptics
+                )
+            } else if oldValue == .listening, icon != .listening {
+                // Sensory edge: release chime/haptic on leave-listening
+                // (processing, done, or error — the release cue still applies).
+                DictationFeedback.play(
+                    .released,
+                    soundsEnabled: settingsStore.dictationFeedbackSounds,
+                    hapticsEnabled: settingsStore.dictationFeedbackHaptics
+                )
             }
         }
     }

@@ -24,9 +24,14 @@ import Foundation
 ///
 /// No `fatalError` on unbuilt cases. Future versions wire in the real types here.
 public func defaultTranscriber(for settings: SettingsStore) -> any Transcribing {
+    // effectiveVocabulary = customVocabulary + acoustic-correction targets, so a
+    // correction's ground-truth term also reaches contextualStrings. Note the
+    // transcriber captures this list at init — the engine's transcriber is built
+    // once, so STT-side biasing applies on the next app/engine rebuild, while
+    // the prompt-side vocabulary applies on the next dictation. [inferred]
     switch settings.sttEngine {
     case .appleSpeech:
-        return AppleSpeechTranscriber(vocabulary: settings.customVocabulary)
+        return AppleSpeechTranscriber(vocabulary: settings.effectiveVocabulary)
 
     case .whisperKit:
         // [decision] WhisperKit is v0.1 — not built in v0. Falls back to Apple Speech.
@@ -34,14 +39,41 @@ public func defaultTranscriber(for settings: SettingsStore) -> any Transcribing 
         SpeakLog.stt.error(
             "defaultTranscriber: .whisperKit requested but not built in v0 — using AppleSpeechTranscriber."
         )
-        return AppleSpeechTranscriber(vocabulary: settings.customVocabulary)
+        return AppleSpeechTranscriber(vocabulary: settings.effectiveVocabulary)
 
     case .whisperCpp:
         // [decision] whisper.cpp is v1 — not built in v0. Falls back to Apple Speech.
         SpeakLog.stt.error(
             "defaultTranscriber: .whisperCpp requested but not built in v0 — using AppleSpeechTranscriber."
         )
-        return AppleSpeechTranscriber(vocabulary: settings.customVocabulary)
+        return AppleSpeechTranscriber(vocabulary: settings.effectiveVocabulary)
+    }
+}
+
+// MARK: - Transcript expander factory
+
+/// Compose the raw-transcript expansion chain read from settings at call time:
+/// acoustic corrections (STT mishearing → ground truth) FIRST, then snippet
+/// triggers — so a trigger the user actually said still matches even when the
+/// recognizer mangled it. `nil` when neither stage has any entries.
+///
+/// [decision: corrections-before-snippets ordering]
+public func defaultExpander(
+    for settings: SettingsStore,
+    snippetStore: SnippetStore?
+) -> (any SnippetExpanding)? {
+    var stages: [any SnippetExpanding] = []
+    let corrections = settings.acousticCorrections
+    if !corrections.isEmpty {
+        stages.append(AcousticCorrectionExpander(corrections: corrections))
+    }
+    if let snippetStore, !snippetStore.snippets.isEmpty {
+        stages.append(snippetStore.makeExpander())
+    }
+    switch stages.count {
+    case 0: return nil
+    case 1: return stages[0]
+    default: return CompositeExpander(stages)
     }
 }
 

@@ -21,9 +21,23 @@ struct AgentBridgeSettingsView: View {
     let onOpenSection: (DashboardSection) -> Void
 
     @State private var copiedItemName: String?
-    @State private var sessionCount: Int?
+    @State private var sessions: [AgentSession] = []
 
     private var store: SettingsStore { context.settingsStore }
+
+    /// A session touched within this window reads as a live heartbeat.
+    /// [decision: 60 s — well under the registry's 30-min stale threshold; an
+    ///  agent that pinged a tool in the last minute is genuinely attached]
+    private static let heartbeatWindow: TimeInterval = 60
+
+    private var lastActivity: Date? {
+        sessions.map(\.lastSeen).max()
+    }
+
+    private var heartbeatLive: Bool {
+        guard let lastActivity else { return false }
+        return Date().timeIntervalSince(lastActivity) < Self.heartbeatWindow
+    }
 
     private let installCommand = "make install-mcp-user"
     private let jsonSnippet = """
@@ -43,7 +57,7 @@ struct AgentBridgeSettingsView: View {
             promptTagCard
             sessionsCard
         }
-        .task { await refreshSessionCount() }
+        .task { await pollSessions() }
     }
 
     // MARK: - speak-mcp server
@@ -55,7 +69,15 @@ struct AgentBridgeSettingsView: View {
                     "Model Context Protocol server",
                     description: "Bridges LLM agents (Claude Code, Cursor, Codex) to speak's local voice interface over JSON-RPC 2.0 stdio."
                 ) {
-                    SettingsStatusPill(text: "Ready")
+                    HStack(spacing: SpeakSpacing.xs) {
+                        Circle()
+                            .fill(heartbeatLive ? Color.speakDelivered : Color.secondary.opacity(0.4))
+                            .frame(width: 7, height: 7)
+                        SettingsStatusPill(
+                            text: heartbeatLive ? "Agent attached" : "Listening",
+                            tint: heartbeatLive ? .speakDelivered : .secondary.opacity(0.4)
+                        )
+                    }
                 }
 
                 SettingsRowSeparator()
@@ -143,34 +165,72 @@ struct AgentBridgeSettingsView: View {
         }
     }
 
-    // MARK: - Live state jump
+    // MARK: - Live state
 
+    /// Heartbeat + session list, refreshed from the app's real
+    /// `AgentSessionRegistry` (the instance `CLIPortServer` touches on every
+    /// `speak-mcp` call) every 2 s while this category is visible.
     private var sessionsCard: some View {
-        SettingsSectionCard(title: "Live State", systemImage: "network") {
-            SettingsRow(
-                "Connected agent sessions",
-                description: "Agents registered via speak_register_session."
-            ) {
-                Text(sessionCount.map { "\($0)" } ?? "—")
-                    .font(.speakMonoBody)
-                    .foregroundStyle(.secondary)
-            }
+        SettingsSectionCard(title: "Live Sessions", systemImage: "dot.radiowaves.left.and.right") {
+            VStack(alignment: .leading, spacing: 0) {
+                SettingsRow(
+                    "Connected agent sessions",
+                    description: lastActivity.map { "Last bridge activity \(Self.relative($0))." }
+                        ?? "No agent has called in yet — register via speak_register_session."
+                ) {
+                    Text("\(sessions.filter { $0.state == .active }.count)")
+                        .font(.speakMonoBody)
+                        .foregroundStyle(.secondary)
+                }
 
-            SettingsRowSeparator()
+                ForEach(sessions, id: \.sessionId) { session in
+                    SettingsRowSeparator()
+                    SettingsRow(
+                        session.label.isEmpty ? session.provider : session.label,
+                        description: "\(session.provider) · seen \(Self.relative(session.lastSeen))"
+                    ) {
+                        SettingsStatusPill(
+                            text: session.state == .active ? "Active" : "Stale",
+                            tint: session.state == .active ? .speakDelivered : .orange
+                        )
+                    }
+                }
 
-            SettingsRow(
-                "Manage agents & calls",
-                description: "Live sessions, tool capabilities, @tag adapters, and the Agent Inbox live on the dashboard."
-            ) {
-                HStack(spacing: SpeakSpacing.sm) {
-                    Button("MCP & Agents") { onOpenSection(.mcpAgents) }
-                    Button("Agent Inbox") { onOpenSection(.agentInbox) }
+                SettingsRowSeparator()
+
+                SettingsRow(
+                    "Manage agents & calls",
+                    description: "Tool capabilities, @tag adapters, and the Agent Inbox live on the dashboard."
+                ) {
+                    HStack(spacing: SpeakSpacing.sm) {
+                        Button("MCP & Agents") { onOpenSection(.mcpAgents) }
+                        Button("Agent Inbox") { onOpenSection(.agentInbox) }
+                    }
                 }
             }
         }
     }
 
     // MARK: - Helpers
+
+    /// Poll the shared registry while visible. `AgentSessionRegistry` is
+    /// `@MainActor` — `list()` is a synchronous read once on the actor.
+    private func pollSessions() async {
+        while !Task.isCancelled {
+            sessions = context.agentSessionRegistry?.list()
+                .sorted { $0.lastSeen > $1.lastSeen } ?? []
+            try? await Task.sleep(for: .seconds(2))
+        }
+    }
+
+    private static func relative(_ date: Date) -> String {
+        let seconds = Int(Date().timeIntervalSince(date))
+        if seconds < 5 { return "just now" }
+        if seconds < 60 { return "\(seconds)s ago" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m ago" }
+        return "\(minutes / 60)h ago"
+    }
 
     private func copyButton(_ label: String, text: String, name: String) -> some View {
         Button(label) {
@@ -185,10 +245,5 @@ struct AgentBridgeSettingsView: View {
         }
         .font(.speakBody(.caption))
         .buttonStyle(.borderless)
-    }
-
-    private func refreshSessionCount() async {
-        let registry = AgentSessionRegistry()
-        sessionCount = registry.list().count
     }
 }

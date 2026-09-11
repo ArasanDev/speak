@@ -21,6 +21,9 @@ struct PrivacyHealthSettingsView: View {
 
     @State private var showMoatResults = false
     @State private var moatResults: [MoatCheckResult] = []
+    @State private var lastAuditAt: Date?
+    @State private var micStatus: PermissionState = .notDetermined
+    @State private var axStatus: PermissionState = .notDetermined
     @State private var showResetConfirmation = false
     @State private var actionError: String?
     @State private var showActionError = false
@@ -31,6 +34,7 @@ struct PrivacyHealthSettingsView: View {
             moatCard
             dataCard
         }
+        .task { await pollPermissions() }
         .sheet(isPresented: $showMoatResults) {
             MoatResultsSheet(results: moatResults)
         }
@@ -69,7 +73,7 @@ struct PrivacyHealthSettingsView: View {
                 "Microphone",
                 description: "Needed to capture dictation audio."
             ) {
-                permissionPill(for: .microphone)
+                permissionPill(for: micStatus)
             }
 
             SettingsRowSeparator()
@@ -78,7 +82,7 @@ struct PrivacyHealthSettingsView: View {
                 "Accessibility",
                 description: "Powers the global hotkey tap and Cmd+V paste simulation."
             ) {
-                permissionPill(for: .accessibility)
+                permissionPill(for: axStatus)
             }
 
             SettingsRowSeparator()
@@ -93,12 +97,23 @@ struct PrivacyHealthSettingsView: View {
         }
     }
 
-    private func permissionPill(for kind: PermissionKind) -> some View {
-        let granted = context.permissionManager?.status(kind) == .granted
+    private func permissionPill(for state: PermissionState) -> some View {
+        let granted = state == .granted
         return SettingsStatusPill(
             text: granted ? "Granted" : "Missing",
             tint: granted ? .speakDelivered : .orange
         )
+    }
+
+    /// Refresh the permission pills every 1.5 s while visible — TCC grants can
+    /// change in System Settings without notifying the app. [decision: cheap
+    /// poll over a NotificationCenter dependency that doesn't exist]
+    private func pollPermissions() async {
+        while !Task.isCancelled {
+            micStatus = context.permissionManager?.status(.microphone) ?? .notDetermined
+            axStatus = context.permissionManager?.status(.accessibility) ?? .notDetermined
+            try? await Task.sleep(for: .milliseconds(1500))
+        }
     }
 
     // MARK: - Moat
@@ -130,12 +145,13 @@ struct PrivacyHealthSettingsView: View {
                 Button(
                     action: {
                         moatResults = MoatAuditor.runAudit()
+                        lastAuditAt = Date()
                         showMoatResults = true
                     },
                     label: {
                         HStack(spacing: SpeakSpacing.xs) {
                             Image(systemName: "shield.checkmark.fill")
-                            Text("Verify Privacy & Security Moat")
+                            Text("Run Moat Verification")
                         }
                         .font(.speakBody(.base, semibold: true))
                         .frame(maxWidth: .infinity)
@@ -144,6 +160,24 @@ struct PrivacyHealthSettingsView: View {
                 )
                 .buttonStyle(.borderedProminent)
                 .tint(.speakDelivered)
+
+                if let lastAuditAt, !moatResults.isEmpty {
+                    let passed = moatResults.filter { $0.status == .pass }.count
+                    HStack(spacing: SpeakSpacing.xs) {
+                        Image(systemName: passed == moatResults.count
+                              ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .foregroundStyle(passed == moatResults.count
+                                             ? Color.speakDelivered : .orange)
+                        Text("\(passed)/\(moatResults.count) guarantees verified · \(lastAuditAt.formatted(date: .omitted, time: .standard))")
+                            .font(.speakBody(.caption))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Details") { showMoatResults = true }
+                            .font(.speakBody(.caption))
+                            .buttonStyle(.borderless)
+                    }
+                    .transition(.opacity)
+                }
             }
             .padding(.horizontal, SpeakSpacing.md)
             .padding(.vertical, SpeakSpacing.sm + 4)
