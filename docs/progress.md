@@ -7,6 +7,38 @@
 
 ## Current phase
 
+**Loop #98 (2026-09-11) — Dedicated Two-Panel Settings Experience (t3code-inspired) COMPLETE.**
+- **Two-mode dashboard navigation**:
+  - `DashboardView` now treats `selection == .settings` as a mode sentinel: the whole window swaps
+    from the desk (Mode A) to the dedicated Settings experience (Mode B). The gear button enters
+    via `openSettings()` (spring animation, remembers `lastDeskSection`); `Esc`, `Cmd+[`, and the
+    `‹ Dashboard` back button return to the desk where you were. `WindowPresenter.showSettings()`
+    still lands directly in Settings via `show(initialSection: .settings)`.
+  - Note: when the dashboard window is already visible, `show(initialSection:)` only re-orders to
+    front (pre-existing behavior) — menubar "Settings…" does not yet force-switch an open window
+    into Settings mode.
+- **New files** (`App/Settings/`):
+  - `SettingsCategory.swift` — 8 rail destinations grouped into System / Intelligence / Experience.
+  - `SettingsChrome.swift` — `SettingsSectionCard`, `SettingsRow` (title+description left, control
+    right), `SettingsRowSeparator`, `SettingsStatusPill` — the native analogue of t3code's
+    `SettingsSection`/`SettingsRow`.
+  - `SettingsExperienceView.swift` — header (back button + `Settings › <category>` breadcrumb +
+    esc keycap), grouped left rail (208pt), card-based detail canvas.
+  - Category views: `GeneralAudioSettingsView` (startup, language, live mic, insertion, voice-out),
+    `HotkeysSettingsView` (activation mode, recorder, extra bindings, accessibility),
+    `AIModelsSettingsView` (intensity, W4.1 diff preview, voice, engine + setup sheets, per-app
+    context), `VocabularySettingsView` (vocab + snippets), `AgentBridgeSettingsView` (speak-mcp
+    status/install/config, prompt tag, session count, jumps to desk panes),
+    `AppearanceHUDSettingsView` (theme, HUD style, border animation), `PrivacyHealthSettingsView`
+    (permission pills, moat audit, data management). About reuses `AboutSettingsTab`.
+- **Refactors**: `MoatResultsSheet` extracted from `PrivacyPaneView` (shared audit surface);
+  `DashboardContext` gained `activeExtraBindings`/`rebindExtraBindings` (wired through
+  `WindowPresenter` + `DashboardWindowController.updateContext`); `SettingsPaneView.swift` deleted
+  (superseded by the dedicated experience).
+- **Tests**: `SettingsCategoryTests` (4 Swift Testing cases — grouping invariants, order, metadata).
+- **Verification**: `make build` clean (0 errors/warnings) · `make test` SUCCESS · `make lint`
+  0 serious (new files warning-free) · `make verify-moat` 7/7.
+
 **Loop #97 (2026-09-11) — Dead Code & Mascot Subsystem Pruning for Clean Architecture Foundation COMPLETE.**
 - **Subsystem Pruning**:
   - Completely excised the experimental "Voice Desktop Pet" subsystem (`App/Pet/`, `PetView`, `PetPanelController`, `PetState`, `PetGeometry`, `DictationController+Pet.swift`, `PetSection.swift`).

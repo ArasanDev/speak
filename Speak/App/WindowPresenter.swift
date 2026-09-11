@@ -127,6 +127,10 @@ final class WindowPresenter {
             showOnboarding: { [weak self] in self?.showOnboarding() },
             dictationCompletedPublisher: dictationController?.dictationCompletedPublisher,
             rebindHotkey: { [weak self] binding in self?.dictationController?.rebindHotkey(binding) },
+            activeExtraBindings: dictationController?.activeExtraBindings ?? .empty,
+            rebindExtraBindings: { [weak self] set in
+                self?.dictationController?.rebindExtraBindings(set)
+            },
             agentCallStore: dictationController?.agentCallStore,
             answerAgentCallByVoice: { [weak self] call in
                 await self?.dictationController?.answerAgentCallByVoice(call) ?? .cancelled
@@ -160,7 +164,8 @@ final class WindowPresenter {
             hotkeyCombo: hotkeyComboProvider(),
             speakEngine: dictationController?.engine,
             permissionManager: permissionManager,
-            dictationCompletedPublisher: dictationController?.dictationCompletedPublisher
+            dictationCompletedPublisher: dictationController?.dictationCompletedPublisher,
+            activeExtraBindings: dictationController?.activeExtraBindings
         )
         controller.show()
     }
@@ -244,7 +249,8 @@ final class WindowPresenter {
             hotkeyCombo: hotkeyComboProvider(),
             speakEngine: dictationController?.engine,
             permissionManager: permissionManager,
-            dictationCompletedPublisher: dictationController?.dictationCompletedPublisher
+            dictationCompletedPublisher: dictationController?.dictationCompletedPublisher,
+            activeExtraBindings: dictationController?.activeExtraBindings
         )
         controller.show(initialSection: .settings)
     }
