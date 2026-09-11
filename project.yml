@@ -82,6 +82,7 @@ targets:
       path: Speak/App/Info.generated.plist
       properties:
         LSUIElement: true            # menubar-only, no Dock icon
+        LSMultipleInstancesProhibited: true
         CFBundleDisplayName: speak
         CFBundleName: speak
         CFBundleShortVersionString: "0.0.1"  # [decision: v0 early release, auto-detected in AboutView]

@@ -50,23 +50,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return  // hosted as TEST_HOST: skip monitoring, single-instance guard, and onboarding
         }
 
-        // Single-instance guard (spec §1.4).
+        // Single-instance & upgrade handoff guard (spec §1.4).
         // Detect any OTHER running instance of this app (exclude self).
         // Uses `com.speak.app` — the PRODUCT_BUNDLE_IDENTIFIER from project.yml.
-        // [verified: NSRunningApplication.runningApplications(withBundleIdentifier:)
-        //  returns all processes with that bundle id, including the current one].
         let bundleID = "com.speak.app"
         let others = NSRunningApplication
             .runningApplications(withBundleIdentifier: bundleID)
             .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
 
-        if let existingInstance = others.first {
-            SpeakLog.hotkey.warning(
-                "speak: another instance is already running (pid=\(existingInstance.processIdentifier, privacy: .public)) — activating it and terminating."
-            )
-            existingInstance.activate()
-            NSApplication.shared.terminate(nil)
-            return
+        if !others.isEmpty {
+            let isReplaceRequested = CommandLine.arguments.contains("--replace") || CommandLine.arguments.contains("--relaunch")
+            let currentPath = Bundle.main.bundleURL.path
+            let isCurrentCanonical = currentPath.hasPrefix("/Applications/")
+            let hasNonCanonicalOther = others.contains { !($0.bundleURL?.path.hasPrefix("/Applications/") ?? false) }
+
+            // If user passed --replace OR the new instance is the canonical /Applications install
+            // while the older instance was running from a dev/derived-data path, terminate the older instance!
+            if isReplaceRequested || (isCurrentCanonical && hasNonCanonicalOther) {
+                for other in others {
+                    SpeakLog.app.info("speak: terminating older instance (pid=\(other.processIdentifier, privacy: .public)) to hand off execution.")
+                    other.terminate()
+                }
+                // Brief pause to allow the older instance to release its event tap and IPC ports.
+                usleep(150_000)
+            } else if let existingInstance = others.first {
+                SpeakLog.hotkey.warning(
+                    "speak: another instance is already running (pid=\(existingInstance.processIdentifier, privacy: .public)) — activating it and terminating."
+                )
+                existingInstance.activate()
+                if let bundleURL = existingInstance.bundleURL {
+                    NSWorkspace.shared.openApplication(at: bundleURL, configuration: NSWorkspace.OpenConfiguration()) { _, _ in }
+                }
+                NSApplication.shared.terminate(nil)
+                return
+            }
         }
 
         // Build the controller now (after the guard — not wasted on secondary instance).

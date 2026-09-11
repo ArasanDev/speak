@@ -61,7 +61,7 @@ APP_BIN   := Speak.app/Contents/MacOS/Speak
 # Local history store (P9). `make history` dumps recent dictations (raw vs cleaned).
 HISTORY_DB := $$HOME/Library/Application Support/speak/history.sqlite
 
-.PHONY: all help generate generate-force build test test-fast eval study lint fmt run kill relaunch logs logs-show history history-eval doctor gates lsp clean install clean-install uninstall install-mcp-user register-mcp register-mcp-apply github-release release verify-moat dev-cert reset-permissions release-preflight
+.PHONY: all help generate generate-force build test test-fast eval study lint fmt run kill relaunch restart logs logs-show history history-eval doctor gates lsp clean install clean-install uninstall install-mcp-user register-mcp register-mcp-apply github-release release verify-moat dev-cert reset-permissions release-preflight
 
 all: build
 
@@ -204,6 +204,16 @@ relaunch:
 	@$(MAKE) --no-print-directory kill
 	@open "$(APP)"
 	@echo "relaunch: opened $(APP) (no rebuild)."
+
+## restart: stop any running instance and launch the installed /Applications/Speak.app
+restart:
+	@pkill -f "Speak.app/Contents/MacOS/Speak" 2>/dev/null || true
+	@pkill -x Speak 2>/dev/null || true
+	@sleep 1
+	@open /Applications/Speak.app
+	@sleep 1
+	@pid=$$(pgrep -n -f "Speak.app/Contents/MacOS/Speak"); \
+	 echo "restart: launched PID $${pid:-?} from /Applications/Speak.app"
 
 ## logs: stream speak's LIVE os.Logger output (info+). Ctrl-C to stop. Use this to
 ##       watch a dictation in real time — .info/.debug are NOT persisted to `log show`.

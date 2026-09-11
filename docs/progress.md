@@ -7,6 +7,27 @@
 
 ## Current phase
 
+**Loop #95 (2026-09-11) — Deep Single-Instance Handoff, In-App Restart & OS LaunchServices Hardening COMPLETE.**
+- **Deep Validation Against Native macOS Architecture**:
+  - Researched and benchmarked lifecycle management in leading open-source macOS utilities (Maccy, Raycast, Ice, Stats).
+  - Identified classic macOS menu bar flaw: new releases terminating themselves when encountering an older zombie or dev instance running in the background.
+- **Two-Tier Process Singleton & Smart Upgrade Handoff**:
+  - **Tier 1 (OS LaunchServices)**: Added `LSMultipleInstancesProhibited: true` to `project.yml` Info properties so macOS LaunchServices natively prevents duplicate process spawns.
+  - **Tier 2 (In-App Smart Handoff in `SpeakApp.swift`)**:
+    - Automatic Canonical Precedence: When `/Applications/Speak.app` launches, it automatically terminates any stale developer/DerivedData instances running in memory.
+    - Argument-driven replacement: Supports `--replace` and `--relaunch` flags to gracefully terminate older instances during updates.
+    - Visual feedback on re-launch: Double-clicking Speak or opening it in Spotlight activates the existing instance and triggers `applicationShouldHandleReopen`, opening the Dashboard.
+- **In-App "Restart speak" & Quick Developer Controls**:
+  - Added **"Restart speak"** (`Cmd+Ctrl+R`) with `arrow.clockwise` action directly to the menubar menu in `StatusBarController.swift`.
+  - Added `make restart` to `Makefile` for instant process cycling.
+- **Swift Concurrency Modernization**:
+  - Eliminated Swift 6 shared mutable state warnings by replacing `kAXTrustedCheckOptionPrompt.takeUnretainedValue()` with modern string literals in `PermissionManager.swift` and `HotkeyMonitor.swift`.
+- **Verification & Deployment**:
+  - `make build`: Clean build (0 errors, 0 compiler warnings).
+  - `make test-fast`: Green (prompt and cleanup test suites pass).
+  - `make verify-moat`: 7/7 checks passed.
+  - Deployed fresh Release app to `/Applications/Speak.app` via `make clean-install` (running as PID 20066).
+
 **Loop #94 (2026-09-11) — Apple Silicon Neural Processing Unit (ANE/NPU) Priority Allocation & Local Test Suite Verification COMPLETE.**
 - **Apple Silicon Neural Engine & Performance Core Allocation**:
   - Investigated and optimized hardware resource allocation for dictation and cleanup windows.

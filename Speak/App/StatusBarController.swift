@@ -328,6 +328,15 @@ final class StatusBarController: NSObject {
 
         menu.addItem(NSMenuItem.separator())
 
+        // Restart speak.
+        let restartItem = NSMenuItem()
+        restartItem.title = "Restart speak"
+        restartItem.keyEquivalent = "r"
+        restartItem.keyEquivalentModifierMask = [.command, .control]
+        restartItem.target = self
+        restartItem.action = #selector(handleRestart)
+        menu.addItem(restartItem)
+
         // Quit.
         let quitItem = NSMenuItem()
         quitItem.title = "Quit speak"
@@ -368,7 +377,6 @@ final class StatusBarController: NSObject {
 
     @objc private func handleOpenAIStudio() {
         controller.showDashboard()
-        // TODO(PE-2): deep-link to .aiStudio section when showDashboard() exposes initialSection
     }
 
     @objc private func handleOpenHistory() {
@@ -393,6 +401,21 @@ final class StatusBarController: NSObject {
     @objc private func handleAbout() {
         NSApplication.shared.orderFrontStandardAboutPanel(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func handleRestart() {
+        let bundleURL = Bundle.main.bundleURL
+        let config = NSWorkspace.OpenConfiguration()
+        config.arguments = ["--replace"]
+        NSWorkspace.shared.openApplication(at: bundleURL, configuration: config) { _, error in
+            if let error {
+                SpeakLog.app.error("handleRestart: failed to launch new instance: \(error.localizedDescription, privacy: .public)")
+            } else {
+                DispatchQueue.main.async {
+                    NSApplication.shared.terminate(nil)
+                }
+            }
+        }
     }
 
     @objc private func handleQuit() {
