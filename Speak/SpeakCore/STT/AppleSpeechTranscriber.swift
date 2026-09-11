@@ -89,9 +89,13 @@ import Speech
 /// Provides a stream of PCM buffers. Production impl uses `AudioCapture`;
 /// tests inject a fixture-backed producer.
 public protocol AudioBufferProducing: Sendable {
-    /// Start and return a stream of PCM buffers. The stream finishes when
-    /// `stop()` is called on the producer, or on file EOF in test mode.
-    func start() throws -> AsyncStream<AVAudioPCMBuffer>
+    /// Start and return a stream of PCM buffers. The stream finishes cleanly
+    /// when `stop()` is called on the producer, or on file EOF in test mode.
+    /// It finishes THROWING when the producer dies underneath the session
+    /// (unrecoverable route/device teardown) — the positive signal that lets
+    /// CaptureSession settle `.error` instead of wedging `.listening` forever
+    /// on a dead audio source. [fix: wedge]
+    func start() throws -> AsyncThrowingStream<AVAudioPCMBuffer, Error>
     /// Stop producing buffers and finish the stream.
     func stop()
 }
@@ -101,7 +105,7 @@ public protocol AudioBufferProducing: Sendable {
 /// `AudioCaptureProviding` for the W2.1 level stream. [decision W2.1]
 final class LiveAudioCapture: AudioBufferProducing, @unchecked Sendable {
     let captureInstance = AudioCapture()
-    func start() throws -> AsyncStream<AVAudioPCMBuffer> { try captureInstance.start() }
+    func start() throws -> AsyncThrowingStream<AVAudioPCMBuffer, Error> { try captureInstance.start() }
     func stop() { captureInstance.stop() }
 }
 
@@ -123,6 +127,15 @@ public final class AppleSpeechTranscriber: Transcribing, AudioCaptureProviding {
 
     private let audioProducer: any AudioBufferProducing
     private let state = SessionState()
+
+    /// Nonisolated pending-start counter, incremented in `startStream()` before
+    /// the session Task exists and decremented inside that Task AFTER it has
+    /// armed itself on the `SessionState` actor. `stop()` spins on this so a
+    /// stop issued while a session is starting (Task created, run() not yet
+    /// entered) waits the ms-scale scheduling gap instead of no-op'ing on a
+    /// nil stopProducer/sessionTask — the race that left the mic live on an
+    /// orphaned session. [fix: audit — mic-leak]
+    private let pendingSessionStarts = OSAllocatedUnfairLock(initialState: 0)
 
     // MARK: - W2.1: AudioCaptureProviding
 
@@ -172,7 +185,21 @@ public final class AppleSpeechTranscriber: Transcribing, AudioCaptureProviding {
 
         let (stream, continuation) = AsyncThrowingStream<TranscriptChunk, Error>.makeStream()
 
+        // Mark the pending start BEFORE the Task exists so a stop() arriving in
+        // the scheduling gap can wait for it (see pendingSessionStarts note).
+        pendingSessionStarts.withLock { $0 += 1 }
         let task = Task<Void, Never>(priority: .userInitiated) {
+            // Arm on the SessionState actor BEFORE releasing the pending gate:
+            // generation must be claimed before stop() can observe pending==0,
+            // or stop() would mark the OLD generation and this session would
+            // orphan a live mic. [fix: mic-leak race]
+            let bailEarly = await state.armSession()
+            pendingSessionStarts.withLock { $0 -= 1 }
+            if bailEarly {
+                SpeakLog.stt.info("stop() predated session start — finishing stream without opening the mic.")
+                continuation.finish()
+                return
+            }
             do {
                 try await Session(locale: locale, audioProducer: producer, state: state, vocabulary: vocabulary)
                     .run(continuation: continuation)
@@ -196,6 +223,14 @@ public final class AppleSpeechTranscriber: Transcribing, AudioCaptureProviding {
     }
 
     public func stop() async {
+        // Wait out any pending session-start (startStream returned, Task not yet
+        // armed). Without this, a stop() landing in that window hit nil
+        // stopProducer/sessionTask, no-op'd, and left run() to open the mic on a
+        // session nobody would ever stop. The pending task's first action is the
+        // arm hop, so this loop is ms-scale. [fix: mic-leak race]
+        while pendingSessionStarts.withLock({ $0 > 0 }) {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
         await state.stopSession()
     }
 }
@@ -226,12 +261,16 @@ private struct Session: Sendable {
         await state.setInputContinuation(inputCont)
 
         // Start audio capture and register the stop closure with SessionState.
-        // B1: `setStopProducer` returns `true` if `stopRequested` was already set
-        // (i.e. stop() won actor entry before this registration). In that case we
-        // stop the mic immediately and return — the session is abandoned cleanly
-        // without reaching the bridge or blocking on `await bridgeTask.value`.
-        // This guards the race where stop()→stopSession() no-oped because stopProducer
-        // was nil, then run() started the mic and would block forever. [validation-fix B1]
+        // B1: `setStopProducer` returns `true` if stop() already marked this
+        // generation stopped. In that case we stop the mic immediately and
+        // return — the session is abandoned cleanly without reaching the
+        // bridge or blocking on `await bridgeTask.value`.
+        // The pre-start check closes the arm→start window so the mic is never
+        // even opened when stop() won the race. [validation-fix B1 + mic-leak]
+        if await state.isStoppedGeneration() {
+            SpeakLog.stt.info("stop() arrived before capture start — never opening the mic.")
+            return
+        }
         let bufferStream = try audioProducer.start()
         let producer = audioProducer
         let stopAlreadyRequested = await state.setStopProducer { producer.stop() }
@@ -243,7 +282,8 @@ private struct Session: Sendable {
         SpeakLog.stt.info("Audio capture started.")
 
         // Bridge task: reads PCM buffers, converts format, feeds AnalyzerInput.
-        // Exits when bufferStream finishes (producer.stop() called or file EOF).
+        // Exits when bufferStream finishes (producer.stop() called or file EOF),
+        // or THROWS when the producer dies underneath us (route-change teardown).
         let bridgeTask = buildBridgeTask(
             bufferStream: bufferStream,
             analyzerFormat: analyzerFormat,
@@ -289,8 +329,16 @@ private struct Session: Sendable {
         }
 
         // Step 2: Await the bridge task — guarantees all AnalyzerInputs have been
-        // queued before we signal the analyzer that input is done.
-        await bridgeTask.value
+        // queued before we signal the analyzer that input is done. A thrown
+        // finish from the producer (route teardown) propagates here — tear the
+        // analyzer down and let run() throw so the session settles `.error`
+        // instead of wedging `.listening` on a dead mic. [fix: wedge]
+        do {
+            try await bridgeTask.value
+        } catch {
+            await state.cancelAll(analyzer: analyzer)
+            throw error
+        }
 
         // Step 3: Finalize — flushes remaining volatile results and CLOSES
         // transcriber.results. Without this, resultsTask loops forever. [verified]
@@ -301,16 +349,27 @@ private struct Session: Sendable {
             try await analyzer.finalizeAndFinishThroughEndOfInput()
             SpeakLog.stt.info("Analyzer finalized; awaiting remaining results.")
 
-            // Step 4: Drain remaining results with a 10s watchdog to avoid silent deadlocks.
-            await withTaskGroup(of: Void.self) { group in
+            // Step 4: Drain remaining results with a 10s watchdog to avoid silent
+            // deadlocks. A resultsTask failure is NOT swallowed (`_ = try?` used to
+            // report truncated transcripts as success) — it propagates so the
+            // session settles `.error`. [fix: audit — results error swallowed]
+            try await withThrowingTaskGroup(of: Error?.self) { group in
                 group.addTask {
-                    _ = try? await resultsTask.value
+                    do {
+                        try await resultsTask.value
+                        return nil
+                    } catch {
+                        return error
+                    }
                 }
                 group.addTask {
                     try? await Task.sleep(nanoseconds: 10_000_000_000)
                     resultsTask.cancel()
+                    return nil
                 }
-                await group.next()
+                if let outcome = try await group.next(), let error = outcome {
+                    throw error
+                }
                 group.cancelAll()
             }
             SpeakLog.stt.info("Transcription session completed normally.")
@@ -437,18 +496,18 @@ private struct Session: Sendable {
     // MARK: Tasks
 
     private func buildBridgeTask(
-        bufferStream: AsyncStream<AVAudioPCMBuffer>,
+        bufferStream: AsyncThrowingStream<AVAudioPCMBuffer, Error>,
         analyzerFormat: AVAudioFormat,
         inputCont: AsyncStream<AnalyzerInput>.Continuation
-    ) -> Task<Void, Never> {
+    ) -> Task<Void, Error> {
         struct SendableFormat: @unchecked Sendable { let format: AVAudioFormat }
         let targetFmt = SendableFormat(format: analyzerFormat)
         struct SendableContinuation: @unchecked Sendable { let cont: AsyncStream<AnalyzerInput>.Continuation }
         let targetCont = SendableContinuation(cont: inputCont)
-        struct SendableStream: @unchecked Sendable { let stream: AsyncStream<AVAudioPCMBuffer> }
+        struct SendableStream: @unchecked Sendable { let stream: AsyncThrowingStream<AVAudioPCMBuffer, Error> }
         let targetStream = SendableStream(stream: bufferStream)
 
-        return Task<Void, Never>(priority: .userInitiated) {
+        return Task<Void, Error>(priority: .userInitiated) {
             let analyzerFormat = targetFmt.format
             let inputCont = targetCont.cont
             let bufferStream = targetStream.stream
@@ -487,19 +546,27 @@ private struct Session: Sendable {
                 return nil
             }()
 
-            for await pcmBuffer in bufferStream {
-                let target: AVAudioPCMBuffer
-                if let conv = converter,
-                   let converted = Self.convert(pcmBuffer, using: conv, to: analyzerFormat) {
-                    target = converted
-                } else {
-                    target = pcmBuffer
+            do {
+                for try await pcmBuffer in bufferStream {
+                    let target: AVAudioPCMBuffer
+                    if let conv = converter,
+                       let converted = Self.convert(pcmBuffer, using: conv, to: analyzerFormat) {
+                        target = converted
+                    } else {
+                        target = pcmBuffer
+                    }
+                    inputCont.yield(AnalyzerInput(buffer: target)) // [verified]
                 }
-                inputCont.yield(AnalyzerInput(buffer: target)) // [verified]
+                // bufferStream ended cleanly (file EOF or producer.stop()) — finish input.
+                inputCont.finish()
+                SpeakLog.stt.info("Bridge task: all input fed to analyzer.")
+            } catch {
+                // Producer died underneath us (route/device teardown). Finish the
+                // analyzer input so nothing downstream blocks, then rethrow —
+                // run()'s Step 2 await propagates this to the session as `.error`.
+                inputCont.finish()
+                throw error
             }
-            // bufferStream ended (file EOF or producer.stop()) — finish input.
-            inputCont.finish()
-            SpeakLog.stt.info("Bridge task: all input fed to analyzer.")
         }
     }
 
@@ -580,41 +647,65 @@ private struct Session: Sendable {
 @available(macOS 26.0, *)
 private actor SessionState {
     private var sessionTask: Task<Void, Never>?
-    private var bridgeTask: Task<Void, Never>?
+    private var bridgeTask: Task<Void, Error>?
     private var resultsTask: Task<Void, Error>?
     private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
     /// Closure that stops the audio producer, ending the buffer stream.
     /// This is what causes the bridge task to exit and triggers finalize.
     private var stopProducer: (@Sendable () -> Void)?
-    /// B1: Set in stopSession() before the producer is registered.
-    /// Causes setStopProducer to return true so run() can bail immediately.
-    private var stopRequested = false
+    /// Monotonic session generation. `armSession()` — the pending session
+    /// task's FIRST actor action — bumps it; `stopSession()` records the armed
+    /// generation as stopped. The mark is never reset, so a stop that beats
+    /// setStopProducer can never be silently consumed by the stale-flag reset
+    /// that previously let run() open an orphaned mic. [fix: audit — mic-leak]
+    private var generation = 0
+    private var stoppedGeneration = 0
 
     func setSessionTask(_ task: Task<Void, Never>) { sessionTask = task }
     func setInputContinuation(_ cont: AsyncStream<AnalyzerInput>.Continuation) {
         inputContinuation = cont
     }
-    func setBridgeTask(_ task: Task<Void, Never>) { bridgeTask = task }
+    /// Called by the pending session task as its first actor action. Claims a
+    /// new generation; returns true when that generation was already stopped
+    /// (belt — pendingSessionStarts makes it unreachable in practice) so the
+    /// caller can finish without ever touching the mic. [fix: mic-leak race]
+    func armSession() -> Bool {
+        generation += 1
+        return generation <= stoppedGeneration
+    }
+
+    /// True when stop() has already marked the armed generation stopped —
+    /// checked inside run() before opening the mic.
+    func isStoppedGeneration() -> Bool { generation <= stoppedGeneration }
+
+    func setBridgeTask(_ task: Task<Void, Error>) { bridgeTask = task }
     func setResultsTask(_ task: Task<Void, Error>) { resultsTask = task }
 
-    /// Registers the producer stop closure. Returns `true` if stop() already ran
-    /// (stopRequested == true) — in that case run() must stop the mic and bail. [B1]
+    /// Registers the producer stop closure. Returns `true` if stop() already
+    /// marked this generation stopped — in that case run() must bail before
+    /// opening the mic. Generation-scoped, never reset: a stop can no longer
+    /// be consumed-and-forgotten by a pending session start. [B1]
     @discardableResult
     func setStopProducer(_ closure: @escaping @Sendable () -> Void) -> Bool {
+        if generation <= stoppedGeneration {
+            SpeakLog.stt.info("stop() predated session start — bailing before mic opens.")
+            return true
+        }
         stopProducer = closure
-        return stopRequested
+        return false
     }
 
     /// Stops the session cleanly:
-    ///   1. Sets stopRequested so a racing setStopProducer returns true.
+    ///   1. Marks the armed generation stopped so a racing setStopProducer bails.
     ///   2. Stops the audio producer → ends the buffer stream → bridge task exits.
     ///   3. The bridge finishing causes inputCont.finish() → analyzer finalize runs.
     ///   4. Awaits the session task (which awaits bridge → finalize → results drain).
-    /// No zombie tasks remain after this returns.
+    /// No zombie tasks remain after this returns. The generation mark is never
+    /// reset — the next startStream() arms a fresh generation. [fix: mic-leak race]
     func stopSession() async {
-        // B1: Set the flag FIRST — before calling stopProducer — so a concurrent
+        // Mark FIRST — before calling stopProducer — so a concurrent
         // setStopProducer (registering after we enter actor) sees it.
-        stopRequested = true
+        stoppedGeneration = generation
 
         // Stop the producer first — this ends bufferStream, which ends the bridge,
         // which finishes the input continuation, which triggers finalize in run().
@@ -627,9 +718,6 @@ private actor SessionState {
         sessionTask = nil
         bridgeTask = nil
         resultsTask = nil
-        // Reset so the same AppleSpeechTranscriber (reused across sessions in SpeakEngine)
-        // does not false-trigger the B1 bail path on the next startStream() call.
-        stopRequested = false
         SpeakLog.stt.info("STT session stopped cleanly.")
     }
 

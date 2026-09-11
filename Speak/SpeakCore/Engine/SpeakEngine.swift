@@ -555,25 +555,49 @@ public actor SpeakEngine {
         // (or cancel) before a second can be started. The caller (DictationController)
         // already serialises through the hotkey debouncer, but the CLI path has no
         // such gate — this is the bypass-proof enforcement point. [decision A3]
-        guard currentSession == nil else {
-            SpeakLog.engine.info("SpeakEngine: beginDictation refused — a session is already in flight.")
-            // [Engine-L1] Return (not throw) is intentional: DictationController's hotkey
-            // debouncer is the primary re-entrancy gate; this is defence-in-depth only.
-            // The CLI path does not have a debouncer, but a rapid double-tap there is
-            // a user error, not an exceptional condition worth surfacing as an error.
-            return false
+        if currentSession != nil {
+            guard await releaseCurrentSessionIfTerminal() else {
+                SpeakLog.engine.info("SpeakEngine: beginDictation refused — a session is already in flight.")
+                // [Engine-L1] Return (not throw) is intentional: DictationController's hotkey
+                // debouncer is the primary re-entrancy gate; this is defence-in-depth only.
+                // The CLI path does not have a debouncer, but a rapid double-tap there is
+                // a user error, not an exceptional condition worth surfacing as an error.
+                return false
+            }
         }
         let session = newSession(frontmostBundleID: frontmostBundleID)
         SpeakLog.engine.info("SpeakEngine: beginDictation — starting new session.")
         // [Engine-L2] If session.start() throws (e.g., mic permission denied), clear
         // currentSession so the A3 re-entrancy guard doesn't permanently block the
-        // next dictation attempt.
+        // next dictation attempt. Identity-guarded: only clear if currentSession is
+        // still THIS session — a concurrent cancel/begin interleave must not let a
+        // stale catch release a newer session. [fix: audit — session clobber]
         do {
             try await session.start()
         } catch {
-            currentSession = nil
+            if currentSession === session {
+                currentSession = nil
+            }
             throw error
         }
+        return true
+    }
+
+    /// [fix: wedge] Self-healing A3 release: when `currentSession` has reached a
+    /// terminal state on its own (e.g. capture teardown threw
+    /// `captureInterrupted` into the stream mid-listen → `.error` via
+    /// `failStream`, ending the session without an explicit endDictation), the
+    /// dead reference must not wedge the re-entrancy guard forever. Clears it
+    /// and returns `true` so the new begin can proceed. Returns `false` when a
+    /// live session is still in flight (the normal A3 refusal path) and `true`
+    /// when no session exists.
+    private func releaseCurrentSessionIfTerminal() async -> Bool {
+        guard let existing = currentSession else { return true }
+        guard await existing.isTerminal else { return false }
+        SpeakLog.engine.info(
+            "SpeakEngine: releasing terminal session (state settled without stop) before new begin."
+        )
+        currentSession = nil
         return true
     }
 
@@ -638,9 +662,14 @@ public actor SpeakEngine {
         do {
             let result = try await session.stop()
             // Stop succeeded — fall through to history save below.
-            return await finishEndDictation(result: result)
+            return await finishEndDictation(result: result, session: session)
         } catch {
-            currentSession = nil
+            // Identity-guarded clear: a concurrent cancelDictation + beginDictation
+            // interleave during session.stop()'s awaits may have installed a NEW
+            // session — a stale catch must never release it. [fix: audit — clobber]
+            if currentSession === session {
+                currentSession = nil
+            }
             SpeakLog.engine.error(
                 "SpeakEngine: endDictation stop/paste failed — currentSession cleared. \(error.localizedDescription, privacy: .public)"
             )
@@ -651,14 +680,18 @@ public actor SpeakEngine {
     /// Completes the end-dictation flow after a successful `session.stop()`:
     /// saves the history entry (best-effort) and clears `currentSession`.
     /// Extracted so the error path above can clear `currentSession` without
-    /// duplicating the history-save logic.
-    private func finishEndDictation(result: TranscriptionResult) async -> TranscriptionResult {
+    /// duplicating the history-save logic. `session` is passed so the clears
+    /// below can be identity-guarded — only the session that was actually
+    /// stopped may release the slot. [fix: audit — session clobber]
+    private func finishEndDictation(result: TranscriptionResult, session: CaptureSession) async -> TranscriptionResult {
 
         // [A2] Empty-transcript guard (engine side): CaptureSession.stop() already
         // skips paste for empty rawText. Skip history save too — a zero-char entry
         // is noise and could mislead WPM/latency stats. Reach .done cleanly.
         guard !result.rawText.isEmpty else {
-            currentSession = nil
+            if currentSession === session {
+                currentSession = nil
+            }
             SpeakLog.engine.info("SpeakEngine: empty transcript — skip history save.")
             return result
         }
@@ -687,7 +720,9 @@ public actor SpeakEngine {
             )
         }
 
-        currentSession = nil
+        if currentSession === session {
+            currentSession = nil
+        }
         return result
     }
 
@@ -699,7 +734,11 @@ public actor SpeakEngine {
         }
         SpeakLog.engine.info("SpeakEngine: cancelDictation — cancelling session.")
         await session.cancel()
-        currentSession = nil
+        // Identity-guarded: only release the session we actually cancelled.
+        // A newer session installed during the await must survive. [fix: clobber]
+        if currentSession === session {
+            currentSession = nil
+        }
     }
 
     // MARK: - State observation

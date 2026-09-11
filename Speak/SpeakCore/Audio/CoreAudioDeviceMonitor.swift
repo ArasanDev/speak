@@ -31,6 +31,12 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
     private var isListening = false
     private let lock = NSLock()
     private var callbacks: [UUID: @Sendable (DeviceInfo) -> Void] = [:]
+    /// The exact block passed to `AudioObjectAddPropertyListenerBlock`.
+    /// `AudioObjectRemovePropertyListenerBlock` identifies the listener BY
+    /// BLOCK IDENTITY — passing a fresh closure to it removes nothing, which
+    /// is what the previous `stopMonitoring` did (double-registration on any
+    /// re-start). [fix: audit — listener identity]
+    private var listenerBlock: AudioObjectPropertyListenerBlock?
 
     private var defaultInputAddress = AudioObjectPropertyAddress(
         mSelector: kAudioHardwarePropertyDefaultInputDevice,
@@ -51,15 +57,18 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
         defer { lock.unlock() }
         guard !isListening else { return }
 
+        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            self?.handleDeviceChange()
+        }
         let status = AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
             &defaultInputAddress,
-            queue
-        ) { [weak self] _, _ in
-            self?.handleDeviceChange()
-        }
+            queue,
+            block
+        )
 
         if status == noErr {
+            listenerBlock = block
             isListening = true
             SpeakLog.audio.info("CoreAudioDeviceMonitor: listening to kAudioHardwarePropertyDefaultInputDevice.")
         } else {
@@ -70,13 +79,15 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
     public func stopMonitoring() {
         lock.lock()
         defer { lock.unlock() }
-        guard isListening else { return }
+        guard isListening, let block = listenerBlock else { return }
 
         AudioObjectRemovePropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
             &defaultInputAddress,
-            queue
-        ) { _, _ in }
+            queue,
+            block
+        )
+        listenerBlock = nil
         isListening = false
     }
 

@@ -14,8 +14,8 @@
 // established pattern).
 
 import AVFoundation
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 final class AudioCaptureConfigChangeTests: XCTestCase {
 
@@ -28,7 +28,7 @@ final class AudioCaptureConfigChangeTests: XCTestCase {
     func testConfigurationChangeMidCaptureSurvivesWithoutCrashing() throws {
         let capture = AudioCapture()
 
-        let stream: AsyncStream<AVAudioPCMBuffer>
+        let stream: AsyncThrowingStream<AVAudioPCMBuffer, Error>
         do {
             stream = try capture.start()
         } catch {
@@ -54,10 +54,12 @@ final class AudioCaptureConfigChangeTests: XCTestCase {
         // dangling on the old format.
         let drainTask = Task {
             var seen = 0
-            for await _ in stream {
-                seen += 1
-                if seen >= 1 { break }
-            }
+            do {
+                for try await _ in stream {
+                    seen += 1
+                    if seen >= 1 { break }
+                }
+            } catch { }
             return seen
         }
         let deadline = Date().addingTimeInterval(3.0)

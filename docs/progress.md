@@ -938,3 +938,67 @@ paste at cursor into terminal with no macOS 26.4 paste-prompt, raw-fallback with
 **`specs/acceleration-plan.md` produced** from 3 parallel scouts (architecture audit, product roadmap,
 competitor analysis). Four locked user decisions: base-hardening-first · local-first+pluggable-later ·
 **full-window dashboard** · **Monaco** typographic theme.
+
+---
+
+## Done (2026-09-12 — deep-audit remediation, Waves 1–2)
+
+External 7-pass audit consumed; fixes applied in the report's recommended order.
+
+**Wave 1 (`0e52956` [P0]) — honest verification gates.**
+- `pretty-output.sh` now propagates xcodebuild's exit status and counts
+  `TEST FAILED`/`BUILD FAILED`/linker/codesign/failed-test-case lines; Makefile
+  runs bash `-o pipefail` so piped gates can no longer swallow failures.
+- `make gates` no longer exits 0 unconditionally.
+- `verify-moat.sh` import audit was dead code (`${line#*:}` never matched) —
+  now strips `file:line:` correctly, normalizes `@preconcurrency import`, and
+  covers `Speak/MCP` (matching `MoatAuditTests`, swiftlint, and fmt coverage
+  for `Speak/CLI` + `Speak/MCP`).
+- `make study` actually runs the Eval scheme's study tests (env prefix didn't
+  propagate to the test host; `SPEAK_STUDY=1` is now baked into the scheme).
+- `SpeakError` conforms to `LocalizedError` — logs and agent-facing errors show
+  `recoverySuggestion` text instead of `SpeakCore.SpeakError error N`.
+- Fixed the pre-existing serious swiftlint violation in `StatusBarController`
+  that the newly-honest gate surfaced.
+- Proved the fix both directions: a deliberately broken build prints red +
+  `make` exits non-zero; green runs print green.
+
+**Wave 2 (uncommitted at write time) — mic/session lifecycle cluster.**
+- `AudioBufferProducing` → `AsyncThrowingStream`: unrecoverable route/device
+  teardown now finishes the producer stream THROWING `SpeakError.captureInterrupted`
+  (the positive teardown signal) → propagates through the SpeechAnalyzer bridge →
+  `failStream` → `.error`. Clean finish still means "stopped normally / fixture EOF".
+- `.listening` wedge resolved: `SpeakEngine.beginDictation` self-heals a terminal
+  `currentSession` (`releaseCurrentSessionIfTerminal`), and the overlay's
+  `onPartialsEnded` hook drives `endDictation()` so the HUD shows the real error.
+- Mic-leak race: `stopRequested` flag (reset before pending starts could see it)
+  replaced by generation math — `pendingSessionStarts` gate + per-generation
+  `stoppedGeneration` mark; `run()` checks `isStoppedGeneration` before ever
+  opening the mic.
+- Cancel-during-start: `CaptureSession.start()` re-checks state after the
+  `cleaner.isAvailable` await — a cancelled session throws `.sessionCancelled`
+  before `startStream`; the controller treats it as silent intent, not an error
+  HUD (same soft-catch added for cancel-during-processing).
+- Watchdog: `awaitStreamDrainWithWatchdog` no longer parks `Task.value` inside
+  a task group (unreachable cancel path) — polls a `streamDrained` flag and
+  cancels the stalled task itself at 5 s.
+- `currentSession` clears are identity-guarded (`===`) everywhere — a stale
+  catch can no longer release a newer session.
+- Route-change rebuilds dispatch `stateQueue.async` (not `.sync` — was blocking
+  the CoreAudio posting thread through `Thread.sleep` + engine restart), guard
+  against post-teardown rebuilds (ghost engine), and `start()`'s failure path
+  uses shared teardown (observer + monitor-token leak closed).
+- `CoreAudioDeviceMonitor.stopMonitoring` now passes the SAME listener block
+  it registered (block identity — previously removed nothing).
+- `resultsTask` errors propagate instead of `try?`-swallowing (truncated
+  transcripts were reported as success).
+
+**Verification:** `make build` clean · `make lint` 0 serious · `verify-moat` 7/7 ·
+new `SessionLifecycleRegressionTests` 5/5 (wedge settle, engine self-heal,
+mic-leak race, cancel-during-start, watchdog break) · full suite 964 run / 10
+skip / 1 failure — the pre-existing live-FM `testEndToEndDictationWithRealComponents`
+(`[speak-stt]` prefix vs cleaned text; confirmed failing on clean HEAD).
+
+**Unverified:** live mic behavior with real route changes needs a human drive.
+Wave 3+ (one-liners, security surface, dead UI, prompt correctness, perf)
+remain queued.

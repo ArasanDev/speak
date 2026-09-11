@@ -109,6 +109,12 @@ final class OverlayController {
     /// text updates. Used by `CaretOverlayController` to track the in-flight text
     /// without creating a coupling from OverlayController to the caret overlay.
     var onPartialTextUpdated: ((String) -> Void)?
+    /// Fired when the partials stream ends on its own (not via task
+    /// cancellation). A natural finish while the controller still believes the
+    /// session is `.listening` means capture died underneath the session —
+    /// the controller runs its normal end path so the session's stored error
+    /// surfaces instead of wedging. [fix: wedge]
+    var onPartialsEnded: (() async -> Void)?
 
     // MARK: - Init
 
@@ -297,7 +303,17 @@ final class OverlayController {
 
         partialsTask?.cancel()
         partialsTask = nil
+        startPartialsDrain(provider: partialsProvider)
+    }
 
+    /// Drains the session's partials stream into the overlay model. When the
+    /// stream ends on its own (not via task cancellation — `transition(to:
+    /// .processing)` and `stop()` cancel this task first), `onPartialsEnded`
+    /// fires so the controller can settle a session whose capture side died.
+    /// [fix: wedge]
+    private func startPartialsDrain(
+        provider partialsProvider: @escaping () async -> AsyncStream<TranscriptChunk>?
+    ) {
         partialsTask = Task { [weak self] in
             guard let self else { return }
             guard let stream = await partialsProvider() else {
@@ -322,6 +338,11 @@ final class OverlayController {
                 }
             }
             SpeakLog.engine.info("OverlayController: partials stream finished.")
+            // A natural finish (not task cancellation) while the session
+            // believed it was listening means the capture side ended underneath
+            // us — let the controller settle the session's terminal state.
+            guard !Task.isCancelled else { return }
+            await onPartialsEnded?()
         }
     }
 

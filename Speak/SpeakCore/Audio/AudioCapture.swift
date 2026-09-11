@@ -54,7 +54,13 @@ public final class AudioCapture: @unchecked Sendable {
     private var engine = AVAudioEngine()
     private let bus: AVAudioNodeBus = 0
     private var converter: AVAudioConverter?
-    private var continuation: AsyncStream<AVAudioPCMBuffer>.Continuation?
+    /// Throwing stream: a CLEAN finish means `stop()` ran (normal teardown);
+    /// a THROWING finish means the input died underneath us (route change with
+    /// no valid format, engine restart failure). CaptureSession keys off that
+    /// distinction — a clean finish while `.listening` is indistinguishable
+    /// from mock/fast-path completion, but a thrown finish is an unambiguous
+    /// "torn down externally" signal. [fix: wedge — positive teardown signal]
+    private var continuation: AsyncThrowingStream<AVAudioPCMBuffer, Error>.Continuation?
 
     // W2.1: Parallel level stream. Carried alongside the PCM buffer stream so the
     // HUD can drive live waveform bars without consuming the single-consumer
@@ -113,10 +119,12 @@ public final class AudioCapture: @unchecked Sendable {
     }
 
     /// Starts capture and returns a stream of 16 kHz mono PCM buffers.
-    /// The stream finishes when `stop()` is called.
+    /// The stream finishes cleanly when `stop()` is called; it finishes
+    /// THROWING `SpeakError.captureInterrupted` when the input route dies
+    /// underneath the session (see `teardownLocked(throwing:)`).
     ///
     /// W2.1: Also starts the parallel level stream (accessible via `startLevelStream()`).
-    public func start() throws -> AsyncStream<AVAudioPCMBuffer> {
+    public func start() throws -> AsyncThrowingStream<AVAudioPCMBuffer, Error> {
         engine.reset()
 
         let input = engine.inputNode
@@ -134,7 +142,7 @@ public final class AudioCapture: @unchecked Sendable {
         }
         self.converter = converter
 
-        let (stream, continuation) = AsyncStream<AVAudioPCMBuffer>.makeStream()
+        let (stream, continuation) = AsyncThrowingStream<AVAudioPCMBuffer, Error>.makeStream()
         self.continuation = continuation
 
         let (levelStream, levelsContinuation) = AsyncStream<Double>.makeStream()
@@ -163,13 +171,12 @@ public final class AudioCapture: @unchecked Sendable {
         do {
             try engine.start()
         } catch {
-            input.removeTap(onBus: bus)
-            engine.stop()
-            engine.reset()
+            // Shared teardown (removes the config-change observer AND the HAL
+            // monitor token — the old path left both bound to the stale input
+            // node, so a later device event would "rebuild" a ghost engine with
+            // no consumer). [fix: audit — observer leak on start failure]
+            stateQueue.sync { self.teardownLocked(throwing: nil) }
             self.engine = AVAudioEngine()
-            continuation.finish()
-            self.continuation = nil
-            self.converter = nil
             throw SpeakError.unknown("AVAudioEngine failed to start: \(error.localizedDescription)")
         }
 
@@ -200,7 +207,7 @@ public final class AudioCapture: @unchecked Sendable {
         input: AVAudioInputNode,
         targetFormat: AVAudioFormat,
         converterBox: ConverterBox,
-        continuation: AsyncStream<AVAudioPCMBuffer>.Continuation,
+        continuation: AsyncThrowingStream<AVAudioPCMBuffer, Error>.Continuation,
         levelsContinuation: AsyncStream<Double>.Continuation
     ) -> @Sendable (AVAudioFormat) -> Bool {
         let vadBox = self.vadBox
@@ -256,7 +263,11 @@ public final class AudioCapture: @unchecked Sendable {
             ) { [weak self] notification in
                 guard let self else { return }
                 if let object = notification.object as AnyObject?, object !== self.engine { return }
-                self.stateQueue.sync {
+                // .async, not .sync: the rebuild sleeps (format-retry) and does
+                // engine stop/reset/start — it must not block the CoreAudio
+                // callback thread that posted the notification. The serial
+                // queue still orders it against stop(). [fix: audit — RT-thread]
+                self.stateQueue.async {
                     self.reconfigureAfterRouteChangeLocked(
                         input: input,
                         bus: bus,
@@ -271,7 +282,7 @@ public final class AudioCapture: @unchecked Sendable {
         if monitorToken == nil {
             monitorToken = CoreAudioDeviceMonitor.shared.registerCallback { [weak self] _ in
                 guard let self else { return }
-                self.stateQueue.sync {
+                self.stateQueue.async {
                     self.reconfigureAfterRouteChangeLocked(
                         input: input,
                         bus: bus,
@@ -303,7 +314,7 @@ public final class AudioCapture: @unchecked Sendable {
     /// is the caller's explicit responsibility via `attachVoiceActivityDetector(nil)`.
     public func stop() {
         stateQueue.sync {
-            stopLocked()
+            teardownLocked(throwing: nil)
         }
     }
 
@@ -326,6 +337,15 @@ public final class AudioCapture: @unchecked Sendable {
         converterBox: ConverterBox,
         installTap: @escaping @Sendable (AVAudioFormat) -> Bool
     ) {
+        // The handler now dispatches `.async` onto stateQueue — an event queued
+        // BEFORE stop()'s teardown can run AFTER it. Without this guard that
+        // late rebuild would reinstall a tap and restart an engine with no
+        // consumer (the ghost-engine leak). [fix: audit — async rebuild race]
+        guard continuation != nil else {
+            SpeakLog.audio.info("AudioCapture: route change arrived after teardown — ignoring.")
+            return
+        }
+
         SpeakLog.audio.info("AudioCapture: route/device change received — rebuilding tap for new hardware format.")
 
         // Tear down first — the OS may have already invalidated the old
@@ -346,22 +366,28 @@ public final class AudioCapture: @unchecked Sendable {
         }
 
         guard newInputFormat.sampleRate > 0, newInputFormat.channelCount > 0 else {
-            SpeakLog.audio.error("AudioCapture: no valid input format after configuration change — stopping capture.")
-            stopLocked()
+            SpeakLog.audio.error("AudioCapture: no valid input format after configuration change — input lost.")
+            teardownLocked(throwing: SpeakError.captureInterrupted(
+                "input device disappeared or reported an invalid format after a route change"
+            ))
             return
         }
         guard let newConverter = AVAudioConverter(from: newInputFormat, to: targetFormat) else {
             SpeakLog.audio.error("""
                 AudioCapture: could not rebuild converter for new format \
-                \(newInputFormat.sampleRate, privacy: .public)Hz — stopping capture.
+                \(newInputFormat.sampleRate, privacy: .public)Hz — input lost.
                 """)
-            stopLocked()
+            teardownLocked(throwing: SpeakError.captureInterrupted(
+                "no converter for the post-route-change format \(newInputFormat.sampleRate)Hz"
+            ))
             return
         }
         converterBox.set(newConverter)
 
         guard installTap(newInputFormat) else {
-            stopLocked()
+            teardownLocked(throwing: SpeakError.captureInterrupted(
+                "could not reinstall the input tap on the new route"
+            ))
             return
         }
 
@@ -372,18 +398,25 @@ public final class AudioCapture: @unchecked Sendable {
         } catch {
             SpeakLog.audio.error("""
                 AudioCapture: failed to restart engine after configuration change — \
-                \(error.localizedDescription, privacy: .public). Stopping capture.
+                \(error.localizedDescription, privacy: .public). Input lost.
                 """)
-            stopLocked()
+            teardownLocked(throwing: SpeakError.captureInterrupted(
+                "engine restart after route change failed: \(error.localizedDescription)"
+            ))
         }
     }
 
     /// Actual teardown body. Must only be called while already holding
     /// `stateQueue` (either via `stop()`, or from inside the
     /// `.AVAudioEngineConfigurationChange` handler, which runs its whole body
-    /// under `stateQueue.sync`) — calling this directly from `stop()` without
+    /// under `stateQueue`) — calling this directly from `stop()` without
     /// the queue would reintroduce the config-change-handler race.
-    private func stopLocked() {
+    ///
+    /// `throwing`: non-nil when the input died underneath the consumer — the
+    /// PCM stream finishes with that error instead of cleanly, which is the
+    /// positive signal CaptureSession uses to settle `.error` rather than
+    /// wedge `.listening` forever. [fix: wedge]
+    private func teardownLocked(throwing error: Error?) {
         if let observer = configObserver {
             NotificationCenter.default.removeObserver(observer)
             configObserver = nil
@@ -395,7 +428,11 @@ public final class AudioCapture: @unchecked Sendable {
         engine.inputNode.removeTap(onBus: bus)
         if engine.isRunning { engine.stop() }
         engine.reset()
-        continuation?.finish()
+        if let error {
+            continuation?.finish(throwing: error)
+        } else {
+            continuation?.finish()
+        }
         continuation = nil
         levelsContinuation?.finish()
         levelsContinuation = nil
@@ -446,7 +483,7 @@ public final class AudioCapture: @unchecked Sendable {
     private static func convert(_ buffer: AVAudioPCMBuffer,
                                 to targetFormat: AVAudioFormat,
                                 using converter: AVAudioConverter,
-                                yielding continuation: AsyncStream<AVAudioPCMBuffer>.Continuation) {
+                                yielding continuation: AsyncThrowingStream<AVAudioPCMBuffer, Error>.Continuation) {
         let ratio = targetFormat.sampleRate / buffer.format.sampleRate
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1
         guard capacity > 0,

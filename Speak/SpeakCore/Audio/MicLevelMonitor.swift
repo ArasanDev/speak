@@ -58,7 +58,7 @@ public final class MicLevelMonitor: @unchecked Sendable {
         levelHandler = onLevel
         lock.unlock()
 
-        let stream: AsyncStream<AVAudioPCMBuffer>
+        let stream: AsyncThrowingStream<AVAudioPCMBuffer, Error>
         do {
             stream = try capture.start()
         } catch {
@@ -68,9 +68,17 @@ public final class MicLevelMonitor: @unchecked Sendable {
             throw error
         }
 
-        // Mandatory drain — an unconsumed AsyncStream buffers every buffer.
+        // Mandatory drain — an unconsumed stream buffers every buffer. A thrown
+        // finish (unrecoverable route teardown) just ends the meter; the level
+        // stream finishes alongside it, so the VU falls back to rest.
         pcmDrainTask = Task {
-            for await _ in stream { }
+            do {
+                for try await _ in stream { }
+            } catch {
+                SpeakLog.audio.error(
+                    "MicLevelMonitor: capture stream ended with error — \(error.localizedDescription, privacy: .public)"
+                )
+            }
         }
         levelDrainTask = Task { [weak self] in
             guard let levels = self?.capture.startLevelStream() else { return }

@@ -30,20 +30,20 @@ final class SpeechTranscriberTests: XCTestCase {
     /// This exercises the same AnalyzerInput path as live audio.
     final class FixtureAudioProducer: AudioBufferProducing, @unchecked Sendable {
         let fileURL: URL
-        private var continuation: AsyncStream<AVAudioPCMBuffer>.Continuation?
+        private var continuation: AsyncThrowingStream<AVAudioPCMBuffer, Error>.Continuation?
 
         init(fileURL: URL) {
             self.fileURL = fileURL
         }
 
-        func start() throws -> AsyncStream<AVAudioPCMBuffer> {
+        func start() throws -> AsyncThrowingStream<AVAudioPCMBuffer, Error> {
             let file = try AVAudioFile(forReading: fileURL)
             let format = file.processingFormat
             let frameCount = AVAudioFrameCount(file.length)
             // Chunk size: 4096 frames per buffer (matches AudioCapture.Constants.tapBufferSize [decision])
             let chunkSize: AVAudioFrameCount = 4096
 
-            let (stream, cont) = AsyncStream<AVAudioPCMBuffer>.makeStream()
+            let (stream, cont) = AsyncThrowingStream<AVAudioPCMBuffer, Error>.makeStream()
             self.continuation = cont
 
             Task.detached(priority: .userInitiated) {
@@ -294,11 +294,11 @@ final class SpeechTranscriberTests: XCTestCase {
         private var _stopCount = 0
         var startCount: Int { lock.withLock { _startCount } }
         var stopCount: Int { lock.withLock { _stopCount } }
-        var continuationRef: AsyncStream<AVAudioPCMBuffer>.Continuation?
+        var continuationRef: AsyncThrowingStream<AVAudioPCMBuffer, Error>.Continuation?
 
-        func start() throws -> AsyncStream<AVAudioPCMBuffer> {
+        func start() throws -> AsyncThrowingStream<AVAudioPCMBuffer, Error> {
             lock.withLock { _startCount += 1 }
-            let (stream, cont) = AsyncStream<AVAudioPCMBuffer>.makeStream()
+            let (stream, cont) = AsyncThrowingStream<AVAudioPCMBuffer, Error>.makeStream()
             lock.withLock { continuationRef = cont }
             return stream
         }
