@@ -51,7 +51,7 @@ public final class AudioCapture: @unchecked Sendable {
         // [decision W2.1: tap cadence drives level updates; no extra timer needed]
     }
 
-    private let engine = AVAudioEngine()
+    private var engine = AVAudioEngine()
     private let bus: AVAudioNodeBus = 0
     private var converter: AVAudioConverter?
     private var continuation: AsyncStream<AVAudioPCMBuffer>.Continuation?
@@ -120,10 +120,6 @@ public final class AudioCapture: @unchecked Sendable {
         engine.reset()
 
         let input = engine.inputNode
-        if let currentDev = CoreAudioDeviceMonitor.shared.currentDefaultInputDevice() {
-            try? input.auAudioUnit.setDeviceID(currentDev.id)
-        }
-
         let inputFormat = try resolveInputFormat(for: input)
         guard let targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -168,6 +164,9 @@ public final class AudioCapture: @unchecked Sendable {
             try engine.start()
         } catch {
             input.removeTap(onBus: bus)
+            engine.stop()
+            engine.reset()
+            self.engine = AVAudioEngine()
             continuation.finish()
             self.continuation = nil
             self.converter = nil
@@ -336,10 +335,6 @@ public final class AudioCapture: @unchecked Sendable {
             engine.stop()
         }
         engine.reset()
-
-        if let currentDev = CoreAudioDeviceMonitor.shared.currentDefaultInputDevice() {
-            try? input.auAudioUnit.setDeviceID(currentDev.id)
-        }
 
         var newInputFormat = input.outputFormat(forBus: bus)
         if newInputFormat.sampleRate <= 0 || newInputFormat.channelCount <= 0 {
