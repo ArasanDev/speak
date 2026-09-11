@@ -3,6 +3,7 @@
 // The full-window dashboard: a NavigationSplitView with the sidebar IA from
 // `DashboardSection`.
 
+import Combine
 import SpeakCore
 import SwiftUI
 
@@ -114,6 +115,16 @@ struct DashboardView: View {
         .ignoresSafeArea(.all, edges: .top)
         .onChange(of: selection) { _, newValue in
             if newValue != .settings { lastDeskSection = newValue }
+        }
+        .onReceive(context.navigateToSectionPublisher ?? Empty().eraseToAnyPublisher()) { target in
+            if target == .settings {
+                openSettings()
+            } else {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                    selection = target
+                    lastDeskSection = target
+                }
+            }
         }
         .background(
             Button(action: toggleSidebar) { EmptyView() }

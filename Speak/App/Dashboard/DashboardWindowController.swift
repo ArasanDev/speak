@@ -42,11 +42,14 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
     private var context: DashboardContext
     private let initialSection: DashboardSection
     private let log = SpeakLog.storage
+    private let navigationSubject = PassthroughSubject<DashboardSection, Never>()
 
     // MARK: - Init
 
     init(context: DashboardContext, initialSection: DashboardSection = .home) {
-        self.context = context
+        var ctx = context
+        ctx.navigateToSectionPublisher = navigationSubject.eraseToAnyPublisher()
+        self.context = ctx
         self.initialSection = initialSection
         super.init()
     }
@@ -91,7 +94,10 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
     /// Pass `initialSection` to override the stored default when opening fresh.
     func show(initialSection overrideSection: DashboardSection? = nil) {
         if let existing = window, existing.isVisible {
-            // Already visible — bring to front without re-promoting (already .regular).
+            // Already visible — switch mode/section if requested, and bring to front.
+            if let overrideSection {
+                navigationSubject.send(overrideSection)
+            }
             bringToFront(existing)
             return
         }
