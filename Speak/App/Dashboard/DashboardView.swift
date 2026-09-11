@@ -40,6 +40,11 @@ struct DashboardView: View {
     /// The selected sidebar section. Seeded from `initialSection` (defaults to Home).
     @State private var selection: DashboardSection
     @State private var isSidebarManuallyToggled = false
+    @State private var selfHealRotation: Double = 0
+    @State private var isSelfHealed: Bool = false
+    @State private var isSettingsHovered: Bool = false
+    @State private var isSelfHealHovered: Bool = false
+    @State private var showUpdateNotification: Bool = false
 
     init(context: DashboardContext, initialSection: DashboardSection = .home) {
         self.context = context
@@ -99,22 +104,15 @@ struct DashboardView: View {
                     
                     Spacer(minLength: 0)
                     
-                    List(selection: $selection) {
-                        if isRail {
-                            Image(systemName: DashboardSection.settings.systemImage)
-                                .font(.system(size: 16))
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .help(DashboardSection.settings.title)
-                                .tag(DashboardSection.settings)
-                        } else {
-                            Label(DashboardSection.settings.title, systemImage: DashboardSection.settings.systemImage)
-                                .tag(DashboardSection.settings)
-                        }
+                    Divider()
+                        .padding(.horizontal, isRail ? 8 : 16)
+                        .opacity(0.4)
+                    
+                    if isRail {
+                        sidebarRailBottomToolbar
+                    } else {
+                        sidebarBottomToolbar
                     }
-                    .listStyle(.sidebar)
-                    .scrollContentBackground(.hidden)
-                    .frame(height: 52)
-                    .scrollDisabled(true)
                 }
                 .frame(width: sidebarWidth)
                 .opacity(mode == .hidden ? 0 : 1)
@@ -158,6 +156,152 @@ struct DashboardView: View {
                 .keyboardShortcut("s", modifiers: [.command, .control])
                 .opacity(0)
         )
+    }
+
+    // MARK: - Sidebar Bottom Toolbars
+    
+    private var sidebarBottomToolbar: some View {
+        HStack(spacing: 0) {
+            // Settings Icon Button (bottom left)
+            Button(action: {
+                selection = .settings
+            }) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(selection == .settings ? Color.speakAccent : .secondary)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        selection == .settings
+                            ? Color.primary.opacity(0.12)
+                            : (isSettingsHovered ? Color.primary.opacity(0.06) : Color.clear)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+            .help("Settings")
+            .onHover { isSettingsHovered = $0 }
+
+            Spacer()
+
+            // Self-Healing & Quick Repair Circle Button (bottom right of left panel)
+            // Icon: "arrow.2.circlepath" (circle divided by half with arrows following each other)
+            Button(action: {
+                triggerSelfHeal()
+            }) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "arrow.2.circlepath")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(isSelfHealed ? Color.speakStateDone : .secondary)
+                        .rotationEffect(.degrees(selfHealRotation))
+                        .frame(width: 32, height: 32)
+                        .background(
+                            isSelfHealed
+                                ? Color.speakStateDone.opacity(0.15)
+                                : (isSelfHealHovered ? Color.primary.opacity(0.06) : Color.clear)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                    // Future version update indicator on top of the circle
+                    Circle()
+                        .fill(Color.speakAccent)
+                        .frame(width: 6, height: 6)
+                        .offset(x: -2, y: 2)
+                        .opacity(showUpdateNotification ? 1 : 0)
+                }
+            }
+            .buttonStyle(.plain)
+            .help(isSelfHealed ? "Application Re-armed & Configured Properly" : "Self-Heal & Re-arm: reset hotkey tap & restore healthy state")
+            .onHover { isSelfHealHovered = $0 }
+            .contextMenu {
+                Button("Self-Heal & Re-arm Hotkey") {
+                    triggerSelfHeal()
+                }
+                Button("Restart speak") {
+                    restartApp()
+                }
+                Divider()
+                Button("Check for Updates (v0.0.1)") {
+                    showUpdateNotification = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                        showUpdateNotification = false
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+
+    private var sidebarRailBottomToolbar: some View {
+        VStack(spacing: 8) {
+            Button(action: {
+                selection = .settings
+            }) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(selection == .settings ? Color.speakAccent : .secondary)
+                    .frame(width: 32, height: 32)
+                    .background(selection == .settings ? Color.primary.opacity(0.12) : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+            .help("Settings")
+
+            Button(action: {
+                triggerSelfHeal()
+            }) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "arrow.2.circlepath")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(isSelfHealed ? Color.speakStateDone : .secondary)
+                        .rotationEffect(.degrees(selfHealRotation))
+                        .frame(width: 32, height: 32)
+                        .background(isSelfHealed ? Color.speakStateDone.opacity(0.15) : Color.clear)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                    Circle()
+                        .fill(Color.speakAccent)
+                        .frame(width: 6, height: 6)
+                        .offset(x: -2, y: 2)
+                        .opacity(showUpdateNotification ? 1 : 0)
+                }
+            }
+            .buttonStyle(.plain)
+            .help("Self-Heal & Re-arm")
+            .contextMenu {
+                Button("Self-Heal & Re-arm Hotkey") {
+                    triggerSelfHeal()
+                }
+                Button("Restart speak") {
+                    restartApp()
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func triggerSelfHeal() {
+        withAnimation(.easeInOut(duration: 0.6)) {
+            selfHealRotation += 360
+        }
+        context.onSelfHeal?()
+        isSelfHealed = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            isSelfHealed = false
+        }
+    }
+
+    private func restartApp() {
+        let bundleURL = Bundle.main.bundleURL
+        let config = NSWorkspace.OpenConfiguration()
+        config.arguments = ["--replace"]
+        NSWorkspace.shared.openApplication(at: bundleURL, configuration: config) { _, error in
+            if error == nil {
+                DispatchQueue.main.async {
+                    NSApplication.shared.terminate(nil)
+                }
+            }
+        }
     }
 
     // MARK: - Detail routing

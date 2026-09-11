@@ -7,6 +7,29 @@
 
 ## Current phase
 
+**Loop #96 (2026-09-11) — Bottom Sidebar Icon Toolbar, Self-Healing Action & Zero-Warning Swift Concurrency COMPLETE.**
+- **Bottom-Left Sidebar Icon Evolution**:
+  - Replaced the vertical text list item for Settings in `DashboardView.swift` with a compact, dedicated bottom toolbar (`sidebarBottomToolbar` and `sidebarRailBottomToolbar`).
+  - **Settings Icon Button**: Clean `gearshape` icon button on the bottom left, opening the Settings panel upon click with active hover/selection styling.
+  - **Circular Self-Healing Button**: Placed in the bottom right of the sidebar panel featuring `arrow.2.circlepath` (semi-circular arrows following each other).
+    - Smooth 360° rotational spin on click (`withAnimation(.easeInOut)`).
+    - Turns green (`Color.speakStateDone`) with a 2.5-second success feedback state and tooltip.
+    - Includes an update notification dot (`Circle().fill(Color.speakAccent)`) positioned on top of the circle for future version releases.
+    - Right-click context menu offering "Self-Heal & Re-arm Hotkey" and "Restart speak".
+- **Self-Healing Architecture (`DictationController.selfHeal()`)**:
+  - Automatically cancels stuck dictation sessions, restarts `HotkeyMonitor` event taps, re-validates TCC Accessibility & Microphone permissions, and prewarms on-device speech recognition via `SpeechPrewarmer`.
+  - Connected end-to-end through `DashboardContext`, `WindowPresenter`, and `DashboardView`.
+- **Swift Concurrency & Zero-Warning Modernization**:
+  - Eliminated all Swift actor-isolation and concurrency warnings:
+    - Marked `receiveData` and `isCompleteRequest` as `nonisolated` in `LocalInferenceServer.swift` to safely process `NWConnection` buffers without actor-hopping friction.
+    - Marked `AgentSessionRegistry.staleThreshold` as `public static nonisolated let` so background threads and tests read it without actor isolation warnings.
+    - Fixed autoclosure `try` in `LLMKeychainStoreTests` (`OpenAICompatibleCleanerTests.swift`).
+- **Verification & Moat**:
+  - `make build`: Clean build (0 errors, 0 compiler warnings).
+  - `make test-fast`: Clean pass (✓ SUCCESS, 0 warnings).
+  - `make verify-moat`: 7/7 checks passed.
+  - Installed and verified live in `/Applications/Speak.app`.
+
 **Loop #95 (2026-09-11) — Deep Single-Instance Handoff, In-App Restart & OS LaunchServices Hardening COMPLETE.**
 - **Deep Validation Against Native macOS Architecture**:
   - Researched and benchmarked lifecycle management in leading open-source macOS utilities (Maccy, Raycast, Ice, Stats).

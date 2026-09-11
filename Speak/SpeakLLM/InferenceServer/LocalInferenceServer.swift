@@ -194,7 +194,7 @@ public actor LocalInferenceServer {
     }
 
     /// Receives data from a connection, accumulating until a full HTTP request is available.
-    private func receiveData(connection: NWConnection, connId: ObjectIdentifier, buffer: Data) {
+    nonisolated private func receiveData(connection: NWConnection, connId: ObjectIdentifier, buffer: Data) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: Self.maxReceiveSize) {
             [weak self] data, _, isComplete, error in
             guard let self else { return }
@@ -234,7 +234,7 @@ public actor LocalInferenceServer {
     /// A request is complete when:
     /// 1. The header/body separator (double CRLF) is present, AND
     /// 2. If Content-Length is specified, enough body bytes have arrived.
-    private func isCompleteRequest(_ data: Data) -> Bool {
+    nonisolated private func isCompleteRequest(_ data: Data) -> Bool {
         let separator = Data([0x0D, 0x0A, 0x0D, 0x0A])
         guard let separatorRange = data.range(of: separator) else {
             return false

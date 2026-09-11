@@ -313,7 +313,8 @@ final class LLMKeychainStoreTests: XCTestCase {
     func testReadMissingAccountReturnsNil() throws {
         let store = uniqueStore()
         do {
-            XCTAssertNil(try store.readKey(account: "does-not-exist"))
+            let key = try store.readKey(account: "does-not-exist")
+            XCTAssertNil(key)
         } catch {
             throw XCTSkip("Keychain storage not accessible in headless test runner: \(error)")
         }

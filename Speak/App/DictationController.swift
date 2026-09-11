@@ -704,6 +704,19 @@ final class DictationController: CLICommandHandler {
         ensureWindowPresenter().showSettings()
     }
 
+    /// Re-arms the hotkey tap, checks and registers permissions, cancels any stuck sessions,
+    /// and prewarms speech recognition to restore full app health.
+    func selfHeal() {
+        SpeakLog.app.info("DictationController: executing self-heal routine...")
+        cancelDictation()
+        monitor.start()
+        let axTrusted = permissionManager.status(.accessibility) == .granted
+        permissionsNeeded = !axTrusted
+        _ = permissionManager.status(.microphone)
+        SpeechPrewarmer.shared.prewarm(locale: settingsStore.language)
+        SpeakLog.app.info("DictationController: self-heal completed successfully.")
+    }
+
     /// Publisher that fires when a dictation completes (success or error).
     /// Used by the dashboard Home pane to refresh recent dictations after a new
     /// entry is saved to history. [decision P11-c]

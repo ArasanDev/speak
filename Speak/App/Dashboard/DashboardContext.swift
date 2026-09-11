@@ -83,6 +83,9 @@ struct DashboardContext {
     /// AVB-7: "Dismiss" row action (no mic). Nil in preview contexts.
     var dismissAgentCall: ((UUID) async -> Void)?
 
+    /// Triggers complete self-healing, hotkey tap re-arm, and engine recovery.
+    var onSelfHeal: (() -> Void)?
+
     /// Explicit init with optional engine/permission manager/publisher (P11-c).
     /// Previews can create a minimal context without these dependencies.
     init(
@@ -101,7 +104,8 @@ struct DashboardContext {
         conversationStore: (any ConversationStoring)? = nil,
         answerAgentCallByVoice: ((AgentCall) async -> HumanResponseOutcome)? = nil,
         declineAgentCall: ((UUID) async -> Void)? = nil,
-        dismissAgentCall: ((UUID) async -> Void)? = nil
+        dismissAgentCall: ((UUID) async -> Void)? = nil,
+        onSelfHeal: (() -> Void)? = nil
     ) {
         self.settingsStore = settingsStore
         self.historyStore = historyStore
@@ -119,5 +123,6 @@ struct DashboardContext {
         self.answerAgentCallByVoice = answerAgentCallByVoice
         self.declineAgentCall = declineAgentCall
         self.dismissAgentCall = dismissAgentCall
+        self.onSelfHeal = onSelfHeal
     }
 }

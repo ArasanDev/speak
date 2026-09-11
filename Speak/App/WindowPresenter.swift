@@ -136,6 +136,9 @@ final class WindowPresenter {
             },
             dismissAgentCall: { [weak self] callId in
                 await self?.dictationController?.dismissAgentCall(callId)
+            },
+            onSelfHeal: { [weak self] in
+                self?.dictationController?.selfHeal()
             }
         )
         let controller = DashboardWindowController(context: context)

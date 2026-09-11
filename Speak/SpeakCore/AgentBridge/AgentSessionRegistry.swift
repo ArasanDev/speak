@@ -28,7 +28,7 @@ public final class AgentSessionRegistry {
     /// from `list()`. 30 minutes: long enough to survive a coffee break
     /// without a re-registration ping, short enough that a genuinely dead
     /// agent process doesn't linger as "active" indefinitely. [decision: AVB-6]
-    public static let staleThreshold: TimeInterval = 30 * 60
+    public static nonisolated let staleThreshold: TimeInterval = 30 * 60
 
     /// The capability set `speak` actually supports this slice (spec §7.1).
     /// `speak_register_session`'s negotiated response is always a subset of
