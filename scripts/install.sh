@@ -72,11 +72,17 @@ log "Ad-hoc signing (free — no Developer ID cert required) ..."
 codesign --force --deep --sign - "$built_app"
 
 log "Stopping any running speak instance ..."
+pkill -f "Speak.app/Contents/MacOS/Speak" 2>/dev/null || true
 pkill -x Speak 2>/dev/null || true
+sleep 1
 
-log "Installing to ${INSTALL_DIR} ..."
-rsync -a --delete "$built_app/" "$INSTALL_DIR/"
+log "Removing any stale installation at ${INSTALL_DIR} ..."
+rm -rf "$INSTALL_DIR"
+
+log "Installing fresh build to ${INSTALL_DIR} ..."
+cp -R "$built_app" "$INSTALL_DIR"
 xattr -cr "$INSTALL_DIR"
+/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f -R -trusted "$INSTALL_DIR" 2>/dev/null || true
 
 log "Installed. Launch it:"
 echo "         open ${INSTALL_DIR}"

@@ -61,7 +61,7 @@ APP_BIN   := Speak.app/Contents/MacOS/Speak
 # Local history store (P9). `make history` dumps recent dictations (raw vs cleaned).
 HISTORY_DB := $$HOME/Library/Application Support/speak/history.sqlite
 
-.PHONY: all help generate generate-force build test test-fast eval study lint fmt run kill relaunch logs logs-show history history-eval doctor gates lsp clean install install-mcp-user register-mcp register-mcp-apply github-release release verify-moat dev-cert reset-permissions release-preflight
+.PHONY: all help generate generate-force build test test-fast eval study lint fmt run kill relaunch logs logs-show history history-eval doctor gates lsp clean install clean-install uninstall install-mcp-user register-mcp register-mcp-apply github-release release verify-moat dev-cert reset-permissions release-preflight
 
 all: build
 
@@ -255,12 +255,48 @@ gates:
 ## rebuilds, run `make dev-cert` once beforehand.
 install: build
 	@echo "==> install: stopping any running Speak instance ..."
-	@pkill -x Speak || true
+	@pkill -f "Speak.app/Contents/MacOS/Speak" 2>/dev/null || true
+	@pkill -x Speak 2>/dev/null || true
 	@echo "==> install: syncing Speak.app to /Applications/ ..."
 	@rsync -a --delete "$(APP)/" /Applications/Speak.app/
 	@xattr -cr /Applications/Speak.app
+	@/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f -R -trusted /Applications/Speak.app 2>/dev/null || true
 	@echo "install: Speak.app → /Applications/ (v$(VERSION)). Launch from Spotlight or:"
 	@echo "         open /Applications/Speak.app"
+
+## clean-install: purge stale caches, kill old background processes, build Release, and install fresh to /Applications/
+clean-install:
+	@echo "==> clean-install: stopping any running Speak processes ..."
+	@pkill -f "Speak.app/Contents/MacOS/Speak" 2>/dev/null || true
+	@pkill -x Speak 2>/dev/null || true
+	@sleep 1
+	@echo "==> clean-install: clearing stale build cache and DerivedData ..."
+	@rm -rf $(DERIVED) build/dmg_staging
+	@echo "==> clean-install: building fresh Release app ..."
+	@$(MAKE) --no-print-directory build CONFIG=Release
+	@echo "==> clean-install: removing old /Applications/Speak.app ..."
+	@rm -rf /Applications/Speak.app
+	@echo "==> clean-install: installing fresh Speak.app to /Applications/ ..."
+	@cp -R "$(RELEASE_APP)" /Applications/Speak.app
+	@xattr -cr /Applications/Speak.app
+	@/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f -R -trusted /Applications/Speak.app 2>/dev/null || true
+	@echo "clean-install: Speak.app cleanly installed to /Applications/ (Release v$(VERSION))."
+	@echo "               Launching fresh instance ..."
+	@open /Applications/Speak.app
+	@sleep 1
+	@pid=$$(pgrep -n -f "Speak.app/Contents/MacOS/Speak"); \
+	 echo "clean-install: launched PID $${pid:-?} from /Applications/Speak.app"
+
+## uninstall: stop running instances, remove /Applications/Speak.app and LaunchServices registrations
+uninstall:
+	@echo "==> uninstall: stopping running instances ..."
+	@pkill -f "Speak.app/Contents/MacOS/Speak" 2>/dev/null || true
+	@pkill -x Speak 2>/dev/null || true
+	@sleep 1
+	@echo "==> uninstall: removing /Applications/Speak.app ..."
+	@rm -rf /Applications/Speak.app
+	@/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -u /Applications/Speak.app 2>/dev/null || true
+	@echo "uninstall: removed /Applications/Speak.app and unregistered from LaunchServices."
 
 ## install-mcp-user: install the local agent voice bridge without requiring root.
 ##
