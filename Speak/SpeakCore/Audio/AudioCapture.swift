@@ -216,7 +216,7 @@ public final class AudioCapture: @unchecked Sendable {
                 return false
             }
             input.removeTap(onBus: bus)
-            input.installTap(onBus: bus, bufferSize: Constants.tapBufferSize, format: format) { buffer, _ in
+            input.installTap(onBus: bus, bufferSize: Constants.tapBufferSize, format: nil) { buffer, _ in
                 let rms = Self.rmsLevel(buffer: buffer)
                 levelsContinuation.yield(rms)
                 vadBox.get()?.processBuffer(buffer)

@@ -588,8 +588,8 @@ final class DictationController: CLICommandHandler {
     func startMonitoring() {
         // WindowPresenter is now constructed lazily via ensureWindowPresenter() —
         // calling it here both guarantees it exists for the lifetime of monitoring
-        // and triggers the onboarding check on the first clean launch.
-        ensureWindowPresenter().showOnboardingIfNeeded()
+        // and presents the onboarding window or the dashboard window on launch.
+        ensureWindowPresenter().showInitialWindowIfNeeded()
 
         // Delegate panel creation to OverlayController — panel is expensive and
         // must be created once, not per-dictation. [task #32] The overlay no longer
@@ -668,6 +668,11 @@ final class DictationController: CLICommandHandler {
     }
 
     // MARK: - Window presentation (delegates to WindowPresenter)
+
+    /// Show onboarding if setup is incomplete; otherwise show the dashboard.
+    func showInitialWindowIfNeeded() {
+        ensureWindowPresenter().showInitialWindowIfNeeded()
+    }
 
     /// Show the Onboarding window if the onboarding flow is not yet complete.
     /// Delegates to `WindowPresenter.showOnboardingIfNeeded()`.

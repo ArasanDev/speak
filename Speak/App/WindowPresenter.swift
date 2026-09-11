@@ -190,6 +190,20 @@ final class WindowPresenter {
 
     // MARK: - Onboarding window
 
+    /// Evaluates onboarding state and shows Onboarding if setup is needed;
+    /// otherwise opens the Dashboard window so the user always receives a visible UI on launch.
+    func showInitialWindowIfNeeded() {
+        let eval = OnboardingStateMachine.evaluate(
+            manager: permissionManager,
+            hasCompletedOnboarding: settingsStore.hasCompletedOnboarding
+        )
+        if !eval.isComplete {
+            showOnboardingIfNeeded()
+        } else {
+            showDashboard()
+        }
+    }
+
     /// Evaluate the onboarding state machine and show the onboarding window if needed.
     ///
     /// Skips silently when onboarding is already complete. Lazily creates the

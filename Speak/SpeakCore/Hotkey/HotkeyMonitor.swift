@@ -702,9 +702,8 @@ public final class HotkeyMonitor: @unchecked Sendable {
             extraKeyDownState[eventKeyCode] = isExtraKeyDown
         }
 
-        // Snapshot the binding once (lock-guarded getter) so a concurrent
+        // The binding was already snapshotted above (lock-guarded getter) so a concurrent
         // updateBinding() on the main thread can't tear this multi-field read.
-        let currentBinding = binding
         let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
         guard isMatchingBoundKey(eventKeyCode: keyCode, bindingKeyCode: currentBinding.keyCode) else { return }
 
