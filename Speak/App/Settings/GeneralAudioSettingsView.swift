@@ -192,13 +192,22 @@ private struct LanguageCard: View {
 
 // MARK: - MicrophoneCard
 
-/// Live readout of the current default input device, driven by
-/// `CoreAudioDeviceMonitor` — same source the old Transcription tab used.
+/// Live mic check: current default input device (CoreAudioDeviceMonitor),
+/// a real-time 20-segment VU meter driven by a `MicLevelMonitor` side-channel
+/// capture, and a route-switch flash when the input device changes mid-view
+/// (AudioCapture rebuilds its tap on `.AVAudioEngineConfigurationChange`, so
+/// AirPods connect/disconnect never surfaces CoreAudio -10868).
 private struct MicrophoneCard: View {
     let context: DashboardContext
     @State private var currentDevice: CoreAudioDeviceMonitor.DeviceInfo?
     @State private var monitorToken: UUID?
     @State private var micStatus: PermissionState = .notDetermined
+    @State private var levelMonitor = MicLevelMonitor()
+    @State private var level: Double = 0
+    @State private var rawRMS: Double = 0
+    @State private var monitoring = false
+    @State private var monitorError: String?
+    @State private var routeFlash = false
 
     var body: some View {
         SettingsSectionCard(title: "Microphone", systemImage: "mic") {
@@ -207,13 +216,33 @@ private struct MicrophoneCard: View {
                     dev.name,
                     description: "\(Int(dev.sampleRate)) Hz · \(dev.channelCount) channel\(dev.channelCount == 1 ? "" : "s") — follows the system default input."
                 ) {
-                    SettingsStatusPill(text: "Active")
+                    if routeFlash {
+                        SettingsStatusPill(text: "Switched", tint: .speakAccent)
+                            .transition(.opacity)
+                    } else {
+                        SettingsStatusPill(text: "Active")
+                    }
                 }
             } else {
                 SettingsRow(
                     "System Default Microphone",
                     description: "Automatically follows connected headphones, AirPods, or external mics."
                 )
+            }
+
+            SettingsRowSeparator()
+
+            SettingsRow(
+                "Input Level",
+                description: monitorError ?? "Live while this card is open — speak to confirm your voice is heard."
+            ) {
+                HStack(spacing: SpeakSpacing.sm) {
+                    VUMeterView(level: level)
+                    Text(dbLabel)
+                        .font(.speakMonoCaption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 62, alignment: .trailing)
+                }
             }
 
             SettingsRowSeparator()
@@ -231,6 +260,7 @@ private struct MicrophoneCard: View {
                             Task {
                                 await context.permissionManager?.requestMicrophone()
                                 updateStatus()
+                                startMonitorIfAble()
                             }
                         }
                     }
@@ -243,20 +273,71 @@ private struct MicrophoneCard: View {
             if monitorToken == nil {
                 monitorToken = CoreAudioDeviceMonitor.shared.registerCallback { dev in
                     Task { @MainActor in
+                        flashRouteChange()
                         currentDevice = dev
                     }
                 }
             }
+            startMonitorIfAble()
         }
         .onDisappear {
             if let token = monitorToken {
                 CoreAudioDeviceMonitor.shared.unregisterCallback(token)
                 monitorToken = nil
             }
+            levelMonitor.stop()
+            monitoring = false
+            level = 0
         }
+        .onChange(of: context.isDictating?() ?? false) { _, dictating in
+            // A real dictation owns the mic + shows its own level HUD — pause
+            // the settings meter for the duration so two engines don't tap at once.
+            if dictating {
+                levelMonitor.stop()
+                monitoring = false
+            } else {
+                startMonitorIfAble()
+            }
+        }
+    }
+
+    // MARK: - Level monitor
+
+    private func startMonitorIfAble() {
+        guard !monitoring, micStatus == .granted, !(context.isDictating?() ?? false) else { return }
+        do {
+            try levelMonitor.start { rms in
+                Task { @MainActor in
+                    rawRMS = rms
+                    level = levelSmoothedAsymmetric(
+                        previous: level,
+                        target: levelPerceptual(rms: rms)
+                    )
+                }
+            }
+            monitoring = true
+            monitorError = nil
+        } catch {
+            monitorError = "Meter unavailable: \(error.localizedDescription)"
+        }
+    }
+
+    private var dbLabel: String {
+        guard monitoring, rawRMS > 0 else { return monitoring ? "−∞ dB" : "—" }
+        let db = max(20.0 * log10(rawRMS), -60)
+        return String(format: "%.0f dB", db)
     }
 
     private func updateStatus() {
         micStatus = context.permissionManager?.status(.microphone) ?? .notDetermined
+    }
+
+    private func flashRouteChange() {
+        guard monitoring || currentDevice != nil else { return }
+        withAnimation(.spring(duration: 0.15)) { routeFlash = true }
+        Task {
+            try? await Task.sleep(for: .milliseconds(1600))
+            withAnimation(.spring(duration: 0.15)) { routeFlash = false }
+        }
     }
 }

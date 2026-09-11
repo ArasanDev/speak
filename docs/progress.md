@@ -7,6 +7,60 @@
 
 ## Current phase
 
+**Loop #99 (2026-09-11) — Settings & Control Room: all six sensory seams wired to real data flows.**
+Direct user directive (not a roadmap pull): turn `App/Settings/` from static controls into a live
+control console. Everything below is real — no placeholders, no canned strings.
+
+- **General & Audio** — live mic check: `SpeakCore/Audio/MicLevelMonitor.swift` runs a second
+  `AudioCapture` in level-only mode (PCM stream drained, RMS `levelStream` forwarded) feeding a
+  new 20-segment `App/Components/VUMeterView.swift` (green/amber/red threshold ramp, 150 ms
+  spring) + dBFS readout in the Microphone card. Route changes flash a "Switched" pill via the
+  existing `CoreAudioDeviceMonitor` callback; recovery across AirPods connect/disconnect is
+  inherited from `AudioCapture`'s `.AVAudioEngineConfigurationChange` rebuild — no -10868.
+  Meter pauses while a real dictation owns the mic.
+- **AI Models** — "Test My Voice" live sandbox replaces the canned diff. `SpeakCore/Engine/
+  VoiceSandbox.swift` composes a real `CaptureSession` with `inserter: nil` (paste-free by
+  construction) using the same settings-derived wiring as `newSession` (locale, `.styled` mode,
+  expander chain); `App/Settings/VoiceSandboxModel.swift` (@MainActor @Observable) drives
+  partials/levels/phase; `App/Settings/HoldToTalkPill.swift` gives hold-to-talk + tap-to-latch
+  (350 ms threshold). Result renders in the existing `CleanupDiffView` with real raw→cleaned
+  diff + "cleaned in N ms by <engine>" readout.
+- **Vocabulary** — new "Acoustic Corrections" card (heard → typed table, e.g. `cubectl`→`kubectl`).
+  New `SpeakCore/Vocabulary/AcousticCorrection.swift` (Codable model + pure upsert/remove rules),
+  `AcousticCorrectionExpander` (rides the `SnippetExpanding` seam — whole-word, case-insensitive),
+  `Snippets/CompositeExpander.swift`, and `defaultExpander(for:snippetStore:)` in
+  `EngineFactories.swift` composing corrections→snippets in that order (corrections restore
+  mangled snippet triggers). `SettingsStore.acousticCorrections` persists as JSON;
+  `effectiveVocabulary` merges correction targets into both the SpeechAnalyzer contextualStrings
+  path and the Foundation Models vocabulary clause.
+- **Hotkeys** — new Feedback card: `dictationFeedbackSounds` (default on, Tink/Pop system chimes)
+  + `dictationFeedbackHaptics` (opt-in, NSHapticFeedbackManager `.generic`). Fired by
+  `DictationController.icon` didSet on `.listening` enter/exit via new
+  `SpeakCore/Feedback/DictationFeedback.swift` (@MainActor).
+- **Agent Bridge** — real heartbeat: `DashboardContext.agentSessionRegistry` now carries the
+  app's actual `AgentSessionRegistry` (previously the view instantiated a fresh empty one — the
+  count was always wrong). Live Sessions card polls every 2 s, shows per-session provider/label,
+  relative lastSeen, Active/Stale pills, "Agent attached" heartbeat dot when a session pinged in
+  the last 60 s.
+- **Privacy & Health** — permission pills now poll every 1.5 s (TCC grants in System Settings
+  don't notify the app); "Run Moat Verification" keeps the sheet and adds an inline
+  "N/N guarantees verified · timestamp" summary.
+- **SettingsStore** — new keys `acousticCorrections`, `dictationFeedbackSounds` (default true),
+  `dictationFeedbackHaptics` (default false); all wired through resetToDefaults.
+- **Tests** — `AcousticCorrectionsTests` (16), `VoiceSandboxTests` (7, mock STT+cleaner),
+  `VUSegmentFillTests` (6): 29 new tests, all green. Note: mock cleaners must not return
+  "Cleaned:"-prefixed output — `extractTargetTranscript` strips LLM label prefixes by design.
+- **Verification**: `make build` clean · targeted suites 29/29 pass · full `make test` 1179 pass /
+  10 skip / 1 failure (`SpeakEngineIntegrationTests.testEndToEndDictationWithRealComponents` —
+  **pre-existing, confirmed failing on clean HEAD via stash**: live-FM run delivers `[speak-stt]`
+  agent-prefixed text; unrelated to this change) · `make lint` 1 serious pre-existing
+  (`StatusBarController` function length, untouched) · `make verify-moat` 7/7 ·
+  `make install CONFIG=Release` ✅.
+- **Not verified**: live VU meter against a real mic + the sandbox's real Foundation Models run
+  need the app running with mic granted — logic verified by tests, live feel unverified.
+
+---
+
 **Loop #98 (2026-09-11) — Dedicated Two-Panel Settings Experience (t3code-inspired) COMPLETE.**
 - **Two-mode dashboard navigation**:
   - `DashboardView` now treats `selection == .settings` as a mode sentinel: the whole window swaps

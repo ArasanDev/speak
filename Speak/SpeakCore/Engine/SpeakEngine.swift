@@ -214,7 +214,7 @@ public actor SpeakEngine {
         // dictation with no engine restart. `customVocabulary` is read here alongside
         // style/level — it rides inside the mode enum so the stateless `LLMCleaning`
         // cleaner sees it without needing its own SettingsStore reference. [decision Wave 2.2]
-        let activeVocabulary: [String] = settings.customVocabulary
+        let activeVocabulary: [String] = settings.effectiveVocabulary
         // Default/global cleanup path — the user's Style + Level + dictionary. Left
         // unchanged so general dictation behaves exactly as the verified v0 base.
         var activeMode: CleanupMode = .styled(settings.cleanupStyle,
@@ -258,9 +258,10 @@ public actor SpeakEngine {
                 "SpeakEngine: profile '\(resolvedProfile.name, privacy: .public)' active for frontmost app \(effectiveFrontmostBundleID ?? "none", privacy: .public)."
             )
         }
-        // Wave B: build a snippet expander from the current snippets at call time, so a
-        // snippet edit applies on the next dictation. nil store → nil expander → no change.
-        let activeExpander: (any SnippetExpanding)? = snippetStore.map { $0.makeExpander() }
+        // Wave B + acoustic corrections: build the expander chain from the current
+        // snippets and corrections table at call time, so an edit applies on the
+        // next dictation. nil when neither stage has entries → no change.
+        let activeExpander: (any SnippetExpanding)? = defaultExpander(for: settings, snippetStore: snippetStore)
 
         // [P0.1 / task #29] Keystroke-injection raw streaming is retired as a delivery
         // path: raw is NEVER inserted into the document — the final AI text is the single
@@ -375,7 +376,7 @@ public actor SpeakEngine {
             profile,
             level: settings.cleanupLevel,
             category: category,
-            customVocabulary: settings.customVocabulary,
+            customVocabulary: settings.effectiveVocabulary,
             customInstructions: customInstructions
         )
         await session.setOverrideCleanupMode(mode)
@@ -444,7 +445,7 @@ public actor SpeakEngine {
         // Use the user's intensity, but never `.none` for a preview (that means "no model
         // call" in live dictation; here the user explicitly asked to see the transform).
         let level: CleanupLevel = settings.cleanupLevel == .none ? .medium : settings.cleanupLevel
-        let mode: CleanupMode = .profile(profile, level: level, customVocabulary: settings.customVocabulary)
+        let mode: CleanupMode = .profile(profile, level: level, customVocabulary: settings.effectiveVocabulary)
         do {
             return .transformed(try await cleaner.clean(sample, mode: mode))
         } catch {
@@ -487,7 +488,7 @@ public actor SpeakEngine {
             profile,
             level: settings.cleanupLevel,
             category: category,
-            customVocabulary: settings.customVocabulary,
+            customVocabulary: settings.effectiveVocabulary,
             customInstructions: customInstructions
         )
         let cleaned = try await cleaner.clean(rawTranscript, mode: mode)

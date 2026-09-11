@@ -165,6 +165,25 @@ public func levelBarHeights(
     }
 }
 
+// MARK: - Level → VU meter segments
+
+/// Map a perceptual level (0…1) to a lit-segment count for an N-segment VU
+/// meter (the Settings mic-check meter). Round-to-nearest so 50% level lights
+/// half the meter; clamped to [0, segmentCount].
+///
+/// [decision: linear fill of the already-perceptual level — the dB warping
+///  happens upstream in `levelPerceptual`, so the meter stays honest.]
+///
+/// - Parameters:
+///   - level:        Perceptual display level (0…1), post `levelPerceptual`.
+///   - segmentCount: Number of meter segments. Must be > 0; returns 0 otherwise.
+/// - Returns: Number of segments to light, in `[0, segmentCount]`.
+public func levelSegmentFill(level: Double, segmentCount: Int) -> Int {
+    guard segmentCount > 0 else { return 0 }
+    let clamped = min(max(level, 0.0), 1.0)
+    return Int((clamped * Double(segmentCount)).rounded())
+}
+
 // MARK: - Level → bar heights with per-bar phase offset (W2.2)
 
 /// Map a level (0…1) to bar heights with a per-bar sinusoidal phase offset.

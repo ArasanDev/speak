@@ -185,6 +185,9 @@ public final class SettingsStore: @unchecked Sendable {
         static let ttsVolume             = "speak.settings.ttsVolume"
         static let agentPrefixStyle          = "speak.settings.agentPrefixStyle"
         static let agentPrefixIncludeState   = "speak.settings.agentPrefixIncludeState"
+        static let acousticCorrections       = "speak.settings.acousticCorrections"
+        static let dictationFeedbackSounds   = "speak.settings.dictationFeedbackSounds"
+        static let dictationFeedbackHaptics  = "speak.settings.dictationFeedbackHaptics"
     }
 
     // MARK: - Injected defaults (the testability seam)
@@ -237,7 +240,9 @@ public final class SettingsStore: @unchecked Sendable {
             Keys.ttsPitchMultiplier: Float(1.0),
             Keys.ttsVolume: Float(1.0),
             Keys.agentPrefixStyle: AgentPrefixStyle.speakSTT.rawValue,
-            Keys.agentPrefixIncludeState: false
+            Keys.agentPrefixIncludeState: false,
+            Keys.dictationFeedbackSounds: true,
+            Keys.dictationFeedbackHaptics: false
         ])
         // Enum defaults are handled via `?? fallback` at the getter level because
         // Codable JSON cannot be registered as a `[String: Any]` literal.
@@ -560,6 +565,7 @@ public final class SettingsStore: @unchecked Sendable {
     /// history is NOT cleared (separate operation). [decision: reset != clear history]
     public func resetToDefaults() {
         resetDictationDefaults()
+        resetVocabularyDefaults()
         resetAppearanceDefaults()
         resetInteractionDefaults()
         resetVoiceOutDefaults()
@@ -574,7 +580,6 @@ public final class SettingsStore: @unchecked Sendable {
         access(keyPath: \.language)
         access(keyPath: \.pasteMode)
         access(keyPath: \.triggerMode)
-        access(keyPath: \.customVocabulary)
         access(keyPath: \.cleanupStyle)
         access(keyPath: \.cleanupLevel)
         access(keyPath: \.streamingRawTextEnabled)
@@ -601,9 +606,6 @@ public final class SettingsStore: @unchecked Sendable {
         withMutation(keyPath: \.triggerMode) {
             defaults.removeObject(forKey: Keys.triggerMode)
         }
-        withMutation(keyPath: \.customVocabulary) {
-            defaults.removeObject(forKey: Keys.customVocabulary)
-        }
         withMutation(keyPath: \.cleanupStyle) {
             defaults.set(CleanupStyle.default.rawValue, forKey: Keys.cleanupStyle)
         }
@@ -621,6 +623,18 @@ public final class SettingsStore: @unchecked Sendable {
         }
         withMutation(keyPath: \.agentPrefixIncludeState) {
             defaults.set(false, forKey: Keys.agentPrefixIncludeState)
+        }
+    }
+
+    private func resetVocabularyDefaults() {
+        access(keyPath: \.customVocabulary)
+        access(keyPath: \.acousticCorrections)
+
+        withMutation(keyPath: \.customVocabulary) {
+            defaults.removeObject(forKey: Keys.customVocabulary)
+        }
+        withMutation(keyPath: \.acousticCorrections) {
+            defaults.removeObject(forKey: Keys.acousticCorrections)
         }
     }
 
@@ -658,6 +672,8 @@ public final class SettingsStore: @unchecked Sendable {
         access(keyPath: \.readbackEnabled)
         access(keyPath: \.extraBindings)
         access(keyPath: \.revealTextWhileProcessing)
+        access(keyPath: \.dictationFeedbackSounds)
+        access(keyPath: \.dictationFeedbackHaptics)
 
         withMutation(keyPath: \.voiceActionsEnabled) {
             defaults.set(false, forKey: Keys.voiceActionsEnabled)
@@ -675,6 +691,12 @@ public final class SettingsStore: @unchecked Sendable {
         // Reset revealTextWhileProcessing back to default (true).
         withMutation(keyPath: \.revealTextWhileProcessing) {
             defaults.set(true, forKey: Keys.revealTextWhileProcessing)
+        }
+        withMutation(keyPath: \.dictationFeedbackSounds) {
+            defaults.set(true, forKey: Keys.dictationFeedbackSounds)
+        }
+        withMutation(keyPath: \.dictationFeedbackHaptics) {
+            defaults.set(false, forKey: Keys.dictationFeedbackHaptics)
         }
     }
 
@@ -699,6 +721,47 @@ public final class SettingsStore: @unchecked Sendable {
 // type_body_length cap — pure code motion, same file so the @Observable
 // macro's access/withMutation members remain reachable.
 extension SettingsStore {
+    // MARK: - Acoustic corrections (Settings ▸ Vocabulary)
+
+    /// The "what you say → what gets typed" table: STT mishearings mapped back
+    /// to ground truth. Consumed by `AcousticCorrectionExpander` (raw-transcript
+    /// pass before snippets + cleanup) and by `effectiveVocabulary` (the `typed`
+    /// terms bias both SpeechAnalyzer contextualStrings and the cleanup prompt).
+    /// [decision: Codable JSON — same codec pattern as cleanupEngine/sttEngine]
+    public var acousticCorrections: [AcousticCorrection] {
+        get {
+            access(keyPath: \.acousticCorrections)
+            guard let data = defaults.data(forKey: Keys.acousticCorrections),
+                  let decoded = try? JSONDecoder().decode([AcousticCorrection].self, from: data) else {
+                return []
+            }
+            return decoded
+        }
+        set {
+            withMutation(keyPath: \.acousticCorrections) {
+                if let data = try? JSONEncoder().encode(newValue) {
+                    defaults.set(data, forKey: Keys.acousticCorrections)
+                } else {
+                    SpeakLog.storage.error("SettingsStore: failed to encode acousticCorrections — value not persisted.")
+                }
+            }
+        }
+    }
+
+    /// `customVocabulary` plus every correction's `typed` term — the list that
+    /// reaches SpeechAnalyzer contextualStrings and the Foundation Models
+    /// vocabulary clause. Deduped case-insensitively, custom terms first.
+    public var effectiveVocabulary: [String] {
+        var seen = Set<String>()
+        var merged: [String] = []
+        for term in customVocabulary + acousticCorrections.map(\.typed) {
+            let key = term.lowercased()
+            guard !key.isEmpty, seen.insert(key).inserted else { continue }
+            merged.append(term)
+        }
+        return merged
+    }
+
     // MARK: - Streaming settings (keystroke injection)
 
     /// Whether raw (unprocessed) text is streamed character-by-character during dictation
@@ -901,7 +964,37 @@ extension SettingsStore {
         }
     }
 
+    // MARK: - Dictation feedback (Settings ▸ Hotkeys)
+
+    /// Play a subtle system chime when dictation engages (`.listening`) and
+    /// releases. Default `true` — the audible edge is the product's signature
+    /// confirmation that the mic is live without looking at the HUD.
+    public var dictationFeedbackSounds: Bool {
+        get {
+            access(keyPath: \.dictationFeedbackSounds)
+            return defaults.bool(forKey: Keys.dictationFeedbackSounds)
+        }
+        set {
+            withMutation(keyPath: \.dictationFeedbackSounds) {
+                defaults.set(newValue, forKey: Keys.dictationFeedbackSounds)
+            }
+        }
+    }
+
+    /// Perform a trackpad haptic click on dictation engage/release. Default
+    /// `false` — `NSHapticFeedbackManager` is a no-op on Macs without a Force
+    /// Touch trackpad, and a click on every press fatigues faster than a chime.
+    /// [decision: opt-in]
+    public var dictationFeedbackHaptics: Bool {
+        get {
+            access(keyPath: \.dictationFeedbackHaptics)
+            return defaults.bool(forKey: Keys.dictationFeedbackHaptics)
+        }
+        set {
+            withMutation(keyPath: \.dictationFeedbackHaptics) {
+                defaults.set(newValue, forKey: Keys.dictationFeedbackHaptics)
+            }
+        }
+    }
+
 }
-
-
-

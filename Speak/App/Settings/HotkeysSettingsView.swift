@@ -26,6 +26,7 @@ struct HotkeysSettingsView: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
             activationCard
             primaryHotkeyCard
+            feedbackCard
             ExtraBindingsCard(context: context)
             permissionsCard
         }
@@ -90,6 +91,40 @@ struct HotkeysSettingsView: View {
                     Button("Change…") { showingRecorder = true }
                         .disabled(context.rebindHotkey == nil)
                 }
+            }
+        }
+    }
+
+    // MARK: - Feedback
+
+    /// Sensory confirmation on dictation engage/release — fired by
+    /// `DictationController` on the menubar-icon state edges.
+    private var feedbackCard: some View {
+        SettingsSectionCard(title: "Feedback", systemImage: "speaker.badge.exclamationmark") {
+            SettingsRow(
+                "Sounds",
+                description: "A subtle system chime when dictation engages and releases."
+            ) {
+                Toggle("", isOn: Binding(
+                    get: { store.dictationFeedbackSounds },
+                    set: { store.dictationFeedbackSounds = $0 }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+            }
+
+            SettingsRowSeparator()
+
+            SettingsRow(
+                "Trackpad haptics",
+                description: "A soft click on Force Touch trackpads at each engage/release edge."
+            ) {
+                Toggle("", isOn: Binding(
+                    get: { store.dictationFeedbackHaptics },
+                    set: { store.dictationFeedbackHaptics = $0 }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.small)
             }
         }
     }

@@ -364,4 +364,5 @@ final class OverlayLevelTests: XCTestCase {
         XCTAssertGreaterThan(risingPrev, 1.0 - fallingPrev,
             "Attack should be faster than release (risingPrev=\(risingPrev), fallingPrev=\(fallingPrev))")
     }
+
 }
