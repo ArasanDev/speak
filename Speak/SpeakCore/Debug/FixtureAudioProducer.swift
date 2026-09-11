@@ -28,7 +28,7 @@ public final class FixtureAudioProducer: AudioBufferProducing, @unchecked Sendab
     /// URL of the audio fixture file to stream.
     public let fileURL: URL
 
-    private var continuation: AsyncStream<AVAudioPCMBuffer>.Continuation?
+    private var continuation: AsyncThrowingStream<AVAudioPCMBuffer, Error>.Continuation?
 
     private let log = SpeakLog.stt
 
@@ -65,7 +65,7 @@ public final class FixtureAudioProducer: AudioBufferProducing, @unchecked Sendab
 
     // MARK: - AudioBufferProducing
 
-    public func start() throws -> AsyncStream<AVAudioPCMBuffer> {
+    public func start() throws -> AsyncThrowingStream<AVAudioPCMBuffer, Error> {
         let file = try AVAudioFile(forReading: fileURL)
         let format = file.processingFormat
         let frameCount = AVAudioFrameCount(file.length)
@@ -74,7 +74,7 @@ public final class FixtureAudioProducer: AudioBufferProducing, @unchecked Sendab
         // AudioCapture.Constants.tapBufferSize documented in SpeechTranscriberTests]
         let chunkSize: AVAudioFrameCount = 4096
 
-        let (stream, cont) = AsyncStream<AVAudioPCMBuffer>.makeStream()
+        let (stream, cont) = AsyncThrowingStream<AVAudioPCMBuffer, Error>.makeStream()
         self.continuation = cont
 
         let log = self.log

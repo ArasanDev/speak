@@ -146,6 +146,17 @@ extension DictationController {
             icon = .idle
             SpeakLog.engine.info("DictationController: start ignored — microphone muted.")
             return .failed
+        } catch SpeakError.sessionCancelled {
+            // [fix: audit — cancel-during-start] A cancel() that landed during
+            // session.start()'s awaits (e.g. Escape while the cleaner probe was
+            // in flight) now throws here instead of leaving a live mic on a dead
+            // session. Deliberate user cancel — settle silently, no error HUD.
+            monitor.notifySessionEnded()
+            overlayController.stop()
+            caretOverlay.hide()
+            icon = .idle
+            SpeakLog.engine.info("DictationController: beginDictation aborted — cancelled during start.")
+            return .failed
         } catch {
             monitor.notifySessionEnded()
             // W2.2: show an error state in the HUD instead of silently hiding.
@@ -286,6 +297,17 @@ extension DictationController {
             SpeakLog.engine.info(
                 "DictationController: paste refused — focused element is a secure field; text saved to Scratchpad"
             )
+        } catch SpeakError.sessionCancelled {
+            // [fix: audit — spurious cancel HUD] A deliberate cancel during
+            // .processing (the settling overlay's ✕, or a hotkey cancel racing
+            // stop()) reaches here via session.stop() re-throwing
+            // .sessionCancelled. That is a user intent, not a failure — hide
+            // quietly to idle instead of flashing "session cancelled" as an
+            // error and leaving the menubar red.
+            overlayController.stop()
+            caretOverlay.hide()
+            icon = .idle
+            SpeakLog.engine.info("DictationController: endDictation aborted — cancelled during processing.")
         } catch {
             // W2.2: show an error state in the HUD with a short reason instead of silently hiding.
             caretOverlay.hide()
@@ -297,5 +319,19 @@ extension DictationController {
             // P11-c: Signal dashboard to refresh even on error completion (may have partial history).
             dictationCompletedSubject.send()
         }
+    }
+
+    /// Partials stream ended on its own while we still believe we're listening —
+    /// the capture side died underneath the session (route/device teardown threw
+    /// `captureInterrupted` through the chain). Drive the normal end path so the
+    /// session's stored `.error` surfaces via the generic catch above (error HUD
+    /// + `currentSession` release) instead of wedging `.listening` forever.
+    /// [fix: wedge — OverlayController.onPartialsEnded]
+    func handlePartialsStreamEnded() async {
+        guard icon == .listening else { return }
+        SpeakLog.engine.error(
+            "DictationController: partials ended while .listening — settling dead session via endDictation."
+        )
+        await endDictation()
     }
 }

@@ -34,6 +34,11 @@ public enum SpeakError: Error, Sendable {
     case microphoneDenied
     case accessibilityDenied
     case transcriberUnavailable(String)
+    /// The audio input died mid-capture — device removed, route change with no
+    /// valid format, or engine restart failure. Distinct from
+    /// `transcriberUnavailable`: the mic hardware path failed, not the STT engine.
+    /// [fix: wedge — positive teardown signal so CaptureSession can settle .error]
+    case captureInterrupted(String)
     case pasteboardBusy
     // [Engine-L4] Thrown by individual cleaner stubs (OllamaCleaner, MLXCleaner) and
     // FoundationModelsCleaner on genuine API error. CaptureSession.runCleanup() catches
@@ -58,6 +63,7 @@ public enum SpeakError: Error, Sendable {
         case .microphoneDenied:              return "microphoneDenied"
         case .accessibilityDenied:           return "accessibilityDenied"
         case .transcriberUnavailable:        return "transcriberUnavailable"
+        case .captureInterrupted:            return "captureInterrupted"
         case .pasteboardBusy:                return "pasteboardBusy"
         case .llmCleanupFailed:              return "llmCleanupFailed"
         case .sessionCancelled:              return "sessionCancelled"
@@ -78,6 +84,9 @@ public enum SpeakError: Error, Sendable {
 
         case .transcriberUnavailable(let detail):
             return "Speech engine unavailable: \(detail). Try a fallback engine in Settings."
+
+        case .captureInterrupted(let detail):
+            return "Microphone input was lost mid-dictation: \(detail). Check the audio device and try again."
 
         case .pasteboardBusy:
             return "Pasteboard busy. Retry in a moment."

@@ -106,6 +106,13 @@ public actor CaptureSession {
     /// cleanup path runs but paste delivery is skipped. [decision: Agent Voice Bridge]
     private var suppressPasteDelivery = false
     var streamTask: Task<Void, Never>?
+    /// Set by the stream consumer task as its final actor action — after the
+    /// `for try await` loop exits (clean finish, thrown error, or cancel).
+    /// `awaitStreamDrainWithWatchdog` polls this instead of awaiting
+    /// `streamTask.value` inside a task group, because `Task.value` is NOT
+    /// cancellation-responsive: a stalled consumer wedged the group itself and
+    /// the watchdog's cancel path was unreachable. [fix: audit — watchdog]
+    private var streamDrained = true
     private var latestChunk: TranscriptChunk?
     /// Progressive chunk-by-chunk cleanup coordinator for live speech.
     var streamingCoordinator: StreamingChunkCoordinator?
@@ -286,37 +293,34 @@ public actor CaptureSession {
             }
         }
 
+        // [fix: audit — cancel-during-start] A cancel() can enter the actor
+        // during the `isAvailable` suspension above, setting
+        // `.error(.sessionCancelled)`. Without this re-check, start() would
+        // proceed to startStream() and open the mic on a session that is
+        // already dead — the cancelled session's stream then runs until some
+        // later stop() happens to clean it up. Throw the stored cancel error
+        // so the engine releases the session instead of orphaning a live mic.
+        if case .error(let startErr) = state {
+            throw startErr
+        }
+
         let stream = transcriber.startStream(locale: locale)
 
         // Background task consumes the STT stream. Each chunk is awaited into
         // the actor before the next is consumed, so `latestChunk` is
         // consistent at stop time. `await self?.ingest(...)` is the
         // synchronization point.
-        // TODO(system-state-resilience survey — CaptureSession.swift:299,
-        // left unfixed): if the transcriber's stream finishes WITHOUT
-        // throwing while the session is still `.listening` (e.g. AudioCapture
-        // torn down out from under the session by an unrecoverable device
-        // configuration change), the session is currently left wedged in
-        // `.listening` forever — it never reaches `.done`/`.error`, and
-        // `SpeakEngine`'s `[A3]` re-entrancy guard then permanently refuses
-        // the next `beginDictation()`.
         //
-        // A "fail if still .listening when the stream ends" recovery was
-        // attempted here and reverted: `MockTranscriber` (the test double
-        // used by ~30 existing `CaptureSessionTests`/`PasteTests`/
-        // `VoiceActionsPipelineTests` cases) legitimately finishes its stream
-        // on its own, before the test calls `stop()` — unlike real
-        // `Transcribing` conformers, which only finish when `stop()` is
-        // called. Treating "stream ended while .listening" as an error is
-        // therefore indistinguishable, with the current mock contract, from
-        // dozens of correct fast-path completions, and produced 33 false
-        // failures. A real fix needs either (a) a mock overhaul so
-        // `MockTranscriber` only finishes on an explicit `stop()` signal,
-        // matching production semantics, or (b) a positive signal from
-        // `AudioCapture`/`AppleSpeechTranscriber` distinguishing "torn down
-        // externally" from "finished normally" that `CaptureSession` can key
-        // off instead of stream-completion-while-listening. Left as a TODO
-        // rather than guessing at either large change.
+        // [fix: wedge — former TODO resolved] A stream that ends while the
+        // session is `.listening` no longer wedges it: real capture teardown
+        // (unrecoverable route/device change) now finishes the producer's
+        // stream THROWING (`SpeakError.captureInterrupted`), which lands in
+        // `failStream` → `.error` → the engine's self-healing A3 guard
+        // releases the session on the next begin. Clean finishes still mean
+        // "stopped normally / fixture EOF" and stay legal — the positive
+        // throwing signal is what distinguishes teardown from normal end,
+        // which is why mock streams finishing early remain valid.
+        self.streamDrained = false
         let task = Task { [weak self] in
             do {
                 for try await chunk in stream {
@@ -325,6 +329,9 @@ public actor CaptureSession {
             } catch {
                 await self?.failStream(error)
             }
+            // Final actor action: flag the drain watchdog. Runs on every exit
+            // path — clean finish, thrown error, or task cancellation.
+            await self?.markStreamDrained()
         }
         self.streamTask = task
 
@@ -767,28 +774,33 @@ extension CaptureSession {
     /// [decision: 5 s — Loop #77 AirPods/route hang; short of the STT finalization
     ///  10 s window so stop() still returns; on fire we cancel the stream and log
     ///  loudly rather than pretending drain completed.]
+    ///
+    /// Polls the `streamDrained` flag (set by the consumer task's final actor
+    /// action) instead of awaiting `streamTask.value` inside a `withTaskGroup`.
+    /// `Task.value` is NOT cancellation-responsive: a truly stalled consumer
+    /// kept that group child suspended forever, `withTaskGroup` waits for all
+    /// children, and the watchdog's `task.cancel()` below the group was
+    /// unreachable — a real stall deadlocked the watchdog branch itself.
+    /// [fix: audit — unreachable watchdog]
     fileprivate func awaitStreamDrainWithWatchdog() async {
-        guard let task = streamTask else { return }
-        let watchdogNanoseconds: UInt64 = 5_000_000_000
-        let drained = await withTaskGroup(of: Bool.self) { group in
-            group.addTask {
-                await task.value
-                return true
-            }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: watchdogNanoseconds)
-                return false
-            }
-            let first = await group.next() ?? false
-            group.cancelAll()
-            return first
+        guard streamTask != nil else { return }
+        let deadline = DispatchTime.now().uptimeNanoseconds + 5_000_000_000
+        while !streamDrained, DispatchTime.now().uptimeNanoseconds < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000) // 10 ms poll
         }
-        if !drained {
+        if !streamDrained {
             SpeakLog.engine.error(
                 "CaptureSession: stream drain watchdog fired after 5s — canceling streamTask; transcript may be incomplete."
             )
-            task.cancel()
-            streamTask = nil
+            streamTask?.cancel()
         }
+        streamTask = nil
+    }
+
+    /// Consumer task epilogue — marks the STT stream fully drained so
+    /// `awaitStreamDrainWithWatchdog` can observe completion without awaiting
+    /// `Task.value` (not cancellation-responsive).
+    private func markStreamDrained() {
+        streamDrained = true
     }
 }

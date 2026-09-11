@@ -11,8 +11,8 @@
 // established pattern for the same caveat).
 
 import AVFoundation
-import XCTest
 @testable import SpeakCore
+import XCTest
 
 final class AudioCaptureVADAttachTests: XCTestCase {
 
@@ -34,7 +34,7 @@ final class AudioCaptureVADAttachTests: XCTestCase {
 
         capture.attachVoiceActivityDetector(vad)
 
-        let stream: AsyncStream<AVAudioPCMBuffer>
+        let stream: AsyncThrowingStream<AVAudioPCMBuffer, Error>
         do {
             stream = try capture.start()
         } catch {
@@ -52,10 +52,12 @@ final class AudioCaptureVADAttachTests: XCTestCase {
 
         let drainTask = Task {
             var seen = 0
-            for await _ in stream {
-                seen += 1
-                if seen >= 3 { break }
-            }
+            do {
+                for try await _ in stream {
+                    seen += 1
+                    if seen >= 3 { break }
+                }
+            } catch { }
         }
         let deadline = Date().addingTimeInterval(3.0)
         while Date() < deadline {
@@ -76,7 +78,7 @@ final class AudioCaptureVADAttachTests: XCTestCase {
         let capture = AudioCapture()
         capture.attachVoiceActivityDetector(nil) // before start() — no-op, must not crash
 
-        let stream: AsyncStream<AVAudioPCMBuffer>
+        let stream: AsyncThrowingStream<AVAudioPCMBuffer, Error>
         do {
             stream = try capture.start()
         } catch {

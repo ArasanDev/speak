@@ -626,6 +626,16 @@ final class DictationController: CLICommandHandler {
             }
         }
 
+        // [fix: wedge] The partials stream ending on its own while the icon is
+        // still `.listening` means the session's stream died underneath us
+        // (e.g. unrecoverable route change → `captureInterrupted` → failStream →
+        // `.error` → partials finished). Run the normal endDictation path so the
+        // stored error surfaces on the HUD and the engine releases the session,
+        // instead of wedging the menubar in a dead listening state.
+        overlayController.onPartialsEnded = { [weak self] in
+            await self?.handlePartialsStreamEnded()
+        }
+
         overlayController.onEscapeStop = { [weak self] in
             guard let self else { return }
             // [PE-3c] If the profile-selector card is open, Escape closes IT first — a
