@@ -58,6 +58,11 @@ public func focusedElementIsSecureField() -> Bool {
 
     // Build a system-wide AX element to query the current input focus.
     let systemWide = AXUIElementCreateSystemWide()
+    // Bound the IPC wait — without this a hung frontmost app stalls each
+    // query for the platform default (~6 s). 0.25 s only clips genuinely
+    // unresponsive targets; healthy apps answer in <10 ms.
+    // [decision: audit — AX stall bound]
+    AXUIElementSetMessagingTimeout(systemWide, 0.25)
 
     // Query the globally focused UI element.
     var focusedRef: CFTypeRef?
@@ -88,6 +93,7 @@ public func focusedElementIsSecureField() -> Bool {
     // Safe: CFTypeID verified above.
     // [decision: unsafeBitCast over as! to satisfy force_cast swiftlint & AGENTS.md §2 rule]
     let focused: AXUIElement = unsafeBitCast(focusedRef, to: AXUIElement.self)
+    AXUIElementSetMessagingTimeout(focused, 0.25)
 
     // Query the subrole attribute of the focused element.
     var subroleRef: CFTypeRef?

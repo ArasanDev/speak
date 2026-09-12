@@ -40,6 +40,13 @@ import os
 /// The caller must gracefully degrade — never crash on nil.
 public enum CaretLocator {
 
+    /// Messaging timeout applied to every AX element we query. A hung frontmost
+    /// app otherwise stalls each synchronous AX round-trip for the platform
+    /// default (~6 s) — up to ~30 s of main-thread freeze across this file's
+    /// worst-case five queries. Healthy apps answer in <10 ms, so 0.25 s only
+    /// clips genuinely unresponsive targets. [decision: audit — AX stall bound]
+    private static let messagingTimeout: Float = 0.25
+
     /// Query the frontmost app for its text cursor screen position.
     ///
     /// Returns the top-left origin of the cursor bounds in Quartz screen
@@ -55,6 +62,7 @@ public enum CaretLocator {
         guard pid > 0 else { return nil }
 
         let appElement = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(appElement, messagingTimeout)
 
         var focusedRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
@@ -67,6 +75,7 @@ public enum CaretLocator {
         // Safe: CFTypeID verified above.
         // [decision P2.1: unsafeBitCast over as! to satisfy force_cast swiftlint & AGENTS.md §2 rule]
         let focused: AXUIElement = unsafeBitCast(focusedRef, to: AXUIElement.self)
+        AXUIElementSetMessagingTimeout(focused, messagingTimeout)
 
         if let point = boundsViaSelectedRange(focused) {
             SpeakLog.input.debug(

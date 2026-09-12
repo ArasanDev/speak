@@ -125,6 +125,7 @@ final class MoatAuditTests: XCTestCase {
         "Foundation",
         "Combine",          // Apple framework; used by AnyPublisher in WindowPresenter / DictationController
         "Observation",      // Apple framework (Swift stdlib on macOS 14+); @Observable macro
+        "Accelerate",       // Apple framework; vDSP vectorized RMS on the audio render thread
         "os",
         "SwiftUI",
         "AppKit",

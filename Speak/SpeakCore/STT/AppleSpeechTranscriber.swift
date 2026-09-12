@@ -183,7 +183,11 @@ public final class AppleSpeechTranscriber: Transcribing, AudioCaptureProviding {
         // Capture vocabulary as a local to avoid capturing self in the Sendable Task.
         let vocabulary = self.vocabulary
 
-        let (stream, continuation) = AsyncThrowingStream<TranscriptChunk, Error>.makeStream()
+        // Bounded: partials churn per buffer; a stalled consumer must not
+        // grow the backlog unboundedly. [fix: audit — unbounded AsyncStream]
+        let (stream, continuation) = AsyncThrowingStream<TranscriptChunk, Error>.makeStream(
+            bufferingPolicy: .bufferingNewest(64)
+        )
 
         // Mark the pending start BEFORE the Task exists so a stop() arriving in
         // the scheduling gap can wait for it (see pendingSessionStarts note).
@@ -257,7 +261,13 @@ private struct Session: Sendable {
 
         // The input stream bridges PCM buffers → AnalyzerInput.
         // We hold the continuation in SessionState so stop() can end it.
-        let (inputStream, inputCont) = AsyncStream<AnalyzerInput>.makeStream()
+        // Bounded: if the analyzer stalls, buffered audio must not grow ~11
+        // MB/min unboundedly. 64 inputs ≈ seconds of audio; drops only occur
+        // under a stall the drain watchdog already tears down.
+        // [fix: audit — unbounded AsyncStream]
+        let (inputStream, inputCont) = AsyncStream<AnalyzerInput>.makeStream(
+            bufferingPolicy: .bufferingNewest(64)
+        )
         await state.setInputContinuation(inputCont)
 
         // Start audio capture and register the stop closure with SessionState.

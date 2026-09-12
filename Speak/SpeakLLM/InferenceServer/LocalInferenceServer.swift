@@ -185,7 +185,7 @@ public actor LocalInferenceServer {
         }
 
         connection.start(queue: DispatchQueue.global(qos: .userInitiated))
-        receiveData(connection: connection, connId: connId, buffer: Data())
+        receiveData(connection: connection, connId: connId, buffer: Data(), scan: RequestScanState())
     }
 
     /// Removes a connection from the active set.
@@ -193,8 +193,32 @@ public actor LocalInferenceServer {
         activeConnections.removeValue(forKey: connId)
     }
 
+    /// Incremental parse state threaded through `receiveData` — the header
+    /// separator search resumes where the last receive stopped and the
+    /// Content-Length parse runs once, so a large request costs O(n) total
+    /// instead of re-scanning the whole accumulation per receive (O(n²)).
+    /// [fix: audit — isCompleteRequest re-scan]
+    /// `internal` (not `private`) so `SpeakTests` can verify the incremental
+    /// scan semantics via `@testable import SpeakLLM`.
+    struct RequestScanState: Sendable {
+        /// Offset up to which the separator search has already progressed.
+        var scannedUpTo = 0
+        /// Data index just past the `\r\n\r\n` separator, once found.
+        var headerEnd: Int?
+        /// Expected body bytes per Content-Length (0 when absent). Parsed once.
+        var contentLength = 0
+        /// Header bytes weren't UTF-8 — never completes (same as old behavior:
+        /// the request is only processed when the peer closes the connection).
+        var headerMalformed = false
+    }
+
     /// Receives data from a connection, accumulating until a full HTTP request is available.
-    nonisolated private func receiveData(connection: NWConnection, connId: ObjectIdentifier, buffer: Data) {
+    nonisolated private func receiveData(
+        connection: NWConnection,
+        connId: ObjectIdentifier,
+        buffer: Data,
+        scan: RequestScanState
+    ) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: Self.maxReceiveSize) {
             [weak self] data, _, isComplete, error in
             guard let self else { return }
@@ -210,9 +234,10 @@ public actor LocalInferenceServer {
             if let data, !data.isEmpty {
                 accumulated.append(data)
             }
+            var scan = scan
 
             // Check if we have a complete HTTP request (headers + body per Content-Length).
-            if self.isCompleteRequest(accumulated) {
+            if self.isCompleteRequest(accumulated, scan: &scan) {
                 Task { await self.processRequest(accumulated, connection: connection, connId: connId) }
             } else if isComplete {
                 // Connection closed by peer — process what we have.
@@ -224,7 +249,7 @@ public actor LocalInferenceServer {
                 }
             } else {
                 // Need more data — continue receiving.
-                self.receiveData(connection: connection, connId: connId, buffer: accumulated)
+                self.receiveData(connection: connection, connId: connId, buffer: accumulated, scan: scan)
             }
         }
     }
@@ -234,34 +259,47 @@ public actor LocalInferenceServer {
     /// A request is complete when:
     /// 1. The header/body separator (double CRLF) is present, AND
     /// 2. If Content-Length is specified, enough body bytes have arrived.
-    nonisolated private func isCompleteRequest(_ data: Data) -> Bool {
-        let separator = Data([0x0D, 0x0A, 0x0D, 0x0A])
-        guard let separatorRange = data.range(of: separator) else {
-            return false
-        }
+    /// `internal` for `@testable` — same contract as the old private version.
+    nonisolated func isCompleteRequest(_ data: Data, scan: inout RequestScanState) -> Bool {
+        guard !scan.headerMalformed else { return false }
 
-        // Check Content-Length in headers.
-        let headerData = data[data.startIndex..<separatorRange.lowerBound]
-        guard let headerStr = String(data: Data(headerData), encoding: .utf8) else {
-            return false
-        }
+        if scan.headerEnd == nil {
+            let separator = Data([0x0D, 0x0A, 0x0D, 0x0A])
+            // Resume where the last receive stopped — the 3-byte overlap catches
+            // a separator straddling the chunk boundary.
+            let lowerBound = data.index(
+                data.startIndex,
+                offsetBy: max(0, scan.scannedUpTo - 3),
+                limitedBy: data.endIndex
+            ) ?? data.endIndex
+            guard let separatorRange = data.range(of: separator, options: [], in: lowerBound..<data.endIndex) else {
+                scan.scannedUpTo = data.count
+                return false
+            }
 
-        // Look for Content-Length header.
-        for line in headerStr.components(separatedBy: "\r\n") {
-            let lower = line.lowercased()
-            if lower.hasPrefix("content-length:") {
-                let valueStr = line.dropFirst("content-length:".count)
-                    .trimmingCharacters(in: .whitespaces)
-                if let contentLength = Int(valueStr) {
-                    let bodyStart = separatorRange.upperBound
-                    let bodyReceived = data.distance(from: bodyStart, to: data.endIndex)
-                    return bodyReceived >= contentLength
+            // Parse Content-Length once — the old code re-decoded and re-scanned
+            // the entire accumulation on every receive.
+            let headerData = data[data.startIndex..<separatorRange.lowerBound]
+            guard let headerStr = String(data: Data(headerData), encoding: .utf8) else {
+                scan.headerMalformed = true
+                return false
+            }
+            scan.headerEnd = separatorRange.upperBound
+            for line in headerStr.components(separatedBy: "\r\n") {
+                let lower = line.lowercased()
+                if lower.hasPrefix("content-length:"),
+                   let contentLength = Int(
+                       line.dropFirst("content-length:".count)
+                           .trimmingCharacters(in: .whitespaces)
+                   ) {
+                    scan.contentLength = contentLength
+                    break
                 }
             }
         }
 
-        // No Content-Length — headers complete is sufficient (GET requests).
-        return true
+        guard let headerEnd = scan.headerEnd else { return false }
+        return data.distance(from: headerEnd, to: data.endIndex) >= scan.contentLength
     }
 
     // MARK: - Request Processing

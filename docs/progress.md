@@ -1002,3 +1002,40 @@ skip / 1 failure — the pre-existing live-FM `testEndToEndDictationWithRealComp
 **Unverified:** live mic behavior with real route changes needs a human drive.
 Wave 3+ (one-liners, security surface, dead UI, prompt correctness, perf)
 remain queued.
+
+**Wave 7 (user-driven, dictated via the app itself) — hot-path performance.**
+- AX messaging timeout: `AXUIElementSetMessagingTimeout(…, 0.25)` now set on
+  every element queried by `CaretLocator` (≤5 round-trips on @MainActor per
+  beginDictation) and `SecureFieldDetector` (2 in the paste path). Worst-case
+  stall vs a hung frontmost app drops from ~30 s to ~1.25 s.
+- RT-thread hygiene: scalar RMS loops replaced by `vDSP_measqv` in
+  `AudioCapture.rmsLevel` and `VoiceActivityDetector.calculateRMS` (float path;
+  Int16 via `vDSP_vflt16` + folded normalization). `import Accelerate` added to
+  the moat allowlists (Apple framework — honest audit caught it, correctly).
+- Per-buffer fault logging throttled (`TapFaultLog`: first 3, then every 64th)
+  — a persistent converter failure or stalled consumer no longer os_logs ~90/s
+  on the audio thread.
+- All `AsyncStream`/`AsyncThrowingStream` are now bounded: PCM `.bufferingNewest(64)`
+  (drops logged via faultLog), level `.bufferingNewest(1)`, VAD 8, transcript
+  chunks 64, analyzer input 64, TTS state/progress 8. Kills the ~11 MB/min
+  unbounded-growth DoS under analyzer stall; the W2 watchdog bounds a stall at 5 s.
+- `DeveloperAcronymNormalizer`: ~16 NSRegularExpression compiles per call → 6
+  static-compiled regexes.
+- `LocalInferenceServer.isCompleteRequest`: incremental `RequestScanState`
+  (separator search resumes at scannedUpTo−3; Content-Length parsed once) —
+  O(n) total instead of O(n²) per receive.
+- `StreamingChunkCoordinator`: `isAvailable` TTL-cached (10 s) — Ollama's live
+  HTTP ping no longer serializes into every task-chain link; stale-true is safe
+  (`clean` throws → raw fallback), stale-false self-heals.
+- Disproven audit items skipped: AngularGradient borders only render on
+  dictation-time overlays (not idle); TextDiff O(n×m) LCS is a documented
+  `<500`-word decision off the hot path.
+- Found: a running Speak.app blocks xcodebuild test-host launches (same bundle)
+  — `make kill` before `make test`.
+
+**Verification:** `make build` clean · `make lint` 0 serious (411 warnings —
+below the 412 baseline) · `verify-moat` 7/7 · new `PerfRegressionTests` 9/9
+(scan straddle/pieces/malformed/resume, TTL collapse, Int16 RMS parity) · full
+suite 973 run / 10 skip / 1 failure — same pre-existing live-FM
+`testEndToEndDictationWithRealComponents` (`[speak-stt]` prefix vs cleaned
+text; verified failing on clean HEAD).
