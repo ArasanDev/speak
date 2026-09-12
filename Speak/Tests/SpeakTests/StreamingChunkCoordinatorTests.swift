@@ -83,4 +83,21 @@ final class StreamingChunkCoordinatorTests: XCTestCase {
         let result = try await coordinator.finalizeAndStitch()
         XCTAssertEqual(result, "Implement option 1 and option 3 immediately.")
     }
+
+    /// A single chunk — however long — was already cleaned as one unit during
+    /// ingestion; macro-consolidating it again would be a second full model
+    /// pass on the release path for zero benefit. [decision: felt-latency]
+    func testSingleChunkDoesNotMacroConsolidate() async throws {
+        let mock = MockChunkCleaner()
+        let longChunk = "we should probably pick the first approach because it is simpler to maintain and it keeps the migration small"
+        mock.cleanedResults[longChunk] = "We should pick the first approach."
+
+        let coordinator = StreamingChunkCoordinator(cleaner: mock, mode: .styled(.code, .medium))
+
+        await coordinator.ingestChunk(longChunk)
+        let result = try await coordinator.finalizeAndStitch()
+
+        XCTAssertEqual(result, "We should pick the first approach.")
+        XCTAssertEqual(mock.callCount, 1)
+    }
 }

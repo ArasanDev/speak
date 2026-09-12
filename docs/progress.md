@@ -1084,3 +1084,30 @@ text; verified failing on clean HEAD).
 `RouteChangeHandlingTests` 6/6 + `AudioCaptureConfigChangeTests` 2/2 +
 `SessionLifecycleRegressionTests` 5/5 + `SettingsStoreRoundTripTests` 16/16 —
 29 green, zero unexpected exits.
+
+### Session (2026-09-12, cont.) — Wispr-parity pass: DSP front-end + felt-latency
+
+**Research basis:** Wispr Flow publishes a ~700ms release-to-text budget
+(<200ms ASR, <200ms LLM, <200ms network) on dedicated cloud GPUs — we cannot
+match their inference budget on-device, but the *felt* gap was ours to close.
+
+**Changes:**
+- ~~VoiceProcessingIO front-end~~ — **REVERTED same session**: typechecks and
+  starts cleanly, but VoiceProcessingIO on macOS is a *duplex* unit — its
+  downlink (echo-reference) DSP faults continuously on an input-only graph
+  (`vp::vx ... failed to run downlink DSP (I/O fault)`, log-confirmed live).
+  Input-only AGC would need a manual gain stage, not VoiceProcessingIO.
+- `StreamingChunkCoordinator.finalizeAndStitch` — macro-consolidation now runs
+  only when `chunkTasks.count > 1`. The `wordCount > 12` branch re-cleaned a
+  *single* already-cleaned chunk — a second full 3B pass on the release path,
+  i.e. the visible "Processing…" wait on typical dictations, for zero benefit.
+- Extracted `readSettledInputFormat` / `failRebuild` helpers (lint hygiene).
+
+**Verification:** build clean · lint 0 serious (414 warnings) · moat 7/7 ·
+AudioCaptureConfigChange 2/2 + RouteChangeHandling 6/6 +
+StreamingChunkCoordinator 5/5 (incl. new `testSingleChunkDoesNotMacroConsolidate`
+pinning exactly one `clean` call for a single-chunk dictation).
+
+**Still open (measured next):** SpeechAnalyzer end-of-speech finalization
+time is Apple-internal; the honest Wispr-parity gaps remaining are ASR model
+quality and per-release measurement instrumentation.

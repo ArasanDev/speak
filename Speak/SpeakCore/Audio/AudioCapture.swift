@@ -459,6 +459,23 @@ public final class AudioCapture: @unchecked Sendable {
         rebuildRequest?()
     }
 
+    /// Reads the input node's format after a route change, retrying briefly
+    /// while the HAL settles — a newly attached device can report a
+    /// zero/invalid format for a beat. Returns nil when no valid format
+    /// materializes (the device is truly gone).
+    private func readSettledInputFormat(on input: AVAudioInputNode, bus: AVAudioNodeBus) -> AVAudioFormat? {
+        var format = input.outputFormat(forBus: bus)
+        if format.sampleRate <= 0 || format.channelCount <= 0 {
+            for _ in 0..<3 {
+                Thread.sleep(forTimeInterval: 0.05)
+                format = input.outputFormat(forBus: bus)
+                if format.sampleRate > 0 && format.channelCount > 0 { break }
+            }
+        }
+        guard format.sampleRate > 0, format.channelCount > 0 else { return nil }
+        return format
+    }
+
     /// Pins the engine's input unit to `deviceID` via
     /// `kAudioOutputUnitProperty_CurrentDevice` — the HAL device-selection
     /// hook on macOS. Must run while the engine is stopped and before the tap
@@ -598,20 +615,9 @@ public final class AudioCapture: @unchecked Sendable {
             pinInputDevice(target.id, on: input)
         }
 
-        var newInputFormat = input.outputFormat(forBus: bus)
-        if newInputFormat.sampleRate <= 0 || newInputFormat.channelCount <= 0 {
-            for _ in 0..<3 {
-                Thread.sleep(forTimeInterval: 0.05)
-                newInputFormat = input.outputFormat(forBus: bus)
-                if newInputFormat.sampleRate > 0 && newInputFormat.channelCount > 0 { break }
-            }
-        }
-
-        guard newInputFormat.sampleRate > 0, newInputFormat.channelCount > 0 else {
+        guard let newInputFormat = readSettledInputFormat(on: input, bus: bus) else {
             SpeakLog.audio.error("AudioCapture: no valid input format after configuration change — input lost.")
-            teardownLocked(throwing: SpeakError.captureInterrupted(
-                "input device disappeared or reported an invalid format after a route change"
-            ))
+            failRebuild("input device disappeared or reported an invalid format after a route change")
             return
         }
         guard let newConverter = AVAudioConverter(from: newInputFormat, to: targetFormat) else {
@@ -619,17 +625,13 @@ public final class AudioCapture: @unchecked Sendable {
                 AudioCapture: could not rebuild converter for new format \
                 \(newInputFormat.sampleRate, privacy: .public)Hz — input lost.
                 """)
-            teardownLocked(throwing: SpeakError.captureInterrupted(
-                "no converter for the post-route-change format \(newInputFormat.sampleRate)Hz"
-            ))
+            failRebuild("no converter for the post-route-change format \(newInputFormat.sampleRate)Hz")
             return
         }
         converterBox.set(newConverter)
 
         guard installTap(newInputFormat) else {
-            teardownLocked(throwing: SpeakError.captureInterrupted(
-                "could not reinstall the input tap on the new route"
-            ))
+            failRebuild("could not reinstall the input tap on the new route")
             return
         }
 
@@ -642,10 +644,14 @@ public final class AudioCapture: @unchecked Sendable {
                 AudioCapture: failed to restart engine after configuration change — \
                 \(error.localizedDescription, privacy: .public). Input lost.
                 """)
-            teardownLocked(throwing: SpeakError.captureInterrupted(
-                "engine restart after route change failed: \(error.localizedDescription)"
-            ))
+            failRebuild("engine restart after route change failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Route-rebuild failure path: ends capture with `.captureInterrupted`
+    /// so the consumer settles `.error` instead of wedging `.listening`.
+    private func failRebuild(_ message: String) {
+        teardownLocked(throwing: SpeakError.captureInterrupted(message))
     }
 
     /// Actual teardown body. Must only be called while already holding
