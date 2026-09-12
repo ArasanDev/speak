@@ -148,10 +148,15 @@ public actor StreamingChunkCoordinator {
         let stitched = TranscriptChunker.stitch(cleanedChunks)
         let normalizedDraft = DeveloperAcronymNormalizer.normalize(stitched)
 
-        // Tier 3: Deterministic Full-Chunk Macro-Consolidation Pass
-        // Only run when multiple chunks or extended thoughts exist (> 12 words) and mode is eligible.
+        // Tier 3: Deterministic Full-Chunk Macro-Consolidation Pass.
+        // Runs only when multiple chunks exist — the pass's job is collapsing
+        // train-of-thought resets *across* stitch boundaries. A single chunk
+        // already went through `clean` as one unit; re-cleaning it was a
+        // second full model pass on the release path — pure latency for a
+        // dictation that was already cleaned in full during speech.
+        // [decision: felt-latency — the visible "Processing" wait is this pass]
         let wordCount = normalizedDraft.split(whereSeparator: { $0.isWhitespace }).count
-        guard isMacroConsolidationEligible, chunkTasks.count > 1 || wordCount > 12 else {
+        guard isMacroConsolidationEligible, chunkTasks.count > 1 else {
             return normalizedDraft
         }
 
