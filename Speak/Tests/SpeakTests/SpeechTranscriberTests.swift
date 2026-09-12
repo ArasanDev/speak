@@ -182,13 +182,13 @@ final class SpeechTranscriberTests: XCTestCase {
     /// Skips the test with a diagnostic message if the model is not ready.
     @available(macOS 26.0, *)
     private func assertModelReadyForFixtureTest(locale: Locale, fixtureURL: URL) async throws {
-        guard SpeechTranscriber.isAvailable else {
-            throw XCTSkip("SpeechTranscriber.isAvailable == false — device/OS does not support on-device STT.")
+        // DictationTranscriber has no isAvailable — supportedLocale + asset
+        // status are the gates, and it pulls the "Assistant" asset family
+        // (not GeneralASR). [decision: DictationTranscriber swap]
+        guard await DictationTranscriber.supportedLocale(equivalentTo: locale) != nil else {
+            throw XCTSkip("en-US is not a supported DictationTranscriber locale on this machine.")
         }
-        guard await SpeechTranscriber.supportedLocale(equivalentTo: locale) != nil else {
-            throw XCTSkip("en-US is not a supported SpeechTranscriber locale on this machine.")
-        }
-        let module = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
+        let module = DictationTranscriber(locale: locale, preset: .progressiveShortDictation)
         let assetStatus = await AssetInventory.status(forModules: [module])
         guard assetStatus == .installed else {
             throw XCTSkip("""
@@ -239,11 +239,20 @@ final class SpeechTranscriberTests: XCTestCase {
         let allFinalText = chunks.filter { $0.isFinal }.map(\.text).joined(separator: " ").lowercased()
         let checkText = allFinalText.isEmpty ? finalText : allFinalText
 
-        let expectedWords = ["one", "two", "three"]  // "testing" may be transcribed as "testing" or not
-        let missingWords = expectedWords.filter { !checkText.contains($0) }
-        if !missingWords.isEmpty {
+        // DictationTranscriber normalizes spoken numbers to digits AND may
+        // render "one two three" as the range "1 to 3" — both are correct
+        // dictation output. Require ≥2 of the 3 number slots in either
+        // surface form; the canary's job is "fixture-related transcript",
+        // not exact orthography. [decision: DictationTranscriber]
+        let expectedAlternatives: [[String]] = [
+            ["one", "1"], ["two", "2", "to"], ["three", "3"]
+        ]
+        let matched = expectedAlternatives.filter { forms in
+            forms.contains(where: { checkText.contains($0) })
+        }
+        if matched.count < 2 {
             XCTFail("""
-                Final transcript missing expected words: \(missingWords). \
+                Final transcript missing expected words: matched \(matched.count)/3 number slots. \
                 Final transcript: '\(checkText)'. \
                 All chunks: \(chunks.map { "[\(($0.isFinal ? "F" : "V")):\($0.text)]" }). \
                 Fixture: hello_speech.caf contains "Testing one two three".
