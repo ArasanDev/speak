@@ -63,7 +63,15 @@ public func defaultExpander(
     snippetStore: SnippetStore?
 ) -> (any SnippetExpanding)? {
     var stages: [any SnippetExpanding] = []
-    let corrections = settings.acousticCorrections
+    // User corrections first — on a `heard` collision the first replacement
+    // consumes the trigger, so user entries (incl. an identity row meant to
+    // disable a built-in) always win over the seeded table.
+    // [decision: built-in slips merge under user entries]
+    let userCorrections = settings.acousticCorrections
+    let userHeard = Set(userCorrections.map { $0.heard.lowercased() })
+    let corrections = userCorrections + AcousticCorrections.builtIn.filter {
+        !userHeard.contains($0.heard.lowercased())
+    }
     if !corrections.isEmpty {
         stages.append(AcousticCorrectionExpander(corrections: corrections))
     }

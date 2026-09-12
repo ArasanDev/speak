@@ -1136,3 +1136,20 @@ free-form utterances with auto-punctuation and faster finalization options.
 **Verification:** build clean · lint 0 serious · moat 7/7 ·
 SpeechTranscriberTests 9/9 incl. real-fixture transcription ·
 RouteChangeHandling 6/6 · LatencyAndAccuracy 2/2.
+
+### Session (2026-09-12, cont.) — developer-name vocabulary + built-in slip table
+
+Live dictation evidence: "Claude Code"→"cloth code", "Codex"→"codecs".
+Two-layer fix:
+- `developerTerms` gained product/tool names (Claude Code, Codex, ChatGPT,
+  Devin, Wispr, Copilot, Cursor, Ollama, MLX, …) — contextualStrings bias at
+  the STT layer.
+- `AcousticCorrections.builtIn` — seeded heard→typed slips
+  (cloth/clod/cloud code→Claude Code, codecs→Codex, chat gpt→ChatGPT, …)
+  merged under user entries in `defaultExpander`; user `heard` wins,
+  incl. an identity row to disable a built-in. Expander is now never nil.
+- Cloned qwen-audio-agent → ai_tmp/ (reference for agent-voice runtime).
+
+**Verification:** build clean · lint 0 serious · moat 7/7 ·
+AcousticCorrectionsTests 19/19 (incl. new built-in + override tests) ·
+SpeechTranscriberTests 9/9.

@@ -48,6 +48,27 @@ public struct AcousticCorrection: Codable, Sendable, Equatable, Hashable, Identi
 ///   - remove: delete every case-insensitive `heard` match.
 public enum AcousticCorrections {
 
+    /// Built-in slips seeded for every install — common recognizer manglings
+    /// of the product/tool names in `AppleSpeechTranscriber.developerTerms`.
+    /// `defaultExpander` merges these under user entries so a user's explicit
+    /// `heard` always wins (incl. an identity row to disable a built-in).
+    /// [evidence: live dictation 2026-09-12 — Claude Code→"cloth code",
+    ///  Codex→"codecs"]
+    public static let builtIn: [AcousticCorrection] = [
+        AcousticCorrection(heard: "cloth code", typed: "Claude Code"),
+        AcousticCorrection(heard: "clod code", typed: "Claude Code"),
+        AcousticCorrection(heard: "cloud code", typed: "Claude Code"),
+        AcousticCorrection(heard: "codecs", typed: "Codex"),
+        AcousticCorrection(heard: "chat gpt", typed: "ChatGPT"),
+        AcousticCorrection(heard: "whisper flow", typed: "Wispr Flow"),
+        AcousticCorrection(heard: "whisperflow", typed: "Wispr Flow"),
+        AcousticCorrection(heard: "devin", typed: "Devin"),
+        AcousticCorrection(heard: "ollama", typed: "Ollama"),
+        AcousticCorrection(heard: "whisper kit", typed: "WhisperKit"),
+        AcousticCorrection(heard: "swift ui", typed: "SwiftUI"),
+        AcousticCorrection(heard: "open ai", typed: "OpenAI"),
+    ]
+
     /// Insert or update the correction for `heard`. A re-add of an existing
     /// `heard` (any case) updates its `typed` value in place rather than
     /// duplicating the row.
