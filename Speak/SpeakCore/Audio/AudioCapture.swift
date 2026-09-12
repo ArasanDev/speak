@@ -149,6 +149,29 @@ public final class AudioCapture: @unchecked Sendable {
 
     private let vadBox = VADBox()
 
+    /// Tracks the peak RMS level seen across the current capture — the "did
+    /// the mic actually hear anything" signal. The tap updates it on the
+    /// audio thread; `peakInputLevel` reads it post-stop. A session that
+    /// produces no transcript AND never crossed the audible floor means the
+    /// input delivered silence (muted headset, wrong pinned device, dead
+    /// mic) — distinguishable from "user didn't speak" only via this.
+    /// [fix: silent-mic sessions surfaced as silent .done]
+    private final class PeakLevelBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: Double = 0
+        func note(_ rms: Double) {
+            lock.lock(); defer { lock.unlock() }
+            if rms > value { value = rms }
+        }
+        func peak() -> Double { lock.lock(); defer { lock.unlock() }; return value }
+        func reset() { lock.lock(); value = 0; lock.unlock() }
+    }
+    private let peakLevelBox = PeakLevelBox()
+
+    /// Peak input RMS observed this session (0 = nothing heard). Read after
+    /// `stop()` — or anytime; it's a best-effort signal, not a guarantee.
+    public var peakInputLevel: Double { peakLevelBox.peak() }
+
     /// Lock-protected holder for the active `AVAudioConverter` — see the
     /// usage note at its call sites in `start()`.
     final class ConverterBox: @unchecked Sendable {
@@ -235,6 +258,12 @@ public final class AudioCapture: @unchecked Sendable {
                     preferredUID: self.preferredInputDeviceUID
                 ) {
                     self.pinInputDevice(target.id, on: input)
+                    // Log WHICH device feeds this session — the single most
+                    // useful fact when a dictation comes back empty.
+                    // [fix: silent-mic diagnosis needs the live source logged]
+                    SpeakLog.audio.info(
+                        "AudioCapture input: \(target.name, privacy: .public) (uid \(target.uid, privacy: .public), preferred=\(self.preferredInputDeviceUID != nil, privacy: .public))"
+                    )
                 }
 
                 let inputFormat = try self.resolveInputFormat(for: input)
@@ -322,6 +351,11 @@ public final class AudioCapture: @unchecked Sendable {
         let vadBox = self.vadBox
         let bus = self.bus
         let faultLog = TapFaultLog()
+        // Bind the box directly — the tap must never capture `self` (a queued
+        // block dropping the last strong ref on stateQueue caused the
+        // deinit→sync-on-own-queue trap). [fix: audit — deinit trap]
+        let peakLevelBox = self.peakLevelBox
+        peakLevelBox.reset()
 
         return { format in
             guard format.sampleRate > 0, format.channelCount > 0 else {
@@ -334,6 +368,7 @@ public final class AudioCapture: @unchecked Sendable {
             input.removeTap(onBus: bus)
             input.installTap(onBus: bus, bufferSize: Constants.tapBufferSize, format: nil) { buffer, _ in
                 let rms = Self.rmsLevel(buffer: buffer)
+                peakLevelBox.note(rms)
                 levelsContinuation.yield(rms)
                 vadBox.get()?.processBuffer(buffer)
 

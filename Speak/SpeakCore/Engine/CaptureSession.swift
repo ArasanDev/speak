@@ -426,7 +426,10 @@ public actor CaptureSession {
             partialsContinuation?.finish()
             partialsContinuation = nil
             streamTask = nil
-            SpeakLog.engine.info("CaptureSession: empty transcript — skip paste + history, reach .done.")
+            let audioWasSilent = classifySilentInput()
+            if !audioWasSilent {
+                SpeakLog.engine.info("CaptureSession: empty transcript — skip paste + history, reach .done.")
+            }
             // Use a single timestamp for both duration and createdAt so they are
             // consistent. [decision: single Date() call prevents sub-millisecond skew
             // between the two fields, which would make duration vs createdAt inconsistent.]
@@ -436,7 +439,8 @@ public actor CaptureSession {
                 cleanedText: nil,
                 duration: sessionEndedAt.timeIntervalSince(sessionStartTime ?? sessionEndedAt),
                 engineId: transcriber.id,
-                createdAt: sessionEndedAt
+                createdAt: sessionEndedAt,
+                audioWasSilent: audioWasSilent
             )
         }
 
@@ -585,6 +589,27 @@ public actor CaptureSession {
             )
             return settleVoiceActionExecuted(rawText: rawText, duration: duration, createdAt: createdAt)
         }
+    }
+
+    /// Silence check for the empty-transcript path: if the input never crossed
+    /// the audible floor the mic delivered nothing (muted headset, wrong
+    /// pinned device, dead input) — not "user didn't speak". Surface it so the
+    /// caller can warn instead of a silent .done.
+    /// [fix: silent-mic sessions surfaced as silent .done]
+    /// 0.01 RMS ≈ well above the room-noise floor (~0.002 measured on this
+    /// hardware) yet far below quiet speech (~0.05+). Transcribers with no
+    /// live capture (fixtures, mocks) return nil → not silent.
+    /// [inferred: measured floor on MacBook mic at gain 70]
+    private func classifySilentInput() -> Bool {
+        guard let peak = (transcriber as? AudioCaptureProviding)?.audioCapture?.peakInputLevel
+        else { return false }
+        if peak < 0.01 {
+            SpeakLog.engine.warning(
+                "CaptureSession: empty transcript with silent input (peak RMS \(peak, privacy: .public)) — mic muted, wrong pinned device, or dead input."
+            )
+            return true
+        }
+        return false
     }
 
     /// [H-1] Settle the session terminally after Voice Actions executed an action or a

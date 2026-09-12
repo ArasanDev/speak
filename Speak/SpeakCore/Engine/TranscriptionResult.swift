@@ -19,16 +19,26 @@ public struct TranscriptionResult: Sendable {
     /// `latency.stopToPasteSeconds` is the benchmark.md §7 `L_e2e` measurement.
     public let latency: LatencyRecord?
 
+    /// True when the session ended with an empty transcript AND the input
+    /// never crossed the audible floor — i.e. the mic delivered silence
+    /// (muted headset, wrong pinned device, dead input). Distinguishes "you
+    /// didn't speak" from "the mic heard nothing"; the caller should surface
+    /// this instead of quietly completing.
+    /// [fix: silent-mic sessions surfaced as silent .done]
+    public let audioWasSilent: Bool
+
     public init(rawText: String,
                 cleanedText: String?,
                 duration: TimeInterval,
                 engineId: String,
                 createdAt: Date,
-                latency: LatencyRecord? = nil) {
+                latency: LatencyRecord? = nil,
+                audioWasSilent: Bool = false) {
         self.rawText = rawText
         self.cleanedText = cleanedText
         self.duration = duration
         self.engineId = engineId
+        self.audioWasSilent = audioWasSilent
         self.createdAt = createdAt
         self.latency = latency
     }

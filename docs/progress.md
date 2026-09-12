@@ -1153,3 +1153,32 @@ Two-layer fix:
 **Verification:** build clean · lint 0 serious · moat 7/7 ·
 AcousticCorrectionsTests 19/19 (incl. new built-in + override tests) ·
 SpeechTranscriberTests 9/9.
+
+### Session (2026-09-12, cont.) — silent-input diagnosis: no more silent .done
+
+User report: live dictations produced zero STT chunks, no paste, no history
+row — while capture/analyzer lifecycle looked healthy. Root cause under
+investigation: sessions ran while the pinned Jabra mic delivered silence
+(hardware-muted) and possibly beyond. The product bug: an empty transcript
+was indistinguishable from success — silent loss.
+
+- `AudioCapture.peakInputLevel` — `PeakLevelBox` (NSLock) tracks peak RMS
+  across the session, updated in the tap; tap closure binds the box, never
+  `self` (deinit-trap invariant). Reset per tap install.
+- `TranscriptionResult.audioWasSilent` — set by `CaptureSession` when the
+  transcript is empty AND a live capture exists AND peak RMS < 0.01
+  (measured room-noise floor ~0.002, quiet speech ~0.05+). [inferred floor]
+- `DictationController.endDictation` surfaces BOTH empty-transcript classes:
+  silent input → "No audio detected — check mic mute or the input source";
+  audio present but zero STT results → "Nothing recognized — try speaking
+  closer to the mic". Both show the error HUD + .error icon; clipboard is
+  untouched; no history row written (still correct).
+- `AudioCapture.start` now logs the resolved input device name + UID at
+  every capture start — the key diagnostic for "which mic fed this session".
+
+**Verification:** build clean · lint 0 serious (function extracted for
+length) · moat 7/7 · CaptureSessionTests 21/21 incl. both new
+silence-classification tests (no-capture→false, silent-capture→true).
+Live behavior [unverified]: next real dictation will show which class the
+failures were — silent input (device/mute) vs audio-present-zero-results
+(STT/locale layer, would point back at DictationTranscriber).

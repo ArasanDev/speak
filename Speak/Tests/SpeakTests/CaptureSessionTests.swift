@@ -102,6 +102,21 @@ private final class MockTranscriber: Transcribing, @unchecked Sendable {
     func calls() -> Int { _stopCallCount }
 }
 
+/// A mock transcriber that exposes a real (never-started) `AudioCapture` via
+/// `AudioCaptureProviding` — its peak level stays 0, simulating a session
+/// where the tap ran but heard only silence. Used to pin the
+/// `audioWasSilent` classification. `@unchecked Sendable`: no mutable state.
+private final class SilentCapturingTranscriber: Transcribing, AudioCaptureProviding, @unchecked Sendable {
+    let id = "mock-stt"
+    let audioCapture: AudioCapture? = AudioCapture()
+
+    func startStream(locale: Locale) -> AsyncThrowingStream<TranscriptChunk, Error> {
+        AsyncThrowingStream { continuation in continuation.finish() }
+    }
+
+    func stop() async {}
+}
+
 /// Helper used by `MockTranscriber` to coordinate "finish the stream" with
 /// "the orchestrator called stop()". A second continuation primitive used
 /// only in tests that need to verify the stream waits for stop().
@@ -312,6 +327,38 @@ final class CaptureSessionTests: XCTestCase {
         XCTAssertTrue(inserted.isEmpty, "An MCP answer must never paste into the focused application.")
         let state = await session.currentState
         XCTAssertEqual(state, .done)
+    }
+
+    // MARK: - Empty transcript silence classification
+
+    /// A transcriber with NO live capture (no `AudioCaptureProviding`
+    /// conformance) and an empty script: `audioWasSilent` must stay false —
+    /// there is no signal to judge, so the session is a plain empty
+    /// transcript, not a silent-mic diagnosis.
+    func testEmptyTranscriptWithoutCaptureReportsNotSilent() async throws {
+        let transcriber = MockTranscriber(script: [])
+        let session = CaptureSession(transcriber: transcriber)
+        try await session.start()
+        try await Task.sleep(nanoseconds: 20_000_000)
+        let result = try await session.stop()
+        XCTAssertTrue(result.rawText.isEmpty)
+        XCTAssertFalse(result.audioWasSilent,
+                       "No capture instance → cannot diagnose silence; flag must be false.")
+    }
+
+    /// A transcriber exposing a live `AudioCapture` whose tap never observed
+    /// signal (peak RMS 0) and an empty script: `audioWasSilent` must be true
+    /// so the controller can warn "check mic mute / input source" instead of
+    /// silently completing.
+    func testEmptyTranscriptWithSilentCaptureFlagsAudioWasSilent() async throws {
+        let transcriber = SilentCapturingTranscriber()
+        let session = CaptureSession(transcriber: transcriber)
+        try await session.start()
+        try await Task.sleep(nanoseconds: 20_000_000)
+        let result = try await session.stop()
+        XCTAssertTrue(result.rawText.isEmpty)
+        XCTAssertTrue(result.audioWasSilent,
+                      "Empty transcript + zero observed input level → silent-input flag expected.")
     }
 
     // MARK: - Cleanup off (cleaner == nil)
