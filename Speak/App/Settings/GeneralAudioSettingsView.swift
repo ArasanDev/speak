@@ -119,16 +119,28 @@ struct GeneralAudioSettingsView: View {
 
 // MARK: - LanguageCard
 
-/// Speech language picker. Locales load async from `SpeechTranscriberLocaleSource`;
-/// rows marked "(download)" are supported but not yet installed on-device.
+/// Speech language picker. The picker renders immediately — it always contains
+/// the stored locale, so the control is usable before the locale list loads.
+/// The list itself loads async from `DictationTranscriberLocaleSource` (the
+/// engine the capture path actually runs) behind a bounded fetch; rows marked
+/// "(download)" are supported but not yet installed on-device.
+///
+/// [fix: settings hang + wrong-engine reset] The previous version gated the
+/// whole control on an unbounded `SpeechTranscriber.supportedLocales` await
+/// (spinner forever when the speech-assets daemon stalls), then compared raw
+/// identifiers — persisted "en_IN" never matched SDK "en-IN" — and force-reset
+/// `store.language` behind a modal alert on every Settings open. Now: fetch is
+/// bounded, identifiers are normalized, a missing stored locale stays
+/// selectable (never auto-reset, never alerts), and the stored identifier is
+/// silently canonicalized through the SDK's own equivalence matcher.
 private struct LanguageCard: View {
     let store: SettingsStore
 
+    private enum ListState { case loading, ready, unavailable }
+
     @State private var supportedLocales: [Locale] = []
     @State private var installedLocaleIDs: Set<String> = []
-    @State private var localesLoaded = false
-    @State private var showLanguageResetAlert = false
-    @State private var pendingResetLocale: Locale?
+    @State private var listState: ListState = .loading
 
     var body: some View {
         SettingsSectionCard(title: "Language", systemImage: "globe") {
@@ -136,57 +148,66 @@ private struct LanguageCard: View {
                 "Dictation Language",
                 description: "Applied to the next dictation — no restart needed."
             ) {
-                if !localesLoaded {
-                    ProgressView().controlSize(.small)
-                } else {
+                HStack(spacing: SpeakSpacing.sm) {
                     Picker("", selection: Binding(
-                        get: { store.language.identifier },
+                        get: { normalizedID(store.language) },
                         set: { store.language = Locale(identifier: $0) }
                     )) {
-                        ForEach(supportedLocales, id: \.identifier) { locale in
+                        ForEach(pickerLocales, id: \.identifier) { locale in
                             Text(localeLabel(for: locale))
-                                .tag(locale.identifier)
+                                .tag(normalizedID(locale))
                         }
                     }
                     .pickerStyle(.menu)
                     .fixedSize()
+                    if listState == .loading {
+                        ProgressView().controlSize(.small)
+                    }
                 }
             }
+            if listState == .unavailable {
+                Text("The full language list couldn't be loaded — your current selection still applies.")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, SpeakSpacing.md)
+                    .padding(.bottom, SpeakSpacing.sm)
+            }
         }
-        .task {
-            async let supported = SpeechTranscriberLocaleSource.supportedLocales()
-            async let installed = SpeechTranscriberLocaleSource.installedLocales()
-            let (s, i) = await (supported, installed)
-            supportedLocales = s
-            installedLocaleIDs = Set(i.map(\.identifier))
-            localesLoaded = true
+        .task { await loadLocales() }
+    }
 
-            if !s.isEmpty && !s.contains(where: { $0.identifier == store.language.identifier }) {
-                let fallback = s[0]
-                store.language = fallback
-                pendingResetLocale = fallback
-                showLanguageResetAlert = true
-            }
+    /// Supported locales with the stored locale guaranteed present — the
+    /// picker never renders an empty or unselectable state.
+    private var pickerLocales: [Locale] {
+        let storedID = normalizedID(store.language)
+        guard !supportedLocales.contains(where: { normalizedID($0) == storedID }) else {
+            return supportedLocales
         }
-        .alert(
-            "Language Reset",
-            isPresented: $showLanguageResetAlert,
-            actions: {
-                Button("OK", role: .cancel) { pendingResetLocale = nil }
-            },
-            message: {
-                let name = pendingResetLocale.flatMap {
-                    $0.localizedString(forIdentifier: $0.identifier)
-                } ?? pendingResetLocale?.identifier ?? "the first supported language"
-                Text("Your previously selected language is no longer available. " +
-                     "Language has been reset to \(name).")
-            }
-        )
+        return [store.language] + supportedLocales
+    }
+
+    private func loadLocales() async {
+        guard let lists = await DictationTranscriberLocaleSource.fetchLists() else {
+            listState = .unavailable
+            return
+        }
+        supportedLocales = lists.supported
+        installedLocaleIDs = Set(lists.installed.map(normalizedID))
+        listState = .ready
+        // Deliberately no canonicalization write: `supportedLocale(equivalentTo:)`
+        // fuzzy-matches (en_IN → en_US when en-IN isn't dictation-supported),
+        // so writing its result could silently change the user's language.
+        // Normalized picker tags already render "en_IN" correctly, and the
+        // engine resolves equivalence at session start.
+    }
+
+    private func normalizedID(_ locale: Locale) -> String {
+        DictationTranscriberLocaleSource.normalizedIdentifier(for: locale)
     }
 
     private func localeLabel(for locale: Locale) -> String {
-        let name = SpeechTranscriberLocaleSource.displayName(for: locale)
-        return installedLocaleIDs.contains(locale.identifier) ? name : "\(name) (download)"
+        let name = DictationTranscriberLocaleSource.displayName(for: locale)
+        return installedLocaleIDs.contains(normalizedID(locale)) ? name : "\(name) (download)"
     }
 }
 
