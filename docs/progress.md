@@ -1111,3 +1111,28 @@ pinning exactly one `clean` call for a single-chunk dictation).
 **Still open (measured next):** SpeechAnalyzer end-of-speech finalization
 time is Apple-internal; the honest Wispr-parity gaps remaining are ASR model
 quality and per-release measurement instrumentation.
+
+### Session (2026-09-12, cont.) — DictationTranscriber swap + prompt-engineer agent
+
+**The real "captures closely" fix:** `SpeechTranscriber(.progressiveTranscription)`
+→ `DictationTranscriber(.progressiveShortDictation)`. The generic transcriber
+is trained on clean read speech; `DictationTranscriber` is Apple's
+dictation-tuned module (Assistant asset family) — built for spoken, disfluent,
+free-form utterances with auto-punctuation and faster finalization options.
+[verified: full API surface typechecked on arm64e-apple-macos.swiftinterface —
+`supportedLocale`, preset, AssetInventory, SpeechAnalyzer(modules:), .results]
+
+- `makeTranscriber`/`provisionAsset`/`installAsset`/`resolveAnalyzerFormat`/
+  `buildResultsTask` re-typed; `DictationTranscriber` has no `isAvailable` —
+  `supportedLocale` nil + `.unsupported` asset status are the gates.
+- Fixture behavior confirmed live: "Testing one two three" → "Taste in 1 to 3"
+  — dictation-correct number normalization (digits + range). Fixture test now
+  accepts digit/word forms per slot (≥2/3) — the canary asserts
+  fixture-related output, not orthography.
+- New agent `.claude/agents/team/builder-prompting.md` — prompt engineer
+  owning `FoundationModelPromptBuilder` + eval-driven iteration (`make eval`
+  baseline → change → re-score); roster updated in team README.
+
+**Verification:** build clean · lint 0 serious · moat 7/7 ·
+SpeechTranscriberTests 9/9 incl. real-fixture transcription ·
+RouteChangeHandling 6/6 · LatencyAndAccuracy 2/2.

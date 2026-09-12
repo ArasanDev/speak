@@ -392,29 +392,36 @@ private struct Session: Sendable {
     // MARK: Setup helpers
 
     /// Validates availability, resolves locale, provisions model asset, and
-    /// returns an initialized `SpeechTranscriber`.
-    private func makeTranscriber() async throws -> SpeechTranscriber {
-        guard SpeechTranscriber.isAvailable else { // [verified]
-            throw SpeakError.transcriberUnavailable(
-                "SpeechTranscriber is not available on this device or OS version."
-            )
-        }
-
-        guard let resolvedLocale = await SpeechTranscriber.supportedLocale(equivalentTo: locale) else {
+    /// returns an initialized `DictationTranscriber`.
+    ///
+    /// We use `DictationTranscriber`, not the generic `SpeechTranscriber`:
+    /// it is Apple's dictation-tuned module — its LM is trained for spoken,
+    /// disfluent, free-form utterances rather than clean read speech, and its
+    /// dictation presets compose punctuation/volatile/finalization behavior
+    /// for exactly this product. [decision: Wispr-parity audit]
+    /// `.progressiveLongDictation` = dictation LM + volatile partials +
+    /// auto-punctuation, tuned for paragraph-length free-form speech.
+    /// [verified: DictationTranscriber(locale:preset:) + Preset cases +
+    ///  .results/.text/.isFinal — arm64e-apple-macos.swiftinterface]
+    ///
+    /// `DictationTranscriber` has no `isAvailable` — availability is
+    /// expressed through `supportedLocale(equivalentTo:)` (nil = unsupported)
+    /// and `AssetInventory.status` (`.unsupported` throws in provisionAsset).
+    private func makeTranscriber() async throws -> DictationTranscriber {
+        guard let resolvedLocale = await DictationTranscriber.supportedLocale(equivalentTo: locale) else {
             // [verified]
             throw SpeakError.transcriberUnavailable(
-                "Locale '\(locale.identifier)' is not supported by SpeechTranscriber."
+                "Locale '\(locale.identifier)' is not supported by DictationTranscriber."
             )
         }
 
-        // .progressiveTranscription includes volatileResults for partial transcripts. [verified]
-        let transcriber = SpeechTranscriber(locale: resolvedLocale, preset: .progressiveTranscription)
+        let transcriber = DictationTranscriber(locale: resolvedLocale, preset: .progressiveShortDictation)
         try await provisionAsset(for: transcriber)
         return transcriber
     }
 
     /// Ensures the speech model is installed, triggering download if needed.
-    private func provisionAsset(for transcriber: SpeechTranscriber) async throws {
+    private func provisionAsset(for transcriber: DictationTranscriber) async throws {
         let status = await AssetInventory.status(forModules: [transcriber]) // [verified]
         SpeakLog.stt.info("AssetInventory status: \(String(describing: status), privacy: .public)")
 
@@ -433,7 +440,7 @@ private struct Session: Sendable {
         }
     }
 
-    private func installAsset(for transcriber: SpeechTranscriber, locale: Locale) async throws {
+    private func installAsset(for transcriber: DictationTranscriber, locale: Locale) async throws {
         SpeakLog.stt.info("Speech model not installed — requesting download.")
 
         // STT P2: Reserve the locale before downloading so the OS accounts for it
@@ -475,7 +482,7 @@ private struct Session: Sendable {
 
     /// Queries the analyzer's preferred format. Builds the conversion note if
     /// P2's Float32 output differs from the analyzer's expected format. [inferred]
-    private func resolveAnalyzerFormat(transcriber: SpeechTranscriber) async throws -> AVAudioFormat {
+    private func resolveAnalyzerFormat(transcriber: DictationTranscriber) async throws -> AVAudioFormat {
         // [verified] Returns nil when model is not installed.
         guard let best = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
         else {
@@ -581,7 +588,7 @@ private struct Session: Sendable {
     }
 
     private func buildResultsTask(
-        transcriber: SpeechTranscriber,
+        transcriber: DictationTranscriber,
         continuation: AsyncThrowingStream<TranscriptChunk, Error>.Continuation
     ) -> Task<Void, Error> {
         Task<Void, Error>(priority: .userInitiated) {

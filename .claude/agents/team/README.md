@@ -14,6 +14,7 @@ files duplicate `AGENTS.md` — they point at it.
 | `builder-engine` | `SpeakCore/Engine/` (facade, state machine, errors), `Logging/` | swift-code-review, swift-macos-build | core seam |
 | `builder-audio-stt` | `Audio/` (AVAudioEngine) + `STT/` (SpeechAnalyzer) | speechanalyzer-stt, swift-code-review | **P2 → P3** |
 | `builder-cleanup` | `Cleanup/` (Foundation Models neat-writing) | foundation-models-cleanup, swift-code-review | **P3.5** |
+| `builder-prompting` | `FoundationModelPromptBuilder` + eval-driven prompt iteration | foundation-models-cleanup, swift-code-review, swift-macos-build | prompt quality |
 | `builder-input` | `Hotkey/` + `Paste/` + `Permissions/` | cgeventtap-hotkey, macos-paste-pipeline, swift-code-review | **P5 → P6** |
 | `builder-app` | `App/` (SwiftUI shell) + `Storage/` (SQLite/settings) | permissions-onboarding, swift-code-review | P1, P4, P7–P10 |
 | `builder-release` | `.xcodeproj`, Makefile, CI, sign/notarize/dmg/cask | swift-macos-build, signing-notarization-release | **P0, P11** |
