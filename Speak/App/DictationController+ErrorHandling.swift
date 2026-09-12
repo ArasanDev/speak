@@ -237,6 +237,28 @@ extension DictationController {
             let includeState = overlayController.overlayModel.agentPrefixIncludeState
             await engine.setAgentPrefix(style: agentPrefixStyle, includeState: includeState)
             let result = try await engine.endDictation()
+            // Silent-input session: the mic delivered nothing (muted headset,
+            // wrong pinned device, dead input) — an empty transcript with no
+            // audible signal. Show a warning instead of the done flash so the
+            // user knows WHY nothing pasted. [fix: silent-mic surfaced as .done]
+            if result.audioWasSilent {
+                caretOverlay.hide()
+                overlayController.showError("No audio detected — check mic mute or the input source in Settings.")
+                icon = .error
+                SpeakLog.engine.warning("DictationController: endDictation — silent input, nothing transcribed.")
+                return
+            }
+            // Non-silent audio but zero STT results — the model heard signal
+            // and returned nothing (mumble, non-speech, locale mismatch).
+            // Still worth surfacing vs a silent .done: nothing pasted and the
+            // user deserves to know why. [fix: empty-result surfaced as .done]
+            if result.rawText.isEmpty {
+                caretOverlay.hide()
+                overlayController.showError("Nothing recognized — try speaking closer to the mic.")
+                icon = .error
+                SpeakLog.engine.warning("DictationController: endDictation — audio present, empty transcript.")
+                return
+            }
             // Remember the finished text for "Paste Last Transcript" re-paste action.
             let baseText = result.cleanedText ?? result.rawText
             let isCleaned = result.cleanedText != nil
