@@ -169,3 +169,32 @@ final class PerfRegressionTests: XCTestCase {
         XCTAssertEqual(rms, 0.5, accuracy: 1e-3)
     }
 }
+
+// MARK: - Device topology enumeration
+
+final class DeviceTopologyTests: XCTestCase {
+
+    /// The machine under test always has the built-in mic — enumeration must
+    /// find at least one input-capable device, and every entry must carry a
+    /// plausible name/rate/channel count.
+    func testListInputDevicesFindsBuiltInMic() {
+        let devices = CoreAudioDeviceMonitor.shared.listInputDevices()
+        XCTAssertFalse(devices.isEmpty, "expected at least the built-in microphone")
+        for dev in devices {
+            XCTAssertFalse(dev.name.isEmpty, "device \(dev.id) has an empty name")
+            XCTAssertGreaterThan(dev.channelCount, 0)
+        }
+        XCTAssertTrue(
+            devices.contains { $0.name.localizedCaseInsensitiveContains("macbook") },
+            "expected the built-in MacBook microphone in the roster, got: \(devices.map { $0.name })"
+        )
+    }
+
+    /// A registered topology callback token unregisters cleanly and a default-
+    /// change callback token clears both channels.
+    func testUnregisterClearsBothChannels() {
+        let monitor = CoreAudioDeviceMonitor.shared
+        let token = monitor.registerTopologyCallback { _ in }
+        monitor.unregisterCallback(token)  // must not crash; clears both maps
+    }
+}

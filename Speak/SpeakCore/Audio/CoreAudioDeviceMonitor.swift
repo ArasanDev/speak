@@ -31,6 +31,10 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
     private var isListening = false
     private let lock = NSLock()
     private var callbacks: [UUID: @Sendable (DeviceInfo) -> Void] = [:]
+    /// Notified on ANY device plug/unplug — carries the full input roster,
+    /// not just the default. Used by UI that lists devices; capture rebuilds
+    /// must keep subscribing to `registerCallback` (default-only).
+    private var topologyCallbacks: [UUID: @Sendable ([DeviceInfo]) -> Void] = [:]
     /// The exact block passed to `AudioObjectAddPropertyListenerBlock`.
     /// `AudioObjectRemovePropertyListenerBlock` identifies the listener BY
     /// BLOCK IDENTITY — passing a fresh closure to it removes nothing, which
@@ -43,6 +47,18 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
         mScope: kAudioObjectPropertyScopeGlobal,
         mElement: kAudioObjectPropertyElementMain
     )
+
+    /// Fires on ANY device plug/unplug — including a mic that connects without
+    /// becoming the default. [fix: audit — topology listener]
+    private var deviceListAddress = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDevices,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+
+    /// The same block registered for the device-list property — removal by
+    /// identity covers both addresses.
+    private var deviceListBlock: AudioObjectPropertyListenerBlock?
 
     private init() {
         startMonitoring()
@@ -74,6 +90,25 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
         } else {
             SpeakLog.audio.error("CoreAudioDeviceMonitor: failed to add listener (\(status, privacy: .public)).")
         }
+
+        // Second listener: device topology — a USB mic plugging in does not
+        // always become the default input, and without this the app never
+        // notices it exists. Same removal-by-identity rules apply.
+        // [fix: audit — detect external mics]
+        let topoBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            self?.handleTopologyChange()
+        }
+        let topoStatus = AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &deviceListAddress,
+            queue,
+            topoBlock
+        )
+        if topoStatus == noErr {
+            deviceListBlock = topoBlock
+        } else {
+            SpeakLog.audio.error("CoreAudioDeviceMonitor: failed to add device-list listener (\(topoStatus, privacy: .public)).")
+        }
     }
 
     public func stopMonitoring() {
@@ -89,6 +124,16 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
         )
         listenerBlock = nil
         isListening = false
+
+        if let topoBlock = deviceListBlock {
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject),
+                &deviceListAddress,
+                queue,
+                topoBlock
+            )
+            deviceListBlock = nil
+        }
     }
 
     @discardableResult
@@ -103,7 +148,19 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
     public func unregisterCallback(_ id: UUID) {
         lock.lock()
         callbacks.removeValue(forKey: id)
+        topologyCallbacks.removeValue(forKey: id)
         lock.unlock()
+    }
+
+    /// Subscribe to device topology changes (plug/unplug of ANY device).
+    /// The callback receives the current input-capable device roster.
+    @discardableResult
+    public func registerTopologyCallback(_ callback: @escaping @Sendable ([DeviceInfo]) -> Void) -> UUID {
+        let id = UUID()
+        lock.lock()
+        topologyCallbacks[id] = callback
+        lock.unlock()
+        return id
     }
 
     public func currentDefaultInputDevice() -> DeviceInfo? {
@@ -141,6 +198,62 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
 
         for callback in notifyList {
             callback(info)
+        }
+    }
+
+    /// Enumerates every device that has at least one input channel.
+    /// Pure HAL query — safe to call from any thread.
+    public func listInputDevices() -> [DeviceInfo] {
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(
+            AudioObjectID(kAudioObjectSystemObject),
+            &deviceListAddress,
+            0,
+            nil,
+            &size
+        ) == noErr, size > 0 else { return [] }
+
+        let count = Int(size) / MemoryLayout<AudioDeviceID>.size
+        var ids = [AudioDeviceID](repeating: 0, count: count)
+        guard AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &deviceListAddress,
+            0,
+            nil,
+            &size,
+            &ids
+        ) == noErr else { return [] }
+
+        return ids.compactMap { id in
+            let channels = queryDeviceChannelCount(deviceID: id)
+            guard channels > 0 else { return nil }
+            return DeviceInfo(
+                id: id,
+                name: queryDeviceName(deviceID: id),
+                sampleRate: queryDeviceSampleRate(deviceID: id),
+                channelCount: channels
+            )
+        }
+    }
+
+    /// Device plug/unplug arrived. Log the current input roster so a newly
+    /// connected mic is visible in `make logs` even when it isn't the default,
+    /// and notify topology subscribers. Deliberately does NOT fan out to the
+    /// capture callbacks — only a *default* change needs a tap rebuild.
+    /// [decision: topology = observability + UI roster, not a rebuild trigger]
+    private func handleTopologyChange() {
+        let inputs = listInputDevices()
+        let names = inputs.map { "\($0.name) (\($0.channelCount)ch)" }.joined(separator: ", ")
+        SpeakLog.audio.info(
+            "CoreAudioDeviceMonitor: device topology changed — input devices now: \(names, privacy: .public)"
+        )
+
+        lock.lock()
+        let notifyList = Array(topologyCallbacks.values)
+        lock.unlock()
+
+        for callback in notifyList {
+            callback(inputs)
         }
     }
 
