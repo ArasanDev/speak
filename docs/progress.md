@@ -1229,3 +1229,67 @@ CaptureSessionTests 21/21 · RouteChange+ConfigChange+STT+Hotkey+EmptyTranscript
 flaky — xcodebuild test intermittently fails to launch SpeakTests, code 20;
 workaround: run the app binary with libXCTestBundleInject + -XCTest args).
 Live dictation on the new capture path: **[unverified — needs user]**.
+
+### Session (2026-09-13, cont.) — Settings UI unification + color reduction
+
+User: settings screen "looks weird / different completely" vs the home
+dashboard; reduce colors on both; align to one Apple-native language.
+
+Root cause: **three divergent Settings surfaces existed** — the dashboard
+gear's Mode B (`SettingsExperienceView`), the SwiftUI `Settings` scene's
+legacy 7-tab `SettingsView` (Cmd+,), and a `SettingsWindowController`
+NSWindow wrapper around the same `SettingsView`. Mode B also used its own
+chrome (busy breadcrumb bar, 208pt rail with truncating labels, orange
+accent, green status pills everywhere) while Home ran glassmorphism +
+purple-gradient hero + colored stat chips + fake trend pills.
+
+Changes:
+- **One surface.** Cmd+, now routes to `controller.showSettings()` → the
+  dashboard's Mode B, via `CommandGroup(replacing: .appSettings)` in
+  SpeakApp. Deleted `SettingsView` (918 lines), `SettingsWindowController`
+  (94), `PrivacyDataSettingsTab` (orphaned, superseded by
+  PrivacyHealthSettingsView), and the dead `ensureSettingsController()`
+  plumbing. Debug launch `--debug-open settings` now calls
+  `controller.showSettings()` instead of hosting a one-off window.
+- **SettingsExperienceView**: gained `.embedded`/`.standalone`
+  presentations; detail canvas is now a radius-24 `speakCardCanvas` card
+  floating on `speakWindowCanvas` — identical chrome to the Mode A desk
+  pane. Rail widened 208→224pt, background switched to the window canvas
+  (was a divergent `speakSidebarBg` wash), selected-row icon no longer
+  uses `speakAccent`.
+- **Shorter rail titles** ("General", "Hotkeys", "AI Models", …) — the
+  long labels visibly truncated at 208pt.
+- **`SettingsStatusPill` default tint → neutral**; semantic tints stay
+  only where state demands (`speakDelivered` = granted/delivered,
+  `.orange` = missing/needs action). Decorative `speakAccent` "Switched"
+  pill removed.
+- **HomePaneView de-colorized**: glass cards → flat `speakSurface` +
+  `speakCardBorder` (same primitive as `SettingsSectionCard`); hero CTA
+  is now monochrome `speakBone`/`speakInk` (adaptive inverse, high
+  contrast in both modes) instead of a blue→purple gradient; dropped the
+  glow, hover scale, mic pulse, fake "+12%"/"+2"/"Active" trend pills,
+  always-on shimmer flow borders, and colored icon chips. Only remaining
+  color: permission shield (green/red — semantic) and the on-air flow
+  border while recording (spec §2).
+- `WindowPresenter.makeDashboardContext()` extracted so the Settings
+  scene and desk share one wiring; `showDashboardSection(_:)` added for
+  "Open MCP & Agents"-style links.
+- `AppDelegate` is now `ObservableObject` with `@Published controller` —
+  the Settings scene's content is evaluated before
+  `applicationDidFinishLaunching` assigns it.
+
+Known issue found while verifying (pre-existing, not fixed here): the
+SwiftUI `Settings` scene creates its window eagerly at launch and, with
+empty content, produced a degenerate 0×0 window that autosave restores.
+Routing Cmd+, to Mode B removes the surface entirely rather than
+patching scene lifecycle.
+
+**Verification:** build clean · lint 0 serious (401 warnings, ~baseline)
+· moat PASS · AppShellIntegrationTests 10/10 via injected xctest.
+Screenshots verified: Mode B inside dashboard renders the new card+rail;
+Home renders the monochrome CTA + flat cards. Full-suite xctest run
+blocked by a pre-existing deadlock in
+`AudioCaptureConfigChangeTests.testConfigurationChangeMidCaptureSurvivesWithoutCrashing`
+(semaphore wait on com.speak.audiocapture.state — unrelated to UI).
+Cmd+, → Mode B path is code-verified but live-keypress **[unverified —
+synthetic input was flaky in this session]**.

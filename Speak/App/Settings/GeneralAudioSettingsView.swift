@@ -219,7 +219,7 @@ private struct MicrophoneCard: View {
                     description: deviceDescription(dev)
                 ) {
                     if routeFlash {
-                        SettingsStatusPill(text: "Switched", tint: .speakAccent)
+                        SettingsStatusPill(text: "Switched")
                             .transition(.opacity)
                     } else {
                         SettingsStatusPill(text: "Active")
@@ -281,7 +281,7 @@ private struct MicrophoneCard: View {
                 description: "Required for on-device voice dictation. Audio never leaves your Mac."
             ) {
                 if micStatus == .granted {
-                    SettingsStatusPill(text: "Granted")
+                    SettingsStatusPill(text: "Granted", tint: .speakDelivered)
                 } else {
                     HStack(spacing: SpeakSpacing.sm) {
                         SettingsStatusPill(text: "Missing", tint: .orange)

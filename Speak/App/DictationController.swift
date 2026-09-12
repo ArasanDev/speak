@@ -816,6 +816,19 @@ final class DictationController: CLICommandHandler {
         ensureWindowPresenter().showSettings()
     }
 
+    /// A `DashboardContext` for the standalone Settings surface (the SwiftUI
+    /// `Settings` scene behind Cmd+,). Both settings entry points render the
+    /// same `SettingsExperienceView`, so the context wiring is shared.
+    func makeSettingsContext() -> DashboardContext {
+        ensureWindowPresenter().makeSettingsContext()
+    }
+
+    /// Open the dashboard at a specific desk section — used by standalone
+    /// Settings links that hand off to a desk pane (e.g. "Open MCP & Agents").
+    func showDashboardSection(_ section: DashboardSection) {
+        ensureWindowPresenter().showDashboardSection(section)
+    }
+
     /// Re-arms the hotkey tap, checks and registers permissions, cancels any stuck sessions,
     /// and prewarms speech recognition to restore full app health.
     func selfHeal() {

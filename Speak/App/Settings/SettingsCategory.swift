@@ -27,13 +27,13 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .generalAudio: return "General & Audio"
-        case .hotkeys:      return "Hotkeys & Activation"
-        case .aiModels:     return "AI Models & Neat-Writing"
-        case .vocabulary:   return "Vocabulary & Jargon"
-        case .agentBridge:  return "Agent Bridge & MCP"
-        case .appearance:   return "Appearance & HUD"
-        case .privacy:      return "Privacy & System Health"
+        case .generalAudio: return "General"
+        case .hotkeys:      return "Hotkeys"
+        case .aiModels:     return "AI Models"
+        case .vocabulary:   return "Vocabulary"
+        case .agentBridge:  return "Agent Bridge"
+        case .appearance:   return "Appearance"
+        case .privacy:      return "Privacy"
         case .about:        return "About"
         }
     }

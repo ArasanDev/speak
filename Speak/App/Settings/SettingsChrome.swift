@@ -115,7 +115,7 @@ struct SettingsRowSeparator: View {
 /// the MCP pane uses for capability status.
 struct SettingsStatusPill: View {
     let text: String
-    var tint: Color = .speakDelivered
+    var tint: Color = .secondary
 
     var body: some View {
         Text(text.uppercased())
