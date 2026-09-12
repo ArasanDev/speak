@@ -7,36 +7,33 @@
 // 3. Today's Quick Stats (words, sessions, engine badge)
 // 4. Recent Dictations (last 5 entries with time, raw/cleaned preview, engine)
 //
-// Redesigned for a modern glassmorphism aesthetic.
+// Card language: flat `speakSurface` + `speakCardBorder` hairline — the same
+// primitive as SettingsSectionCard, so Home and Settings read as one system.
+// [decision: retired the glassmorphism/gradient treatment — restrained Apple
+//  chrome; color is reserved for semantics (permissions, on-air, delivered).]
 
 import Foundation
 import os
 import SpeakCore
 import SwiftUI
 
-// MARK: - Glassmorphism Modifier
+// MARK: - Flat Card Modifier
 
-private struct GlassCardModifier: ViewModifier {
+private struct HomeCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .background(.ultraThinMaterial)
-            .background(Color.white.opacity(0.03))
+            .background(Color.speakSurface)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(LinearGradient(
-                        colors: [.white.opacity(0.4), .white.opacity(0.1)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ), lineWidth: 1)
+                    .stroke(Color.speakCardBorder, lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.15), radius: 15, x: 0, y: 8)
     }
 }
 
 extension View {
-    fileprivate func glassCard() -> some View {
-        self.modifier(GlassCardModifier())
+    fileprivate func homeCard() -> some View {
+        self.modifier(HomeCardModifier())
     }
 }
 
@@ -51,7 +48,6 @@ struct HomePaneView: View {
     @State private var accPermissionStatus: PermissionState = .notDetermined
     
     @State private var isCTAHovered = false
-    @State private var isPulseAnimating = false
     /// Tracks whether dictation is actively recording — drives the On-Air flow border.
     @State private var isRecording = false
 
@@ -139,78 +135,50 @@ struct HomePaneView: View {
             }
         }
         .padding(16)
-        .glassCard()
+        .homeCard()
     }
 
     // MARK: - Hero Dictation CTA
 
+    /// High-contrast monochrome CTA — `speakBone` fill / `speakInk` content
+    /// inverts with the mode, so it reads as the primary action in both light
+    /// and dark. The only color is the on-air flow border while recording
+    /// (spec §2: `speakOnAir` may only appear while the mic is capturing).
     private var startDictationHero: some View {
         Button(action: { startDictation() }) {
-            ZStack {
-                // Background Gradient
-                LinearGradient(
-                    colors: [Color.blue.opacity(0.8), Color.purple.opacity(0.8)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                
-                // Glow effect when hovered
-                if isCTAHovered {
-                    LinearGradient(
-                        colors: [Color.blue, Color.purple],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .blur(radius: 20)
-                    .opacity(0.6)
+            HStack(spacing: 16) {
+                Image(systemName: isRecording ? "stop.fill" : "mic.fill")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(Color.speakInk)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isRecording ? "Stop Dictation" : "Start Dictation")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(Color.speakInk)
+                    Text(isRecording ? "Recording..." : "Double-tap your hotkey")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.speakInk.opacity(0.7))
                 }
 
-                HStack(spacing: 16) {
-                    Image(systemName: isRecording ? "stop.fill" : "mic.fill")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(.white)
-                        .scaleEffect(isPulseAnimating ? 1.05 : 1.0)
-                        .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulseAnimating)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(isRecording ? "Stop Dictation" : "Start Dictation")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(.white)
-                        Text(isRecording ? "Recording..." : "Powered by AI")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.8))
-                    }
-                    
-                    Spacer()
-                    
-                    // Hotkey Pill
-                    HStack(spacing: 4) {
-                        ForEach(context.hotkeyCombo, id: \.self) { key in
-                            Text(key)
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.black.opacity(0.3))
-                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        }
+                Spacer()
+
+                // Hotkey keycaps
+                HStack(spacing: 4) {
+                    ForEach(context.hotkeyCombo, id: \.self) { key in
+                        Text(key)
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.speakInk)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.speakInk.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 20)
-                .background(
-                    LinearGradient(
-                        colors: [Color.blue, Color.purple],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Color.white.opacity(0.4), lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
+            .background(Color.speakBone)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
         .buttonStyle(.plain)
         .flowBorder(
@@ -219,14 +187,11 @@ struct HomePaneView: View {
             isActive: isRecording
         )
         .onHover { hovering in
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            withAnimation(.easeInOut(duration: 0.15)) {
                 isCTAHovered = hovering
             }
         }
-        .scaleEffect(isCTAHovered ? 1.02 : 1.0)
-        .onAppear {
-            isPulseAnimating = true
-        }
+        .opacity(isCTAHovered ? 0.9 : 1.0)
     }
 
     private func startDictation() {
@@ -271,53 +236,35 @@ struct HomePaneView: View {
                 statCard(
                     title: "Words Dictated",
                     value: "\(stats.totalWords)",
-                    icon: "text.word.spacing",
-                    color: .blue,
-                    trend: "+12%"
+                    icon: "text.word.spacing"
                 )
-                
+
                 statCard(
                     title: "Sessions Today",
                     value: "\(todayEntries.count)",
-                    icon: "waveform",
-                    color: .purple,
-                    trend: "+2"
+                    icon: "waveform"
                 )
-                
+
                 if context.settingsStore.cleanupEnabled {
                     statCard(
                         title: "AI Cleanups",
                         value: "\(todayEntries.compactMap { $0.cleanedText }.count)",
-                        icon: "wand.and.stars",
-                        color: .orange,
-                        trend: "Active"
+                        icon: "wand.and.stars"
                     )
                 }
             }
         }
     }
 
-    private func statCard(title: String, value: String, icon: String, color: Color, trend: String) -> some View {
+    private func statCard(title: String, value: String, icon: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                ZStack {
-                    Circle()
-                        .fill(color.opacity(0.2))
-                        .frame(width: 28, height: 28)
-                    Image(systemName: icon)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(color)
-                }
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
                 Spacer()
-                Text(trend)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color.green)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.green.opacity(0.2))
-                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             }
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(value)
                     .font(.system(size: 28, weight: .bold, design: .rounded))
@@ -329,14 +276,7 @@ struct HomePaneView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassCard()
-        .flowBorder(
-            colors: Color.speakFlowGlass,
-            lineWidth: 1,
-            cornerRadius: 16,
-            speed: 0.5,
-            isActive: true
-        )
+        .homeCard()
     }
 
     // MARK: - Recent Dictations (last 5)
@@ -351,11 +291,7 @@ struct HomePaneView: View {
                 Button(action: { /* View all */ }) {
                     Text("View All")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.blue)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Color.blue.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -387,7 +323,7 @@ struct HomePaneView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
-        .glassCard()
+        .homeCard()
     }
 
     // MARK: - Data loading
@@ -443,7 +379,7 @@ private struct RecentEntryRow: View {
                     HStack(spacing: 4) {
                         Image(systemName: "wand.and.stars")
                             .font(.system(size: 10))
-                            .foregroundStyle(.purple)
+                            .foregroundStyle(.secondary)
                         Text(truncatePreview(cleaned, maxChars: 50))
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.secondary)

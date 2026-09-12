@@ -219,29 +219,12 @@ final class DebugLaunchDispatcher {
     // MARK: - Settings target
 
     private func openSettings(controller: DictationController) {
-        // SwiftUI's `SettingsLink` action can only be triggered inside a menu;
-        // from `applicationDidFinishLaunching` it is not callable directly.
-        // Fall back to a manually constructed NSWindow hosting SettingsView —
-        // same view, same data, reliable from any launch context.
-        // [decision: NSWindow + NSHostingView mirrors OnboardingWindowController
-        //  and HistoryWindowController; avoids relying on NSApp.sendAction
-        //  Selector("showSettingsWindow:") which is runtime-fragile on macOS 26]
-        let view = SettingsView(controller: controller)
-        let hosting = NSHostingView(rootView: view)
-        let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 400),
-            styleMask: [.titled, .closable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        win.title = "speak — Settings"
-        win.contentView = hosting
-        win.isReleasedWhenClosed = false
-        win.center()
-        win.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        keepAlive(win)
-        log.info("DebugLaunchDispatcher: Settings window opened.")
+        // Route to the canonical Settings surface — the dashboard's Mode B —
+        // instead of hosting the legacy tabbed SettingsView in a one-off window.
+        // [decision: one Settings surface everywhere; debug launches must show
+        //  the real UI, not a second implementation.]
+        controller.showSettings()
+        log.info("DebugLaunchDispatcher: Settings (dashboard Mode B) opened.")
     }
 
     // MARK: - History target

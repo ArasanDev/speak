@@ -47,7 +47,6 @@ final class WindowPresenter {
     private var historyController: HistoryWindowController?
     private var onboardingController: OnboardingWindowController?
     private var dashboardController: DashboardWindowController?
-    private var settingsController: SettingsWindowController?
 
     /// Supplies the live hotkey combo (e.g. ["Fn", "Fn"]) for the dashboard at show
     /// time. Injected by `DictationController`, which owns the `HotkeyMonitor`. Read
@@ -104,18 +103,18 @@ final class WindowPresenter {
 
     // MARK: - Dashboard window
 
-    /// Lazily create and show the full-window dashboard (Phase-2 UI spine).
-    /// Returns the controller — exposed as `internal` for testability.
-    @discardableResult
-    func ensureDashboardController() -> DashboardWindowController {
-        if let existing = dashboardController {
-            return existing
-        }
+    /// Assemble a `DashboardContext` bound to the live stores, engine, and
+    /// controller closures. Shared by `ensureDashboardController()` (the desk
+    /// window) and the standalone `Settings` scene (Cmd+,), which hosts the
+    /// same `SettingsExperienceView` so every entry point renders one surface.
+    /// [decision: extracted so the SwiftUI Settings scene reuses the identical
+    ///  wiring instead of a second, divergent Settings implementation.]
+    func makeDashboardContext() -> DashboardContext {
         // P11-c: Pass speakEngine + permissionManager from the controller so the
         // dashboard Home pane can access live engine state and show hotkey status.
         // Also pass the dictation completion publisher so the dashboard can refresh
         // recent dictations after a new entry is saved.
-        let context = DashboardContext(
+        DashboardContext(
             settingsStore: settingsStore,
             historyStore: historyStore,
             hotkeyCombo: hotkeyComboProvider(),
@@ -155,7 +154,16 @@ final class WindowPresenter {
                 self?.dictationController?.icon == .listening
             }
         )
-        let controller = DashboardWindowController(context: context)
+    }
+
+    /// Lazily create and show the full-window dashboard (Phase-2 UI spine).
+    /// Returns the controller — exposed as `internal` for testability.
+    @discardableResult
+    func ensureDashboardController() -> DashboardWindowController {
+        if let existing = dashboardController {
+            return existing
+        }
+        let controller = DashboardWindowController(context: makeDashboardContext())
         dashboardController = controller
         return controller
     }
@@ -259,20 +267,7 @@ final class WindowPresenter {
         onboardingController?.show()
     }
 
-    // MARK: - Settings window
-
-    /// Lazily create and show the Settings window.
-    /// Returns the controller — exposed as `internal` for testability.
-    @discardableResult
-    func ensureSettingsController() -> SettingsWindowController? {
-        if let existing = settingsController {
-            return existing
-        }
-        guard let controller = dictationController else { return nil }
-        let settingsController = SettingsWindowController(controller: controller)
-        self.settingsController = settingsController
-        return settingsController
-    }
+    // MARK: - Settings
 
     /// Show the Settings pane inside the Dashboard (the single configuration surface).
     /// Routes to .settings initial section so the user lands directly on preferences.
@@ -286,5 +281,26 @@ final class WindowPresenter {
             activeExtraBindings: dictationController?.activeExtraBindings
         )
         controller.show(initialSection: .settings)
+    }
+
+    /// A fresh `DashboardContext` for the standalone Settings surface (the
+    /// SwiftUI `Settings` scene, Cmd+,). Same wiring as the desk window so both
+    /// entry points render identical controls.
+    func makeSettingsContext() -> DashboardContext {
+        makeDashboardContext()
+    }
+
+    /// Open the dashboard at a specific desk section — used by standalone
+    /// Settings "Open MCP & Agents"-style links, which hand off to the desk.
+    func showDashboardSection(_ section: DashboardSection) {
+        let controller = ensureDashboardController()
+        controller.updateContext(
+            hotkeyCombo: hotkeyComboProvider(),
+            speakEngine: dictationController?.engine,
+            permissionManager: permissionManager,
+            dictationCompletedPublisher: dictationController?.dictationCompletedPublisher,
+            activeExtraBindings: dictationController?.activeExtraBindings
+        )
+        controller.show(initialSection: section)
     }
 }

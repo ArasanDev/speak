@@ -138,7 +138,7 @@ struct HotkeysSettingsView: View {
                 description: "Required for the global hotkey tap (CGEventTap). macOS gates it in Privacy & Security."
             ) {
                 if context.permissionManager?.status(.accessibility) == .granted {
-                    SettingsStatusPill(text: "Granted")
+                    SettingsStatusPill(text: "Granted", tint: .speakDelivered)
                 } else {
                     SettingsStatusPill(text: "Missing", tint: .orange)
                 }

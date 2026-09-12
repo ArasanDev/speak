@@ -29,11 +29,14 @@ import SwiftUI
 // MARK: - AppDelegate
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     /// Owned here for its lifetime. Passed to SwiftUI via the App's body.
     /// Optional because we may terminate early in the single-instance guard.
-    var controller: DictationController?
+    /// @Published so the Settings scene re-evaluates once the controller is
+    /// assigned in applicationDidFinishLaunching — the scene's body can be
+    /// built before that assignment and would otherwise stay empty forever.
+    @Published var controller: DictationController?
 
     /// The NSStatusItem controller, retained for the app lifetime.
     private var statusBarController: StatusBarController?
@@ -128,6 +131,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 #endif
 }
 
+// MARK: - SettingsSceneHost
+
+/// Observes `AppDelegate.controller` so the Settings window renders the shared
+/// `SettingsExperienceView` once the controller exists. Without observation the
+/// scene captured a nil controller at launch and stayed blank forever.
+private struct SettingsSceneHost: View {
+    @ObservedObject var appDelegate: AppDelegate
+
+    var body: some View {
+        if let ctrl = appDelegate.controller {
+            SettingsExperienceView(
+                context: ctrl.makeSettingsContext(),
+                presentation: .standalone,
+                onOpenSection: { section in ctrl.showDashboardSection(section) }
+            )
+        }
+    }
+}
+
 // MARK: - SpeakApp
 
 @main
@@ -141,9 +163,26 @@ struct SpeakApp: App {
         //  Nothing in the app ever called openWindow(id: "appshell"); the only thing that
         //  could resurrect it was macOS's automatic window-state restoration reopening a
         //  stale saved window with no content wired up, producing a blank "speak" window.]
+        // [decision: one Settings surface, one window — Cmd+, routes to the
+        //  dashboard's Mode B via `controller.showSettings()`, same as the
+        //  gear icon and menubar item. The SwiftUI `Settings` scene hosts
+        //  EmptyView and never opens: its default "Settings…" appSettings
+        //  command is replaced by ours. The scene is kept because a
+        //  CommandGroup must hang off *some* scene to reach the app menu.
+        //  Rationale: the Settings scene creates its window eagerly at launch,
+        //  before `controller` exists — producing a degenerate 0×0 window that
+        //  autosave then restores forever. Routing to Mode B removes that
+        //  whole class of bug plus the second, divergent Settings surface.]
         Settings {
-            if let ctrl = appDelegate.controller {
-                SettingsView(controller: ctrl)
+            SettingsSceneHost(appDelegate: appDelegate)
+                .frame(minWidth: 760, idealWidth: 940, minHeight: 480, idealHeight: 620)
+        }
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") {
+                    appDelegate.controller?.showSettings()
+                }
+                .keyboardShortcut(",")
             }
         }
     }
