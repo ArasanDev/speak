@@ -1039,3 +1039,48 @@ below the 412 baseline) · `verify-moat` 7/7 · new `PerfRegressionTests` 9/9
 suite 973 run / 10 skip / 1 failure — same pre-existing live-FM
 `testEndToEndDictationWithRealComponents` (`[speak-stt]` prefix vs cleaned
 text; verified failing on clean HEAD).
+
+### 2026-09-12 — Audit: route/device handling + in-app mic picker
+
+**Device matrix closed (user-requested "Apple-standard" pass):**
+- `AudioCapture.start()`: full reset → pin → format → tap → observe → start
+  sequence now runs inside `stateQueue.sync` — a queued route-change rebuild
+  can no longer interleave mid-setup and removeTap under a half-built graph.
+- Rebuild bursts coalesced (`requestRebuildLocked` drain loop): one physical
+  event fires BOTH `.AVAudioEngineConfigurationChange` and the HAL
+  default-input callback — previously each ran a full removeTap/stop/reset/
+  sleep/start cycle (~300ms+ of dropped audio per plug).
+- Mid-dictation route cue: `.routeChanged` `DictationFeedback` event ("Morse"
+  tick + haptic) wired through `DictationController` on BOTH HAL channels,
+  comparing the *effective* device (`resolvedInputDevice`) — fires when the
+  mic actually feeding you changes, not merely when the OS default does.
+
+**In-app mic picker (pinned-device selection):**
+- `DeviceInfo` gains `uid` (`kAudioDevicePropertyDeviceUID` — stable across
+  reboots, unlike `AudioDeviceID`).
+- `CoreAudioDeviceMonitor.resolvedInputDevice(preferredUID:)` — single source
+  of truth: preferred-if-present else system default. Used by capture pinning
+  AND the route cue so they can't disagree.
+- `AudioCapture.preferredInputDeviceUID` — pins the input unit via
+  `kAudioOutputUnitProperty_CurrentDevice` before format read (start) and on
+  every rebuild (skipped when already pinned — no HAL churn under storms).
+  Live-settable: changing the pin mid-dictation re-resolves and rebuilds only
+  when the effective device differs. A `topologyToken` listener re-resolves on
+  any plug/unplug so a pinned mic reconnecting mid-dictation switches back.
+- `SpeakEngine.setPreferredInputDeviceUID` (`nonisolated`) forwards to the
+  transcriber's `AudioCapture` via `AudioCaptureProviding`; applied at
+  `beginDictation` from `settings` and observed live by `DictationController`.
+- `SettingsStore.preferredInputDeviceUID/Name` (own file — main file is at
+  the 1000-line lint cap).
+- Settings → Microphone "Input Source" picker: System Default + every detected
+  input, checkmarked selection, "Active" pill, pinned-but-missing warning.
+
+**Bug found by tests:** `stateQueue.async` blocks strongly captured the
+`guard let self` unwrapped ref → last release could land ON stateQueue →
+`deinit → stop() → stateQueue.sync` → `DISPATCH_WAIT_FOR_QUEUE` SIGTRAP
+(killed the test host 3/3 runs). All enqueued blocks now weak-capture self.
+
+**Verification:** build clean · lint 0 serious · moat 7/7 ·
+`RouteChangeHandlingTests` 6/6 + `AudioCaptureConfigChangeTests` 2/2 +
+`SessionLifecycleRegressionTests` 5/5 + `SettingsStoreRoundTripTests` 16/16 —
+29 green, zero unexpected exits.

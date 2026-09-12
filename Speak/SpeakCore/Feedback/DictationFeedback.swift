@@ -27,6 +27,12 @@ public enum DictationFeedbackEvent: Sendable {
     case engaged
     /// Dictation released — session left `.listening` (stop/processing/error).
     case released
+    /// Input device switched mid-dictation (system default input changed while
+    /// `.listening` — e.g. a USB headset grabbed the default, or the active mic
+    /// was unplugged and macOS fell back). A distinct neutral tick so the user
+    /// knows the mic source changed under them — the standard "you can feel it"
+    /// route-change cue.
+    case routeChanged
 }
 
 // MARK: - DictationFeedback
@@ -59,6 +65,7 @@ public enum DictationFeedback {
         switch event {
         case .engaged: return NSSound(named: NSSound.Name("Tink"))
         case .released: return NSSound(named: NSSound.Name("Pop"))
+        case .routeChanged: return NSSound(named: NSSound.Name("Morse"))
         }
     }
 }

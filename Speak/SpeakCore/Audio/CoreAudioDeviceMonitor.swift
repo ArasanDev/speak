@@ -15,12 +15,17 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
 
     public struct DeviceInfo: Equatable, Sendable {
         public let id: AudioDeviceID
+        /// Stable hardware UID (`kAudioDevicePropertyDeviceUID`) — survives
+        /// reboots and re-enumeration, unlike `id` (which is per-boot). This
+        /// is what `SettingsStore.preferredInputDeviceUID` persists.
+        public let uid: String
         public let name: String
         public let sampleRate: Double
         public let channelCount: Int
 
-        public init(id: AudioDeviceID, name: String, sampleRate: Double, channelCount: Int) {
+        public init(id: AudioDeviceID, uid: String = "", name: String, sampleRate: Double, channelCount: Int) {
             self.id = id
+            self.uid = uid
             self.name = name
             self.sampleRate = sampleRate
             self.channelCount = channelCount
@@ -183,7 +188,29 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
         let rate = queryDeviceSampleRate(deviceID: deviceID)
         let channels = queryDeviceChannelCount(deviceID: deviceID)
 
-        return DeviceInfo(id: deviceID, name: name, sampleRate: rate, channelCount: channels)
+        return DeviceInfo(
+            id: deviceID,
+            uid: queryDeviceUID(deviceID: deviceID),
+            name: name,
+            sampleRate: rate,
+            channelCount: channels
+        )
+    }
+
+    /// Resolves which device capture should actually use: the persisted
+    /// preference when its hardware is still connected, else the system
+    /// default. Single source of truth — `AudioCapture`'s pin logic and the
+    /// app's route-change cue both consult this so they can never disagree
+    /// about what "the current mic" is. [decision: pinned-device resolution]
+    ///
+    /// - Parameter preferredUID: `SettingsStore.preferredInputDeviceUID`;
+    ///   `nil`/empty/missing → system default.
+    public func resolvedInputDevice(preferredUID: String?) -> DeviceInfo? {
+        if let uid = preferredUID, !uid.isEmpty,
+           let preferred = listInputDevices().first(where: { $0.uid == uid }) {
+            return preferred
+        }
+        return currentDefaultInputDevice()
     }
 
     private func handleDeviceChange() {
@@ -229,6 +256,7 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
             guard channels > 0 else { return nil }
             return DeviceInfo(
                 id: id,
+                uid: queryDeviceUID(deviceID: id),
                 name: queryDeviceName(deviceID: id),
                 sampleRate: queryDeviceSampleRate(deviceID: id),
                 channelCount: channels
@@ -255,6 +283,24 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
         for callback in notifyList {
             callback(inputs)
         }
+    }
+
+    /// Stable hardware UID for `deviceID` (e.g. "AppleUSBAudioEngine:...").
+    /// Returns "" when the property is absent — callers treat "" as
+    /// "not persistable", never as a matchable value.
+    private func queryDeviceUID(deviceID: AudioDeviceID) -> String {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceUID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var uid: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &uid)
+        if status == noErr, let uid = uid {
+            return uid.takeRetainedValue() as String
+        }
+        return ""
     }
 
     private func queryDeviceName(deviceID: AudioDeviceID) -> String {
