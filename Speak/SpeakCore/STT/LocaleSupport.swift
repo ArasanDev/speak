@@ -1,92 +1,158 @@
 // SpeakCore/STT/LocaleSupport.swift
 //
 // Exposes the real SpeechAnalyzer locale surface to SpeakCore consumers
-// (primarily the TranscriptionSettingsTab in the UI layer).
+// (the Language card in Settings).
 //
 // API VERIFICATION — all symbols [verified] from arm64e-apple-macos.swiftinterface
-// inside the macOS 26 SDK (Xcode.app/…/Speech.swiftmodule), 2026-06-22:
+// inside the macOS 26 SDK (Xcode.app/…/Speech.swiftmodule), 2026-06-22 /
+// re-confirmed 2026-07-06:
 //
-//   • SpeechTranscriber.supportedLocales: [Locale] { get async }
-//     — All locales the on-device SpeechAnalyzer can recognize (model may need download).
-//   • SpeechTranscriber.installedLocales: [Locale] { get async }
-//     — Subset of supportedLocales whose model asset is already on disk (ready to use).
+//   • DictationTranscriber.supportedLocales: [Locale] { get async }
+//     — All locales the dictation engine can recognize (model may need download).
+//   • DictationTranscriber.installedLocales: [Locale] { get async }
+//     — Subset whose model asset is already on disk (ready to use).
+//   • DictationTranscriber.supportedLocale(equivalentTo:) async -> Locale?
+//     — SDK-side canonical matcher; resolves identifier-shape differences such
+//       as a persisted "en_IN" against the SDK's canonical "en-IN".
 //
-// DESIGN:
-//   This struct is a pure async fetch helper — no state, no caching.
-//   The UI layer decides how to cache (via @State + .task{}).
-//   Not added to the `Transcribing` protocol because:
-//     (a) The protocol is availability-unguarded; adding a static async requirement
-//         forces every future engine to implement locale introspection, which is
-//         engine-specific, not protocol-shaped.
-//     (b) SpeakCore exposing this as a standalone type keeps the seam minimal.
+// ENGINE MATCH [fix: settings queried the wrong model family]:
+//   The capture path instantiates `DictationTranscriber`
+//   (AppleSpeechTranscriber.swift, .progressiveLongDictation), NOT
+//   `SpeechTranscriber`. The two have different asset families and different
+//   locale lists, so this source queries DictationTranscriber — the list must
+//   describe the engine that will actually transcribe.
 //
-// ASSET-AVAILABILITY:
-//   `supportedLocales` includes locales whose model is available for download
-//   but not yet installed. `installedLocales` is the ready-to-use subset.
-//   The UI surfaces which locales need download via `needsDownload(locale:)`.
-//   Whether SpeechAnalyzer will auto-trigger a download at session start for a
-//   supported-but-not-installed locale is `[unverified — live]`: the existing
-//   `provisionAsset` path in AppleSpeechTranscriber handles this at transcription
-//   time regardless, so the UI label is informational, not a gate.
+// NON-BLOCKING CONTRACT [fix: settings hang]:
+//   The SDK getters await a reply from the speech-assets daemon with no
+//   timeout; a wedged or slow daemon leaves the await suspended forever.
+//   `fetchLists` therefore races the real fetch against a deadline (the
+//   resumeOnce pattern from CaptureSession+Cleanup). Callers must treat nil
+//   as "unknown", NOT as "empty" — the user's stored language is never
+//   authoritative-reset based on this list.
+//
+// IDENTIFIER NORMALIZATION:
+//   UserDefaults may persist "en_IN" while the SDK returns "en-IN".
+//   Raw `identifier` equality is therefore unsafe; all matching here goes
+//   through `normalizedIdentifier` (underscore → hyphen) or the SDK's own
+//   `supportedLocale(equivalentTo:)`.
 
 import Foundation
 import os
 import Speech
 
-// MARK: - SpeechTranscriberLocaleSource
+// MARK: - DictationTranscriberLocaleSource
 
-/// Queries `SpeechTranscriber` for its supported and installed locales.
+/// Queries `DictationTranscriber` for its supported and installed locales.
 ///
 /// Usage (in SwiftUI):
 /// ```swift
-/// @State private var locales: [Locale] = []
 /// .task {
-///     locales = await SpeechTranscriberLocaleSource.supportedLocales()
+///     if let lists = await DictationTranscriberLocaleSource.fetchLists() {
+///         supported = lists.supported
+///         installed = Set(lists.installed.map(DictationTranscriberLocaleSource.normalizedIdentifier))
+///     }
 /// }
 /// ```
 @available(macOS 26.0, *)
-public enum SpeechTranscriberLocaleSource {
+public enum DictationTranscriberLocaleSource {
+
+    /// How long `fetchLists` waits for the speech-assets daemon before
+    /// reporting the list as unavailable. Generous because a cold daemon can
+    /// take seconds; bounded so the UI can never spin forever.
+    /// [decision: 8 s — observed healthy fetches complete well under this;
+    ///  a longer wait is indistinguishable from a hang to the user.]
+    public static let fetchTimeoutNanoseconds: UInt64 = 8_000_000_000
+
+    public struct LocaleLists: Sendable {
+        public let supported: [Locale]
+        public let installed: [Locale]
+    }
 
     // MARK: - Public API
 
-    /// All locales the SpeechAnalyzer engine supports.
-    ///
-    /// Includes both installed locales (model on disk) and locales that can be
-    /// downloaded. Sorted by human-readable display name in the current locale.
-    ///
-    /// [verified: SpeechTranscriber.supportedLocales from arm64e-apple-macos.swiftinterface, 2026-06-22]
+    /// All locales the DictationTranscriber engine supports — installed plus
+    /// downloadable. Sorted by display name in the current locale.
+    /// Can suspend indefinitely if the speech-assets daemon doesn't reply;
+    /// prefer `fetchLists` from UI code.
     public static func supportedLocales() async -> [Locale] {
-        let locales = await SpeechTranscriber.supportedLocales   // [verified]
-        return sorted(locales)
+        sorted(await DictationTranscriber.supportedLocales)   // [verified]
     }
 
     /// Subset of `supportedLocales()` whose speech model is already installed.
-    ///
-    /// These locales can be used immediately without a download step.
-    ///
-    /// [verified: SpeechTranscriber.installedLocales from arm64e-apple-macos.swiftinterface, 2026-06-22]
+    /// Same suspension caveat as `supportedLocales()`.
     public static func installedLocales() async -> [Locale] {
-        let locales = await SpeechTranscriber.installedLocales   // [verified]
-        return sorted(locales)
+        sorted(await DictationTranscriber.installedLocales)   // [verified]
     }
 
-    /// Returns `true` when `locale` is in `supportedLocales` but not in `installedLocales`.
+    /// SDK-canonical equivalent for `locale`, or nil when the dictation
+    /// engine supports nothing equivalent. Use this to canonicalize a
+    /// persisted identifier ("en_IN" → "en-IN") without guessing.
+    /// [verified: DictationTranscriber.supportedLocale(equivalentTo:)
+    ///  from arm64e-apple-macos.swiftinterface, 2026-07-06]
+    public static func supportedLocale(equivalentTo locale: Locale) async -> Locale? {
+        await DictationTranscriber.supportedLocale(equivalentTo: locale)
+    }
+
+    /// Bounded fetch of both lists. Returns nil on timeout — the caller must
+    /// treat nil as "unknown" and keep the user's stored selection usable.
     ///
-    /// [unverified — live]: whether SpeechAnalyzer auto-installs at session start is
-    /// not directly tested here; `AppleSpeechTranscriber.provisionAsset` handles the
-    /// actual download at transcription time.
+    /// The SDK await cannot be cancelled cooperatively, so the fetch task is
+    /// abandoned (not killed) on timeout — same trade-off as the cleanup
+    /// timeout in CaptureSession+Cleanup: one suspended task, zero UI block.
+    public static func fetchLists(
+        timeoutNanoseconds: UInt64 = fetchTimeoutNanoseconds
+    ) async -> LocaleLists? {
+        await withCheckedContinuation { continuation in
+            // resumeOnce: fetch and timeout race to resume; only the first wins.
+            let resumeOnce = OSAllocatedUnfairLock<Bool>(initialState: false)
+
+            let fetch = Task {
+                async let s = supportedLocales()
+                async let i = installedLocales()
+                let lists = LocaleLists(supported: await s, installed: await i)
+                resumeOnce.withLock { done in
+                    guard !done else { return }
+                    done = true
+                    continuation.resume(returning: lists)
+                }
+            }
+
+            Task {
+                try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+                resumeOnce.withLock { done in
+                    guard !done else { return }
+                    done = true
+                    fetch.cancel()   // best-effort — the SDK await may ignore it
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
+
+    /// Returns `true` when `locale` is supported but its model is not yet
+    /// installed. Compares normalized identifiers so "en_IN" and "en-IN"
+    /// match instead of producing a false "needs download".
     public static func needsDownload(locale: Locale, installedLocales: [Locale]) -> Bool {
-        // [STT-L2] Comparing `.identifier` strings assumes callers provide normalised
-        // BCP-47 identifiers (e.g. "en-US" not "en_US"). AssetInventory returns canonical
-        // identifiers from the SDK, so this assumption holds in production. If callers
-        // supply un-normalised identifiers in tests, the result may be a false "needs download".
-        !installedLocales.contains { $0.identifier == locale.identifier }
+        let wanted = normalizedIdentifier(for: locale)
+        return !installedLocales.contains { normalizedIdentifier(for: $0) == wanted }
+    }
+
+    /// Identifier with underscores converted to hyphens — the shape the SDK
+    /// returns ("en-IN"). Persisted values may carry either form.
+    public static func normalizedIdentifier(for locale: Locale) -> String {
+        locale.identifier.replacingOccurrences(of: "_", with: "-")
+    }
+
+    /// Human-readable name for a locale, e.g. `"English (United States)"`.
+    /// Falls back to `locale.identifier` when `localizedString` returns nil.
+    public static func displayName(for locale: Locale) -> String {
+        Locale.current.localizedString(forIdentifier: locale.identifier) ?? locale.identifier
     }
 
     // MARK: - Helpers
 
-    /// Sorts locales by their human-readable display name in the current locale.
-    /// Ties are broken by identifier string for determinism.
+    /// Sorts locales by display name in the current locale; identifier
+    /// tie-breaks for determinism.
     private static func sorted(_ locales: [Locale]) -> [Locale] {
         locales.sorted { a, b in
             let nameA = displayName(for: a)
@@ -94,13 +160,5 @@ public enum SpeechTranscriberLocaleSource {
             if nameA == nameB { return a.identifier < b.identifier }
             return nameA.localizedCompare(nameB) == .orderedAscending
         }
-    }
-
-    /// Human-readable name for a locale, e.g. `"English (United States)"`.
-    ///
-    /// Falls back to `locale.identifier` if `localizedString(forIdentifier:)`
-    /// returns `nil` (should not happen in practice, but never force-unwrap).
-    public static func displayName(for locale: Locale) -> String {
-        Locale.current.localizedString(forIdentifier: locale.identifier) ?? locale.identifier
     }
 }
