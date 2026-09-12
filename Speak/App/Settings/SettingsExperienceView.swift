@@ -40,7 +40,21 @@ struct SettingsExperienceView: View {
     var onBack: () -> Void = {}
     var onOpenSection: (DashboardSection) -> Void = { _ in }
 
-    @State private var category: SettingsCategory = .generalAudio
+    @State private var category: SettingsCategory
+
+    init(
+        context: DashboardContext,
+        presentation: Presentation = .embedded,
+        initialCategory: SettingsCategory = .generalAudio,
+        onBack: @escaping () -> Void = {},
+        onOpenSection: @escaping (DashboardSection) -> Void = { _ in }
+    ) {
+        self.context = context
+        self.presentation = presentation
+        self.onBack = onBack
+        self.onOpenSection = onOpenSection
+        _category = State(initialValue: initialCategory)
+    }
 
     /// Traffic-light clearance — the dashboard window is `.fullSizeContentView`
     /// with a transparent titlebar. The standalone Settings window has a normal

@@ -63,7 +63,7 @@ struct OllamaSetupSheet: View {
             HStack(alignment: .top, spacing: SpeakSpacing.md) {
                 Image(systemName: "server.rack")
                     .font(.system(size: 32))
-                    .foregroundStyle(Color.speakAccent)
+                    .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     Text("Set up Ollama")
                         .font(.speakMonoTitle)
@@ -155,12 +155,12 @@ struct OllamaSetupSheet: View {
                         if entry.recommended {
                             Text("Recommended")
                                 .font(.caption)
-                                .foregroundStyle(Color.speakAccent)
+                                .foregroundStyle(Color.speakDelivered)
                                 .padding(.horizontal, SpeakSpacing.xs)
                                 .padding(.vertical, 2)
                                 .background(
                                     RoundedRectangle(cornerRadius: 4)
-                                        .fill(Color.speakAccent.opacity(0.12))
+                                        .fill(Color.speakDelivered.opacity(0.12))
                                 )
                         }
                     }
@@ -192,9 +192,9 @@ struct SetupStepRow: View {
             // [decision: 24pt bubble = 3× SpeakSpacing.sm; matches PrivacyGuaranteeRow icon column]
             Text(number)
                 .font(.speakMonoBody)
-                .foregroundStyle(.background)
+                .foregroundStyle(Color.speakInk)
                 .frame(width: 24, height: 24)
-                .background(Circle().fill(Color.speakAccent))
+                .background(Circle().fill(Color.speakBone))
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Text(title)
                     .font(.speakMonoBody)

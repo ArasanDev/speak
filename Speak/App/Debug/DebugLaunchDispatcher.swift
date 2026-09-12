@@ -255,29 +255,39 @@ final class DebugLaunchDispatcher {
         snippets.add(trigger: "omw", expansion: "on my way")
         snippets.add(trigger: "sig", expansion: "Best,\nTamil")
 
-        let section = Self.parseDashboardSection()
+        let (section, settingsCategory) = Self.parseDashboardSection()
         let context = DashboardContext(
             settingsStore: settings,
             historyStore: DebugSeededHistoryStore(),
             hotkeyCombo: ["Fn", "Fn"],
             snippetStore: snippets
         )
-        let vc = DashboardWindowController(context: context, initialSection: section)
+        let vc = DashboardWindowController(
+            context: context,
+            initialSection: section,
+            initialSettingsCategory: settingsCategory
+        )
         vc.show()
         keepAlive(vc)
-        log.info("DebugLaunchDispatcher: Dashboard opened at section=\(section.rawValue, privacy: .public) (seeded).")
+        log.info("DebugLaunchDispatcher: Dashboard opened at section=\(section.rawValue, privacy: .public) settingsCategory=\(settingsCategory.rawValue, privacy: .public) (seeded).")
     }
 
-    /// Parse the section from `--debug-open dashboard:<section>` (defaults to Home).
-    private static func parseDashboardSection() -> DashboardSection {
+    /// Parse `--debug-open dashboard:<section>[:<settingsCategory>]`
+    /// (defaults to Home / General). The third component deep-links a Settings
+    /// category so every Mode B screen can be screenshot-verified directly:
+    /// `dashboard:settings:hotkeys`, `dashboard:settings:vocabulary`, …
+    private static func parseDashboardSection() -> (DashboardSection, SettingsCategory) {
         let args = CommandLine.arguments
         guard let idx = args.firstIndex(of: "--debug-open"), args.indices.contains(idx + 1) else {
-            return .home
+            return (.home, .generalAudio)
         }
-        let raw = args[idx + 1]
-        guard let colon = raw.firstIndex(of: ":") else { return .home }
-        let name = String(raw[raw.index(after: colon)...])
-        return DashboardSection(rawValue: name) ?? .home
+        let parts = args[idx + 1].split(separator: ":").map(String.init)
+        guard parts.count > 1 else { return (.home, .generalAudio) }
+        let section = DashboardSection(rawValue: parts[1]) ?? .home
+        let category = parts.count > 2
+            ? (SettingsCategory(rawValue: parts[2]) ?? .generalAudio)
+            : .generalAudio
+        return (section, category)
     }
 
     // MARK: - Overlay demo target (Phase C)

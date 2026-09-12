@@ -1293,3 +1293,43 @@ blocked by a pre-existing deadlock in
 (semaphore wait on com.speak.audiocapture.state — unrelated to UI).
 Cmd+, → Mode B path is code-verified but live-keypress **[unverified —
 synthetic input was flaky in this session]**.
+
+---
+
+## 2026-09-13 — Settings category deep-links + final color pass
+
+Follow-up to the UI unification. Added per-category debug deep links so
+every Mode B screen is directly screenshot-verifiable:
+
+- `SettingsExperienceView` gains `initialCategory` (default `.generalAudio`);
+  `DashboardView` + `DashboardWindowController` pass it through;
+  `DebugLaunchDispatcher` parses
+  `--debug-open dashboard:settings:<category>` (e.g. `...:hotkeys`,
+  `...:privacy`). All 8 categories screenshot-verified live.
+
+De-colorization sweep across Settings (decorative → semantic/neutral):
+
+- `HoldToTalkPill` idle state: `speakAccent` capsule → neutral
+  `primary.opacity` fill + `speakCardBorder` stroke (active/listening
+  state keeps `speakStateListening` — semantic).
+- `AgentBridgeSettingsView` install/JSON code blocks: hardcoded
+  `Color.black.opacity(0.2)` (non-adaptive, invisible in light mode) →
+  `speakWindowCanvas` + `speakCardBorder` hairline.
+- `VocabularySettingsView` correction/snippet text: `speakAccent` →
+  `.primary` (mono font already distinguishes).
+- `GeneralAudioSettingsView` input-device checkmark: accent → primary.
+- `OllamaSetupSheet`: header icon → secondary; "Recommended" badge →
+  `speakDelivered` (semantic positive); step bubbles → `speakBone`/`speakInk`
+  monochrome (matches Home CTA).
+- `CleanupEngineSheet`: key icon → secondary; stored-key checkmark →
+  `speakDelivered`.
+
+Kept intentionally: `speakAccent` on the About waveform (brand mark,
+matches menubar icon), `HotkeyRecorderView` red (destructive), all
+green/orange status pills (semantic).
+
+**Verification:** build clean · lint 0 errors · moat 7/7 PASS · all 8
+Settings categories screenshot-verified via deep links.
+Note: `--debug-open` launches occasionally race window visibility
+(AX/screenshot timing); the dispatcher log confirms
+`window shown (promoted=true)` each time — retry the capture, not the code.
