@@ -201,6 +201,7 @@ private struct MicrophoneCard: View {
     let context: DashboardContext
     @State private var currentDevice: CoreAudioDeviceMonitor.DeviceInfo?
     @State private var monitorToken: UUID?
+    @State private var topologyToken: UUID?
     @State private var micStatus: PermissionState = .notDetermined
     @State private var levelMonitor = MicLevelMonitor()
     @State private var level: Double = 0
@@ -208,6 +209,7 @@ private struct MicrophoneCard: View {
     @State private var monitoring = false
     @State private var monitorError: String?
     @State private var routeFlash = false
+    @State private var inputDevices: [CoreAudioDeviceMonitor.DeviceInfo] = []
 
     var body: some View {
         SettingsSectionCard(title: "Microphone", systemImage: "mic") {
@@ -228,6 +230,25 @@ private struct MicrophoneCard: View {
                     "System Default Microphone",
                     description: "Automatically follows connected headphones, AirPods, or external mics."
                 )
+            }
+
+            if inputDevices.count > 1 {
+                SettingsRowSeparator()
+
+                SettingsRow(
+                    "Available Inputs",
+                    description: "Every mic macOS currently sees. Switch in System Settings → Sound → Input."
+                ) {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        ForEach(inputDevices, id: \.id) { dev in
+                            Text(dev.name)
+                                .font(.speakMonoCaption)
+                                .foregroundStyle(
+                                    dev.id == currentDevice?.id ? Color.primary : Color.secondary
+                                )
+                        }
+                    }
+                }
             }
 
             SettingsRowSeparator()
@@ -270,11 +291,20 @@ private struct MicrophoneCard: View {
         .onAppear {
             updateStatus()
             currentDevice = CoreAudioDeviceMonitor.shared.currentDefaultInputDevice()
+            inputDevices = CoreAudioDeviceMonitor.shared.listInputDevices()
             if monitorToken == nil {
                 monitorToken = CoreAudioDeviceMonitor.shared.registerCallback { dev in
                     Task { @MainActor in
                         flashRouteChange()
                         currentDevice = dev
+                        inputDevices = CoreAudioDeviceMonitor.shared.listInputDevices()
+                    }
+                }
+            }
+            if topologyToken == nil {
+                topologyToken = CoreAudioDeviceMonitor.shared.registerTopologyCallback { devices in
+                    Task { @MainActor in
+                        inputDevices = devices
                     }
                 }
             }
@@ -284,6 +314,10 @@ private struct MicrophoneCard: View {
             if let token = monitorToken {
                 CoreAudioDeviceMonitor.shared.unregisterCallback(token)
                 monitorToken = nil
+            }
+            if let token = topologyToken {
+                CoreAudioDeviceMonitor.shared.unregisterCallback(token)
+                topologyToken = nil
             }
             levelMonitor.stop()
             monitoring = false
