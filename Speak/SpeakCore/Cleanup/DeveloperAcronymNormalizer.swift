@@ -98,13 +98,28 @@ public struct DeveloperAcronymNormalizer: Sendable {
         }
     }()
 
+    /// Compiled once — `NSRegularExpression` construction is ~µs-scale and
+    /// these ran inside the per-call cleanup path. [fix: audit — regex hoist]
+    private static let stutterRegex: NSRegularExpression? = {
+        let pattern = "\\b([A-Za-z0-9_'-]+(?:\\s+[A-Za-z0-9_'-]+){0,2})(?:,\\s*|\\s+)\\1\\b"
+        return try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+    }()
+
+    private static let paddingTailRegexes: [NSRegularExpression] = [
+        "(?i)\\s*[,;]?\\s*(and\\s+)?\\b(do you understand my point|can you relate this|do you understand|can you understand this|is it clear|got it)\\b[?.!]*\\s*$"
+    ].compactMap { try? NSRegularExpression(pattern: $0) }
+
+    private static let paddingHeadRegexes: [NSRegularExpression] = [
+        "^(?i)(So\\s+)?(Now\\s+)?what I (want to tell you|am telling|feel) is like[,:]?\\s*",
+        "^(?i)Here is the information I want to give you[:.]?\\s*",
+        "^(?i)Okay,\\s*correct[.]\\s*",
+        "^(?i)Now\\s+what I am going to do is like[,:]?\\s*"
+    ].compactMap { try? NSRegularExpression(pattern: $0) }
+
     /// Collapses immediate repeated word stutters (e.g. "I will I will" -> "I will", "For, for" -> "For", "you, you" -> "you").
     public static func collapseStutters(_ text: String) -> String {
         var result = text
-        let pattern = "\\b([A-Za-z0-9_'-]+(?:\\s+[A-Za-z0-9_'-]+){0,2})(?:,\\s*|\\s+)\\1\\b"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
-            return result
-        }
+        guard let regex = stutterRegex else { return result }
         for _ in 0..<3 {
             let range = NSRange(result.startIndex..., in: result)
             let replaced = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "$1")
@@ -119,31 +134,17 @@ public struct DeveloperAcronymNormalizer: Sendable {
         var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let original = result
 
-        let tailPatterns = [
-            "(?i)\\s*[,;]?\\s*(and\\s+)?\\b(do you understand my point|can you relate this|do you understand|can you understand this|is it clear|got it)\\b[?.!]*\\s*$"
-        ]
-        let headPatterns = [
-            "^(?i)(So\\s+)?(Now\\s+)?what I (want to tell you|am telling|feel) is like[,:]?\\s*",
-            "^(?i)Here is the information I want to give you[:.]?\\s*",
-            "^(?i)Okay,\\s*correct[.]\\s*",
-            "^(?i)Now\\s+what I am going to do is like[,:]?\\s*"
-        ]
-
         for _ in 0..<3 {
             let before = result
-            for pattern in tailPatterns {
-                if let regex = try? NSRegularExpression(pattern: pattern) {
-                    let range = NSRange(result.startIndex..., in: result)
-                    result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "")
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                }
+            for regex in paddingTailRegexes {
+                let range = NSRange(result.startIndex..., in: result)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
             }
-            for pattern in headPatterns {
-                if let regex = try? NSRegularExpression(pattern: pattern) {
-                    let range = NSRange(result.startIndex..., in: result)
-                    result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "")
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                }
+            for regex in paddingHeadRegexes {
+                let range = NSRange(result.startIndex..., in: result)
+                result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
             }
             if result == before { break }
         }

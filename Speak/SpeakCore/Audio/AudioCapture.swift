@@ -29,6 +29,7 @@
 //   attach before capture begins or at any point during an already-running
 //   session. [decision]
 
+import Accelerate
 @preconcurrency import AVFoundation
 import os
 
@@ -112,6 +113,33 @@ public final class AudioCapture: @unchecked Sendable {
         func set(_ newValue: AVAudioConverter) { lock.lock(); value = newValue; lock.unlock() }
     }
 
+    /// Throttles per-buffer fault logging on the real-time audio thread. A
+    /// persistent converter failure or a stalled stream consumer would
+    /// otherwise emit an os_log per buffer (~90/s). `note()` returns the
+    /// 1-based ordinal; callers log the first few and then every 64th.
+    /// [fix: audit — RT-thread log spam]
+    private final class TapFaultLog: @unchecked Sendable {
+        private let lock = NSLock()
+        private var conversionFailures = 0
+        private var droppedBuffers = 0
+
+        func noteConversionFailure() -> Int {
+            lock.lock(); defer { lock.unlock() }
+            conversionFailures += 1
+            return conversionFailures
+        }
+
+        func noteDroppedBuffer() -> Int {
+            lock.lock(); defer { lock.unlock() }
+            droppedBuffers += 1
+            return droppedBuffers
+        }
+
+        func resetConversionFailures() {
+            lock.lock(); conversionFailures = 0; lock.unlock()
+        }
+    }
+
     public init() {}
 
     deinit {
@@ -129,23 +157,23 @@ public final class AudioCapture: @unchecked Sendable {
 
         let input = engine.inputNode
         let inputFormat = try resolveInputFormat(for: input)
-        guard let targetFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: Constants.targetSampleRate,
-            channels: Constants.targetChannels,
-            interleaved: false
-        ) else {
-            throw SpeakError.unknown("Could not build 16 kHz mono target format")
-        }
-        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
-            throw SpeakError.unknown("Could not create audio converter")
-        }
+        let (targetFormat, converter) = try makeTargetFormatAndConverter(from: inputFormat)
         self.converter = converter
 
-        let (stream, continuation) = AsyncThrowingStream<AVAudioPCMBuffer, Error>.makeStream()
+        // Bounded streams: an unbounded buffer grows ~11 MB/min of PCM if the
+        // analyzer stalls (a real stall is on record). 64 buffers ≈ seconds of
+        // audio — drops only happen under a stall the 5 s watchdog already
+        // tears down, and each drop is logged via `faultLog`.
+        // [fix: audit — unbounded AsyncStream]
+        let (stream, continuation) = AsyncThrowingStream<AVAudioPCMBuffer, Error>.makeStream(
+            bufferingPolicy: .bufferingNewest(64)
+        )
         self.continuation = continuation
 
-        let (levelStream, levelsContinuation) = AsyncStream<Double>.makeStream()
+        // A VU meter only ever needs the latest level — never backlog.
+        let (levelStream, levelsContinuation) = AsyncStream<Double>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
         self.levelsContinuation = levelsContinuation
         self.pendingLevelStream = levelStream
 
@@ -188,6 +216,23 @@ public final class AudioCapture: @unchecked Sendable {
         return stream
     }
 
+    private func makeTargetFormatAndConverter(
+        from inputFormat: AVAudioFormat
+    ) throws -> (AVAudioFormat, AVAudioConverter) {
+        guard let targetFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: Constants.targetSampleRate,
+            channels: Constants.targetChannels,
+            interleaved: false
+        ) else {
+            throw SpeakError.unknown("Could not build 16 kHz mono target format")
+        }
+        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+            throw SpeakError.unknown("Could not create audio converter")
+        }
+        return (targetFormat, converter)
+    }
+
     private func resolveInputFormat(for input: AVAudioInputNode) throws -> AVAudioFormat {
         var inputFormat = input.outputFormat(forBus: bus)
         if inputFormat.sampleRate <= 0 || inputFormat.channelCount <= 0 {
@@ -212,6 +257,7 @@ public final class AudioCapture: @unchecked Sendable {
     ) -> @Sendable (AVAudioFormat) -> Bool {
         let vadBox = self.vadBox
         let bus = self.bus
+        let faultLog = TapFaultLog()
 
         return { format in
             guard format.sampleRate > 0, format.channelCount > 0 else {
@@ -242,7 +288,13 @@ public final class AudioCapture: @unchecked Sendable {
                     }
                 }
 
-                Self.convert(buffer, to: targetFormat, using: activeConv, yielding: continuation)
+                Self.convert(
+                    buffer,
+                    to: targetFormat,
+                    using: activeConv,
+                    faultLog: faultLog,
+                    yielding: continuation
+                )
             }
             return true
         }
@@ -466,16 +518,14 @@ public final class AudioCapture: @unchecked Sendable {
               let channelData = buffer.floatChannelData else {
             return 0.0
         }
-        let frames = Int(buffer.frameLength)
-        let channel = channelData[0]   // channel 0 — mono-sufficient for a VU indicator
-        var sumOfSquares: Double = 0.0
-        for i in 0 ..< frames {
-            let sample = Double(channel[i])
-            sumOfSquares += sample * sample
-        }
-        let rms = sqrt(sumOfSquares / Double(frames))
+        // vDSP_measqv computes mean-of-squares in one vectorized pass —
+        // replaces a scalar Double loop per buffer on the real-time thread.
+        // Channel 0 only — mono-sufficient for a VU indicator.
+        // [fix: audit — RT-thread hygiene]
+        var meanSquare: Float = 0
+        vDSP_measqv(channelData[0], 1, &meanSquare, vDSP_Length(buffer.frameLength))
         // Clamp to [0, 1] — in practice rms ≤ 1 for 32-bit float samples in [-1, 1].
-        return min(max(rms, 0.0), 1.0)
+        return Double(min(max(sqrt(meanSquare), 0.0), 1.0))
     }
 
     /// Converts one input buffer to the target format and yields it. Runs on the
@@ -483,6 +533,7 @@ public final class AudioCapture: @unchecked Sendable {
     private static func convert(_ buffer: AVAudioPCMBuffer,
                                 to targetFormat: AVAudioFormat,
                                 using converter: AVAudioConverter,
+                                faultLog: TapFaultLog,
                                 yielding continuation: AsyncThrowingStream<AVAudioPCMBuffer, Error>.Continuation) {
         let ratio = targetFormat.sampleRate / buffer.format.sampleRate
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1
@@ -510,10 +561,23 @@ public final class AudioCapture: @unchecked Sendable {
         }
 
         if let conversionError {
-            SpeakLog.audio.error("PCM conversion failed: \(conversionError.localizedDescription, privacy: .public)")
+            let n = faultLog.noteConversionFailure()
+            if n <= 3 || n % 64 == 0 {
+                SpeakLog.audio.error(
+                    "PCM conversion failed (x\(n, privacy: .public)): \(conversionError.localizedDescription, privacy: .public)"
+                )
+            }
             return
         }
+        faultLog.resetConversionFailures()
         guard status != .error, output.frameLength > 0 else { return }
-        continuation.yield(output)
+        if case .dropped = continuation.yield(output) {
+            let n = faultLog.noteDroppedBuffer()
+            if n <= 3 || n % 64 == 0 {
+                SpeakLog.audio.error(
+                    "PCM stream consumer stalled — dropped buffer (x\(n, privacy: .public))"
+                )
+            }
+        }
     }
 }

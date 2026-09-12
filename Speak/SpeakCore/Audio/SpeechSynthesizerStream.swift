@@ -125,8 +125,14 @@ public final class SpeechSynthesizerStream: @unchecked Sendable {
     public init(configuration: SpeechStreamConfiguration = SpeechStreamConfiguration()) {
         self.currentConfiguration = configuration
 
-        let (sStream, sContinuation) = AsyncStream<SpeechPlaybackState>.makeStream()
-        let (pStream, pContinuation) = AsyncStream<SpeechProgress>.makeStream()
+        // Bounded: only the latest playback state/progress matters to a
+        // consumer — never backlog unboundedly. [fix: audit — unbounded AsyncStream]
+        let (sStream, sContinuation) = AsyncStream<SpeechPlaybackState>.makeStream(
+            bufferingPolicy: .bufferingNewest(8)
+        )
+        let (pStream, pContinuation) = AsyncStream<SpeechProgress>.makeStream(
+            bufferingPolicy: .bufferingNewest(8)
+        )
 
         self.stateStream = sStream
         self.stateContinuation = sContinuation

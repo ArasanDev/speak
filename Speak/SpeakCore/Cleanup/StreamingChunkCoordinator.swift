@@ -23,6 +23,14 @@ public actor StreamingChunkCoordinator {
     private var chunkErrors: [String] = []
     private var lastTask: Task<String, Never>?
 
+    /// TTL-cached `isAvailable` result — for HTTP-backed cleaners (Ollama)
+    /// the check is a live network ping; running it per chunk serialized an
+    /// HTTP round-trip into every task-chain link. A stale `true` is safe
+    /// (`clean` throws → raw fallback); a stale `false` self-heals at the TTL.
+    /// [fix: audit — per-chunk isAvailable ping]
+    private var availabilityCache: (value: Bool, checkedAt: ContinuousClock.Instant)?
+    private static let availabilityTTL: Duration = .seconds(10)
+
     public init(cleaner: any LLMCleaning, mode: CleanupMode) {
         self.cleaner = cleaner
         self.mode = mode
@@ -58,7 +66,7 @@ public actor StreamingChunkCoordinator {
         // while still processing continuously in the background during active speech.
         let task = Task<String, Never> { [weak self] in
             _ = await priorTask?.value
-            guard await cleanerRef.isAvailable else {
+            guard let self, await self.cleanerAvailable() else {
                 return trimmed
             }
             do {
@@ -66,7 +74,7 @@ public actor StreamingChunkCoordinator {
                 let extracted = FoundationModelPromptBuilder.extractTargetTranscript(from: cleaned, fallback: trimmed)
                 return extracted.trimmingCharacters(in: .whitespacesAndNewlines)
             } catch {
-                await self?.recordError(error.localizedDescription)
+                await self.recordError(error.localizedDescription)
                 SpeakLog.cleanup.warning(
                     "StreamingChunkCoordinator: chunk clean failed, falling back to raw — \(error.localizedDescription, privacy: .public)"
                 )
@@ -77,15 +85,30 @@ public actor StreamingChunkCoordinator {
         chunkTasks.append(task)
     }
 
+    /// `cleaner.isAvailable` with a short TTL — see `availabilityCache`.
+    /// `internal` for `@testable` verification of the cache behavior.
+    func cleanerAvailable() async -> Bool {
+        if let cache = availabilityCache,
+           cache.checkedAt.duration(to: .now) < Self.availabilityTTL {
+            return cache.value
+        }
+        let value = await cleaner.isAvailable
+        availabilityCache = (value, .now)
+        return value
+    }
+
     /// Determines whether the current cleanup mode benefits from the full-chunk macro-consolidation pass.
     private var isMacroConsolidationEligible: Bool {
         switch mode {
         case .styled(let style, _, _):
             return style == .code || style == .professional || style == .default
+
         case .profile:
             return true
+
         case .toneAdjust, .codeAware:
             return true
+
         case .fillersOnly, .punctuation, .translate, .command:
             return false
         }

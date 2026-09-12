@@ -5,6 +5,7 @@
 //
 // Part of Layer 1 of the Bidirectional Voice Architecture.
 
+import Accelerate
 import AVFoundation
 import Foundation
 import os
@@ -66,7 +67,11 @@ public final class VoiceActivityDetector: @unchecked Sendable {
 
     public init(configuration: Configuration = Configuration()) {
         self.config = configuration
-        let (stream, continuation) = AsyncStream<Event>.makeStream()
+        // Bounded: a stalled consumer shouldn't grow VAD events unboundedly.
+        // [fix: audit — unbounded AsyncStream]
+        let (stream, continuation) = AsyncStream<Event>.makeStream(
+            bufferingPolicy: .bufferingNewest(8)
+        )
         self.eventStream = stream
         self.eventContinuation = continuation
     }
@@ -214,15 +219,13 @@ public final class VoiceActivityDetector: @unchecked Sendable {
         let frames = Int(frameLength)
         guard channelCount > 0, frames > 0 else { return 0.0 }
 
+        // vDSP_measqv per channel — vectorized mean-of-squares instead of a
+        // scalar Double loop on the audio render thread. [fix: audit]
         var sumOfSquares: Double = 0.0
         for channel in 0..<channelCount {
-            let samples = floatData[channel]
-            var channelSum: Double = 0.0
-            for i in 0..<frames {
-                let sample = Double(samples[i])
-                channelSum += sample * sample
-            }
-            sumOfSquares += channelSum
+            var meanSquare: Float = 0
+            vDSP_measqv(floatData[channel], 1, &meanSquare, vDSP_Length(frames))
+            sumOfSquares += Double(meanSquare) * Double(frames)
         }
         let totalSamples = Double(frames * channelCount)
         guard totalSamples > 0 else { return 0.0 }
@@ -239,17 +242,20 @@ public final class VoiceActivityDetector: @unchecked Sendable {
         let frames = Int(frameLength)
         guard channelCount > 0, frames > 0 else { return 0.0 }
 
+        // vDSP_vflt16 converts Int16 → Float (unnormalized, ±32768), then
+        // vDSP_measqv takes mean-of-squares — replaces a scalar loop on the
+        // audio render thread. Normalization folds into the divisor.
+        // [fix: audit — RT-thread hygiene]
+        var scratch = [Float](repeating: 0, count: frames)
         var sumOfSquares: Double = 0.0
         for channel in 0..<channelCount {
-            let samples = int16Data[channel]
-            var channelSum: Double = 0.0
-            for i in 0..<frames {
-                let sample = Double(samples[i]) / 32768.0
-                channelSum += sample * sample
-            }
-            sumOfSquares += channelSum
+            vDSP_vflt16(int16Data[channel], 1, &scratch, 1, vDSP_Length(frames))
+            var meanSquare: Float = 0
+            vDSP_measqv(scratch, 1, &meanSquare, vDSP_Length(frames))
+            sumOfSquares += Double(meanSquare) * Double(frames)
         }
-        let totalSamples = Double(frames * channelCount)
+        // ±32768 samples: divide sum-of-squares by total samples AND 32768².
+        let totalSamples = Double(frames * channelCount) * (32768.0 * 32768.0)
         guard totalSamples > 0 else { return 0.0 }
         let rms = sqrt(sumOfSquares / totalSamples)
         return min(max(rms, 0.0), 1.0)

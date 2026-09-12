@@ -106,6 +106,7 @@ ALLOWED_IMPORTS=(
     "ServiceManagement" # Apple; SMAppService for Launch at Login
     "Observation"       # Apple; @Observable macro (matches MoatAuditTests allowlist)
     "CoreFoundation"    # Apple; CFRunLoop in HotkeyMonitor (matches MoatAuditTests)
+    "Accelerate"        # Apple; vDSP vectorized RMS on the audio render thread
 )
 
 IMPORT_VIOLATIONS=0
