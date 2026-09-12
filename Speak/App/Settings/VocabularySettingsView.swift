@@ -88,7 +88,7 @@ private struct AcousticCorrectionsCard: View {
                                 .foregroundStyle(.tertiary)
                             Text(correction.typed)
                                 .font(.speakMonoBody)
-                                .foregroundStyle(Color.speakAccent)
+                                .foregroundStyle(.primary)
                             Spacer()
                             Button {
                                 remove(correction)
@@ -221,7 +221,7 @@ private struct SnippetsCard: View {
                         HStack(spacing: SpeakSpacing.sm) {
                             Text(snippet.trigger)
                                 .font(.speakMonoBody)
-                                .foregroundStyle(Color.speakAccent)
+                                .foregroundStyle(.primary)
                             Image(systemName: "arrow.right")
                                 .font(.speakMonoCaption)
                                 .foregroundStyle(.tertiary)

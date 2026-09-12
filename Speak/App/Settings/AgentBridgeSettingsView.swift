@@ -93,7 +93,8 @@ struct AgentBridgeSettingsView: View {
                         .font(.speakMonoCaption)
                         .padding(SpeakSpacing.sm)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.black.opacity(0.2))
+                        .background(Color.speakWindowCanvas)
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.speakCardBorder, lineWidth: 1))
                         .cornerRadius(6)
                 }
 
@@ -108,7 +109,8 @@ struct AgentBridgeSettingsView: View {
                         .font(.speakMonoCaption)
                         .padding(SpeakSpacing.sm)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.black.opacity(0.2))
+                        .background(Color.speakWindowCanvas)
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.speakCardBorder, lineWidth: 1))
                         .cornerRadius(6)
                 }
 

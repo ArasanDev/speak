@@ -53,8 +53,18 @@ struct DashboardView: View {
     @State private var isSelfHealHovered: Bool = false
     @State private var showUpdateNotification: Bool = false
 
-    init(context: DashboardContext, initialSection: DashboardSection = .home) {
+    /// Which Settings category Mode B opens on — seeded by the debug
+    /// deep-link (`--debug-open dashboard:settings:<category>`); the normal
+    /// gear path leaves it at .generalAudio.
+    private let initialSettingsCategory: SettingsCategory
+
+    init(
+        context: DashboardContext,
+        initialSection: DashboardSection = .home,
+        initialSettingsCategory: SettingsCategory = .generalAudio
+    ) {
         self.context = context
+        self.initialSettingsCategory = initialSettingsCategory
         _selection = State(initialValue: initialSection)
         if initialSection != .settings {
             _lastDeskSection = State(initialValue: initialSection)
@@ -98,6 +108,7 @@ struct DashboardView: View {
                 // Mode B — the dedicated two-panel Settings experience.
                 SettingsExperienceView(
                     context: context,
+                    initialCategory: initialSettingsCategory,
                     onBack: closeSettings,
                     onOpenSection: { section in
                         withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {

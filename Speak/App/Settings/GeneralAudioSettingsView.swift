@@ -381,7 +381,7 @@ private struct MicrophoneCard: View {
         } label: {
             HStack(spacing: SpeakSpacing.sm) {
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selected ? Color.speakAccent : Color.secondary)
+                    .foregroundStyle(selected ? Color.primary : Color.secondary)
                     .font(.speakBody(.caption))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(name)

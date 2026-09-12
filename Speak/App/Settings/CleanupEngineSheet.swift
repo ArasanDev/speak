@@ -116,7 +116,7 @@ struct CleanupEngineSheet: View {
             HStack(alignment: .top, spacing: SpeakSpacing.md) {
                 Image(systemName: "key")
                     .font(.system(size: 32))
-                    .foregroundStyle(Color.speakAccent)
+                    .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     Text("\(viewModel.preset.displayName) API Key")
                         .font(.speakMonoTitle)
@@ -170,7 +170,7 @@ struct CleanupEngineSheet: View {
     private var statusRow: some View {
         HStack(spacing: SpeakSpacing.xs) {
             Image(systemName: viewModel.hasStoredKey ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(viewModel.hasStoredKey ? Color.speakAccent : .secondary)
+                .foregroundStyle(viewModel.hasStoredKey ? Color.speakDelivered : .secondary)
             Text(viewModel.hasStoredKey ? "A key is currently set for \(viewModel.preset.displayName)." :
                  "No key set \u{2014} cleanup falls back to raw transcript until one is entered.")
                 .font(.caption)

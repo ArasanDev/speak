@@ -41,16 +41,22 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
     /// NSHostingView created at the start of the next show() call.
     private var context: DashboardContext
     private let initialSection: DashboardSection
+    private let initialSettingsCategory: SettingsCategory
     private let log = SpeakLog.storage
     private let navigationSubject = PassthroughSubject<DashboardSection, Never>()
 
     // MARK: - Init
 
-    init(context: DashboardContext, initialSection: DashboardSection = .home) {
+    init(
+        context: DashboardContext,
+        initialSection: DashboardSection = .home,
+        initialSettingsCategory: SettingsCategory = .generalAudio
+    ) {
         var ctx = context
         ctx.navigateToSectionPublisher = navigationSubject.eraseToAnyPublisher()
         self.context = ctx
         self.initialSection = initialSection
+        self.initialSettingsCategory = initialSettingsCategory
         super.init()
     }
 
@@ -114,7 +120,11 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
         let didPromote = promoteToRegularApp()
 
         let section = overrideSection ?? self.initialSection
-        let contentView = DashboardView(context: context, initialSection: section)
+        let contentView = DashboardView(
+            context: context,
+            initialSection: section,
+            initialSettingsCategory: initialSettingsCategory
+        )
         let hosting = NSHostingView(rootView: contentView)
 
         let win = NSWindow(
