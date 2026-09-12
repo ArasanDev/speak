@@ -254,9 +254,17 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
         return ids.compactMap { id in
             let channels = queryDeviceChannelCount(deviceID: id)
             guard channels > 0 else { return nil }
+            let uid = queryDeviceUID(deviceID: id)
+            // AVAudioEngine creates per-process hidden aggregates
+            // (CADefaultDeviceAggregate-<pid>-<n>) around the pinned device.
+            // They report real input channels but are transient — a stale
+            // one can outlive its process just long enough to be resolved
+            // and pinned, then vanish mid-session. Never roster them.
+            // [fix: transient aggregate devices]
+            guard !uid.hasPrefix("CADefaultDeviceAggregate-") else { return nil }
             return DeviceInfo(
                 id: id,
-                uid: queryDeviceUID(deviceID: id),
+                uid: uid,
                 name: queryDeviceName(deviceID: id),
                 sampleRate: queryDeviceSampleRate(deviceID: id),
                 channelCount: channels
@@ -330,6 +338,13 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
         return status == noErr ? Double(rate) : 0.0
     }
 
+    /// Input-channel count via the input-scope stream configuration. Returns
+    /// 0 when the device has no input streams OR the query fails — a device we
+    /// cannot prove input-capable must not enter the roster. The old fallback
+    /// (`return 1`, `max(channels, 1)`) made every output-only device — e.g.
+    /// "MacBook Pro Speakers" — enumerate as a selectable input, which users
+    /// could then pin, and pinning an output-only device fails -10851 →
+    /// engine start -10868. [fix: phantom input devices]
     private func queryDeviceChannelCount(deviceID: AudioDeviceID) -> Int {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreamConfiguration,
@@ -338,19 +353,19 @@ public final class CoreAudioDeviceMonitor: @unchecked Sendable {
         )
         var size: UInt32 = 0
         guard AudioObjectGetPropertyDataSize(deviceID, &address, 0, nil, &size) == noErr, size > 0 else {
-            return 1
+            return 0
         }
         let bufferListPointer = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: Int(size))
         defer { bufferListPointer.deallocate() }
 
         guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, bufferListPointer) == noErr else {
-            return 1
+            return 0
         }
         let buffers = UnsafeMutableAudioBufferListPointer(bufferListPointer)
         var channels = 0
         for buf in buffers {
             channels += Int(buf.mNumberChannels)
         }
-        return max(channels, 1)
+        return channels
     }
 }
