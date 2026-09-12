@@ -422,26 +422,7 @@ public actor CaptureSession {
         // spoke only the trigger phrase, which is fine: a short empty paste is preferable
         // to treating the whole utterance as silence.
         if rawText.isEmpty {
-            state = .done
-            partialsContinuation?.finish()
-            partialsContinuation = nil
-            streamTask = nil
-            let audioWasSilent = classifySilentInput()
-            if !audioWasSilent {
-                SpeakLog.engine.info("CaptureSession: empty transcript — skip paste + history, reach .done.")
-            }
-            // Use a single timestamp for both duration and createdAt so they are
-            // consistent. [decision: single Date() call prevents sub-millisecond skew
-            // between the two fields, which would make duration vs createdAt inconsistent.]
-            let sessionEndedAt = Date()
-            return TranscriptionResult(
-                rawText: rawText,
-                cleanedText: nil,
-                duration: sessionEndedAt.timeIntervalSince(sessionStartTime ?? sessionEndedAt),
-                engineId: transcriber.id,
-                createdAt: sessionEndedAt,
-                audioWasSilent: audioWasSilent
-            )
+            return try settleEmptyTranscript()
         }
 
         // [decision: single Date() call for both duration and createdAt so the two
@@ -535,6 +516,34 @@ public actor CaptureSession {
             cleanup=\(String(format: "%.0f", latency.cleanupSeconds * 1000), privacy: .public)ms
             """)
         return resultWithLatency
+    }
+
+    /// [A2] Terminal settle for an empty transcript: never paste, never write
+    /// history, never run cleanup. Re-checks `.error` first — a stream failure
+    /// or cancel() can land during the stop()/drain awaits and must not be
+    /// masked as a silent dictation. [fix: error masked by empty .done]
+    private func settleEmptyTranscript() throws -> TranscriptionResult {
+        if case .error(let drainErr) = state {
+            throw drainErr
+        }
+        state = .done
+        partialsContinuation?.finish()
+        partialsContinuation = nil
+        streamTask = nil
+        let audioWasSilent = classifySilentInput()
+        if !audioWasSilent {
+            SpeakLog.engine.info("CaptureSession: empty transcript — skip paste + history, reach .done.")
+        }
+        // Single timestamp for both duration and createdAt — no sub-ms skew.
+        let sessionEndedAt = Date()
+        return TranscriptionResult(
+            rawText: "",
+            cleanedText: nil,
+            duration: sessionEndedAt.timeIntervalSince(sessionStartTime ?? sessionEndedAt),
+            engineId: transcriber.id,
+            createdAt: sessionEndedAt,
+            audioWasSilent: audioWasSilent
+        )
     }
 
     private func settleAgentResponse(_ result: TranscriptionResult) -> TranscriptionResult {

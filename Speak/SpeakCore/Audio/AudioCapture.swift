@@ -254,17 +254,7 @@ public final class AudioCapture: @unchecked Sendable {
                 // actually feeding us. `nil` preference or an unplugged
                 // preferred device resolves to the system default.
                 // [decision: pinned-device selection]
-                if let target = CoreAudioDeviceMonitor.shared.resolvedInputDevice(
-                    preferredUID: self.preferredInputDeviceUID
-                ) {
-                    self.pinInputDevice(target.id, on: input)
-                    // Log WHICH device feeds this session — the single most
-                    // useful fact when a dictation comes back empty.
-                    // [fix: silent-mic diagnosis needs the live source logged]
-                    SpeakLog.audio.info(
-                        "AudioCapture input: \(target.name, privacy: .public) (uid \(target.uid, privacy: .public), preferred=\(self.preferredInputDeviceUID != nil, privacy: .public))"
-                    )
-                }
+                self.resolveAndPinInput(on: input)
 
                 let inputFormat = try self.resolveInputFormat(for: input)
                 let (targetFormat, converter) = try self.makeTargetFormatAndConverter(from: inputFormat)
@@ -303,7 +293,13 @@ public final class AudioCapture: @unchecked Sendable {
             // no consumer). [fix: audit — observer leak on start failure]
             stateQueue.sync { self.teardownLocked(throwing: nil) }
             self.engine = AVAudioEngine()
-            throw SpeakError.unknown("AVAudioEngine failed to start: \(error.localizedDescription)")
+            // Carry the OSStatus code — error.localizedDescription for a raw
+            // CoreAudio NSError renders the generic "operation couldn't be
+            // completed" boilerplate, which reads as truncated in the HUD.
+            let nsError = error as NSError
+            throw SpeakError.unknown(
+                "Audio engine failed to start (CoreAudio error \(nsError.code)). Check the input device in Settings."
+            )
         }
 
         return stream
@@ -320,18 +316,33 @@ public final class AudioCapture: @unchecked Sendable {
         ) else {
             throw SpeakError.unknown("Could not build 16 kHz mono target format")
         }
-        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+        // The tap downmixes to mono BEFORE converting — the converter's input
+        // format is mono at the hardware rate, not the raw device format.
+        guard let monoFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: inputFormat.sampleRate,
+            channels: 1,
+            interleaved: false
+        ) else {
+            throw SpeakError.unknown("Could not build mono source format")
+        }
+        guard let converter = AVAudioConverter(from: monoFormat, to: targetFormat) else {
             throw SpeakError.unknown("Could not create audio converter")
         }
         return (targetFormat, converter)
     }
 
     private func resolveInputFormat(for input: AVAudioInputNode) throws -> AVAudioFormat {
-        var inputFormat = input.outputFormat(forBus: bus)
+        // `inputFormat(forBus:)` is the TRUE hardware format; `outputFormat`
+        // is the engine's client/presentation format, which can misreport the
+        // hardware stream (documented on macOS 26: taps bound to outputFormat
+        // receive zeroed buffers while inputFormat delivers real audio).
+        // [fix: audit — inputFormat over outputFormat]
+        var inputFormat = input.inputFormat(forBus: bus)
         if inputFormat.sampleRate <= 0 || inputFormat.channelCount <= 0 {
             for _ in 0..<3 {
                 Thread.sleep(forTimeInterval: 0.05)
-                inputFormat = input.outputFormat(forBus: bus)
+                inputFormat = input.inputFormat(forBus: bus)
                 if inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 { break }
             }
         }
@@ -366,21 +377,30 @@ public final class AudioCapture: @unchecked Sendable {
                 return false
             }
             input.removeTap(onBus: bus)
-            input.installTap(onBus: bus, bufferSize: Constants.tapBufferSize, format: nil) { buffer, _ in
-                let rms = Self.rmsLevel(buffer: buffer)
+            // Explicit format = the resolved HARDWARE input format — not nil
+            // (which binds the tap to outputFormat, a documented macOS 26
+            // source of zeroed buffers). [fix: audit — inputFormat over outputFormat]
+            input.installTap(onBus: bus, bufferSize: Constants.tapBufferSize, format: format) { buffer, _ in
+                // Downmix EVERY channel to mono before anything reads it.
+                // Channel 0 alone is not guaranteed to carry speech: while
+                // another process holds a VoiceProcessingIO session, the mic
+                // presents extra streams and ch0 can carry post-AEC gated
+                // silence with real audio on ch1/ch2. RMS, VAD, and the STT
+                // converter must all see the same mixed signal.
+                // [fix: multi-channel mic — speech not always on ch0]
+                guard let mono = Self.downmixToMono(buffer) else { return }
+                let rms = Self.rmsLevel(buffer: mono)
                 peakLevelBox.note(rms)
                 levelsContinuation.yield(rms)
-                vadBox.get()?.processBuffer(buffer)
-
-                guard buffer.format.sampleRate > 0, buffer.format.channelCount > 0 else { return }
+                vadBox.get()?.processBuffer(mono)
 
                 var activeConv = converterBox.get()
-                if buffer.format.sampleRate != activeConv.inputFormat.sampleRate ||
-                   buffer.format.channelCount != activeConv.inputFormat.channelCount {
-                    if let newConv = AVAudioConverter(from: buffer.format, to: targetFormat) {
+                if mono.format.sampleRate != activeConv.inputFormat.sampleRate ||
+                   mono.format.channelCount != activeConv.inputFormat.channelCount {
+                    if let newConv = AVAudioConverter(from: mono.format, to: targetFormat) {
                         converterBox.set(newConv)
                         activeConv = newConv
-                        SpeakLog.audio.info("AudioCapture: dynamic format re-sync to \(buffer.format.sampleRate, privacy: .public)Hz")
+                        SpeakLog.audio.info("AudioCapture: dynamic format re-sync to \(mono.format.sampleRate, privacy: .public)Hz")
                     } else {
                         SpeakLog.audio.error("AudioCapture: dynamic format re-sync FAILED — dropping buffer.")
                         return
@@ -388,7 +408,7 @@ public final class AudioCapture: @unchecked Sendable {
                 }
 
                 Self.convert(
-                    buffer,
+                    mono,
                     to: targetFormat,
                     using: activeConv,
                     faultLog: faultLog,
@@ -419,35 +439,33 @@ public final class AudioCapture: @unchecked Sendable {
                 // callback thread that posted the notification. The serial
                 // queue still orders it against stop(). [fix: audit — RT-thread]
                 //
-                // The inner block MUST weak-capture self: a strong capture
+                // The enqueued block MUST weak-capture self: a strong capture
                 // retains AudioCapture until the block runs on stateQueue —
                 // if that's the last reference, deinit → stop() →
                 // stateQueue.sync fires ON stateQueue itself and dispatch
                 // traps (DISPATCH_WAIT_FOR_QUEUE). [fix: audit — deinit trap]
-                self.stateQueue.async { [weak self] in
-                    self?.requestRebuildLocked(
-                        input: input,
-                        bus: bus,
-                        targetFormat: targetFormat,
-                        converterBox: converterBox,
-                        installTap: installTap
-                    )
-                }
+                // scheduleRebuild arms the coalescing flag off-queue, then
+                // enqueues the drain — bursts collapse to one rebuild.
+                self.scheduleRebuild(
+                    input: input,
+                    bus: bus,
+                    targetFormat: targetFormat,
+                    converterBox: converterBox,
+                    installTap: installTap
+                )
             }
         }
 
         if monitorToken == nil {
             monitorToken = CoreAudioDeviceMonitor.shared.registerCallback { [weak self] _ in
                 guard let self else { return }
-                self.stateQueue.async { [weak self] in
-                    self?.requestRebuildLocked(
-                        input: input,
-                        bus: bus,
-                        targetFormat: targetFormat,
-                        converterBox: converterBox,
-                        installTap: installTap
-                    )
-                }
+                self.scheduleRebuild(
+                    input: input,
+                    bus: bus,
+                    targetFormat: targetFormat,
+                    converterBox: converterBox,
+                    installTap: installTap
+                )
             }
         }
 
@@ -499,11 +517,14 @@ public final class AudioCapture: @unchecked Sendable {
     /// zero/invalid format for a beat. Returns nil when no valid format
     /// materializes (the device is truly gone).
     private func readSettledInputFormat(on input: AVAudioInputNode, bus: AVAudioNodeBus) -> AVAudioFormat? {
-        var format = input.outputFormat(forBus: bus)
+        // Hardware format, not the engine's presentation format — same
+        // inputFormat-vs-outputFormat reasoning as resolveInputFormat.
+        // [fix: audit — inputFormat over outputFormat]
+        var format = input.inputFormat(forBus: bus)
         if format.sampleRate <= 0 || format.channelCount <= 0 {
             for _ in 0..<3 {
                 Thread.sleep(forTimeInterval: 0.05)
-                format = input.outputFormat(forBus: bus)
+                format = input.inputFormat(forBus: bus)
                 if format.sampleRate > 0 && format.channelCount > 0 { break }
             }
         }
@@ -518,8 +539,14 @@ public final class AudioCapture: @unchecked Sendable {
     /// deterministically re-pins to the system default. On failure the error
     /// is logged and `effectiveDeviceID` is left stale so the next
     /// re-resolution retries rather than believing the pin landed.
-    private func pinInputDevice(_ deviceID: AudioDeviceID, on input: AVAudioInputNode) {
-        guard let audioUnit = input.audioUnit else { return }
+    /// Returns true when the pin was applied (or the unit already targeted
+    /// this device). On failure the input unit keeps its current device —
+    /// i.e. the system default — which is the graceful-degradation path: a
+    /// present-but-unpinnable preferred device must not break capture.
+    /// [fix: pin failure degraded into engine-start -10868]
+    @discardableResult
+    private func pinInputDevice(_ deviceID: AudioDeviceID, on input: AVAudioInputNode) -> Bool {
+        guard let audioUnit = input.audioUnit else { return false }
         var id = deviceID
         let status = AudioUnitSetProperty(
             audioUnit,
@@ -536,23 +563,88 @@ public final class AudioCapture: @unchecked Sendable {
                 "AudioCapture: pinning input device \(deviceID, privacy: .public) failed — \(status, privacy: .public)."
             )
         }
+        return status == noErr
     }
 
-    /// `stateQueue`-guarded coalescing flag — set when a route-change event is
-    /// queued while a rebuild is already pending or running. Cleared by the
-    /// drain loop in `requestRebuildLocked`.
-    private var rebuildRequested = false
+    /// Resolve the preferred input (or system default) and pin it. When the
+    /// resolved device is present but unpinnable (e.g. an output-only device
+    /// persisted before the roster fix), degrade to the system default
+    /// rather than letting the session start against a device the unit can't
+    /// deliver. Logs the device that will actually feed this session — the
+    /// single most useful fact when a dictation comes back empty.
+    /// [fix: unpinnable preference → graceful default fallback]
+    /// [fix: silent-mic diagnosis needs the live source logged]
+    private func resolveAndPinInput(on input: AVAudioInputNode) {
+        let monitor = CoreAudioDeviceMonitor.shared
+        var resolved = monitor.resolvedInputDevice(preferredUID: preferredInputDeviceUID)
+        if let target = resolved,
+           !pinInputDevice(target.id, on: input),
+           preferredInputDeviceUID != nil,
+           let fallback = monitor.currentDefaultInputDevice(),
+           fallback.id != target.id {
+            // The unit keeps its current device when a pin fails, which is
+            // already the system default — pin it explicitly anyway so
+            // `effectiveDeviceID` is truthful for the rebuild dedup check.
+            SpeakLog.audio.warning(
+                "AudioCapture: preferred device '\(target.name, privacy: .public)' unpinnable — falling back to system default '\(fallback.name, privacy: .public)'."
+            )
+            pinInputDevice(fallback.id, on: input)
+            resolved = fallback
+        }
+        if let target = resolved {
+            SpeakLog.audio.info(
+                "AudioCapture input: \(target.name, privacy: .public) (uid \(target.uid, privacy: .public), preferred=\(self.preferredInputDeviceUID != nil, privacy: .public))"
+            )
+        }
+    }
 
-    /// Coalesces route-change bursts into a single rebuild.
-    ///
-    /// One physical event (e.g. a USB headset plug that also flips the default
-    /// input) typically fires BOTH `.AVAudioEngineConfigurationChange` and the
-    /// HAL default-device callback. Without this flag each enqueues its own
-    /// `reconfigureAfterRouteChangeLocked` → the tap is torn down and the
-    /// engine restarted twice per plug (~300ms+ of dropped audio, plus churn
-    /// on the RT path). With it, a queued event arriving mid-rebuild just
-    /// re-arms the flag and the loop drains once more against the *final*
-    /// hardware state. [fix: audit — route-change rebuild dedup]
+    /// Coalescing state for route-change rebuilds — guarded by `rebuildLock`
+    /// because `scheduleRebuild` runs on arbitrary CoreAudio callback threads
+    /// while the drain runs on `stateQueue`.
+    /// [fix: coalescing flag was never armed — serial-queue blocks each ran
+    ///  a full rebuild; one physical plug event cost 2–3 engine restarts]
+    private let rebuildLock = NSLock()
+    private var rebuildQueuedOrInFlight = false
+    private var rebuildRequestedAgain = false
+
+    /// Schedules a route-change rebuild from ANY thread. The flag is armed
+    /// BEFORE the work is enqueued, so a burst of events (one physical plug
+    /// fires both `.AVAudioEngineConfigurationChange` and the HAL default
+    /// callback) coalesces into at most one extra rebuild — events arriving
+    /// while a rebuild is queued or running only re-arm `rebuildRequestedAgain`.
+    private func scheduleRebuild(
+        input: AVAudioInputNode,
+        bus: AVAudioNodeBus,
+        targetFormat: AVAudioFormat,
+        converterBox: ConverterBox,
+        installTap: @escaping @Sendable (AVAudioFormat) -> Bool
+    ) {
+        rebuildLock.lock()
+        if rebuildQueuedOrInFlight {
+            rebuildRequestedAgain = true
+            rebuildLock.unlock()
+            SpeakLog.audio.info("AudioCapture: route-change burst coalesced into in-flight rebuild.")
+            return
+        }
+        rebuildQueuedOrInFlight = true
+        rebuildLock.unlock()
+        stateQueue.async { [weak self] in
+            self?.requestRebuildLocked(
+                input: input,
+                bus: bus,
+                targetFormat: targetFormat,
+                converterBox: converterBox,
+                installTap: installTap
+            )
+        }
+    }
+
+    /// Drains rebuild requests on `stateQueue`. Rebuilds once per drain pass;
+    /// if a hardware event arrived mid-rebuild (`rebuildRequestedAgain`),
+    /// runs once more against the *final* hardware state. Events still
+    /// arriving after the drain exits enqueue a fresh pass via
+    /// `scheduleRebuild`. Also callable directly on `stateQueue` (the
+    /// preference/topology path) — the flag bookkeeping is harmless there.
     private func requestRebuildLocked(
         input: AVAudioInputNode,
         bus: AVAudioNodeBus,
@@ -560,12 +652,15 @@ public final class AudioCapture: @unchecked Sendable {
         converterBox: ConverterBox,
         installTap: @escaping @Sendable (AVAudioFormat) -> Bool
     ) {
-        if rebuildRequested {
-            SpeakLog.audio.info("AudioCapture: route-change burst coalesced into in-flight rebuild.")
-            return
+        defer {
+            rebuildLock.lock()
+            rebuildQueuedOrInFlight = false
+            rebuildLock.unlock()
         }
-        repeat {
-            rebuildRequested = false
+        while continuation != nil {
+            rebuildLock.lock()
+            rebuildRequestedAgain = false
+            rebuildLock.unlock()
             reconfigureAfterRouteChangeLocked(
                 input: input,
                 bus: bus,
@@ -573,7 +668,11 @@ public final class AudioCapture: @unchecked Sendable {
                 converterBox: converterBox,
                 installTap: installTap
             )
-        } while rebuildRequested && continuation != nil
+            rebuildLock.lock()
+            let again = rebuildRequestedAgain
+            rebuildLock.unlock()
+            if !again { break }
+        }
     }
 
     /// W2.1: Returns the live level stream (0…1 RMS values). Must be called after
@@ -636,26 +735,29 @@ public final class AudioCapture: @unchecked Sendable {
             engine.stop()
         }
         engine.reset()
-
-        // Re-resolve the pinned-device preference before reading the new
-        // format: the pinned device may be the thing that disappeared
-        // (resolve falls back to system default), or a preference may have
-        // been set/cleared mid-capture. Skip the HAL transaction when the
-        // resolved device is already pinned — re-pinning the same device on
-        // every rebuild is wasted churn under a route-change storm.
-        // [decision: pinned-device selection]
-        if let target = CoreAudioDeviceMonitor.shared.resolvedInputDevice(
-            preferredUID: preferredInputDeviceUID
-        ), target.id != effectiveDeviceID {
-            pinInputDevice(target.id, on: input)
-        }
+        // reset() tears down the input AUHAL — the device pin does not
+        // provably survive it. Invalidate BEFORE re-resolving so the pin is
+        // re-applied unconditionally: skipping it when resolved ==
+        // effectiveDeviceID leaves capture on the system default while the
+        // code believes the pinned device is live — and the stale
+        // effectiveDeviceID masks the drift from every later re-resolution.
+        // [fix: pin dropped by engine.reset() never restored]
+        effectiveDeviceID = kAudioDeviceUnknown
+        resolveAndPinInput(on: input)
 
         guard let newInputFormat = readSettledInputFormat(on: input, bus: bus) else {
             SpeakLog.audio.error("AudioCapture: no valid input format after configuration change — input lost.")
             failRebuild("input device disappeared or reported an invalid format after a route change")
             return
         }
-        guard let newConverter = AVAudioConverter(from: newInputFormat, to: targetFormat) else {
+        // Source format is mono — the tap downmixes before converting.
+        // [fix: multi-channel mic — converter input is the mono mix]
+        guard let monoFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: newInputFormat.sampleRate,
+            channels: 1,
+            interleaved: false
+        ), let newConverter = AVAudioConverter(from: monoFormat, to: targetFormat) else {
             SpeakLog.audio.error("""
                 AudioCapture: could not rebuild converter for new format \
                 \(newInputFormat.sampleRate, privacy: .public)Hz — input lost.
@@ -713,7 +815,10 @@ public final class AudioCapture: @unchecked Sendable {
             topologyToken = nil
         }
         rebuildRequest = nil
-        rebuildRequested = false
+        rebuildLock.lock()
+        rebuildQueuedOrInFlight = false
+        rebuildRequestedAgain = false
+        rebuildLock.unlock()
         effectiveDeviceID = kAudioDeviceUnknown
         engine.inputNode.removeTap(onBus: bus)
         if engine.isRunning { engine.stop() }
@@ -740,17 +845,56 @@ public final class AudioCapture: @unchecked Sendable {
 
     // MARK: - W2.1: RMS level computation
 
-    /// Compute the RMS (root-mean-square) amplitude of a PCM buffer and return it
-    /// as a linear value in [0, 1].
-    ///
-    /// - Runs on the audio render thread — only reads immutable buffer channel data.
-    /// - Returns 0.0 when the buffer has no frames or no channel data.
-    /// - The result is a raw linear amplitude. Callers should apply
-    ///   `levelSmoothed(previous:target:)` before driving bar heights.
-    ///
-    /// Formula: RMS = sqrt( sum(sample²) / N ). At silence, ≈ 0; at full scale, ≈ 1.
-    /// [decision W2.1: RMS on channel 0 only (mono after conversion; input buffer
-    ///  may be stereo but channel 0 is sufficient for a VU indicator)]
+    /// Downmix a (possibly multi-channel) buffer to mono by averaging all
+    /// channels. Channel 0 alone is NOT guaranteed to carry the mic signal —
+    /// while another process holds a VoiceProcessingIO session, the built-in
+    /// mic presents a reshaped layout where speech can live on later channels
+    /// (observed live: ch0 ≈ gated silence, RMS 0.001, while another dictation
+    /// app captured normally). Averaging every channel is safe for a mic
+    /// array (in-phase content survives) and rescues speech on ANY channel.
+    /// Runs on the audio render thread — allocation-free beyond the one
+    /// output buffer, vector adds via vDSP. [fix: multi-channel mic]
+    static func downmixToMono(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard buffer.frameLength > 0,
+              let channelData = buffer.floatChannelData,
+              let monoFormat = AVAudioFormat(
+                  commonFormat: .pcmFormatFloat32,
+                  sampleRate: buffer.format.sampleRate,
+                  channels: 1,
+                  interleaved: false
+              ),
+              let mono = AVAudioPCMBuffer(
+                  pcmFormat: monoFormat,
+                  frameCapacity: buffer.frameCapacity
+              ) else {
+            return nil
+        }
+        mono.frameLength = buffer.frameLength
+        let channelCount = Int(buffer.format.channelCount)
+        let frames = vDSP_Length(buffer.frameLength)
+        guard let out = mono.floatChannelData?[0] else { return nil }
+        // Zero the accumulator, then add each channel's samples into it.
+        // Interleaved buffers expose a single channel pointer — channel c's
+        // samples live at offset c with stride channelCount. Dropping such a
+        // buffer would silently discard every frame (the original bug class),
+        // so handle both layouts. [fix: interleaved input]
+        vDSP_vclr(out, 1, frames)
+        if buffer.format.isInterleaved {
+            for ch in 0..<channelCount {
+                vDSP_vadd(out, 1, channelData[0] + ch, channelCount, out, 1, frames)
+            }
+        } else {
+            for ch in 0..<channelCount {
+                vDSP_vadd(out, 1, channelData[ch], 1, out, 1, frames)
+            }
+        }
+        if channelCount > 1 {
+            var scale = Float(1.0 / Double(channelCount))
+            vDSP_vsmul(out, 1, &scale, out, 1, frames)
+        }
+        return mono
+    }
+
     static func rmsLevel(buffer: AVAudioPCMBuffer) -> Double {
         guard buffer.frameLength > 0,
               let channelData = buffer.floatChannelData else {

@@ -172,9 +172,8 @@ public final class HotkeyMonitor: @unchecked Sendable {
     /// Detector: pure value type, mutated only on the run-loop callback thread.
     private var detector = DoubleTapDetector()
 
-    /// Dual-key detection: Fn double-tap fallback detector when the primary binding is not Fn.
-    /// Ensures both Fn double-tap and the primary binding (Right-Command) trigger dictation out-of-the-box.
-    private var fnFallbackDetector = DoubleTapDetector()
+    // (Fn double-tap fallback detector removed — only the configured binding
+    // triggers dictation; see handle() for the rationale.)
 
     /// Command Mode chord detector. Pure value type, mutated only on the run-loop
     /// callback thread (same as `detector`).
@@ -382,7 +381,6 @@ public final class HotkeyMonitor: @unchecked Sendable {
         CFRunLoopPerformBlock(rl, CFRunLoopMode.commonModes.rawValue) { [weak self] in
             guard let self else { return }
             self.detector.reset()
-            self.fnFallbackDetector.reset()
             self.commandChord.reset()
             self.lastBoundKeyDown = false
             self.lastFnDown = false
@@ -478,7 +476,6 @@ public final class HotkeyMonitor: @unchecked Sendable {
     private func buildTap() {
         tearDownTap()
         detector.reset()
-        fnFallbackDetector.reset()
         commandChord.reset()
         lastFnDown = false
         lastBoundKeyDown = false
@@ -659,25 +656,17 @@ public final class HotkeyMonitor: @unchecked Sendable {
         }
         let chordActive = commandChord.isActive
 
-        // Update lastFnDown HERE (after chord update, before binding guard) so the
-        // chord detector gets accurate Fn state even when the bound key is not Fn.
-        let wasFnDown = lastFnDown
+        // Update lastFnDown HERE (after chord update) so the chord detector
+        // gets accurate Fn state even when the bound key is not Fn.
         lastFnDown = isFnDown
 
-        // Dual-activation: if the primary binding is not Fn, also evaluate Fn double-tap
-        // so users pressing either Fn x2 or the configured hotkey can trigger dictation.
+        // Fn fallback REMOVED: the configured binding is the only trigger.
+        // Previously a second DoubleTapDetector also accepted Fn double-tap
+        // when the primary binding was not Fn ("dual-activation") — the owner
+        // directive is Right-Command double-press ONLY (config.runtime), and
+        // the shadow trigger caused surprise dictations (and paired sessions)
+        // from an unbound key. [fix: unintended Fn fallback trigger]
         let currentBinding = binding
-        if currentBinding.keyCode != Int(kVK_Function), !chordActive {
-            if isFnDown && !wasFnDown {
-                let nowSec = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000.0
-                if fnDebouncer.shouldProcess(now: nowSec) {
-                    if let fnEvent = fnFallbackDetector.register(tapAt: nowSec, window: 0.5) {
-                        SpeakLog.hotkey.info("Fn fallback hotkey fired: \(String(describing: fnEvent), privacy: .public)")
-                        continuation.yield(fnEvent)
-                    }
-                }
-            }
-        }
 
         // [V01-5] Extra keyboard bindings — evaluated for EVERY flagsChanged event,
         // independent of the primary binding's keyCode (unlike the primary path

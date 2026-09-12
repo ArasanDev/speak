@@ -1182,3 +1182,50 @@ silence-classification tests (no-capture→false, silent-capture→true).
 Live behavior [unverified]: next real dictation will show which class the
 failures were — silent input (device/mute) vs audio-present-zero-results
 (STT/locale layer, would point back at DictationTranscriber).
+
+### Session (2026-09-13) — multi-agent review → capture/robustness fixes
+
+Four parallel read-only code reviews (audio capture, device roster,
+session/error model, hotkey) after user's "mic itself is not listening —
+other dictation app works". Fixes landed:
+
+- **All-channel downmix** (`downmixToMono`, vDSP): the tap, peak-RMS, VAD,
+  and STT converter all read channel 0 only; the built-in mic presents 3
+  channels and — while another process holds a VoiceProcessingIO session —
+  speech can ride ch1/ch2 while ch0 is gated silence. RMS ~0.001 observed.
+  Now averages every channel; handles interleaved + non-interleaved layouts
+  (dropping an interleaved buffer would have reproduced the same silence).
+- **inputFormat(forBus:) over outputFormat** for tap install, converter
+  source, and post-route-change format settle — outputFormat can bind the
+  tap to a zeroed client format on macOS 26. Tap now installs with the
+  explicit hardware format (was `nil`).
+- **Unconditional re-pin after `engine.reset()`** in the route-rebuild path:
+  the old `target.id != effectiveDeviceID` gate could leave capture on the
+  system default while believing the pinned device was live.
+- **Real coalescing for route-change bursts**: `rebuildRequested` was never
+  armed (serial-queue blocks each ran a full rebuild — 2–3 engine restarts
+  per plug). Now a lock-guarded flag is armed before enqueue; bursts drain
+  at most once more against final hardware state.
+- **Transient aggregates excluded** from the input roster
+  (`CADefaultDeviceAggregate-<pid>-N` — AVAudioEngine's per-process pinning
+  aggregates; pinnable, then vanish mid-session).
+- **Error un-masking**: `settleEmptyTranscript()` re-checks `.error` before
+  settling `.done` — a failStream during stop/drain was previously
+  overwritten by the empty-transcript path and reported as silence.
+- **Fn fallback removed**: the configured binding is the sole trigger —
+  owner directive is Right-Command double-press only (config.runtime); the
+  shadow Fn detector caused paired/unexpected sessions.
+- **Preset → `.progressiveLongDictation`**: dictated input is paragraph-
+  length free-form; short preset can end-point early. SpeechPrewarmer now
+  warms DictationTranscriber (Assistant asset family) — it was still
+  warming SpeechTranscriber/GeneralASR, a different model.
+- **Engine-start error** now carries the CoreAudio OSStatus code instead of
+  nested NSError boilerplate (the "truncated" HUD string).
+
+**Verification:** clean from-scratch rebuild (DerivedData + .xcodeproj
+regenerated) · lint 0 errors/414 warnings (baseline) · moat 7/7 ·
+CaptureSessionTests 21/21 · RouteChange+ConfigChange+STT+Hotkey+EmptyTranscript
+73/73 via bundle-injected xctest (LaunchServices test-host launch remains
+flaky — xcodebuild test intermittently fails to launch SpeakTests, code 20;
+workaround: run the app binary with libXCTestBundleInject + -XCTest args).
+Live dictation on the new capture path: **[unverified — needs user]**.

@@ -50,10 +50,9 @@ public final class SpeechPrewarmer: Sendable {
     ///
     /// Failure is logged via `os.Logger` and never propagated.
     public func prewarm(locale: Locale = Locale(identifier: "en-US")) {
-        guard SpeechTranscriber.isAvailable else { // [verified]
-            SpeakLog.stt.info("SpeechPrewarmer: SpeechTranscriber not available — skipping prewarm.")
-            return
-        }
+        // Availability is expressed via supportedLocale(equivalentTo:) for
+        // DictationTranscriber (it has no `isAvailable`) — the locale check
+        // inside warmModel covers this. [fix: warm the model actually used]
         Task.detached(priority: .background) {
             await Self.warmModel(locale: locale)
         }
@@ -67,11 +66,15 @@ public final class SpeechPrewarmer: Sendable {
     /// [STT-H1] [verified: SpeechAnalyzer(modules:options:) + Options(priority:modelRetention:)
     ///  + ModelRetention.processLifetime — arm64e-apple-macos.swiftinterface, MacOSX26.5.sdk]
     private static func warmModel(locale: Locale) async {
-        guard let resolvedLocale = await SpeechTranscriber.supportedLocale(equivalentTo: locale) else {
+        // Must match the session path: AppleSpeechTranscriber uses
+        // DictationTranscriber (Assistant asset family) — warming the generic
+        // SpeechTranscriber (GeneralASR) leaves the dictation model cold.
+        // [fix: prewarmer warmed a different model family than the one used]
+        guard let resolvedLocale = await DictationTranscriber.supportedLocale(equivalentTo: locale) else {
             SpeakLog.stt.info("SpeechPrewarmer: \(locale.identifier, privacy: .public) not a supported locale — skipping prewarm.")
             return
         }
-        let transcriber = SpeechTranscriber(locale: resolvedLocale, preset: .progressiveTranscription)
+        let transcriber = DictationTranscriber(locale: resolvedLocale, preset: .progressiveLongDictation)
 
         // Only prewarm when the model asset is installed — avoid triggering
         // a background download during prewarm; that is the session's job.

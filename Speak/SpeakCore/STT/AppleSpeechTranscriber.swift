@@ -423,7 +423,12 @@ private struct Session: Sendable {
             )
         }
 
-        let transcriber = DictationTranscriber(locale: resolvedLocale, preset: .progressiveShortDictation)
+        // .progressiveLongDictation over .progressiveShortDictation: dictated
+        // input here is free-form developer prompts (paragraph-length,
+        // disfluent) — the long preset's endpointing assumes sustained speech;
+        // the short preset can commit/end-point an utterance early.
+        // [decision: A/B review — long preset matches the dictation profile]
+        let transcriber = DictationTranscriber(locale: resolvedLocale, preset: .progressiveLongDictation)
         try await provisionAsset(for: transcriber)
         return transcriber
     }
