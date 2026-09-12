@@ -159,7 +159,15 @@ public final class AppleSpeechTranscriber: Transcribing, AudioCaptureProviding {
     public let vocabulary: [String]
     static let developerTerms = [
         "CLI", "API", "SDK", "UI", "LLM", "PR", "macOS", "SwiftUI", "Xcode", "Git",
-        "JSON", "HTTP", "RPC", "LSP", "AST", "FTS5", "SQLite", "SQLite3", "SQL", "gRPC", "REST", "iOS"
+        "JSON", "HTTP", "RPC", "LSP", "AST", "FTS5", "SQLite", "SQLite3", "SQL", "gRPC", "REST", "iOS",
+        // Product/tool names developers dictate daily — contextualStrings bias
+        // pulls "Claude Code" back from "cloth code", "Codex" from "codecs".
+        // [evidence: live dictation 2026-09-12 — Claude Code→"cloth code",
+        //  Codex→"codecs" without these hints]
+        "Claude", "Claude Code", "Codex", "ChatGPT", "OpenAI", "Anthropic",
+        "Devin", "Wispr", "Copilot", "Cursor", "Windsurf", "Ollama",
+        "MLX", "Whisper", "Gemini", "DeepSeek", "Qwen", "Homebrew",
+        "Neural Engine", "Foundation Models", "SpeechAnalyzer"
     ]
 
     /// Default no-arg init: uses the live microphone.

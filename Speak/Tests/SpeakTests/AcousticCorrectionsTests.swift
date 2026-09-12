@@ -102,11 +102,23 @@ final class AcousticCorrectionsTests: XCTestCase {
 
     // MARK: - defaultExpander factory
 
-    func testDefaultExpanderNilWhenNothingConfigured() {
+    /// The seeded built-in slip table means the expander is never nil —
+    /// built-ins are active even with zero user configuration.
+    /// [decision: built-in slips merge under user entries]
+    func testDefaultExpanderAlwaysPresentViaBuiltIns() {
         let store = SettingsStore(defaults: freshDefaults())
-        XCTAssertNil(defaultExpander(for: store, snippetStore: nil))
-        let snippets = SnippetStore(defaults: freshDefaults())
-        XCTAssertNil(defaultExpander(for: store, snippetStore: snippets))
+        let expander = defaultExpander(for: store, snippetStore: nil)
+        XCTAssertNotNil(expander)
+        XCTAssertEqual(expander?.expand("paste this into cloth code"), "paste this into Claude Code")
+    }
+
+    /// A user row for the same `heard` must win over the built-in — including
+    /// an identity row used to disable a built-in slip.
+    func testUserCorrectionOverridesBuiltIn() {
+        let store = SettingsStore(defaults: freshDefaults())
+        store.acousticCorrections = [AcousticCorrection(heard: "codecs", typed: "codecs")]
+        let expander = defaultExpander(for: store, snippetStore: nil)
+        XCTAssertEqual(expander?.expand("the codecs we ship"), "the codecs we ship")
     }
 
     func testDefaultExpanderAppliesCorrectionsThenSnippets() {
