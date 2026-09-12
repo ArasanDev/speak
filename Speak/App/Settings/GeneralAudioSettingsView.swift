@@ -216,7 +216,7 @@ private struct MicrophoneCard: View {
             if let dev = currentDevice {
                 SettingsRow(
                     dev.name,
-                    description: "\(Int(dev.sampleRate)) Hz · \(dev.channelCount) channel\(dev.channelCount == 1 ? "" : "s") — follows the system default input."
+                    description: deviceDescription(dev)
                 ) {
                     if routeFlash {
                         SettingsStatusPill(text: "Switched", tint: .speakAccent)
@@ -236,19 +236,27 @@ private struct MicrophoneCard: View {
                 SettingsRowSeparator()
 
                 SettingsRow(
-                    "Available Inputs",
-                    description: "Every mic macOS currently sees. Switch in System Settings → Sound → Input."
-                ) {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        ForEach(inputDevices, id: \.id) { dev in
-                            Text(dev.name)
-                                .font(.speakMonoCaption)
-                                .foregroundStyle(
-                                    dev.id == currentDevice?.id ? Color.primary : Color.secondary
-                                )
-                        }
+                    "Input Source",
+                    description: pinnedDeviceMissing
+                        ? "\(context.settingsStore.preferredInputDeviceName ?? "Pinned microphone") isn't connected — using the system default until it returns."
+                        : "Pick a mic, or follow the system default. Applies live, even mid-dictation."
+                )
+
+                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                    inputSourceRow(
+                        uid: nil,
+                        name: "System Default",
+                        detail: "Follows whatever macOS selects — recommended"
+                    )
+                    ForEach(inputDevices, id: \.id) { dev in
+                        inputSourceRow(
+                            uid: dev.uid,
+                            name: dev.name,
+                            detail: "\(Int(dev.sampleRate)) Hz · \(dev.channelCount)ch"
+                        )
                     }
                 }
+                .padding(.vertical, SpeakSpacing.xs)
             }
 
             SettingsRowSeparator()
@@ -290,25 +298,26 @@ private struct MicrophoneCard: View {
         }
         .onAppear {
             updateStatus()
-            currentDevice = CoreAudioDeviceMonitor.shared.currentDefaultInputDevice()
-            inputDevices = CoreAudioDeviceMonitor.shared.listInputDevices()
+            refreshDevices()
             if monitorToken == nil {
-                monitorToken = CoreAudioDeviceMonitor.shared.registerCallback { dev in
+                monitorToken = CoreAudioDeviceMonitor.shared.registerCallback { _ in
                     Task { @MainActor in
                         flashRouteChange()
-                        currentDevice = dev
-                        inputDevices = CoreAudioDeviceMonitor.shared.listInputDevices()
+                        refreshDevices()
                     }
                 }
             }
             if topologyToken == nil {
-                topologyToken = CoreAudioDeviceMonitor.shared.registerTopologyCallback { devices in
+                topologyToken = CoreAudioDeviceMonitor.shared.registerTopologyCallback { _ in
                     Task { @MainActor in
-                        inputDevices = devices
+                        refreshDevices()
                     }
                 }
             }
             startMonitorIfAble()
+        }
+        .onChange(of: context.settingsStore.preferredInputDeviceUID) { _, _ in
+            refreshDevices()
         }
         .onDisappear {
             if let token = monitorToken {
@@ -333,6 +342,67 @@ private struct MicrophoneCard: View {
                 startMonitorIfAble()
             }
         }
+    }
+
+    // MARK: - Input source picker
+
+    /// One selectable row in the Input Source list. `uid == nil` is the
+    /// "System Default" option; device rows persist the stable hardware UID
+    /// (plus the display name, so an unplugged pin still reads as a name).
+    /// Writes go through `SettingsStore` — `DictationController`'s observer
+    /// pushes them into the engine, which live-switches a running capture.
+    private func inputSourceRow(uid: String?, name: String, detail: String) -> some View {
+        let selected = context.settingsStore.preferredInputDeviceUID == uid
+        return Button {
+            context.settingsStore.preferredInputDeviceUID = uid
+            context.settingsStore.preferredInputDeviceName = uid == nil ? nil : name
+            refreshDevices()
+        } label: {
+            HStack(spacing: SpeakSpacing.sm) {
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(selected ? Color.speakAccent : Color.secondary)
+                    .font(.speakBody(.caption))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(name)
+                        .font(.speakBody(.caption))
+                        .foregroundStyle(.primary)
+                    Text(detail)
+                        .font(.speakMonoCaption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if uid != nil, uid == currentDevice?.uid {
+                    SettingsStatusPill(text: "Active")
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Top-row description: format string for the effective device, noting
+    /// whether it arrived via the system default or the picker pin.
+    private func deviceDescription(_ dev: CoreAudioDeviceMonitor.DeviceInfo) -> String {
+        let source = context.settingsStore.preferredInputDeviceUID == nil
+            ? "follows the system default input"
+            : "pinned below"
+        return "\(Int(dev.sampleRate)) Hz · \(dev.channelCount) channel\(dev.channelCount == 1 ? "" : "s") — \(source)."
+    }
+
+    /// `true` when a pin is stored but its device isn't in the current roster —
+    /// the picker shows the "not connected → system default" explanation.
+    private var pinnedDeviceMissing: Bool {
+        guard let uid = context.settingsStore.preferredInputDeviceUID else { return false }
+        return !inputDevices.contains { $0.uid == uid }
+    }
+
+    /// Refreshes both the roster and the EFFECTIVE device (pinned-or-default)
+    /// shown at the top of the card — the honest "what's feeding you" answer.
+    private func refreshDevices() {
+        inputDevices = CoreAudioDeviceMonitor.shared.listInputDevices()
+        currentDevice = CoreAudioDeviceMonitor.shared.resolvedInputDevice(
+            preferredUID: context.settingsStore.preferredInputDeviceUID
+        )
     }
 
     // MARK: - Level monitor

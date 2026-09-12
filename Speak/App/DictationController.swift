@@ -46,6 +46,7 @@
 
 import AppKit
 import Combine
+import CoreAudio
 import Foundation
 import Observation
 import SpeakCore
@@ -112,6 +113,11 @@ final class DictationController: CLICommandHandler {
         didSet {
             if icon == .listening, oldValue != .listening {
                 _hotkeySubject.send()
+                // Seed the effective-input baseline for the route-change cue —
+                // pinned-device-aware so a later topology/default event is
+                // compared against what capture is actually using.
+                lastEffectiveInputID = CoreAudioDeviceMonitor.shared
+                    .resolvedInputDevice(preferredUID: settingsStore.preferredInputDeviceUID)?.id
                 // Sensory edge: engage chime/haptic (Settings ▸ Hotkeys ▸ Feedback).
                 DictationFeedback.play(
                     .engaged,
@@ -153,6 +159,21 @@ final class DictationController: CLICommandHandler {
     nonisolated(unsafe) var eventTask: Task<Void, Never>?
     @ObservationIgnored
     nonisolated(unsafe) var armStateTask: Task<Void, Never>?
+    /// CoreAudio default-input callback token — registered in `startMonitoring()`
+    /// so a mid-dictation device switch plays the `.routeChanged` cue.
+    /// nonisolated(unsafe): unregistered from deinit.
+    @ObservationIgnored
+    nonisolated(unsafe) var routeCueToken: UUID?
+    /// Topology-channel twin of `routeCueToken` — needed so a *pinned* mic
+    /// disappearing mid-dictation (no default change fires) still cues.
+    @ObservationIgnored
+    nonisolated(unsafe) var routeCueTopologyToken: UUID?
+    /// The device capture is actually using, seeded on `.listening` entry —
+    /// the cue compares against this so it fires on EFFECTIVE-input changes
+    /// (pinned-device loss included), not merely OS default changes.
+    private var lastEffectiveInputID: AudioDeviceID?
+    @ObservationIgnored
+    nonisolated(unsafe) var inputPrefObserverTask: Task<Void, Never>?
 
     let historyStore: any HistoryStoring
 
@@ -485,6 +506,13 @@ final class DictationController: CLICommandHandler {
         // Start observing future appearance theme changes from SettingsView.
         startObservingAppearance()
 
+        // Mic picker (Settings → Microphone): apply the persisted pin now and
+        // observe future changes — setting it mid-dictation live-switches the
+        // capture via AudioCapture's preference didSet → rebuild path.
+        // [decision: pinned-device selection]
+        engine.setPreferredInputDeviceUID(store.preferredInputDeviceUID)
+        startObservingInputDevicePreference()
+
     }
 
     // MARK: - Trigger-mode observation
@@ -520,6 +548,31 @@ final class DictationController: CLICommandHandler {
         }
     }
 
+
+    /// Re-arming observation loop for `settingsStore.preferredInputDeviceUID` —
+    /// pushes picker changes into the engine, which re-resolves the effective
+    /// input and live-switches a running capture when it actually differs.
+    private func startObservingInputDevicePreference() {
+        inputPrefObserverTask?.cancel()
+        inputPrefObserverTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self else { break }
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    withObservationTracking {
+                        _ = self.settingsStore.preferredInputDeviceUID
+                    } onChange: {
+                        continuation.resume()
+                    }
+                }
+                guard !Task.isCancelled else { break }
+                let uid = self.settingsStore.preferredInputDeviceUID
+                self.engine.setPreferredInputDeviceUID(uid)
+                SpeakLog.audio.info(
+                    "DictationController: mic preference changed → \(uid ?? "system default", privacy: .public)"
+                )
+            }
+        }
+    }
 
     // MARK: - Appearance theme observation
     // `applyAppearance(_:)` lives in the extension below ([lint] type_body_length).
@@ -658,6 +711,8 @@ final class DictationController: CLICommandHandler {
         }
         SpeakLog.hotkey.info("DictationController: startMonitoring() — arming monitor.")
 
+        registerRouteChangeCue()
+
         // Check immediate AX state to set the initial permissionsNeeded hint.
         let axGranted = permissionManager.status(.accessibility) == .granted
         if !axGranted {
@@ -689,6 +744,42 @@ final class DictationController: CLICommandHandler {
         // Called AFTER the XCTestConfigurationFilePath early-return in AppDelegate
         // ensures the port is never opened during test-host runs.
         registerCLIPortAndSweepAgentCalls()
+    }
+
+    /// Route-change cue: fires when the EFFECTIVE input changes while we're
+    /// listening — headset grabbing the default, active mic unplugged →
+    /// fallback, or a pinned device (dis)connecting. Registers on both HAL
+    /// channels because a pinned-device loss changes what we're capturing
+    /// without ever changing the system default. Idle changes don't cue —
+    /// the Settings roster + capture-side rebuild handle those. Callbacks
+    /// arrive on arbitrary threads; gate + feedback run on the main actor.
+    private func registerRouteChangeCue() {
+        routeCueToken = CoreAudioDeviceMonitor.shared.registerCallback { _ in
+            Task { @MainActor [weak self] in self?.evaluateRouteCue() }
+        }
+        routeCueTopologyToken = CoreAudioDeviceMonitor.shared.registerTopologyCallback { _ in
+            Task { @MainActor [weak self] in self?.evaluateRouteCue() }
+        }
+    }
+
+    /// Compares the resolved input against the dictation-start baseline and
+    /// plays `.routeChanged` when they differ — the cue means "the mic
+    /// feeding you changed," not "the OS default changed."
+    private func evaluateRouteCue() {
+        guard icon == .listening else { return }
+        let resolved = CoreAudioDeviceMonitor.shared.resolvedInputDevice(
+            preferredUID: settingsStore.preferredInputDeviceUID
+        )
+        guard let resolved, resolved.id != lastEffectiveInputID else { return }
+        lastEffectiveInputID = resolved.id
+        SpeakLog.audio.info(
+            "DictationController: effective input switched mid-dictation → \(resolved.name, privacy: .public)"
+        )
+        DictationFeedback.play(
+            .routeChanged,
+            soundsEnabled: settingsStore.dictationFeedbackSounds,
+            hapticsEnabled: settingsStore.dictationFeedbackHaptics
+        )
     }
 
     // MARK: - Window presentation (delegates to WindowPresenter)
@@ -771,6 +862,13 @@ final class DictationController: CLICommandHandler {
         eventTask?.cancel()
         armStateTask?.cancel()
         commandChordTask?.cancel()
+        inputPrefObserverTask?.cancel()
+        if let routeCueToken {
+            CoreAudioDeviceMonitor.shared.unregisterCallback(routeCueToken)
+        }
+        if let routeCueTopologyToken {
+            CoreAudioDeviceMonitor.shared.unregisterCallback(routeCueTopologyToken)
+        }
     }
 
 }

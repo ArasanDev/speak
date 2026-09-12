@@ -565,6 +565,12 @@ public actor SpeakEngine {
                 return false
             }
         }
+        // Apply the persisted mic pin (Settings → Microphone) at session start.
+        // `nil` follows the system default; an unplugged preferred device
+        // resolves to default inside CoreAudioDeviceMonitor — never an error
+        // here. [decision: pinned-device selection]
+        setPreferredInputDeviceUID(settings.preferredInputDeviceUID)
+
         let session = newSession(frontmostBundleID: frontmostBundleID)
         SpeakLog.engine.info("SpeakEngine: beginDictation — starting new session.")
         // [Engine-L2] If session.start() throws (e.g., mic permission denied), clear
@@ -581,6 +587,20 @@ public actor SpeakEngine {
             throw error
         }
         return true
+    }
+
+    /// Applies a mic preference to the live capture when the transcriber
+    /// exposes one (`AudioCaptureProviding`). Setting mid-session re-resolves
+    /// the effective device and rebuilds the tap if it actually differs — see
+    /// `AudioCapture.preferredInputDeviceUID`. No-op for fixture/mock
+    /// producers that don't own a real `AudioCapture`.
+    ///
+    /// `nonisolated`: touches only the immutable `transcriber` — the property
+    /// setter on `AudioCapture` is itself lock-guarded + stateQueue-dispatched,
+    /// so callers (MainActor Settings observers, this actor's beginDictation)
+    /// don't need an await for a fire-and-forget apply.
+    public nonisolated func setPreferredInputDeviceUID(_ uid: String?) {
+        (transcriber as? AudioCaptureProviding)?.audioCapture?.preferredInputDeviceUID = uid
     }
 
     /// [fix: wedge] Self-healing A3 release: when `currentSession` has reached a

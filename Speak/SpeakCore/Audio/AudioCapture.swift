@@ -30,7 +30,9 @@
 //   session. [decision]
 
 import Accelerate
+import AudioToolbox
 @preconcurrency import AVFoundation
+import CoreAudio
 import os
 
 public final class AudioCapture: @unchecked Sendable {
@@ -73,6 +75,50 @@ public final class AudioCapture: @unchecked Sendable {
     private var configObserver: (any NSObjectProtocol)?
     /// Observer token for CoreAudio HAL default input device changes.
     private var monitorToken: UUID?
+    /// Observer token for HAL topology changes — lets a pinned-device
+    /// preference re-resolve when hardware appears/disappears mid-capture
+    /// (the "user's preferred mic reconnects mid-dictation" path).
+    private var topologyToken: UUID?
+
+    /// The device the input unit is currently pinned to. `stateQueue`-guarded;
+    /// `kAudioDeviceUnknown` while no capture is live.
+    private var effectiveDeviceID: AudioDeviceID = kAudioDeviceUnknown
+
+    /// stateQueue-scoped rebuild trigger, bound at `setupObservers` time with
+    /// the live tap-install captures. Preference/topology re-resolution calls
+    /// it instead of duplicating the rebuild-arg plumbing.
+    private var rebuildRequest: (@Sendable () -> Void)?
+
+    /// Lock-guarded storage for `preferredInputDeviceUID` — the property is
+    /// written from the main thread (Settings picker) while capture machinery
+    /// reads it on `stateQueue`.
+    private let preferenceLock = NSLock()
+    private var _preferredInputDeviceUID: String?
+
+    /// Pins capture to a specific input device by its stable hardware UID.
+    /// `nil` = follow the system default (the pre-preference behavior).
+    ///
+    /// Resolution + fallback live in `CoreAudioDeviceMonitor.resolvedInputDevice`:
+    /// a stored UID whose device is unplugged transparently falls back to the
+    /// system default rather than failing the session. Setting this while a
+    /// capture is live re-resolves on `stateQueue` and rebuilds the tap only
+    /// when the *effective* device actually differs — the "user picked Jabra
+    /// in Settings mid-dictation" path. [decision: pinned-device selection]
+    public var preferredInputDeviceUID: String? {
+        get {
+            preferenceLock.lock()
+            defer { preferenceLock.unlock() }
+            return _preferredInputDeviceUID
+        }
+        set {
+            preferenceLock.lock()
+            _preferredInputDeviceUID = newValue
+            preferenceLock.unlock()
+            stateQueue.async { [weak self] in
+                self?.reResolveInputLocked()
+            }
+        }
+    }
 
     /// Serializes `stop()` against the `.AVAudioEngineConfigurationChange`
     /// handler, which fires on an arbitrary CoreAudio callback thread. Without
@@ -153,13 +199,6 @@ public final class AudioCapture: @unchecked Sendable {
     ///
     /// W2.1: Also starts the parallel level stream (accessible via `startLevelStream()`).
     public func start() throws -> AsyncThrowingStream<AVAudioPCMBuffer, Error> {
-        engine.reset()
-
-        let input = engine.inputNode
-        let inputFormat = try resolveInputFormat(for: input)
-        let (targetFormat, converter) = try makeTargetFormatAndConverter(from: inputFormat)
-        self.converter = converter
-
         // Bounded streams: an unbounded buffer grows ~11 MB/min of PCM if the
         // analyzer stalls (a real stall is on record). 64 buffers ≈ seconds of
         // audio — drops only happen under a stall the 5 s watchdog already
@@ -177,27 +216,57 @@ public final class AudioCapture: @unchecked Sendable {
         self.levelsContinuation = levelsContinuation
         self.pendingLevelStream = levelStream
 
-        let converterBox = ConverterBox(converter)
-        let installTap = makeTapInstaller(
-            input: input,
-            targetFormat: targetFormat,
-            converterBox: converterBox,
-            continuation: continuation,
-            levelsContinuation: levelsContinuation
-        )
-
-        _ = installTap(inputFormat)
-
-        setupObservers(
-            input: input,
-            targetFormat: targetFormat,
-            converterBox: converterBox,
-            installTap: installTap
-        )
-
-        engine.prepare()
+        // The whole reset → pin → format → tap → observe → start sequence runs
+        // on `stateQueue` so a route-change rebuild event can never interleave
+        // mid-setup — before this, `installTap` ran on the caller thread while
+        // a queued `reconfigureAfterRouteChangeLocked` could removeTap
+        // underneath it, leaving a torn engine graph. [fix: audit — start/rebuild race]
         do {
-            try engine.start()
+            try stateQueue.sync {
+                self.engine.reset()
+                let input = self.engine.inputNode
+
+                // Pin the input unit to the persisted preference BEFORE reading
+                // the hardware format — `outputFormat` must describe the device
+                // actually feeding us. `nil` preference or an unplugged
+                // preferred device resolves to the system default.
+                // [decision: pinned-device selection]
+                if let target = CoreAudioDeviceMonitor.shared.resolvedInputDevice(
+                    preferredUID: self.preferredInputDeviceUID
+                ) {
+                    self.pinInputDevice(target.id, on: input)
+                }
+
+                let inputFormat = try self.resolveInputFormat(for: input)
+                let (targetFormat, converter) = try self.makeTargetFormatAndConverter(from: inputFormat)
+                self.converter = converter
+
+                let converterBox = ConverterBox(converter)
+                let installTap = self.makeTapInstaller(
+                    input: input,
+                    targetFormat: targetFormat,
+                    converterBox: converterBox,
+                    continuation: continuation,
+                    levelsContinuation: levelsContinuation
+                )
+                _ = installTap(inputFormat)
+
+                self.setupObservers(
+                    input: input,
+                    targetFormat: targetFormat,
+                    converterBox: converterBox,
+                    installTap: installTap
+                )
+
+                self.engine.prepare()
+                try self.engine.start()
+
+                SpeakLog.audio.info("""
+                    AudioCapture started: \(inputFormat.sampleRate, privacy: .public)Hz \
+                    \(inputFormat.channelCount, privacy: .public)ch → \
+                    \(Constants.targetSampleRate, privacy: .public)Hz mono
+                    """)
+            }
         } catch {
             // Shared teardown (removes the config-change observer AND the HAL
             // monitor token — the old path left both bound to the stale input
@@ -208,11 +277,6 @@ public final class AudioCapture: @unchecked Sendable {
             throw SpeakError.unknown("AVAudioEngine failed to start: \(error.localizedDescription)")
         }
 
-        SpeakLog.audio.info("""
-            AudioCapture started: \(inputFormat.sampleRate, privacy: .public)Hz \
-            \(inputFormat.channelCount, privacy: .public)ch → \
-            \(Constants.targetSampleRate, privacy: .public)Hz mono
-            """)
         return stream
     }
 
@@ -319,8 +383,14 @@ public final class AudioCapture: @unchecked Sendable {
                 // engine stop/reset/start — it must not block the CoreAudio
                 // callback thread that posted the notification. The serial
                 // queue still orders it against stop(). [fix: audit — RT-thread]
-                self.stateQueue.async {
-                    self.reconfigureAfterRouteChangeLocked(
+                //
+                // The inner block MUST weak-capture self: a strong capture
+                // retains AudioCapture until the block runs on stateQueue —
+                // if that's the last reference, deinit → stop() →
+                // stateQueue.sync fires ON stateQueue itself and dispatch
+                // traps (DISPATCH_WAIT_FOR_QUEUE). [fix: audit — deinit trap]
+                self.stateQueue.async { [weak self] in
+                    self?.requestRebuildLocked(
                         input: input,
                         bus: bus,
                         targetFormat: targetFormat,
@@ -334,8 +404,8 @@ public final class AudioCapture: @unchecked Sendable {
         if monitorToken == nil {
             monitorToken = CoreAudioDeviceMonitor.shared.registerCallback { [weak self] _ in
                 guard let self else { return }
-                self.stateQueue.async {
-                    self.reconfigureAfterRouteChangeLocked(
+                self.stateQueue.async { [weak self] in
+                    self?.requestRebuildLocked(
                         input: input,
                         bus: bus,
                         targetFormat: targetFormat,
@@ -345,6 +415,113 @@ public final class AudioCapture: @unchecked Sendable {
                 }
             }
         }
+
+        // Bind the stateQueue-scoped rebuild trigger so preference changes and
+        // topology events can re-resolve the effective device without
+        // duplicating this argument list. [decision: pinned-device selection]
+        rebuildRequest = { [weak self] in
+            self?.requestRebuildLocked(
+                input: input,
+                bus: bus,
+                targetFormat: targetFormat,
+                converterBox: converterBox,
+                installTap: installTap
+            )
+        }
+
+        // Topology listener: fires on ANY plug/unplug, not just default changes.
+        // When a pinned preference is set, this is how "preferred mic
+        // reconnects mid-dictation" switches the capture back to it — the
+        // default-device callback alone can't see that event.
+        if topologyToken == nil {
+            topologyToken = CoreAudioDeviceMonitor.shared.registerTopologyCallback { [weak self] _ in
+                guard let self else { return }
+                self.stateQueue.async { [weak self] in
+                    self?.reResolveInputLocked()
+                }
+            }
+        }
+    }
+
+    /// Re-resolves the effective input device after a preference change or a
+    /// topology event. Rebuilds only when the resolved device actually differs
+    /// from what's pinned — an unrelated device plug/unplug during capture is
+    /// correctly a no-op. Must run on `stateQueue`.
+    private func reResolveInputLocked() {
+        guard continuation != nil else { return }
+        let resolved = CoreAudioDeviceMonitor.shared.resolvedInputDevice(
+            preferredUID: preferredInputDeviceUID
+        )
+        guard let resolved, resolved.id != effectiveDeviceID else { return }
+        SpeakLog.audio.info(
+            "AudioCapture: effective input now \(resolved.name, privacy: .public) — rebuilding."
+        )
+        rebuildRequest?()
+    }
+
+    /// Pins the engine's input unit to `deviceID` via
+    /// `kAudioOutputUnitProperty_CurrentDevice` — the HAL device-selection
+    /// hook on macOS. Must run while the engine is stopped and before the tap
+    /// is (re)installed. Always sets explicitly so a cleared preference
+    /// deterministically re-pins to the system default. On failure the error
+    /// is logged and `effectiveDeviceID` is left stale so the next
+    /// re-resolution retries rather than believing the pin landed.
+    private func pinInputDevice(_ deviceID: AudioDeviceID, on input: AVAudioInputNode) {
+        guard let audioUnit = input.audioUnit else { return }
+        var id = deviceID
+        let status = AudioUnitSetProperty(
+            audioUnit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &id,
+            UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+        if status == noErr {
+            effectiveDeviceID = deviceID
+        } else {
+            SpeakLog.audio.error(
+                "AudioCapture: pinning input device \(deviceID, privacy: .public) failed — \(status, privacy: .public)."
+            )
+        }
+    }
+
+    /// `stateQueue`-guarded coalescing flag — set when a route-change event is
+    /// queued while a rebuild is already pending or running. Cleared by the
+    /// drain loop in `requestRebuildLocked`.
+    private var rebuildRequested = false
+
+    /// Coalesces route-change bursts into a single rebuild.
+    ///
+    /// One physical event (e.g. a USB headset plug that also flips the default
+    /// input) typically fires BOTH `.AVAudioEngineConfigurationChange` and the
+    /// HAL default-device callback. Without this flag each enqueues its own
+    /// `reconfigureAfterRouteChangeLocked` → the tap is torn down and the
+    /// engine restarted twice per plug (~300ms+ of dropped audio, plus churn
+    /// on the RT path). With it, a queued event arriving mid-rebuild just
+    /// re-arms the flag and the loop drains once more against the *final*
+    /// hardware state. [fix: audit — route-change rebuild dedup]
+    private func requestRebuildLocked(
+        input: AVAudioInputNode,
+        bus: AVAudioNodeBus,
+        targetFormat: AVAudioFormat,
+        converterBox: ConverterBox,
+        installTap: @escaping @Sendable (AVAudioFormat) -> Bool
+    ) {
+        if rebuildRequested {
+            SpeakLog.audio.info("AudioCapture: route-change burst coalesced into in-flight rebuild.")
+            return
+        }
+        repeat {
+            rebuildRequested = false
+            reconfigureAfterRouteChangeLocked(
+                input: input,
+                bus: bus,
+                targetFormat: targetFormat,
+                converterBox: converterBox,
+                installTap: installTap
+            )
+        } while rebuildRequested && continuation != nil
     }
 
     /// W2.1: Returns the live level stream (0…1 RMS values). Must be called after
@@ -407,6 +584,19 @@ public final class AudioCapture: @unchecked Sendable {
             engine.stop()
         }
         engine.reset()
+
+        // Re-resolve the pinned-device preference before reading the new
+        // format: the pinned device may be the thing that disappeared
+        // (resolve falls back to system default), or a preference may have
+        // been set/cleared mid-capture. Skip the HAL transaction when the
+        // resolved device is already pinned — re-pinning the same device on
+        // every rebuild is wasted churn under a route-change storm.
+        // [decision: pinned-device selection]
+        if let target = CoreAudioDeviceMonitor.shared.resolvedInputDevice(
+            preferredUID: preferredInputDeviceUID
+        ), target.id != effectiveDeviceID {
+            pinInputDevice(target.id, on: input)
+        }
 
         var newInputFormat = input.outputFormat(forBus: bus)
         if newInputFormat.sampleRate <= 0 || newInputFormat.channelCount <= 0 {
@@ -477,6 +667,13 @@ public final class AudioCapture: @unchecked Sendable {
             CoreAudioDeviceMonitor.shared.unregisterCallback(token)
             monitorToken = nil
         }
+        if let token = topologyToken {
+            CoreAudioDeviceMonitor.shared.unregisterCallback(token)
+            topologyToken = nil
+        }
+        rebuildRequest = nil
+        rebuildRequested = false
+        effectiveDeviceID = kAudioDeviceUnknown
         engine.inputNode.removeTap(onBus: bus)
         if engine.isRunning { engine.stop() }
         engine.reset()
