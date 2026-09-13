@@ -189,6 +189,7 @@ struct SettingsExperienceView: View {
         case .vocabulary:   VocabularySettingsView(context: context)
         case .agentBridge:  AgentBridgeSettingsView(context: context, onOpenSection: onOpenSection)
         case .appearance:   AppearanceHUDSettingsView(context: context)
+        case .overlay:      OverlaySettingsView(context: context)
         case .privacy:      PrivacyHealthSettingsView(context: context)
         case .general:      GeneralSettingsView(context: context)
         case .about:        AboutSettingsTab().frame(minHeight: 420)

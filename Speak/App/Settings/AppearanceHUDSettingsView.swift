@@ -1,9 +1,9 @@
 // App/Settings/AppearanceHUDSettingsView.swift
 //
-// "Appearance & HUD" — the sixth Settings category. App theme, recording-HUD
-// style (Classic vs Aurora), and the HUD border animation. The legacy General
-// tab's HUDStyleSection/BorderStyleSection were superseded by these
-// SettingsChrome cards and removed.
+// "Appearance" — appearance mode (light/dark/system) and runtime color
+// themes. The recording-HUD and border-animation controls moved to their own
+// dedicated "Overlay" category (OverlaySettingsView) — the overlay panel is
+// a product surface in its own right, not a subsection of theme settings.
 
 import SpeakCore
 import SwiftUI
@@ -22,8 +22,6 @@ struct AppearanceHUDSettingsView: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
             appearanceCard
             colorThemeCard
-            hudCard
-            borderCard
         }
         .sheet(isPresented: $editingTheme) {
             if let engine = context.themeEngine {
@@ -74,148 +72,6 @@ struct AppearanceHUDSettingsView: View {
         }
     }
 
-    // MARK: - Recording HUD
-
-    private var hudCard: some View {
-        SettingsSectionCard(title: "Recording HUD") {
-            SettingsRow(
-                "HUD style",
-                description: "Both styles share the capsule frame; Aurora adds an ambient animated border."
-            ) {
-                Picker("", selection: Binding(
-                    get: { store.hudStyle },
-                    set: { store.hudStyle = $0 }
-                )) {
-                    Text("Classic").tag(HUDStyle.classic)
-                    Text("Aurora").tag(HUDStyle.aurora)
-                }
-                .pickerStyle(.menu)
-                .fixedSize()
-            }
-
-            SettingsRowSeparator()
-
-            SettingsRow(
-                "Voice animation",
-                description: "The left-side voice visual while dictating — live mic level drives it."
-            ) {
-                Picker("", selection: Binding(
-                    get: { store.voiceAnimationStyle },
-                    set: { store.voiceAnimationStyle = $0 }
-                )) {
-                    Text("Sonar Ping").tag(VoiceAnimationStyle.sonar)
-                    Text("Ring Gauge").tag(VoiceAnimationStyle.ringGauge)
-                    Text("Spectrum Bars").tag(VoiceAnimationStyle.spectrum)
-                }
-                .pickerStyle(.menu)
-                .fixedSize()
-            }
-
-            SettingsRowSeparator()
-
-            SettingsRow(
-                "Animation color",
-                description: "The hue the voice animation draws with."
-            ) {
-                HStack(spacing: SpeakSpacing.sm) {
-                    ForEach(VoiceAnimationColor.allCases, id: \.self) { choice in
-                        Button {
-                            store.voiceAnimationColor = choice
-                        } label: {
-                            Circle()
-                                .fill(choice.color)
-                                .frame(width: 18, height: 18)
-                                .overlay(
-                                    Circle()
-                                        .strokeBorder(
-                                            choice == store.voiceAnimationColor
-                                                ? Color.speakBone
-                                                : Color.clear,
-                                            lineWidth: 2
-                                        )
-                                        .padding(-3)
-                                )
-                                .contentShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .help(choice.rawValue.capitalized)
-                        .accessibilityLabel("\(choice.rawValue) animation color")
-                        .accessibilityAddTraits(
-                            choice == store.voiceAnimationColor ? .isSelected : []
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Border animation
-
-    private var borderCard: some View {
-        SettingsSectionCard(title: "Animated Border") {
-            SettingsRow(
-                "Border animation",
-                description: borderCaption
-            ) {
-                Picker("", selection: Binding(
-                    get: { store.borderAnimationStyle },
-                    set: { store.borderAnimationStyle = $0 }
-                )) {
-                    Text("None").tag(BorderAnimationStyle.none)
-                    Text("Full Glow").tag(BorderAnimationStyle.fullGlow)
-                    Text("Edge Flow").tag(BorderAnimationStyle.edgeFlow)
-                }
-                .pickerStyle(.menu)
-                .fixedSize()
-            }
-
-            if store.borderAnimationStyle == .edgeFlow {
-                SettingsRowSeparator()
-
-                SettingsRow("Flow speed") {
-                    Picker("", selection: Binding(
-                        get: { store.borderFlowSpeed },
-                        set: { store.borderFlowSpeed = $0 }
-                    )) {
-                        Text("Slow (6s)").tag(BorderFlowSpeed.slow)
-                        Text("Medium (3s)").tag(BorderFlowSpeed.medium)
-                        Text("Fast (1.5s)").tag(BorderFlowSpeed.fast)
-                    }
-                    .pickerStyle(.menu)
-                    .fixedSize()
-                }
-
-                SettingsRowSeparator()
-
-                SettingsRow(
-                    "Flowing lights",
-                    description: "Number of light pulses traveling the border."
-                ) {
-                    Stepper(
-                        "\(store.borderFlowCount)",
-                        value: Binding(
-                            get: { store.borderFlowCount },
-                            set: { store.borderFlowCount = $0 }
-                        ),
-                        in: 1...3
-                    )
-                }
-            }
-        }
-    }
-
-    private var borderCaption: String {
-        switch store.borderAnimationStyle {
-        case .none:
-            return "Plain panel edges."
-
-        case .fullGlow:
-            return "Rotating conic gradient glow around the HUD."
-
-        case .edgeFlow:
-            return "Traveling lights that move around the border perimeter."
-        }
-    }
 }
 
 // MARK: - ThemeRows

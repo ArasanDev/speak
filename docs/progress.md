@@ -1767,3 +1767,34 @@ launch with persisted edgeFlow+ember+ringGauge+violet verified alive.
 app-agnostic colors) · lint 0 serious · moat 7/7 · screenshot-verified
 overlay (sonar + edgeFlow border live) and Settings → Appearance pane
 (Recording HUD card: HUD style, Voice animation, Animation color swatches).
+
+### 2026-09-14 — Dedicated "Overlay" settings category (post `2515dbb`)
+
+**The ask** — "no specific option for configuring the UI overlay panel" —
+the HUD controls lived as sub-cards inside Appearance, undiscoverable.
+The overlay is a product surface, not a theme subsection, so it now has its
+own rail destination.
+
+**`SettingsCategory.overlay`** — new case in the APP group (order:
+Appearance, Overlay, Privacy, General, About), `record.circle` glyph,
+deep-linkable via `dashboard:settings:overlay`.
+
+**`OverlaySettingsView`** owns every overlay-panel control:
+
+- **Preview card** — a mock 640×76 capsule rendering the REAL
+  `VoiceAnimationView` (style + color live from SettingsStore) driven by a
+  TimelineView-simulated mic level, with the HUD's dotted full-height
+  dividers, `● LISTENING` header, transcript placeholder, and `0:07` timer.
+  Picking a style/swatch repaints the preview instantly — no dictation run
+  needed to see the choice.
+- **Recording HUD card** — HUD style (Classic/Aurora), Voice animation
+  (Sonar Ping / Ring Gauge / Spectrum Bars), Animation color swatches.
+- **Animated Border card** — border style + EdgeFlow speed/light-count rows.
+
+`AppearanceHUDSettingsView` slimmed to Appearance mode + Color Theme only.
+
+**Gates** — build clean (generate-force needed — `make generate` only
+re-runs xcodegen when project.yml is newer than the project; new files under
+globbed source dirs otherwise silently miss the target) · 994 tests /
+0 failures · lint 0 serious · moat 7/7 · screenshot-verified: rail shows
+Overlay selected, live preview animating, all controls present.
