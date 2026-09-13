@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>speak — left-zone animation options</title>
+<style>
+  :root {
+    --glass: #f2f0ec;
+    --ink: #26251f;
+    --ink-dim: rgba(38,37,31,.55);
+    --ink-faint: rgba(38,37,31,.28);
+    --blue: #2b6de8;
+    --violet: #7a5af8;
+    --cyan: #2ab5d8;
+    --amber: #d98e2b;
+    --green: #3d9e5f;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+    background: #3a3a42;
+    background-image: radial-gradient(ellipse at 30% 20%, #4a4a55 0%, #33333a 70%);
+    color: #e8e6e1;
+    padding: 32px 28px 60px;
+    min-height: 100vh;
+  }
+  h1 { font-size: 20px; font-weight: 650; letter-spacing: -.01em; }
+  .sub { color: #a5a3ac; font-size: 13px; margin-top: 6px; max-width: 760px; line-height: 1.5; }
+  .controls {
+    margin: 18px 0 8px;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .controls span { font-size: 11px; color: #8f8d96; text-transform: uppercase; letter-spacing: .08em; margin-right: 4px; }
+  button.state {
+    font: 600 11px/1 -apple-system, system-ui;
+    padding: 6px 12px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.18);
+    background: transparent; color: #cfcdc4; cursor: pointer;
+  }
+  button.state.on { background: #e8e6e1; color: #26251f; border-color: transparent; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 26px; margin-top: 22px; max-width: 980px; }
+  .card {
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 14px;
+    background: rgba(0,0,0,.22);
+    padding: 16px 18px 18px;
+  }
+  .card-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+  .num {
+    font: 700 11px/1 ui-monospace, "SF Mono", monospace;
+    color: #0a0a0a; background: var(--cyan);
+    border-radius: 5px; padding: 4px 6px;
+  }
+  .name { font-size: 14px; font-weight: 650; }
+  .desc { font-size: 12px; color: #a5a3ac; }
+  .zoom {
+    margin-left: auto; font: 600 10px/1 ui-monospace, monospace; color: #8f8d96;
+    border: 1px dashed rgba(255,255,255,.22); border-radius: 6px; padding: 5px 8px;
+  }
+  .stage { display: flex; gap: 18px; align-items: center; }
+  .stage canvas { display: block; }
+  .detail-label { font: 600 10px/1 ui-monospace, monospace; color: #8f8d96; text-align: center; margin-top: 6px; }
+  .detail-wrap { display: flex; flex-direction: column; align-items: center; }
+  footer { margin-top: 34px; font-size: 12px; color: #8f8d96; max-width: 720px; line-height: 1.6; }
+  code { font: 12px ui-monospace, "SF Mono", monospace; color: var(--cyan); }
+</style>
+</head>
+<body>
+<h1>Left-zone voice animation — 10 options</h1>
+<p class="sub">
+  Each row is the real HUD at true scale (640×76, light glass, dotted dividers, timer on the right).
+  The large circle next to it is a 2.4× detail of the same animation. Toggle the state to see
+  listening vs. idle. Pick a number and I'll port it to SwiftUI.
+</p>
+<div class="controls">
+  <span>state</span>
+  <button class="state on" data-s="live">LISTENING (live level)</button>
+  <button class="state" data-s="idle">IDLE (mic off)</button>
+</div>
+<div class="grid" id="grid"></div>
+<footer>
+  Simulated mic level drives every variant the same way. In the app this is the real
+  audio level — the animation IS the meter, that's why it's the product's asset.
+  Colors shown use the speak palette (<code>voiceBlue #2b6de8</code>, cyan, violet, amber);
+  final hues follow whichever option you pick.
+</footer>
+
+<script>
+const STATE = { live: true };
+
+// Simulated mic level: layered sines + noise, smoothed — same feel as real RMS.
+function makeLevel(phase) {
+  let v = 0;
+  return t => {
+    const target = STATE.live
+      ? Math.min(1, Math.max(0,
+          0.42 + 0.28 * Math.sin(t * 2.1 + phase)
+               + 0.18 * Math.sin(t * 5.7 + phase * 2.3)
+               + 0.10 * Math.sin(t * 9.3 + phase)
+               + (Math.random() - 0.5) * 0.08))
+      : 0.06;
+    v += (target - v) * 0.18;
+    return v;
+  };
+}
+
+const BLUE = '#2b6de8', CYAN = '#2ab5d8', VIOLET = '#7a5af8', AMBER = '#d98e2b',
+      GREEN = '#3d9e5f', INK = '#26251f', GLASS = '#f2f0ec';
+
+// ---------- 10 animation variants. Each draws inside a circle of radius R. ----------
+const VARIANTS = [
+  {
+    name: 'Spectrum Bars + Orbit Ring',
+    desc: 'What\'s in the app now — 15 bars in a quiet ring, rotating conic spectrum outside.',
+    size: 60,
+    draw(ctx, R, t, lv) {
+      // outer rotating spectrum ring
+      ctx.save();
+      ctx.lineWidth = R * 0.07;
+      const seg = 14;
+      for (let i = 0; i < seg; i++) {
+        const a0 = (i / seg) * Math.PI * 2 + t * 1.2;
+        const cols = [BLUE, CYAN, VIOLET];
+        ctx.strokeStyle = cols[i % 3];
+        ctx.globalAlpha = 0.85;
+        ctx.beginPath();
+        ctx.arc(0, 0, R * 0.93, a0, a0 + (Math.PI * 2 / seg) * 0.62);
+        ctx.stroke();
+      }
+      ctx.restore();
+      // inner quiet ring
+      ctx.strokeStyle = 'rgba(38,37,31,.22)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.72, 0, Math.PI * 2); ctx.stroke();
+      // bars
+      const n = 15, bw = R * 0.075, gap = R * 0.07;
+      const total = n * bw + (n - 1) * gap;
+      ctx.fillStyle = BLUE;
+      for (let i = 0; i < n; i++) {
+        const h = R * (0.14 + 0.62 * Math.abs(Math.sin(t * 3 + i * 0.9)) * (0.25 + lv * 0.95));
+        ctx.globalAlpha = 0.95;
+        ctx.beginPath();
+        const x = -total / 2 + i * (bw + gap) + bw / 2;
+        ctx.roundRect(x - bw / 2, -h / 2, bw, h, bw / 2);
+        ctx.fill();
+      }
+    }
+  },
+  {
+    name: 'Radial Corona',
+    desc: 'Bars radiate outward around the rim — the whole circle becomes the waveform.',
+    size: 60,
+    draw(ctx, R, t, lv) {
+      ctx.strokeStyle = 'rgba(38,37,31,.2)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.45, 0, Math.PI * 2); ctx.stroke();
+      const n = 28;
+      ctx.strokeStyle = CYAN; ctx.lineWidth = R * 0.055; ctx.lineCap = 'round';
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const len = R * (0.08 + 0.4 * Math.abs(Math.sin(t * 2.4 + i * 0.55)) * (0.2 + lv));
+        ctx.globalAlpha = 0.4 + 0.6 * (len / (R * 0.5));
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * R * 0.5, Math.sin(a) * R * 0.5);
+        ctx.lineTo(Math.cos(a) * (R * 0.5 + len), Math.sin(a) * (R * 0.5 + len));
+        ctx.stroke();
+      }
+    }
+  },
+  {
+    name: 'Aurora Blob',
+    desc: 'Siri-style — a morphing gradient blob breathing inside a hairline ring.',
+    size: 60,
+    draw(ctx, R, t, lv) {
+      ctx.strokeStyle = 'rgba(38,37,31,.22)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.9, 0, Math.PI * 2); ctx.stroke();
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, R * 0.62);
+      g.addColorStop(0, VIOLET); g.addColorStop(0.6, BLUE); g.addColorStop(1, CYAN);
+      ctx.fillStyle = g; ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      const pts = 40;
+      for (let i = 0; i <= pts; i++) {
+        const a = (i / pts) * Math.PI * 2;
+        const r = R * (0.34 + 0.24 * lv) * (1 + 0.16 * Math.sin(a * 3 + t * 3) + 0.08 * Math.sin(a * 5 - t * 2.2));
+        const x = Math.cos(a) * r, y = Math.sin(a) * r;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.closePath(); ctx.fill();
+    }
+  },
+  {
+    name: 'Sonar Ping',
+    desc: 'A live dot emits expanding rings as you speak — quiet when you\'re quiet.',
+    size: 60,
+    draw(ctx, R, t, lv) {
+      ctx.strokeStyle = 'rgba(38,37,31,.2)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.92, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 3; i++) {
+        const p = ((t * 0.55 + i / 3) % 1);
+        ctx.globalAlpha = (1 - p) * (0.25 + lv * 0.6);
+        ctx.strokeStyle = BLUE; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(0, 0, R * 0.14 + p * R * 0.68, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      const d = R * (0.14 + lv * 0.16);
+      ctx.fillStyle = BLUE;
+      ctx.beginPath(); ctx.arc(0, 0, d, 0, Math.PI * 2); ctx.fill();
+    }
+  },
+  {
+    name: 'Orbital Particles',
+    desc: 'Six dots orbit a center point — speed and spread track your voice.',
+    size: 60,
+    draw(ctx, R, t, lv) {
+      ctx.strokeStyle = 'rgba(38,37,31,.2)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.9, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(38,37,31,.4)';
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.06, 0, Math.PI * 2); ctx.fill();
+      const cols = [BLUE, CYAN, VIOLET, BLUE, CYAN, VIOLET];
+      for (let i = 0; i < 6; i++) {
+        const a = t * (1.1 + lv * 2.2) + i * Math.PI / 3;
+        const r = R * (0.34 + 0.3 * lv + 0.08 * Math.sin(t * 2 + i));
+        ctx.fillStyle = cols[i]; ctx.globalAlpha = 0.95;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * r, Math.sin(a) * r, R * (0.07 + lv * 0.05), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  },
+  {
+    name: 'ECG Trace',
+    desc: 'A heartbeat line sweeps left-to-right inside the ring — clinical, legible.',
+    size: 60,
+    draw(ctx, R, t, lv) {
+      ctx.strokeStyle = 'rgba(38,37,31,.22)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.88, 0, Math.PI * 2); ctx.stroke();
+      ctx.save();
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.82, 0, Math.PI * 2); ctx.clip();
+      ctx.strokeStyle = GREEN; ctx.lineWidth = R * 0.05; ctx.lineJoin = 'round'; ctx.globalAlpha = 0.95;
+      ctx.beginPath();
+      const w = R * 1.5;
+      for (let x = -w / 2; x <= w / 2; x += 2) {
+        const u = (x / w + 0.5);
+        const env = Math.sin(((u + t * 0.5) % 1) * Math.PI); // traveling bump
+        const spike = Math.abs(Math.sin((u + t * 0.5) * 28));
+        const y = -env * spike * R * 0.42 * (0.25 + lv);
+        x === -w / 2 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  },
+  {
+    name: 'Arc Loader',
+    desc: 'Two chasing arc segments — the gap between them opens with voice energy.',
+    size: 60,
+    draw(ctx, R, t, lv) {
+      ctx.strokeStyle = 'rgba(38,37,31,.16)'; ctx.lineWidth = R * 0.07;
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.7, 0, Math.PI * 2); ctx.stroke();
+      const arcs = [
+        { off: 0, col: BLUE, len: Math.PI * (0.5 + lv * 0.9) },
+        { off: Math.PI, col: CYAN, len: Math.PI * (0.3 + lv * 0.7) }
+      ];
+      ctx.lineWidth = R * 0.09; ctx.lineCap = 'round';
+      for (const a of arcs) {
+        ctx.strokeStyle = a.col; ctx.globalAlpha = 0.95;
+        ctx.beginPath();
+        ctx.arc(0, 0, R * 0.7, a.off + t * 1.6, a.off + t * 1.6 + a.len);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1; ctx.fillStyle = INK;
+      ctx.beginPath(); ctx.arc(0, 0, R * (0.05 + lv * 0.08), 0, Math.PI * 2); ctx.fill();
+    }
+  },
+  {
+    name: 'Helix Ribbon',
+    desc: 'Two mirrored sine waves crossing — a double helix that tightens with energy.',
+    size: 60,
+    draw(ctx, R, t, lv) {
+      ctx.strokeStyle = 'rgba(38,37,31,.22)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.9, 0, Math.PI * 2); ctx.stroke();
+      ctx.save();
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.84, 0, Math.PI * 2); ctx.clip();
+      const w = R * 1.4, amp = R * (0.1 + lv * 0.4);
+      for (const [col, ph] of [[BLUE, 0], [VIOLET, Math.PI]]) {
+        ctx.strokeStyle = col; ctx.lineWidth = R * 0.05; ctx.globalAlpha = 0.9;
+        ctx.beginPath();
+        for (let x = -w / 2; x <= w / 2; x += 2) {
+          const y = Math.sin(x / w * Math.PI * 4 + t * 3 + ph) * amp;
+          x === -w / 2 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  },
+  {
+    name: 'Dot Matrix',
+    desc: 'A 5×5 field of dots — each breathes by distance from center, driven by level.',
+    size: 60,
+    draw(ctx, R, t, lv) {
+      ctx.strokeStyle = 'rgba(38,37,31,.2)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.92, 0, Math.PI * 2); ctx.stroke();
+      const n = 5, cell = R * 1.3 / n;
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+        const dx = i - (n - 1) / 2, dy = j - (n - 1) / 2;
+        const d = Math.hypot(dx, dy);
+        const pulse = 0.5 + 0.5 * Math.sin(t * 3.2 - d * 1.1);
+        const r = cell * (0.16 + 0.3 * pulse * (0.2 + lv));
+        ctx.fillStyle = d < 0.7 ? BLUE : (d < 1.6 ? CYAN : 'rgba(38,37,31,.45)');
+        ctx.globalAlpha = 0.5 + 0.5 * pulse;
+        ctx.beginPath();
+        ctx.arc(dx * cell, dy * cell, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  },
+  {
+    name: 'Ring Gauge',
+    desc: 'The ring itself fills like a meter — fullness = how loud, plus a level needle.',
+    size: 60,
+    draw(ctx, R, t, lv) {
+      ctx.strokeStyle = 'rgba(38,37,31,.16)'; ctx.lineWidth = R * 0.1;
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.72, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = AMBER; ctx.lineWidth = R * 0.1; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(0, 0, R * 0.72, -Math.PI / 2, -Math.PI / 2 + lv * Math.PI * 2);
+      ctx.stroke();
+      // needle dot at tip
+      const na = -Math.PI / 2 + lv * Math.PI * 2;
+      ctx.fillStyle = AMBER;
+      ctx.beginPath();
+      ctx.arc(Math.cos(na) * R * 0.72, Math.sin(na) * R * 0.72, R * 0.09, 0, Math.PI * 2);
+      ctx.fill();
+      // center % as micro-bars
+      const n = 9, bw = R * 0.07, gap = R * 0.055, tot = n * bw + (n - 1) * gap;
+      ctx.fillStyle = INK; ctx.globalAlpha = 0.85;
+      for (let i = 0; i < n; i++) {
+        const on = i / n < lv;
+        ctx.globalAlpha = on ? 0.9 : 0.2;
+        const h = R * 0.32;
+        ctx.beginPath();
+        ctx.roundRect(-tot / 2 + i * (bw + gap), -h / 2, bw, h, bw / 2);
+        ctx.fill();
+      }
+    }
+  }
+];
+
+// ---------- HUD shell drawing (the 640×76 capsule around the animation) ----------
+const DPR = window.devicePixelRatio || 1;
+
+function drawHUD(ctx, variant, t, lv, scale) {
+  const W = 640, H = 76;
+  ctx.save();
+  ctx.scale(scale, scale);
+  // glass capsule
+  ctx.fillStyle = GLASS;
+  ctx.beginPath(); ctx.roundRect(0, 0, W, H, H / 2); ctx.fill();
+  // outer edge — slightly thicker
+  ctx.strokeStyle = 'rgba(38,37,31,.35)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(1, 1, W - 2, H - 2, (H - 2) / 2); ctx.stroke();
+
+  const R = variant.size / 2;
+  // left animation zone center
+  const lz = 44;
+  ctx.save();
+  ctx.translate(lz, H / 2);
+  ctx.scale(1, 1);
+  variant.draw(ctx, R, t, lv);
+  ctx.restore();
+
+  // dotted dividers
+  ctx.fillStyle = 'rgba(38,37,31,.5)';
+  for (const dx of [88, 552]) {
+    for (let y = 8; y < H - 8; y += 7) ctx.fillRect(dx, y, 1.6, 3.6);
+  }
+
+  // header + transcript
+  ctx.fillStyle = BLUE;
+  ctx.font = '700 9px ui-monospace, "SF Mono", monospace';
+  ctx.fillText(STATE.live ? '● LISTENING' : '○ IDLE', 104, 22);
+  ctx.fillStyle = 'rgba(38,37,31,.8)';
+  ctx.font = '11px ui-monospace, "SF Mono", monospace';
+  ctx.fillText('the quick brown fox jumps over the lazy dog and', 104, 42);
+  ctx.fillText('keeps streaming into the bounded text lane…', 104, 58);
+
+  // right zone: timer circle
+  ctx.strokeStyle = 'rgba(38,37,31,.25)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(596, H / 2, 24, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = INK;
+  ctx.font = '600 13px ui-monospace, "SF Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('0:12', 596, H / 2 + 4.5);
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
+// ---------- build DOM + animation loop ----------
+const grid = document.getElementById('grid');
+const items = VARIANTS.map((v, i) => {
+  const card = document.createElement('div'); card.className = 'card';
+  card.innerHTML = `
+    <div class="card-head">
+      <span class="num">${String(i + 1).padStart(2, '0')}</span>
+      <span class="name">${v.name}</span>
+      <span class="desc">${v.desc}</span>
+    </div>
+    <div class="stage">
+      <canvas width="${640 * DPR}" height="${76 * DPR}" style="width:640px;height:76px"></canvas>
+      <div class="detail-wrap">
+        <canvas width="${150 * DPR}" height="${150 * DPR}" style="width:150px;height:150px"></canvas>
+        <div class="detail-label">2.4× detail</div>
+      </div>
+    </div>`;
+  grid.appendChild(card);
+  const [hud, det] = card.querySelectorAll('canvas');
+  for (const c of [hud, det]) c.getContext('2d').scale(DPR, DPR);
+  return { v, hud, det, level: makeLevel(i * 1.7) };
+});
+
+function frame(now) {
+  const t = now / 1000;
+  for (const it of items) {
+    const lv = it.level(t);
+    // HUD at true scale
+    const hc = it.hud.getContext('2d');
+    hc.save(); hc.setTransform(DPR, 0, 0, DPR, 0, 0);
+    hc.clearRect(0, 0, 640, 76);
+    drawHUD(hc, it.v, t, lv, 1);
+    hc.restore();
+    // detail zoom
+    const dc = it.det.getContext('2d');
+    dc.save(); dc.setTransform(DPR, 0, 0, DPR, 0, 0);
+    dc.clearRect(0, 0, 150, 150);
+    dc.fillStyle = GLASS;
+    dc.beginPath(); dc.roundRect(0, 0, 150, 150, 24); dc.fill();
+    dc.translate(75, 75); dc.scale(2.4, 2.4);
+    it.v.draw(dc, it.v.size / 2, t, lv);
+    dc.restore();
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+document.querySelectorAll('button.state').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('button.state').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    STATE.live = b.dataset.s === 'live';
+  };
+});
+</script>
+</body>
+</html>
