@@ -63,7 +63,7 @@ struct AgentBridgeSettingsView: View {
     // MARK: - speak-mcp server
 
     private var serverCard: some View {
-        SettingsSectionCard(title: "speak-mcp Stdio Server", systemImage: "terminal") {
+        SettingsSectionCard(title: "speak-mcp Stdio Server") {
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 SettingsRow(
                     "Model Context Protocol server",
@@ -133,7 +133,7 @@ struct AgentBridgeSettingsView: View {
     // MARK: - Agent prompt tag
 
     private var promptTagCard: some View {
-        SettingsSectionCard(title: "Agent Integration", systemImage: "tag") {
+        SettingsSectionCard(title: "Agent Integration") {
             SettingsRow(
                 "Prompt tag",
                 description: "Prepends an STT origin tag to pasted text so coding agents know the prompt was voice-dictated."
@@ -173,7 +173,7 @@ struct AgentBridgeSettingsView: View {
     /// `AgentSessionRegistry` (the instance `CLIPortServer` touches on every
     /// `speak-mcp` call) every 2 s while this category is visible.
     private var sessionsCard: some View {
-        SettingsSectionCard(title: "Live Sessions", systemImage: "dot.radiowaves.left.and.right") {
+        SettingsSectionCard(title: "Live Sessions") {
             VStack(alignment: .leading, spacing: 0) {
                 SettingsRow(
                     "Connected agent sessions",

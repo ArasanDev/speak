@@ -51,7 +51,7 @@ struct AIModelsSettingsView: View {
     // MARK: - Intensity
 
     private var intensityCard: some View {
-        SettingsSectionCard(title: "Intensity", systemImage: "slider.horizontal.3") {
+        SettingsSectionCard(title: "Intensity") {
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 Picker("", selection: Binding(
                     get: { store.effectiveCleanupLevel },
@@ -79,7 +79,7 @@ struct AIModelsSettingsView: View {
     /// corrections, snippets, cleanup mode) with `inserter: nil` — nothing is
     /// pasted; the diff shows exactly what the current engine/level does.
     private var sandboxCard: some View {
-        SettingsSectionCard(title: "Test My Voice", systemImage: "waveform.and.mic") {
+        SettingsSectionCard(title: "Test My Voice") {
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 HStack(spacing: SpeakSpacing.md) {
                     HoldToTalkPill(
@@ -184,7 +184,7 @@ struct AIModelsSettingsView: View {
     // MARK: - Voice
 
     private var voiceCard: some View {
-        SettingsSectionCard(title: "Voice", systemImage: "person.wave.2") {
+        SettingsSectionCard(title: "Voice") {
             SettingsRow(
                 "Neat-writing style",
                 description: cleanupActive
@@ -209,7 +209,7 @@ struct AIModelsSettingsView: View {
     // MARK: - Engine
 
     private var engineCard: some View {
-        SettingsSectionCard(title: "Engine", systemImage: "cpu") {
+        SettingsSectionCard(title: "Engine") {
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 SettingsRow(
                     "Cleanup engine",
@@ -314,7 +314,7 @@ struct AIModelsSettingsView: View {
     // MARK: - Per-app context
 
     private var contextCard: some View {
-        SettingsSectionCard(title: "Context", systemImage: "app.badge") {
+        SettingsSectionCard(title: "Context") {
             SettingsRow(
                 "Per-app profiles",
                 description: "The frontmost app picks the profile (Xcode/Terminal → Agent, "

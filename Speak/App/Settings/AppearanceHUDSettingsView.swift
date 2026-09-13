@@ -27,7 +27,7 @@ struct AppearanceHUDSettingsView: View {
     // MARK: - Theme
 
     private var themeCard: some View {
-        SettingsSectionCard(title: "Theme", systemImage: "circle.lefthalf.filled") {
+        SettingsSectionCard(title: "Theme") {
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 Picker("", selection: Binding(
                     get: { store.appTheme },
@@ -52,7 +52,7 @@ struct AppearanceHUDSettingsView: View {
     // MARK: - Recording HUD
 
     private var hudCard: some View {
-        SettingsSectionCard(title: "Recording HUD", systemImage: "waveform") {
+        SettingsSectionCard(title: "Recording HUD") {
             SettingsRow(
                 "HUD style",
                 description: "Aurora is an ambient orb with live materializing transcript words; Classic is the 15-bar waveform."
@@ -73,7 +73,7 @@ struct AppearanceHUDSettingsView: View {
     // MARK: - Border animation
 
     private var borderCard: some View {
-        SettingsSectionCard(title: "Animated Border", systemImage: "rectangle.on.rectangle") {
+        SettingsSectionCard(title: "Animated Border") {
             SettingsRow(
                 "Border animation",
                 description: borderCaption

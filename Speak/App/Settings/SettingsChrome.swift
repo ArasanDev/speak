@@ -12,36 +12,30 @@ import SwiftUI
 
 // MARK: - SettingsSectionCard
 
-/// A grouped settings card: muted section header + rounded-rect container with
-/// hairline-separated rows, matching the t3code `SettingsSection` rhythm.
+/// A grouped settings card: section header + rounded-rect container with
+/// hairline-separated rows. The header matches the Home pane's section style
+/// (`Activity Overview`, `Recent Dictations`) — 16pt semibold primary, no
+/// icon — and the card matches `homeCard` (speakSurface + hairline, r16).
 struct SettingsSectionCard<Content: View>: View {
     let title: String
-    var systemImage: String?
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-            HStack(spacing: SpeakSpacing.xs + 2) {
-                if let systemImage {
-                    Image(systemName: systemImage)
-                        .font(.speakBody(.base))
-                        .foregroundStyle(.secondary)
-                }
-                Text(title)
-                    .font(.speakBody(.base))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, SpeakSpacing.xs)
+            Text(title)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, SpeakSpacing.xs)
 
             VStack(spacing: 0) {
                 content()
             }
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(Color.speakSurface)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(Color.speakCardBorder, lineWidth: 1)
             )
         }
