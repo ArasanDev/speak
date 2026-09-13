@@ -1,10 +1,14 @@
 // App/Overlay/OverlayVoiceAnimation.swift
 //
 // The HUD's left-zone voice animation — the app's signature asset — as a
-// runtime-configurable family (`SettingsStore.voiceAnimationStyle`, picked in
-// Settings → Appearance & HUD). Selected from the owner's design menu
-// (`img/overlay-anim-options.html`): Sonar Ping (04) and Ring Gauge (10),
-// with the original 15-bar spectrum kept as a third option.
+// runtime-configurable family. Settings → Appearance & HUD → Recording HUD
+// picks the style (`voiceAnimationStyle`) and the color it draws with
+// (`voiceAnimationColor`), both live like the color theme.
+//
+// Selected from the owner's design menu (`img/overlay-anim-options.html`):
+// Sonar Ping (04) and Ring Gauge (10), with the original 15-bar spectrum
+// kept as a third option. Each variant owns its COMPLETE look — no shared
+// chamber wraps them; the menu designs are distinct, not layered.
 //
 // Every variant is level-driven (`level` = live mic RMS, 0…1) and active only
 // while `.listening` — idle dims to a resting state. All motion is suppressed
@@ -14,44 +18,109 @@
 import SpeakCore
 import SwiftUI
 
+// MARK: - VoiceAnimationColor resolution
+
+public extension VoiceAnimationColor {
+    /// Resolved display color — a fixed functional palette (the menu's hues),
+    /// NOT the system accent, which can be orange on the owner's machine.
+    var color: Color {
+        switch self {
+        case .blue:   return .speakVoiceBlue
+        case .cyan:   return Color(red: 0.16, green: 0.71, blue: 0.85)
+        case .violet: return .speakAgentViolet
+        case .green:  return Color(red: 0.24, green: 0.62, blue: 0.37)
+        case .amber:  return .speakHumanAmber
+        }
+    }
+}
+
 // MARK: - VoiceAnimationView (switcher)
 
 /// The left-zone animation, dispatched on the user's configured style.
-/// Callers wrap it in the shared chamber (inner quiet ring + rotating
-/// spectrum outer ring) and `accessibilityHidden(true)` — it is decorative.
+/// Decorative — callers apply `accessibilityHidden(true)`; the header's
+/// tally lamp + phase word carry the accessible state.
 struct VoiceAnimationView: View {
     let style: VoiceAnimationStyle
+    let tint: Color
     let level: Double
     let isActive: Bool
 
     var body: some View {
         switch style {
         case .spectrum:
-            WaveformView(level: level, isActive: isActive)
-                .scaleEffect(Self.spectrumScale)
+            SpectrumChamberView(tint: tint, level: level, isActive: isActive)
         case .sonar:
-            SonarPingView(level: level, isActive: isActive)
+            SonarPingView(tint: tint, level: level, isActive: isActive)
         case .ringGauge:
-            RingGaugeView(level: level, isActive: isActive)
+            RingGaugeView(tint: tint, level: level, isActive: isActive)
         }
     }
+}
 
-    /// The 15-bar block is ~58 pt wide; 0.75 lands it inside the Ø48 chamber
-    /// with ring clearance (same scale callers used before this switcher).
-    private static let spectrumScale: CGFloat = 0.75
+// MARK: - SpectrumChamberView (the original — bars inside two circles)
+
+/// "Waveform inside one circle, then another circle — a colorful animation
+/// thing": the 15-bar analyser inside a quiet inner ring, a rotating
+/// conic-gradient spectrum ring around it. This layering is SPECTRUM's own
+/// look — the other variants draw their own complete design.
+struct SpectrumChamberView: View {
+    let tint: Color
+    let level: Double
+    let isActive: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// [decision: 60/48 pt — outer leaves ~6 pt margin inside the 72 pt end
+    ///  zone; inner holds the ~44 pt scaled waveform block with clearance.]
+    private static let outerRingSize: CGFloat = 60
+    private static let innerCircleSize: CGFloat = 48
+    private static let waveformScale: CGFloat = 0.75
+
+    /// Rotation driver for the colorful outer ring.
+    @State private var ringAngle: Double = 0
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .strokeBorder(
+                    AngularGradient(
+                        colors: Color.speakFlowInference,
+                        center: .center,
+                        angle: .degrees(ringAngle)
+                    ),
+                    lineWidth: 2.5
+                )
+                .frame(width: Self.outerRingSize, height: Self.outerRingSize)
+                .opacity(isActive ? 1 : 0.4)
+
+            Circle()
+                .strokeBorder(Color.speakBone.opacity(0.25), lineWidth: 1)
+                .frame(width: Self.innerCircleSize, height: Self.innerCircleSize)
+
+            WaveformView(level: level, isActive: isActive, tint: tint)
+                .scaleEffect(Self.waveformScale)
+        }
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.linear(duration: 5).repeatForever(autoreverses: false)) {
+                ringAngle = 360
+            }
+        }
+    }
 }
 
 // MARK: - SonarPingView (design option 04)
 
 /// A live center dot emitting expanding rings — quiet when you're quiet.
-/// Ported from `img/overlay-anim-options.html` option 04.
+/// Ported from `img/overlay-anim-options.html` option 04. The variant's own
+/// look: one hairline outer ring, pings inside, nothing else.
 struct SonarPingView: View {
+    let tint: Color
     let level: Double
     let isActive: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Natural size; fits inside the Ø48 inner chamber with clearance.
-    private static let diameter: CGFloat = 44
+    /// Fills the endcap like the menu render (Ø60 canvas, ring at ~0.92R).
+    private static let diameter: CGFloat = 60
     /// Ring count + cycle pace — ported from the HTML reference (0.55 rev/s).
     private static let ringCount = 3
     private static let cyclesPerSecond = 0.55
@@ -62,7 +131,7 @@ struct SonarPingView: View {
                 rings(at: context.date.timeIntervalSinceReferenceDate)
             }
         } else {
-            // Idle or reduce-motion: three frozen rings + the level-driven dot.
+            // Idle or reduce-motion: frozen rings + the level-driven dot.
             rings(at: 0)
         }
     }
@@ -76,6 +145,17 @@ struct SonarPingView: View {
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             let live = isActive
 
+            // The variant's own boundary — a quiet hairline ring.
+            let outerR = r * 0.92
+            ctx.stroke(
+                Path(ellipseIn: CGRect(
+                    x: center.x - outerR, y: center.y - outerR,
+                    width: outerR * 2, height: outerR * 2
+                )),
+                with: .color(.speakBone.opacity(0.25)),
+                lineWidth: 1
+            )
+
             for i in 0 ..< Self.ringCount {
                 let p = (time * Self.cyclesPerSecond + Double(i) / Double(Self.ringCount))
                     .truncatingRemainder(dividingBy: 1)
@@ -86,7 +166,7 @@ struct SonarPingView: View {
                         x: center.x - ringR, y: center.y - ringR,
                         width: ringR * 2, height: ringR * 2
                     )),
-                    with: .color(.speakVoiceBlue.opacity(alpha)),
+                    with: .color(tint.opacity(alpha)),
                     lineWidth: 1.5
                 )
             }
@@ -97,7 +177,7 @@ struct SonarPingView: View {
                 Path(ellipseIn: CGRect(
                     x: center.x - d / 2, y: center.y - d / 2, width: d, height: d
                 )),
-                with: .color(.speakVoiceBlue.opacity(live ? 1 : 0.35))
+                with: .color(tint.opacity(live ? 1 : 0.35))
             )
         }
         .frame(width: Self.diameter, height: Self.diameter)
@@ -110,15 +190,16 @@ struct SonarPingView: View {
 /// the arc tip, and a row of micro-bars in the center shows the same level in
 /// discrete steps. Ported from `img/overlay-anim-options.html` option 10.
 struct RingGaugeView: View {
+    let tint: Color
     let level: Double
     let isActive: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private static let diameter: CGFloat = 44
-    private static let ringRadius: CGFloat = 16.5
-    private static let ringWidth: CGFloat = 3
+    private static let diameter: CGFloat = 60
+    private static let ringRadius: CGFloat = 22
+    private static let ringWidth: CGFloat = 3.5
     private static let barCount = 9
-    private static let barSize = CGSize(width: 2, height: 7)
+    private static let barSize = CGSize(width: 2, height: 9)
     private static let barGap: CGFloat = 1.5
 
     private var clampedLevel: Double { min(max(level, 0), 1) }
@@ -135,7 +216,7 @@ struct RingGaugeView: View {
             Circle()
                 .trim(from: 0, to: clampedLevel)
                 .stroke(
-                    Color.speakVoiceBlue.opacity(isActive ? 1 : 0.35),
+                    tint.opacity(isActive ? 1 : 0.35),
                     style: StrokeStyle(lineWidth: Self.ringWidth, lineCap: .round)
                 )
                 .frame(width: Self.ringRadius * 2, height: Self.ringRadius * 2)
@@ -143,8 +224,8 @@ struct RingGaugeView: View {
 
             // Needle dot at the arc tip.
             Circle()
-                .fill(Color.speakVoiceBlue.opacity(isActive ? 1 : 0.35))
-                .frame(width: 5, height: 5)
+                .fill(tint.opacity(isActive ? 1 : 0.35))
+                .frame(width: 5.5, height: 5.5)
                 .offset(needleOffset)
 
             // Center micro-bars — discrete steps of the same level.

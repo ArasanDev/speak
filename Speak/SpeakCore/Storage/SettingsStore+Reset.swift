@@ -100,6 +100,7 @@ extension SettingsStore {
         access(keyPath: \.perAppContextEnabled)
         access(keyPath: \.hudStyle)
         access(keyPath: \.voiceAnimationStyle)
+        access(keyPath: \.voiceAnimationColor)
         access(keyPath: \.borderAnimationStyle)
         access(keyPath: \.borderFlowSpeed)
         access(keyPath: \.borderFlowCount)
@@ -121,6 +122,9 @@ extension SettingsStore {
         }
         withMutation(keyPath: \.voiceAnimationStyle) {
             defaults.set(VoiceAnimationStyle.sonar.rawValue, forKey: Keys.voiceAnimationStyle)
+        }
+        withMutation(keyPath: \.voiceAnimationColor) {
+            defaults.set(VoiceAnimationColor.blue.rawValue, forKey: Keys.voiceAnimationColor)
         }
         withMutation(keyPath: \.borderAnimationStyle) {
             defaults.set(BorderAnimationStyle.none.rawValue, forKey: Keys.borderAnimationStyle)
