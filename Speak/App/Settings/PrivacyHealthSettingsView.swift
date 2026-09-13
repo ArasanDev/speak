@@ -68,7 +68,7 @@ struct PrivacyHealthSettingsView: View {
     // MARK: - System health
 
     private var healthCard: some View {
-        SettingsSectionCard(title: "System Health", systemImage: "stethoscope") {
+        SettingsSectionCard(title: "System Health") {
             SettingsRow(
                 "Microphone",
                 description: "Needed to capture dictation audio."
@@ -119,7 +119,7 @@ struct PrivacyHealthSettingsView: View {
     // MARK: - Moat
 
     private var moatCard: some View {
-        SettingsSectionCard(title: "On-Device Moat", systemImage: "lock.shield") {
+        SettingsSectionCard(title: "On-Device Moat") {
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 PrivacyGuaranteeRow(
                     icon: "mic.slash.fill",
@@ -187,7 +187,7 @@ struct PrivacyHealthSettingsView: View {
     // MARK: - Data management
 
     private var dataCard: some View {
-        SettingsSectionCard(title: "Data Management", systemImage: "externaldrive") {
+        SettingsSectionCard(title: "Data Management") {
             SettingsRow(
                 "Reset all settings",
                 description: "Restores every preference to its default. History is not affected."

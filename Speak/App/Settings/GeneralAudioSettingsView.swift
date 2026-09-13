@@ -31,7 +31,7 @@ struct GeneralAudioSettingsView: View {
     // MARK: - Startup
 
     private var startupCard: some View {
-        SettingsSectionCard(title: "Startup", systemImage: "power") {
+        SettingsSectionCard(title: "Startup") {
             SettingsRow(
                 "Launch at Login",
                 description: "Start speak in the background when you log in."
@@ -49,7 +49,7 @@ struct GeneralAudioSettingsView: View {
     // MARK: - Text insertion
 
     private var insertionCard: some View {
-        SettingsSectionCard(title: "Text Insertion", systemImage: "text.insert") {
+        SettingsSectionCard(title: "Text Insertion") {
             SettingsRow(
                 "Paste Mode",
                 description: "Cmd+V works in almost every app."
@@ -101,7 +101,7 @@ struct GeneralAudioSettingsView: View {
     // MARK: - Voice out
 
     private var voiceOutCard: some View {
-        SettingsSectionCard(title: "Voice Out", systemImage: "speaker.wave.2") {
+        SettingsSectionCard(title: "Voice Out") {
             SettingsRow(
                 "Read back finished transcripts",
                 description: "Adds a speaker button after each dictation to hear it read aloud on-device."
@@ -143,7 +143,7 @@ private struct LanguageCard: View {
     @State private var listState: ListState = .loading
 
     var body: some View {
-        SettingsSectionCard(title: "Language", systemImage: "globe") {
+        SettingsSectionCard(title: "Language") {
             SettingsRow(
                 "Dictation Language",
                 description: "Applied to the next dictation — no restart needed."
@@ -233,7 +233,7 @@ private struct MicrophoneCard: View {
     @State private var inputDevices: [CoreAudioDeviceMonitor.DeviceInfo] = []
 
     var body: some View {
-        SettingsSectionCard(title: "Microphone", systemImage: "mic") {
+        SettingsSectionCard(title: "Microphone") {
             if let dev = currentDevice {
                 SettingsRow(
                     dev.name,

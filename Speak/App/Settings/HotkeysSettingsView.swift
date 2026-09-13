@@ -45,7 +45,7 @@ struct HotkeysSettingsView: View {
     // MARK: - Activation mode
 
     private var activationCard: some View {
-        SettingsSectionCard(title: "Activation", systemImage: "bolt") {
+        SettingsSectionCard(title: "Activation") {
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 Picker("", selection: Binding(
                     get: { store.triggerMode },
@@ -79,7 +79,7 @@ struct HotkeysSettingsView: View {
     // MARK: - Primary hotkey
 
     private var primaryHotkeyCard: some View {
-        SettingsSectionCard(title: "Primary Hotkey", systemImage: "command") {
+        SettingsSectionCard(title: "Primary Hotkey") {
             SettingsRow(
                 "Current binding",
                 description: "Record any key+modifier combo or a modifier-only key (Right ⌘, Fn)."
@@ -100,7 +100,7 @@ struct HotkeysSettingsView: View {
     /// Sensory confirmation on dictation engage/release — fired by
     /// `DictationController` on the menubar-icon state edges.
     private var feedbackCard: some View {
-        SettingsSectionCard(title: "Feedback", systemImage: "speaker.badge.exclamationmark") {
+        SettingsSectionCard(title: "Feedback") {
             SettingsRow(
                 "Sounds",
                 description: "A subtle system chime when dictation engages and releases."
@@ -132,7 +132,7 @@ struct HotkeysSettingsView: View {
     // MARK: - Permissions
 
     private var permissionsCard: some View {
-        SettingsSectionCard(title: "System Permissions", systemImage: "hand.raised") {
+        SettingsSectionCard(title: "System Permissions") {
             SettingsRow(
                 "Accessibility",
                 description: "Required for the global hotkey tap (CGEventTap). macOS gates it in Privacy & Security."
@@ -195,7 +195,7 @@ private struct ExtraBindingsCard: View {
     private var bindings: ExtraBindingSet { context.activeExtraBindings }
 
     var body: some View {
-        SettingsSectionCard(title: "Additional Shortcuts", systemImage: "plus.rectangle.on.rectangle") {
+        SettingsSectionCard(title: "Additional Shortcuts") {
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 if bindings.bindings.isEmpty {
                     Text("No additional shortcuts. These fire immediately on press — no double-tap.")

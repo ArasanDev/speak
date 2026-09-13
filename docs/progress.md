@@ -1333,3 +1333,37 @@ Settings categories screenshot-verified via deep links.
 Note: `--debug-open` launches occasionally race window visibility
 (AX/screenshot timing); the dispatcher log confirms
 `window shown (promoted=true)` each time — retry the capture, not the code.
+
+---
+
+## 2026-09-13 — Settings fully adopts the Home design language
+
+Per user direction ("the home dashboard is the inspiration for the
+settings panel"), Mode B was restructured to mirror Mode A chrome
+element-for-element instead of merely sharing its canvas:
+
+- **Removed the 52pt breadcrumb strip + divider entirely.** Mode A has
+  no header bar; Mode B no longer does either.
+- **Rail** is now 220pt (same as the Mode A sidebar) with a 28pt
+  traffic-light clearance row, and the back affordance moved to an icon
+  button at the exact position of Mode A's sidebar-toggle.
+- **Rail selection** changed from the gray `speakSidebarSelection` pill
+  to `Color.accentColor` + white label — matching what the Mode A
+  `List(.sidebar)` actually renders.
+- **Detail card** now carries the same slim header as Mode A
+  (`category.title` as `.headline` + inline `subtitle` + esc hint,
+  44pt) inside the radius-24 card, instead of a large `speak2Title`
+  block inside the scroll area.
+- **SettingsSectionCard** headers: small secondary icon+label → 16pt
+  semibold primary on-canvas (identical to Home's "Activity Overview"
+  rhythm); card radius 12 → 16 to match `homeCard`. The `systemImage`
+  param was removed (27 call sites updated).
+- **BackToDashboardButton** restyled to `SidebarToggleButton`'s exact
+  metrics (26×26, chevron.left, hover pill).
+
+Esc / Cmd+[ still return to the desk; the esc keycap hint now lives in
+the detail header's trailing edge.
+
+**Verification:** build clean · lint 0 errors · moat 7/7 PASS ·
+screenshot-verified General, Hotkeys, Privacy against the Home
+reference.

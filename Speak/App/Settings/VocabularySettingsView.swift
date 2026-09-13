@@ -40,7 +40,7 @@ private struct AcousticCorrectionsCard: View {
     @State private var typed = ""
 
     var body: some View {
-        SettingsSectionCard(title: "Acoustic Corrections", systemImage: "ear.badge.waveform") {
+        SettingsSectionCard(title: "Acoustic Corrections") {
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 HStack(spacing: SpeakSpacing.sm) {
                     TextField("What you say (e.g. “cubectl”)", text: $heard)
@@ -137,7 +137,7 @@ private struct CustomVocabularyCard: View {
     @State private var newTerm = ""
 
     var body: some View {
-        SettingsSectionCard(title: "Custom Vocabulary", systemImage: "character.book.closed") {
+        SettingsSectionCard(title: "Custom Vocabulary") {
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 HStack(spacing: SpeakSpacing.sm) {
                     TextField("Add a word or name…", text: $newTerm)
@@ -195,7 +195,7 @@ private struct SnippetsCard: View {
     @State private var expansion = ""
 
     var body: some View {
-        SettingsSectionCard(title: "Snippets", systemImage: "text.append") {
+        SettingsSectionCard(title: "Snippets") {
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 HStack(spacing: SpeakSpacing.sm) {
                     TextField("Trigger (what you say)", text: $trigger)

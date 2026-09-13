@@ -56,24 +56,13 @@ struct SettingsExperienceView: View {
         _category = State(initialValue: initialCategory)
     }
 
-    /// Traffic-light clearance — the dashboard window is `.fullSizeContentView`
-    /// with a transparent titlebar. The standalone Settings window has a normal
-    /// titlebar, so no inset is needed there.
-    private var leadingInset: CGFloat {
-        presentation == .embedded ? 78 : SpeakSpacing.lg
-    }
-
     var body: some View {
-        VStack(spacing: 0) {
-            header
+        HStack(spacing: 0) {
+            rail
+                .frame(width: 220)
 
-            HStack(spacing: 0) {
-                rail
-                    .frame(width: 224)
-
-                detailCard
-                    .padding(SpeakSpacing.md)
-            }
+            detailCard
+                .padding(SpeakSpacing.md)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.speakWindowCanvas)
@@ -92,108 +81,88 @@ struct SettingsExperienceView: View {
         )
     }
 
-    // MARK: - Header
-
-    private var header: some View {
-        HStack(spacing: SpeakSpacing.sm) {
-            if presentation == .embedded {
-                BackToDashboardButton(action: onBack)
-            } else {
-                Text("Settings")
-                    .font(.speakBody(.base, semibold: true))
-                    .foregroundStyle(.primary)
-            }
-
-            breadcrumb
-
-            Spacer(minLength: 0)
-
-            if presentation == .embedded {
-                HStack(spacing: SpeakSpacing.xs) {
-                    KeyCapView(label: "esc")
-                    Text("to go back")
-                        .font(.speakBody(.caption))
-                        .foregroundStyle(.tertiary)
-                }
-            }
-        }
-        .padding(.leading, leadingInset)
-        .padding(.trailing, SpeakSpacing.lg)
-        .frame(height: 52)
-        .overlay(alignment: .bottom) {
-            Divider().overlay(Color.speakCardBorder.opacity(0.6))
-        }
-    }
-
-    private var breadcrumb: some View {
-        HStack(spacing: SpeakSpacing.xs) {
-            if presentation == .embedded {
-                Text("Settings")
-                    .font(.speakBody(.base, semibold: true))
-                    .foregroundStyle(.primary)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.tertiary)
-            }
-            Text(category.title)
-                .font(.speakBody(.base))
-                .foregroundStyle(.secondary)
-        }
-    }
-
     // MARK: - Left rail
 
     private var rail: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: SpeakSpacing.md) {
-                ForEach(SettingsCategoryGroup.allCases) { group in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(group.title.uppercased())
-                            .font(.speakBody(.caption))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, SpeakSpacing.sm)
-                            .padding(.bottom, SpeakSpacing.xs)
+        VStack(spacing: 0) {
+            if presentation == .embedded {
+                // Mirrors Mode A's sidebar-toggle row: 28pt of traffic-light
+                // clearance with the back button at the same x position.
+                HStack {
+                    BackToDashboardButton(action: onBack)
+                        .padding(.leading, 80)
+                    Spacer()
+                }
+                .frame(height: 28)
+            }
 
-                        ForEach(group.categories) { item in
-                            SettingsRailRow(
-                                category: item,
-                                isSelected: item == category
-                            ) {
-                                withAnimation(.easeInOut(duration: 0.15)) {
-                                    category = item
+            ScrollView {
+                VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+                    ForEach(SettingsCategoryGroup.allCases) { group in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(group.title.uppercased())
+                                .font(.speakBody(.caption))
+                                .foregroundStyle(.tertiary)
+                                .padding(.horizontal, SpeakSpacing.sm)
+                                .padding(.bottom, SpeakSpacing.xs)
+
+                            ForEach(group.categories) { item in
+                                SettingsRailRow(
+                                    category: item,
+                                    isSelected: item == category
+                                ) {
+                                    withAnimation(.easeInOut(duration: 0.15)) {
+                                        category = item
+                                    }
                                 }
                             }
                         }
                     }
                 }
+                .padding(.horizontal, SpeakSpacing.sm)
+                .padding(.vertical, SpeakSpacing.sm)
             }
-            .padding(.horizontal, SpeakSpacing.sm)
-            .padding(.vertical, SpeakSpacing.md)
         }
     }
 
     // MARK: - Right detail canvas
 
-    /// The detail surface — a rounded card matching the Mode A desk pane so
-    /// Settings reads as the same window, not a separate app.
+    /// The detail surface — identical chrome to the Mode A desk pane: a slim
+    /// `.headline` title row inside a radius-24 `speakCardCanvas` card floating
+    /// on `speakWindowCanvas`, so Settings reads as the same window as Home.
     private var detailCard: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                    Text(category.title)
-                        .font(.speak2Title)
-                    Text(category.subtitle)
-                        .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, SpeakSpacing.xs)
-                .padding(.bottom, SpeakSpacing.sm)
+        VStack(spacing: 0) {
+            HStack(spacing: SpeakSpacing.sm) {
+                Text(category.title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Text(category.subtitle)
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
 
-                detail(for: category)
+                Spacer(minLength: 0)
+
+                if presentation == .embedded {
+                    HStack(spacing: SpeakSpacing.xs) {
+                        KeyCapView(label: "esc")
+                        Text("to go back")
+                            .font(.speakBody(.caption))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
             }
-            .padding(SpeakSpacing.lg)
-            .frame(maxWidth: 860, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            .padding(.leading, SpeakSpacing.md)
+            .padding(.trailing, SpeakSpacing.md)
+            .frame(height: 44)
+
+            ScrollView {
+                detail(for: category)
+                    .padding(.horizontal, SpeakSpacing.lg)
+                    .padding(.bottom, SpeakSpacing.lg)
+                    .frame(maxWidth: 860, alignment: .leading)
+                    .frame(maxWidth: .infinity)
+            }
         }
         .background(Color.speakCardCanvas)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -223,27 +192,23 @@ struct SettingsExperienceView: View {
 
 // MARK: - BackToDashboardButton
 
+/// Icon back button at the Mode A sidebar-toggle position — same 26×26 hit
+/// area and hover treatment so the two surfaces share chrome.
 private struct BackToDashboardButton: View {
     let action: () -> Void
     @State private var isHovering = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: SpeakSpacing.xs) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 12, weight: .semibold))
-                Text("Dashboard")
-                    .font(.speakBody(.base, semibold: true))
-            }
-            .foregroundStyle(isHovering ? .primary : .secondary)
-            .padding(.horizontal, SpeakSpacing.sm)
-            .padding(.vertical, SpeakSpacing.xs + 1)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(isHovering ? 0.08 : 0))
-            )
+            Image(systemName: "chevron.left")
+                .font(.system(size: 15))
+                .foregroundColor(.secondary)
+                .frame(width: 26, height: 26)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .background(Color.primary.opacity(isHovering ? 0.08 : 0))
+        .cornerRadius(6)
         .help("Back to Dashboard (Esc)")
         .onHover { isHovering = $0 }
     }
@@ -265,11 +230,11 @@ private struct SettingsRailRow: View {
             HStack(spacing: SpeakSpacing.sm) {
                 Image(systemName: category.systemImage)
                     .font(.system(size: 13))
-                    .foregroundStyle(isSelected ? .primary : .secondary)
+                    .foregroundStyle(isSelected ? Color.white : .secondary)
                     .frame(width: 18)
                 Text(category.title)
                     .font(.speakBody(.base, semibold: isSelected))
-                    .foregroundStyle(isSelected ? .primary : .secondary)
+                    .foregroundStyle(isSelected ? Color.white : .secondary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
@@ -279,7 +244,7 @@ private struct SettingsRailRow: View {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(
                         isSelected
-                            ? Color.speakSidebarSelection
+                            ? Color.accentColor
                             : (isHovering ? Color.primary.opacity(0.05) : Color.clear)
                     )
             )
