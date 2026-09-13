@@ -96,8 +96,7 @@ private struct MCPServerConfigSection: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: SpeakSpacing.xs) {
                         Text("speak-mcp Stdio Server")
-                            .font(.speakMonoBody)
-                            .bold()
+                            .font(.speakBody(.base, semibold: true))
                         Text("READY")
                             .font(.system(size: 10, weight: .bold))
                             .padding(.horizontal, 6)
@@ -107,7 +106,7 @@ private struct MCPServerConfigSection: View {
                             .clipShape(Capsule())
                     }
                     Text("Standard input/output Model Context Protocol server bridging LLM agents to Speak's local voice interface.")
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -117,16 +116,16 @@ private struct MCPServerConfigSection: View {
                 // Info Grid
                 Grid(alignment: .leading, horizontalSpacing: SpeakSpacing.lg, verticalSpacing: SpeakSpacing.xs) {
                     GridRow {
-                        Text("Binary Name:").font(.speakMonoCaption).foregroundStyle(.secondary)
-                        Text("speak-mcp (~/.local/bin/speak-mcp)").font(.speakMonoCaption)
+                        Text("Binary Name:").font(.speakBody(.caption)).foregroundStyle(.secondary)
+                        Text("speak-mcp (~/.local/bin/speak-mcp)").font(.speakMonoFace(.caption))
                     }
                     GridRow {
-                        Text("Protocol Version:").font(.speakMonoCaption).foregroundStyle(.secondary)
-                        Text("2025-11-25 (JSON-RPC 2.0 via Stdio)").font(.speakMonoCaption)
+                        Text("Protocol Version:").font(.speakBody(.caption)).foregroundStyle(.secondary)
+                        Text("2025-11-25 (JSON-RPC 2.0 via Stdio)").font(.speakMonoFace(.caption))
                     }
                     GridRow {
-                        Text("Capabilities:").font(.speakMonoCaption).foregroundStyle(.secondary)
-                        Text("tools (speak_notify, speak_request_input, speak_say, …)").font(.speakMonoCaption)
+                        Text("Capabilities:").font(.speakBody(.caption)).foregroundStyle(.secondary)
+                        Text("tools (speak_notify, speak_request_input, speak_say, …)").font(.speakMonoFace(.caption))
                     }
                 }
 
@@ -135,21 +134,19 @@ private struct MCPServerConfigSection: View {
                 // User Installation Command
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     HStack {
-                        Text("1-Click Stdio Install Command").font(.speakMonoCaption).bold()
+                        Text("1-Click Stdio Install Command").font(.speakBody(.caption, semibold: true))
                         Spacer()
                         Button(action: { copyToClipboard(installCommand, name: "Install Command") }) {
                             Label("Copy Command", systemImage: "doc.on.doc")
-                                .font(.speakMonoCaption)
+                                .font(.speakBody(.caption))
                         }
                     }
 
                     Text(installCommand)
-                        .font(.speakMonoBody)
+                        .font(.speakMonoFace(.base))
                         .padding(SpeakSpacing.sm)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.black.opacity(0.2))
-                        .cornerRadius(6)
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.1), lineWidth: 1))
+                        .speakInset(cornerRadius: 8)
                 }
 
                 Divider()
@@ -157,21 +154,19 @@ private struct MCPServerConfigSection: View {
                 // Client Config JSON
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     HStack {
-                        Text("Client Configuration Snippet (Claude / Cursor / Antigravity)").font(.speakMonoCaption).bold()
+                        Text("Client Configuration Snippet (Claude / Cursor / Antigravity)").font(.speakBody(.caption, semibold: true))
                         Spacer()
                         Button(action: { copyToClipboard(jsonSnippet, name: "JSON Config") }) {
                             Label("Copy JSON Config", systemImage: "doc.on.doc")
-                                .font(.speakMonoCaption)
+                                .font(.speakBody(.caption))
                         }
                     }
 
                     Text(jsonSnippet)
-                        .font(.speakMonoBody)
+                        .font(.speakMonoFace(.base))
                         .padding(SpeakSpacing.sm)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.black.opacity(0.2))
-                        .cornerRadius(6)
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.1), lineWidth: 1))
+                        .speakInset(cornerRadius: 8)
                 }
 
                 if showCopiedNotification {
@@ -179,7 +174,7 @@ private struct MCPServerConfigSection: View {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(Color.speakDelivered)
                         Text("\(copiedItemName) copied to clipboard.")
-                            .font(.speakMonoCaption)
+                            .font(.speakBody(.caption))
                             .foregroundStyle(Color.speakDelivered)
                     }
                     .padding(.top, SpeakSpacing.xs)
@@ -220,16 +215,15 @@ private struct ActiveAgentSessionsSection: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Connected Agent Sessions")
-                            .font(.speakMonoBody)
-                            .bold()
+                            .font(.speakBody(.base, semibold: true))
                         Text("Active agent pings negotiated via speak_register_session tool calls.")
-                            .font(.speakMonoCaption)
+                            .font(.speakBody(.caption))
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
                     Button(action: { Task { await refreshSessions() } }) {
                         Label(isLoading ? "Refreshing..." : "Refresh Sessions", systemImage: "arrow.clockwise")
-                            .font(.speakMonoCaption)
+                            .font(.speakBody(.caption))
                     }
                     .disabled(isLoading)
                 }
@@ -240,7 +234,7 @@ private struct ActiveAgentSessionsSection: View {
                             .font(.system(size: 28))
                             .foregroundStyle(.tertiary)
                         Text("No external agent sessions currently registered.")
-                            .font(.speakMonoCaption)
+                            .font(.speakBody(.caption))
                             .foregroundStyle(.secondary)
                         Text("Agents registering via speak_register_session will appear here live.")
                             .font(.system(size: 10))
@@ -269,10 +263,9 @@ private struct ActiveAgentSessionsSection: View {
             VStack(alignment: .leading, spacing: SpeakSpacing.md) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Exposed MCP Tools & Capability Status")
-                        .font(.speakMonoBody)
-                        .bold()
+                        .font(.speakBody(.base, semibold: true))
                     Text("Registered tool interfaces available to connected stdio agents.")
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                         .foregroundStyle(.secondary)
                 }
 
@@ -342,11 +335,10 @@ private struct ActiveAgentSessionsSection: View {
     private func toolRow(name: String, summary: String, params: String, status: String) -> some View {
         GridRow {
             Text(name)
-                .font(.speakMonoBody)
-                .bold()
+                .font(.speakMonoFace(.base, semibold: true))
                 .foregroundStyle(Color.speakAccent)
             Text(summary)
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
             Text("(\(params))")
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
@@ -372,10 +364,9 @@ private struct AgentSessionRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: SpeakSpacing.xs) {
                     Text(session.label)
-                        .font(.speakMonoBody)
-                        .bold()
+                        .font(.speakMonoFace(.base, semibold: true))
                     Text("[\(session.provider)]")
-                        .font(.speakMonoCaption)
+                        .font(.speakMonoFace(.caption))
                         .foregroundStyle(.secondary)
                 }
                 if let cwd = session.workingDirectory {
@@ -426,16 +417,15 @@ private struct TagAgentAdaptersSection: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Spoken @tag Agent Adapters")
-                        .font(.speakMonoBody)
-                        .bold()
+                        .font(.speakBody(.base, semibold: true))
                     Text("Register, inspect, and invoke dynamic agent adapters using spoken @tag references.")
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button(action: { showingAddModal = true }) {
                     Label("Register @tag Adapter", systemImage: "plus")
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -540,8 +530,7 @@ private struct TagRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: SpeakSpacing.xs) {
                     Text(tag.tagName)
-                        .font(.speakMonoBody)
-                        .bold()
+                        .font(.speakMonoFace(.base, semibold: true))
                         .foregroundStyle(Color.speakAccent)
 
                     Text(tag.tagKind.rawValue.capitalized)
@@ -553,7 +542,7 @@ private struct TagRow: View {
                 }
 
                 Text(tag.description)
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.secondary)
             }
 

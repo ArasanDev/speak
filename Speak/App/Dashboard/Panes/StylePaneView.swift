@@ -54,7 +54,7 @@ struct StylePaneView: View {
     private var styleSection: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Text("Voice")
-                .font(.speakMonoBody)
+                .font(.speakBody(.base))
             Picker("Voice", selection: Binding(
                 get: { settings.cleanupStyle },
                 set: { settings.cleanupStyle = $0 }
@@ -66,7 +66,7 @@ struct StylePaneView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             Text(styleBlurb(settings.cleanupStyle))
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(.secondary)
         }
     }
@@ -74,7 +74,7 @@ struct StylePaneView: View {
     private var levelSection: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Text("Polish level")
-                .font(.speakMonoBody)
+                .font(.speakBody(.base))
             Picker("Polish level", selection: Binding(
                 get: { settings.cleanupLevel },
                 set: { settings.cleanupLevel = $0 }
@@ -86,7 +86,7 @@ struct StylePaneView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             Text(levelBlurb(settings.cleanupLevel))
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(.secondary)
         }
     }
@@ -94,10 +94,10 @@ struct StylePaneView: View {
     private var previewCard: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
             Text("Example")
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(.secondary)
             Text(examplePhrase(settings.cleanupStyle))
-                .font(.speakMonoBody)
+                .font(.speakBody(.base))
                 .textSelection(.enabled)
         }
         .padding(SpeakSpacing.md)

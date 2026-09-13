@@ -29,20 +29,20 @@ struct AboutSettingsTab: View {
         VStack(spacing: SpeakSpacing.lg) {
             Spacer()
 
-            // App name + version in Monaco — content voice, not chrome.
+            // App name in display face; version in mono data face.
             VStack(spacing: SpeakSpacing.sm) {
                 Image(systemName: "waveform")
                     .font(.system(size: 48))
                     .foregroundStyle(Color.speakAccent)
                 Text("speak")
-                    .font(.speakMonoTitle)
+                    .font(.speakDisplay())
                 if !appVersion.isEmpty {
                     Text("v\(appVersion)")
-                        .font(.speakMonoCaption)
+                        .font(.speakMonoFace(.caption))
                         .foregroundStyle(.secondary)
                 }
                 Text("Free · Open-source · MIT")
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.secondary)
             }
 
@@ -55,11 +55,11 @@ struct AboutSettingsTab: View {
             VStack(spacing: SpeakSpacing.sm) {
                 AboutSettingsTab.githubURL.map { url in
                     Link("View on GitHub", destination: url)
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                 }
                 AboutSettingsTab.issuesURL.map { url in
                     Link("Report an issue", destination: url)
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                 }
             }
 
@@ -93,9 +93,9 @@ struct PrivacyGuaranteeRow: View {
                 .frame(width: 24)  // [decision: 24pt icon column width = 3× SpeakSpacing.sm]
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Text(title)
-                    .font(.speakMonoBody)
+                    .font(.speakBody(.base))
                 Text(detail)
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.secondary)
             }
         }

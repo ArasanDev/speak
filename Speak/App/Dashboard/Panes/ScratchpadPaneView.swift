@@ -5,7 +5,7 @@
 //
 // v0: a single persistent pad backed by `@AppStorage` (UserDefaults) so the note
 // survives relaunch — no cloud, no account (the local-first moat). Multi-tab notes are a
-// later enhancement. The text is Monaco (content voice); chrome is the system font.
+// later enhancement. The text is SF Mono (data voice); chrome is the SF Pro body scale.
 
 import SpeakCore
 import SwiftUI
@@ -28,14 +28,14 @@ struct ScratchpadPaneView: View {
             )
 
             TextEditor(text: $text)
-                .font(.speakMonoBody)
+                .font(.speakMonoFace(.base))
                 .scrollContentBackground(.hidden)
                 .padding(SpeakSpacing.sm)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color.speakSurface))
                 .overlay(alignment: .topLeading) {
                     if text.isEmpty {
                         Text("Start typing…")
-                            .font(.speakMonoBody)
+                            .font(.speakBody(.base))
                             .foregroundStyle(.tertiary)
                             .padding(SpeakSpacing.md)
                             .allowsHitTesting(false)
@@ -50,7 +50,7 @@ struct ScratchpadPaneView: View {
     private var footer: some View {
         HStack(spacing: SpeakSpacing.md) {
             Text("\(wordCount) words")
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(.secondary)
             Spacer()
             Button("Copy") {

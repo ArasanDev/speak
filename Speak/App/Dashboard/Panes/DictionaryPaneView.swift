@@ -40,7 +40,7 @@ struct DictionaryPaneView: View {
         HStack(spacing: SpeakSpacing.sm) {
             TextField("Add a word or name…", text: $newTerm)
                 .textFieldStyle(.plain)
-                .font(.speakMonoBody)
+                .font(.speakBody(.base))
                 .onSubmit(addTerm)
             Button("Add", action: addTerm)
                 .disabled(newTerm.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -66,7 +66,7 @@ struct DictionaryPaneView: View {
                 ForEach(terms, id: \.self) { term in
                     HStack {
                         Text(term)
-                            .font(.speakMonoBody)
+                            .font(.speakMonoFace(.base))
                         Spacer()
                         Button {
                             removeTerm(term)

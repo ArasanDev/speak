@@ -92,15 +92,15 @@ struct AboutView: View {
                     // Headline: "speak v0.0.1"
                     HStack(spacing: SpeakSpacing.xs) {
                         Text("speak")
-                            .font(.speakMonoTitle)
+                            .font(.speakDisplay(.display))
                         Text("v\(appVersion)")
-                            .font(.speakMonoCaption)
+                            .font(.speakMonoFace(.caption))
                             .foregroundStyle(.secondary)
                     }
 
                     // Tagline
                     Text("Speech → text → clean writing, 100% on your device")
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
                 }
@@ -132,7 +132,7 @@ struct AboutView: View {
 
                 VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                     Text("Quick Links")
-                        .font(.speakMonoBody)
+                        .font(.speakBody(.base))
                         .foregroundStyle(.primary)
                         .padding(.bottom, SpeakSpacing.xs)
 
@@ -143,7 +143,7 @@ struct AboutView: View {
                                 Image(systemName: "link")
                                     .foregroundStyle(.secondary)
                                 Text("View on GitHub")
-                                    .font(.speakMonoCaption)
+                                    .font(.speakBody(.caption))
                                     .foregroundStyle(Color.speakAccent)
                                 Spacer()
                                 Image(systemName: "arrow.up.right")
@@ -161,7 +161,7 @@ struct AboutView: View {
                                 Image(systemName: "exclamationmark.circle")
                                     .foregroundStyle(.secondary)
                                 Text("Report an issue")
-                                    .font(.speakMonoCaption)
+                                    .font(.speakBody(.caption))
                                     .foregroundStyle(Color.speakAccent)
                                 Spacer()
                                 Image(systemName: "arrow.up.right")
@@ -179,7 +179,7 @@ struct AboutView: View {
                                 Image(systemName: "person.badge.plus")
                                     .foregroundStyle(.secondary)
                                 Text("Learn how to contribute")
-                                    .font(.speakMonoCaption)
+                                    .font(.speakBody(.caption))
                                     .foregroundStyle(Color.speakAccent)
                                 Spacer()
                                 Image(systemName: "arrow.up.right")
@@ -197,7 +197,7 @@ struct AboutView: View {
                                 Image(systemName: "list.bullet.clipboard")
                                     .foregroundStyle(.secondary)
                                 Text("What's new")
-                                    .font(.speakMonoCaption)
+                                    .font(.speakBody(.caption))
                                     .foregroundStyle(Color.speakAccent)
                                 Spacer()
                                 Image(systemName: "arrow.up.right")
@@ -218,7 +218,7 @@ struct AboutView: View {
 
                 VStack(alignment: .leading, spacing: SpeakSpacing.md) {
                     Text("Credits")
-                        .font(.speakMonoBody)
+                        .font(.speakBody(.base))
                         .foregroundStyle(.primary)
 
                     VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
@@ -271,7 +271,7 @@ private struct SystemInfoRow: View {
                 .frame(width: 80, alignment: .leading)
             Spacer()
             Text(value)
-                .font(.speakMonoCaption)
+                .font(.speakMonoFace(.caption))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
         }
@@ -295,7 +295,7 @@ private struct CreditRow: View {
 
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Text(title)
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.primary)
                 Text(detail)
                     .font(.caption)

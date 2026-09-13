@@ -10,7 +10,7 @@
 //     a live diff preview that updates when the user changes the cleanup level. The
 //     preview uses a canned illustrative transcript; live diffs from real dictations
 //     are a future History-detail integration. [decision W4.1: Settings preview first]
-//   - Monaco theme throughout (Font.speakMono*, Color.speakAccent, SpeakSpacing).
+//   - FE-1 type system (Font.speakBody / .speakMonoFace, Color.speakAccent, SpeakSpacing).
 //     No magic numbers — all sizes are semantic tokens or tagged [decision]. [decision]
 //   - Three display modes via `CleanupDiffView.DisplayMode`:
 //       .sideBySide  — raw (left) / cleaned (right) panels.
@@ -112,7 +112,7 @@ public struct CleanupDiffView: View {
     private var headerBar: some View {
         HStack {
             Text("AI Changes")
-                .font(.speakMonoBody)
+                .font(.speakBody(.base))
                 .foregroundColor(.secondary)
 
             Spacer()
@@ -164,11 +164,11 @@ public struct CleanupDiffView: View {
         HStack(alignment: .top, spacing: SpeakSpacing.md) {
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Text("Raw")
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundColor(.secondary)
                 ScrollView {
                     Text(raw)
-                        .font(.speakMonoBody)
+                        .font(.speakMonoFace(.base))
                         .foregroundColor(.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
@@ -180,11 +180,11 @@ public struct CleanupDiffView: View {
 
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Text("Cleaned")
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundColor(.secondary)
                 ScrollView {
                     Text(cleaned)
-                        .font(.speakMonoBody)
+                        .font(.speakMonoFace(.base))
                         .foregroundColor(.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
@@ -199,7 +199,7 @@ public struct CleanupDiffView: View {
     private func cleanedOnlyView(text: String) -> some View {
         ScrollView {
             Text(text)
-                .font(.speakMonoBody)
+                .font(.speakMonoFace(.base))
                 .foregroundColor(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
@@ -211,12 +211,12 @@ public struct CleanupDiffView: View {
     private var noCleanupView: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Label("No AI cleanup applied", systemImage: "wand.and.stars.inverse")
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .foregroundColor(.secondary)
 
             ScrollView {
                 Text(rawText)
-                    .font(.speakMonoBody)
+                    .font(.speakMonoFace(.base))
                     .foregroundColor(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
@@ -231,7 +231,7 @@ public struct CleanupDiffView: View {
     /// styles — no `ForEach`, no `HStack` word-wrap issues. [decision W4.1]
     private func segmentedText(segments: [DiffSegment]) -> Text {
         guard !segments.isEmpty else {
-            return Text("(empty)").font(.speakMonoBody).foregroundColor(.secondary)
+            return Text("(empty)").font(.speakMonoFace(.base)).foregroundColor(.secondary)
         }
 
         // Build from first segment so we can use + to accumulate.
@@ -247,13 +247,13 @@ public struct CleanupDiffView: View {
         switch segment.kind {
         case .equal:
             return Text(segment.text)
-                .font(.speakMonoBody)
+                .font(.speakMonoFace(.base))
 
         case .insert:
             // Inserted words: green + underline to signal "AI added this".
             // [decision W4.1: underline (not bold) to avoid weight mismatch with Monaco]
             return Text(segment.text)
-                .font(.speakMonoBody)
+                .font(.speakMonoFace(.base))
                 .foregroundColor(.speakDiffInsert)
                 .underline(true, color: .speakDiffInsert)
 
@@ -261,7 +261,7 @@ public struct CleanupDiffView: View {
             // Deleted words: red + strikethrough to signal "AI removed this".
             // [decision W4.1: strikethrough is the universal "crossed out" affordance]
             return Text(segment.text)
-                .font(.speakMonoBody)
+                .font(.speakMonoFace(.base))
                 .foregroundColor(.speakDiffDelete)
                 .strikethrough(true, color: .speakDiffDelete)
         }

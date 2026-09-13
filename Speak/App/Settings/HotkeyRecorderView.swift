@@ -39,7 +39,7 @@
 //   callbacks arrive on the main thread [verified: AppKit docs, 2026-06-22].
 //
 // DESIGN TOKENS:
-//   Monaco font / SpeakSpacing / speakSurface per SpeakTheme (SettingsView.swift contract).
+//   FE-1 type tokens / SpeakSpacing / speakSurface per SpeakTheme (SettingsView.swift contract).
 //
 // NO MAGIC NUMBERS:
 //   - cornerRadius 8: [decision: matches macOS control radius — aligns with RoundedRectangle
@@ -352,7 +352,7 @@ struct HotkeyRecorderView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text(preview.displayString)
-                    .font(.speakMonoBody)
+                    .font(.speakBody(.base))
                     .foregroundStyle(.primary)
                     .padding(.horizontal, SpeakSpacing.sm)
                     .padding(.vertical, SpeakSpacing.xs)

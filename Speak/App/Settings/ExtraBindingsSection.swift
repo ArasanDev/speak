@@ -50,7 +50,7 @@ struct ExtraBindingsSection: View {
                 ForEach(bindings) { binding in
                     HStack {
                         Text(binding.source.displayString)
-                            .font(.speakMonoBody)
+                            .font(.speakBody(.base))
                         Spacer()
                         Text(binding.action.displayString)
                             .font(.caption)

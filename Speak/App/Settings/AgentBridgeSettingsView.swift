@@ -90,7 +90,7 @@ struct AgentBridgeSettingsView: View {
                         copyButton("Copy Command", text: installCommand, name: "Install command")
                     }
                     Text(installCommand)
-                        .font(.speakMonoCaption)
+                        .font(.speakMonoFace(.caption))
                         .padding(SpeakSpacing.sm)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.speakWindowCanvas)
@@ -106,7 +106,7 @@ struct AgentBridgeSettingsView: View {
                         copyButton("Copy JSON", text: jsonSnippet, name: "JSON config")
                     }
                     Text(jsonSnippet)
-                        .font(.speakMonoCaption)
+                        .font(.speakMonoFace(.caption))
                         .padding(SpeakSpacing.sm)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.speakWindowCanvas)
@@ -181,7 +181,7 @@ struct AgentBridgeSettingsView: View {
                         ?? "No agent has called in yet — register via speak_register_session."
                 ) {
                     Text("\(sessions.filter { $0.state == .active }.count)")
-                        .font(.speakMonoBody)
+                        .font(.speakBody(.base))
                         .foregroundStyle(.secondary)
                 }
 

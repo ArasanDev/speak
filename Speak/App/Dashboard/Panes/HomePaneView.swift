@@ -19,21 +19,10 @@ import SwiftUI
 
 // MARK: - Flat Card Modifier
 
-private struct HomeCardModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .background(Color.speakSurface)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.speakCardBorder, lineWidth: 1)
-            )
-    }
-}
-
 extension View {
+    /// Home's card = the shared `speakCard()` primitive (see SpeakCard.swift).
     fileprivate func homeCard() -> some View {
-        self.modifier(HomeCardModifier())
+        speakCard()
     }
 }
 

@@ -3,7 +3,7 @@
 // Shared chrome for dashboard panes so every pane shares one header rhythm and the
 // not-yet-built panes read as intentional placeholders (not broken screens).
 //
-// `PaneHeader` — a Monaco title + optional subtitle, the standard top of each pane.
+// `PaneHeader` — a serif display title + optional subtitle, the standard top of each pane.
 // `PanePlaceholder` — the "this lands in this wave" empty state used by scaffolded panes
 //   until their specialist fills the body. Replace the placeholder, keep the header.
 
@@ -22,10 +22,10 @@ struct PaneHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
             Text(title)
-                .font(.speakMonoTitle)
+                .font(.speakDisplay())
             if let subtitle {
                 Text(subtitle)
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.secondary)
             }
         }
@@ -50,7 +50,7 @@ struct PanePlaceholder: View {
                 .font(.system(size: 34))
                 .foregroundStyle(.tertiary)
             Text(message)
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }

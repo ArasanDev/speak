@@ -119,9 +119,9 @@ struct CleanupEngineSheet: View {
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     Text("\(viewModel.preset.displayName) API Key")
-                        .font(.speakMonoTitle)
+                        .font(.speakDisplay(.title))
                     Text("Stored in Keychain \u{2014} never sent anywhere except \(viewModel.preset.displayName).")
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -134,7 +134,7 @@ struct CleanupEngineSheet: View {
             SecureField(viewModel.hasStoredKey ? "Key set \u{2014} enter a new key to replace it" : "Enter API key",
                         text: $viewModel.keyText)
                 .textFieldStyle(.roundedBorder)
-                .font(.speakMonoBody)
+                .font(.speakBody(.base))
 
             if let errorMessage = viewModel.errorMessage {
                 Text(errorMessage)

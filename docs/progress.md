@@ -1367,3 +1367,43 @@ the detail header's trailing edge.
 **Verification:** build clean · lint 0 errors · moat 7/7 PASS ·
 screenshot-verified General, Hotkeys, Privacy against the Home
 reference.
+
+---
+
+## 2026-09-13 — Typography unification onto FE-1 type system
+
+The user-directed audit identified the biggest remaining divergence:
+legacy Monaco (`speakMono*`) was used for ALL chrome text across the
+desk panes, while the FE-1 spec (`SpeakTypography.swift`) reserves mono
+for data and uses SF Pro for chrome / New York serif for hero titles.
+
+**~200 call sites converted** across 25 files (6 parallel workers):
+
+- CHROME (labels, section headers, descriptions, buttons, empty states,
+  input fields) → `speakBody(.caption/.base)`; section headers →
+  `.system(size:16, weight:.semibold)` matching Home; pane/sheet hero
+  titles → `speakDisplay` serif.
+- DATA (transcripts, commands, JSON, timestamps, IDs, spec readouts,
+  stored snippet/vocabulary rows) → `speakMonoFace` (SF Mono — the
+  spec's data voice, replacing Monaco).
+- Stat numerals → `.system(size:28, weight:.bold, design:.rounded)` +
+  `.primary`, matching Home's stat cards (Insights' amber numerals
+  removed).
+- `.speakMonoKeycap` intentionally retained — keycap glyph voice.
+
+**Shared card primitive extracted**: `Speak/App/DesignSystem/SpeakCard.swift`
+adds `.speakCard()` (speakSurface + hairline, r16 — the Home/Settings
+card) and `.speakInset()` (canvas-tone recessed well, r8 — code/commands).
+HomeCardModifier + SettingsSectionCard now delegate to it; MCP pane's
+command/JSON wells use `.speakInset()`. Bespoke pane cards with
+non-matching radii/fills were left for the pane-restyle pass.
+
+**Overlay audit (user: "review and align")**: default `.classic` HUD is
+already the restrained dark pill; `.aurora` is an opt-in ambient style
+where color is the point — kept. Overlay typography converted (transcript
+text/timers → speakMonoFace; HUD labels → speakBody).
+
+**Verification:** build clean (xcodegen regenerated for SpeakCard.swift)
+· lint 0 errors · moat 7/7 · screenshot-verified Insights (numerals now
+system-rounded primary), MCP & Agents (serif hero, SF Pro labels, mono
+data wells), AI Studio (sliders/labels in SF Pro).

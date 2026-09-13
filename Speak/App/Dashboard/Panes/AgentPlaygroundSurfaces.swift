@@ -161,7 +161,7 @@ struct PlaygroundEngineChip: View {
                 .frame(width: 5, height: 5)
 
             Text(name)
-                .font(.speakMonoFace(.caption))
+                .font(.speakBody(.caption))
                 .foregroundStyle(isSelected ? Color.speakBone : Color.speakMica)
                 .lineLimit(1)
         }

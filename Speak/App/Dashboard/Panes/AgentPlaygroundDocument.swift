@@ -312,7 +312,7 @@ struct PlaygroundEmptyState: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.md) {
             Text("The agent writes here.")
-                .font(.speakDisplay(.title))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color.speakBone)
 
             Text("Everything below streams from a model running on this machine. "
@@ -352,7 +352,7 @@ struct PlaygroundStarterRow: View {
         Button(action: action) {
             HStack(alignment: .top, spacing: SpeakSpacing.sm) {
                 Text("↳")
-                    .font(.speakMonoFace(.caption))
+                    .font(.speakBody(.caption))
                     .foregroundStyle(Color.speakHumanAmber.opacity(isHovering ? 0.9 : 0.5))
 
                 Text(text)

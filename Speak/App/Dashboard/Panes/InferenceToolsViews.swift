@@ -110,7 +110,7 @@ struct BackendRow: View {
 
                 HStack(spacing: SpeakSpacing.xs) {
                     Text(backend.id)
-                        .font(.speakMonoCaption)
+                        .font(.speakMonoFace(.caption))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
 
@@ -118,7 +118,7 @@ struct BackendRow: View {
                         Text("·")
                             .foregroundStyle(.quaternary)
                         Text(endpoint)
-                            .font(.speakMonoCaption)
+                            .font(.speakMonoFace(.caption))
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
                     }
@@ -235,7 +235,7 @@ struct QuickTestConsole: View {
 
     private var promptField: some View {
         TextField("Ask the local model something…", text: $viewModel.testPrompt, axis: .vertical)
-            .font(.speakMonoBody)
+            .font(.speakMonoFace(.base))
             .textFieldStyle(.plain)
             .lineLimit(1...4)
             .padding(.horizontal, SpeakSpacing.sm + 2)
@@ -289,7 +289,7 @@ struct QuickTestConsole: View {
     private var outputView: some View {
         ScrollView {
             Text(viewModel.testOutput)
-                .font(.speakMonoCaption)
+                .font(.speakMonoFace(.caption))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(SpeakSpacing.sm)

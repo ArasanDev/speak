@@ -37,9 +37,9 @@ struct TransformsPaneView: View {
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Text(transform.name)
-                    .font(.speakMonoBody)
+                    .font(.speakBody(.base))
                 Text(transform.blurb)
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)

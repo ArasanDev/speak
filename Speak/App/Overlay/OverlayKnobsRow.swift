@@ -57,7 +57,7 @@ struct OverlayKnobsRow: View {
                         Image(systemName: "xmark.circle")
                             .font(.system(size: 10))
                         Text("Cancel")
-                            .font(.speakMonoCaption)
+                            .font(.speakBody(.caption))
                     }
                     .foregroundStyle(Color.secondary.opacity(0.6))
                 }
@@ -70,7 +70,7 @@ struct OverlayKnobsRow: View {
     private func knobChip(label: String, isActive: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 3)
                 .background(

@@ -381,7 +381,7 @@ private struct HotkeyConflictNoteView: View {
 
             // swiftlint:disable:next line_length
             Text("speak uses double-tap Right-Command so it won't clash with macOS dictation. If you switch to Fn in Settings, disable **System Settings \u{2192} Keyboard \u{2192} Dictation** shortcut first.")
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -417,7 +417,7 @@ private struct HotkeyTryPillView: View {
                 .foregroundStyle(triggered ? .green : .secondary)
                 .font(.body)
             Text(triggered ? "Nice \u{2014} that worked." : "Try it now \u{2014} \(hotkeyLabel)")
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(triggered ? .primary : .secondary)
         }
         .padding(.horizontal, SpeakSpacing.md)
@@ -461,7 +461,7 @@ private struct DoneStepView: View {
                     .frame(maxWidth: 340)
             }
             Text("This window will close in a moment.")
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 40)

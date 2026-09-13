@@ -126,7 +126,7 @@ private struct ServerStatusCard: View {
                     .foregroundStyle(viewModel.isServerRunning ? statusTint : Color.secondary)
 
                 Text("http://localhost:\(viewModel.serverPort)")
-                    .font(.speakMonoCaption)
+                    .font(.speakMonoFace(.caption))
                     .foregroundStyle(viewModel.isServerRunning ? .secondary : .tertiary)
                     .textSelection(.enabled)
             }
@@ -169,8 +169,7 @@ private struct ServerStatusCard: View {
     private func metric(value: String, label: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value)
-                .font(.speakMono(15))
-                .monospacedDigit()
+                .font(.speakMonoFace(.body))
                 .foregroundStyle(viewModel.isServerRunning ? .primary : .tertiary)
                 .lineLimit(1)
             Text(label)
@@ -275,7 +274,7 @@ private struct APIKeyCard: View {
     private var keyField: some View {
         HStack(spacing: SpeakSpacing.sm) {
             Text(maskedKey(viewModel.apiKey))
-                .font(.speakMonoBody)
+                .font(.speakMonoFace(.base))
                 .foregroundStyle(viewModel.apiKey.isEmpty ? .tertiary : .primary)
                 .textSelection(.enabled)
                 .lineLimit(1)

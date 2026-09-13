@@ -377,20 +377,20 @@ private struct CollapsedHistoryEntryView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: SpeakSpacing.sm) {
                     Text(entry.createdAt, style: .time)
-                        .font(.speakMonoCaption)
+                        .font(.speakMonoFace(.caption))
                         .foregroundStyle(.secondary)
                     Text("·")
                         .foregroundStyle(.secondary)
                     Text(entry.rawText.prefix(40))
                         .lineLimit(1)
-                        .font(.speakMonoCaption)
+                        .font(.speakMonoFace(.caption))
                         .truncationMode(.tail)
                     if let cleaned = entry.cleanedText {
                         Text("|")
                             .foregroundStyle(.secondary)
                         Text(cleaned.prefix(40))
                             .lineLimit(1)
-                            .font(.speakMonoCaption)
+                            .font(.speakMonoFace(.caption))
                             .truncationMode(.tail)
                     }
                     Spacer()
@@ -446,7 +446,7 @@ private struct ExpandedHistoryEntryView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.createdAt, style: .date)
-                    .font(.speakMonoCaption)
+                    .font(.speakMonoFace(.caption))
                     .foregroundStyle(.secondary)
                 HStack(spacing: SpeakSpacing.sm) {
                     Text(entry.createdAt, style: .time)
@@ -487,7 +487,7 @@ private struct ExpandedHistoryEntryView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(formatDuration(entry.duration))
-                        .font(.speakMonoCaption)
+                        .font(.speakMonoFace(.caption))
                 }
             }
 
@@ -497,7 +497,7 @@ private struct ExpandedHistoryEntryView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(String(format: "%.2fs", entry.stopToPasteSeconds))
-                        .font(.speakMonoCaption)
+                        .font(.speakMonoFace(.caption))
                 }
             }
 
@@ -507,7 +507,7 @@ private struct ExpandedHistoryEntryView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(String(format: "%.2fs", entry.cleanupSeconds))
-                        .font(.speakMonoCaption)
+                        .font(.speakMonoFace(.caption))
                 }
             }
         }

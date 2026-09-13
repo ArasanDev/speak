@@ -69,8 +69,7 @@ struct CodingCustomizationView: View {
             Image(systemName: "slider.horizontal.3")
                 .foregroundStyle(.secondary)
             Text("Customize this dictation's prompt")
-                .font(.speakMonoBody)
-                .fontWeight(.semibold)
+                .font(.speakBody(.base, semibold: true))
             Spacer(minLength: 0)
             Button {
                 close()
@@ -127,7 +126,7 @@ struct CodingCustomizationView: View {
                 Text(title)
                 Spacer(minLength: 0)
             }
-            .font(.speakMonoCaption)
+            .font(.speakBody(.caption))
             .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
@@ -147,7 +146,7 @@ struct CodingCustomizationView: View {
                 Text(model.defaultSystemPrompt.isEmpty
                     ? "No system prompt for this dictation (AI cleanup is off, or the active destination is Raw)."
                     : model.defaultSystemPrompt)
-                    .font(.speakMonoCaption)
+                    .font(.speakMonoFace(.caption))
                     .foregroundStyle(model.defaultSystemPrompt.isEmpty ? .tertiary : .secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
@@ -171,13 +170,13 @@ struct CodingCustomizationView: View {
     private var customInstructionsSection: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("Additional instructions for this dictation")
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(.secondary)
             TextEditor(text: Binding(
                 get: { model.customInstructions },
                 set: { model.customInstructions = $0 }
             ))
-            .font(.speakMonoBody)
+            .font(.speakMonoFace(.base))
             .focused($isCustomInstructionsFocused)
             .scrollContentBackground(.hidden)
             .frame(minHeight: 88, maxHeight: 160)
@@ -196,7 +195,7 @@ struct CodingCustomizationView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("Agent Prompt Tag")
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text("Tags prompt for Speak agent skill")
@@ -211,7 +210,7 @@ struct CodingCustomizationView: View {
                         model.onKnobChanged?()
                     } label: {
                         Text(style.displayName)
-                            .font(.speakMonoCaption)
+                            .font(.speakBody(.caption))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 3)
                             .background(
