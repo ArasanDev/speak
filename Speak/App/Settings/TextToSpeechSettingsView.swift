@@ -52,19 +52,24 @@ struct TextToSpeechSettingsView: View {
     private var voiceCard: some View {
         SettingsSectionCard(title: "Voice") {
             SettingsRow(
-                "Voice",
+                "Selected Voice",
                 description: "“Automatic” picks the best installed voice for the dictation language."
             ) {
                 Picker("", selection: Binding(
                     get: { store.ttsVoiceIdentifier },
                     set: { store.ttsVoiceIdentifier = $0 }
                 )) {
-                    Text("Automatic").tag("")
+                    Text("Automatic")
+                        .tag("")
+                        .foregroundStyle(.speakBone)
                     ForEach(sortedVoices, id: \.identifier) { voice in
-                        Text(voiceLabel(voice)).tag(voice.identifier)
+                        Text(voiceLabel(voice))
+                            .tag(voice.identifier)
+                            .foregroundStyle(.speakBone)
                     }
                 }
                 .pickerStyle(.menu)
+                .tint(.speakUIAccent)
                 .fixedSize()
             }
 
@@ -72,26 +77,40 @@ struct TextToSpeechSettingsView: View {
 
             SettingsRow(
                 "Speaking Rate",
-                description: rateLabel
+                description: rateDescription
             ) {
-                Slider(value: Binding(
-                    get: { Double(store.ttsSpeechRate) },
-                    set: { store.ttsSpeechRate = Float($0) }
-                ), in: 0.25...0.75)
-                .frame(width: 160)
+                HStack(spacing: SpeakSpacing.sm) {
+                    Slider(value: Binding(
+                        get: { Double(store.ttsSpeechRate) },
+                        set: { store.ttsSpeechRate = Float($0) }
+                    ), in: 0.25...0.75)
+                    .tint(.speakUIAccent)
+                    .frame(width: 140)
+                    Text(rateCaption)
+                        .font(.speakMonoFace(.caption))
+                        .foregroundStyle(.speakMica)
+                        .frame(width: 40, alignment: .trailing)
+                }
             }
 
             SettingsRowSeparator()
 
             SettingsRow(
                 "Pitch",
-                description: pitchLabel
+                description: pitchDescription
             ) {
-                Slider(value: Binding(
-                    get: { Double(store.ttsPitchMultiplier) },
-                    set: { store.ttsPitchMultiplier = Float($0) }
-                ), in: 0.5...2.0)
-                .frame(width: 160)
+                HStack(spacing: SpeakSpacing.sm) {
+                    Slider(value: Binding(
+                        get: { Double(store.ttsPitchMultiplier) },
+                        set: { store.ttsPitchMultiplier = Float($0) }
+                    ), in: 0.5...2.0)
+                    .tint(.speakUIAccent)
+                    .frame(width: 140)
+                    Text(pitchCaption)
+                        .font(.speakMonoFace(.caption))
+                        .foregroundStyle(.speakMica)
+                        .frame(width: 40, alignment: .trailing)
+                }
             }
 
             SettingsRowSeparator()
@@ -100,11 +119,18 @@ struct TextToSpeechSettingsView: View {
                 "Volume",
                 description: "Playback loudness for readbacks and agent speech."
             ) {
-                Slider(value: Binding(
-                    get: { Double(store.ttsVolume) },
-                    set: { store.ttsVolume = Float($0) }
-                ), in: 0...1.0)
-                .frame(width: 160)
+                HStack(spacing: SpeakSpacing.sm) {
+                    Slider(value: Binding(
+                        get: { Double(store.ttsVolume) },
+                        set: { store.ttsVolume = Float($0) }
+                    ), in: 0...1.0)
+                    .tint(.speakUIAccent)
+                    .frame(width: 140)
+                    Text(volumeCaption)
+                        .font(.speakMonoFace(.caption))
+                        .foregroundStyle(.speakMica)
+                        .frame(width: 40, alignment: .trailing)
+                }
             }
         }
     }
@@ -123,10 +149,13 @@ struct TextToSpeechSettingsView: View {
                     TextField("Preview text", text: $previewText)
                         .textFieldStyle(.roundedBorder)
                         .font(.speakBody(.caption))
+                        .tint(.speakUIAccent)
                         .frame(width: 220)
                     Button(previewing ? "Stop" : "Play") {
                         togglePreview()
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.speakUIAccent)
                     .disabled(context.voiceOut == nil
                               || (!previewing && previewText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
                 }
@@ -148,6 +177,7 @@ struct TextToSpeechSettingsView: View {
                 ))
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                .tint(.speakUIAccent)
             }
         }
     }
@@ -168,12 +198,24 @@ struct TextToSpeechSettingsView: View {
         return label
     }
 
-    private var rateLabel: String {
-        String(format: "%.2f — 0.50 is the system default.", store.ttsSpeechRate)
+    private var rateDescription: String {
+        "0.50 is the system default."
     }
 
-    private var pitchLabel: String {
-        String(format: "%.1f× voice pitch.", store.ttsPitchMultiplier)
+    private var rateCaption: String {
+        String(format: "%.2f", store.ttsSpeechRate)
+    }
+
+    private var pitchDescription: String {
+        "Multiplier over the voice's base pitch."
+    }
+
+    private var pitchCaption: String {
+        String(format: "%.2f×", store.ttsPitchMultiplier)
+    }
+
+    private var volumeCaption: String {
+        String(format: "%.0f%%", store.ttsVolume * 100)
     }
 
     private func togglePreview() {

@@ -61,6 +61,11 @@ final class WindowPresenter {
 
     // MARK: - Init
 
+    /// Runtime color-theme engine injected into every window root this
+    /// presenter opens (`ThemedRoot`). Nil in tests → a store-bound engine is
+    /// created so the palette still resolves correctly.
+    private let themeEngine: ThemeEngine
+
     // Store reference to DictationController for SettingsWindowController
     private weak var dictationController: DictationController?
 
@@ -71,7 +76,8 @@ final class WindowPresenter {
         snippetStore: SnippetStore,
         hotkeyComboProvider: @escaping @MainActor () -> [String],
         hotkeyFiredPublisher: AnyPublisher<Void, Never>? = nil,
-        dictationController: DictationController? = nil
+        dictationController: DictationController? = nil,
+        themeEngine: ThemeEngine? = nil
     ) {
         self.historyStore = historyStore
         self.permissionManager = permissionManager
@@ -80,6 +86,7 @@ final class WindowPresenter {
         self.hotkeyComboProvider = hotkeyComboProvider
         self.hotkeyFiredPublisher = hotkeyFiredPublisher
         self.dictationController = dictationController
+        self.themeEngine = themeEngine ?? ThemeEngine(settingsStore: settingsStore)
     }
 
     // MARK: - History window
@@ -131,6 +138,7 @@ final class WindowPresenter {
                 self?.dictationController?.rebindExtraBindings(set)
             },
             voiceOut: dictationController?.voiceOut,
+            themeEngine: themeEngine,
             agentSessionRegistry: dictationController?.agentSessionRegistry,
             agentCallStore: dictationController?.agentCallStore,
             answerAgentCallByVoice: { [weak self] call in

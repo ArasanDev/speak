@@ -141,11 +141,13 @@ private struct SettingsSceneHost: View {
 
     var body: some View {
         if let ctrl = appDelegate.controller {
+            let context = ctrl.makeSettingsContext()
             SettingsExperienceView(
-                context: ctrl.makeSettingsContext(),
+                context: context,
                 presentation: .standalone,
                 onOpenSection: { section in ctrl.showDashboardSection(section) }
             )
+            .speakThemed(with: context.themeEngine)
         }
     }
 }

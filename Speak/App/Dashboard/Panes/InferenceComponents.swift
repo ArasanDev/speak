@@ -47,7 +47,7 @@ struct InferenceCard<Content: View, Accessory: View>: View {
     let title: String
     var subtitle: String?
     /// Tint for the header glyph. Also tints the card's border when `isEmphasized`.
-    var tint: Color = .secondary
+    var tint: Color = .speakMica
     /// When true the border picks up `tint` — used by the server card when running.
     var isEmphasized = false
     @ViewBuilder var accessory: () -> Accessory
@@ -61,11 +61,11 @@ struct InferenceCard<Content: View, Accessory: View>: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .font(.speakBody(.base, semibold: true))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.speakBone)
                     if let subtitle {
                         Text(subtitle)
                             .font(.speakBody(.caption))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.speakMica)
                             // Narrow panes (the dashboard floor is 480pt wide,
                             // sidebar included) must wrap the subtitle rather
                             // than truncate it against the accessory button.
@@ -106,7 +106,7 @@ extension InferenceCard where Accessory == EmptyView {
         systemImage: String,
         title: String,
         subtitle: String? = nil,
-        tint: Color = .secondary,
+        tint: Color = .speakMica,
         isEmphasized: Bool = false,
         @ViewBuilder content: @escaping () -> Content
     ) {
@@ -127,7 +127,7 @@ extension InferenceCard where Accessory == EmptyView {
 /// A tinted rounded-square icon chip — the card header's anchor.
 struct InferenceGlyph: View {
     let systemImage: String
-    var tint: Color = .secondary
+    var tint: Color = .speakMica
 
     var body: some View {
         RoundedRectangle(cornerRadius: InferenceMetrics.controlRadius, style: .continuous)
@@ -193,7 +193,7 @@ struct InferenceButton: View {
 
     let title: String
     var systemImage: String?
-    var tint: Color = .accentColor
+    var tint: Color = .speakUIAccent
     var emphasis: Emphasis = .tinted
     var isBusy = false
     let action: () -> Void
@@ -259,9 +259,9 @@ struct InferenceButton: View {
 
     private var foreground: Color {
         switch emphasis {
-        case .filled: return .white
+        case .filled: return Color.speakOnAccent
         case .tinted: return tint
-        case .quiet: return .secondary
+        case .quiet: return Color.speakMica
         }
     }
 }
@@ -291,7 +291,7 @@ struct InferenceCopyButton: View {
                         .font(.speakBody(.caption, semibold: true))
                 }
             }
-            .foregroundStyle(copied ? Color.speakDelivered : Color.secondary)
+            .foregroundStyle(copied ? Color.speakDelivered : Color.speakMica)
             .padding(.horizontal, label == nil ? 5 : SpeakSpacing.sm)
             .padding(.vertical, 4)
             .background(
@@ -339,14 +339,14 @@ struct InferenceEmptyState<Action: View>: View {
         VStack(spacing: SpeakSpacing.sm) {
             Image(systemName: systemImage)
                 .font(.system(size: 22, weight: .regular))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.speakMica)
             VStack(spacing: 2) {
                 Text(headline)
                     .font(.speakBody(.base, semibold: true))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                 Text(message)
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.speakMica)
                     .multilineTextAlignment(.center)
             }
             action()

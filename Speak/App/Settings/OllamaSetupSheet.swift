@@ -63,13 +63,13 @@ struct OllamaSetupSheet: View {
             HStack(alignment: .top, spacing: SpeakSpacing.md) {
                 Image(systemName: "server.rack")
                     .font(.system(size: 32))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     Text("Set up Ollama")
                         .font(.speakDisplay(.title))
                     Text("Run a local LLM on your Mac \u{2014} no cloud, no account.")
                         .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                 }
             }
             .padding(.bottom, SpeakSpacing.sm)
@@ -106,10 +106,10 @@ struct OllamaSetupSheet: View {
             // false until SpeakLLM networking lands). [decision Wave 2.1]
             HStack(spacing: SpeakSpacing.xs) {
                 Image(systemName: "info.circle")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                 Text("Ollama support lands in v0.1. In v0, speak falls back to raw transcript when Ollama is selected.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
             }
             .padding(SpeakSpacing.md)
             .background(
@@ -140,7 +140,7 @@ struct OllamaSetupSheet: View {
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     Text(entry.label)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                     HStack(spacing: SpeakSpacing.sm) {
                         Text("ollama pull \(entry.tag)")
                             .font(.speakMonoFace(.base))
@@ -166,7 +166,7 @@ struct OllamaSetupSheet: View {
                     }
                     Text(entry.detail)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                 }
             }
         }
@@ -200,7 +200,7 @@ struct SetupStepRow: View {
                     .font(.speakBody(.base))
                 Text(detail)
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
             }
         }
     }

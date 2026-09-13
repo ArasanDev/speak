@@ -50,7 +50,9 @@ struct AIStudioPaneView: View {
             VStack(alignment: .leading, spacing: SpeakSpacing.md) {
                 Picker("Studio View", selection: $selectedTab) {
                     ForEach(StudioTab.allCases) { tab in
-                        Label(tab.rawValue, systemImage: tab.icon).tag(tab)
+                        Label(tab.rawValue, systemImage: tab.icon)
+                            .foregroundStyle(.speakBone)
+                            .tag(tab)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -113,13 +115,14 @@ struct AIStudioPaneView: View {
         VStack(spacing: SpeakSpacing.md) {
             Image(systemName: "brain.head.profile")
                 .font(.system(size: 34))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.speakMica)
             Text("Select a profile to edit")
                 .font(.speakBody(.caption))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.speakMica)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.speakSurface))
+        .padding(SpeakSpacing.md)
+        .speakCard()
     }
 }
 
@@ -139,28 +142,31 @@ private struct VoiceTTSConfigSection: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Voice & TTS Configuration")
                         .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.speakBone)
                     Text("Configure on-device AVSpeechSynthesizer voices, speech rate, pitch, volume, and test live audio readbacks.")
                         .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.speakMica)
                 }
                 Spacer()
                 Button(action: resetTTSDefaults) {
                     Label("Reset Voice Defaults", systemImage: "arrow.counterclockwise")
                         .font(.speakBody(.caption))
+                        .foregroundStyle(.speakBone)
                 }
             }
 
             VStack(alignment: .leading, spacing: SpeakSpacing.md) {
                 // On-Device Voice picker
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                    Text("On-Device TTS Voice").font(.speakBody(.caption)).foregroundStyle(.secondary)
+                    Text("On-Device TTS Voice").font(.speakBody(.caption)).foregroundStyle(.speakAgentViolet)
                     Picker("Voice", selection: Binding(
                         get: { context.settingsStore.ttsVoiceIdentifier },
                         set: { context.settingsStore.ttsVoiceIdentifier = $0 }
                     )) {
-                        Text("System Default (Locale matching)").tag("")
+                        Text("System Default (Locale matching)").tag("").foregroundStyle(.speakBone)
                         ForEach(availableVoices, id: \.identifier) { voice in
                             Text("\(voice.name) (\(voice.language)\(qualityBadge(voice.quality)))")
+                                .foregroundStyle(.speakBone)
                                 .tag(voice.identifier)
                         }
                     }
@@ -170,11 +176,11 @@ private struct VoiceTTSConfigSection: View {
                 // Speech Rate
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     HStack {
-                        Text("Speech Rate").font(.speakBody(.caption)).foregroundStyle(.secondary)
+                        Text("Speech Rate").font(.speakBody(.caption)).foregroundStyle(.speakAgentViolet)
                         Spacer()
                         Text(String(format: "%.2fx (Default: 0.50x)", context.settingsStore.ttsSpeechRate))
                             .font(.speakMonoFace(.caption))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.speakMica)
                     }
                     Slider(value: Binding(
                         get: { Double(context.settingsStore.ttsSpeechRate) },
@@ -185,11 +191,11 @@ private struct VoiceTTSConfigSection: View {
                 // Pitch Multiplier
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     HStack {
-                        Text("Pitch Multiplier").font(.speakBody(.caption)).foregroundStyle(.secondary)
+                        Text("Pitch Multiplier").font(.speakBody(.caption)).foregroundStyle(.speakAgentViolet)
                         Spacer()
                         Text(String(format: "%.2fx (Default: 1.00x)", context.settingsStore.ttsPitchMultiplier))
                             .font(.speakMonoFace(.caption))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.speakMica)
                     }
                     Slider(value: Binding(
                         get: { Double(context.settingsStore.ttsPitchMultiplier) },
@@ -200,11 +206,11 @@ private struct VoiceTTSConfigSection: View {
                 // Volume Slider
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     HStack {
-                        Text("Volume").font(.speakBody(.caption)).foregroundStyle(.secondary)
+                        Text("Volume").font(.speakBody(.caption)).foregroundStyle(.speakAgentViolet)
                         Spacer()
                         Text(String(format: "%.0f%%", context.settingsStore.ttsVolume * 100))
                             .font(.speakMonoFace(.caption))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.speakMica)
                     }
                     Slider(value: Binding(
                         get: { Double(context.settingsStore.ttsVolume) },
@@ -216,16 +222,18 @@ private struct VoiceTTSConfigSection: View {
 
                 // Live Audio Readback Test
                 VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-                    Text("Live Audio Readback Test").font(.speakBody(.caption)).foregroundStyle(.secondary)
+                    Text("Live Audio Readback Test").font(.speakBody(.caption)).foregroundStyle(.speakAgentViolet)
 
                     TextField("Test utterance text", text: $testText)
                         .font(.speakMonoFace(.base))
                         .textFieldStyle(.roundedBorder)
+                        .foregroundStyle(.speakBone)
 
                     HStack(spacing: SpeakSpacing.sm) {
                         Button(action: testReadback) {
                             Label(isSpeaking ? "Speaking..." : "Test Voice Readback", systemImage: "speaker.wave.2.fill")
                                 .font(.speakBody(.caption))
+                                .foregroundStyle(.speakBone)
                         }
                         .disabled(testText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSpeaking)
 
@@ -235,22 +243,22 @@ private struct VoiceTTSConfigSection: View {
                                     .font(.speakBody(.caption))
                             }
                             .buttonStyle(.borderedProminent)
-                            .tint(.red)
+                            .tint(.speakError)
                         }
 
                         Spacer()
 
                         if isSpeaking {
                             HStack(spacing: 4) {
-                                Circle().fill(Color.speakHumanAmber).frame(width: 8, height: 8)
-                                Text("AUDIO PLAYING").font(.system(size: 9)).bold().foregroundStyle(Color.speakHumanAmber)
+                                Circle().fill(Color.speakAgentViolet).frame(width: 8, height: 8)
+                                Text("AUDIO PLAYING").font(.system(size: 9)).bold().foregroundStyle(Color.speakAgentViolet)
                             }
                         }
                     }
                 }
             }
             .padding(SpeakSpacing.md)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Color.speakSurface))
+            .speakCard()
             .onAppear {
                 loadVoices()
             }
@@ -327,14 +335,16 @@ private struct STTAudioWaveformInspectorSection: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("STT Audio Waveform Inspector")
                         .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.speakBone)
                     Text("Inspect real-time audio signal dynamics, peak RMS levels, and PCM stream metrics.")
                         .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.speakMica)
                 }
                 Spacer()
                 Button(action: toggleSimulation) {
                     Label(isSimulating ? "Pause Inspection" : "Simulate Live Audio", systemImage: isSimulating ? "pause.fill" : "play.fill")
                         .font(.speakBody(.caption))
+                        .foregroundStyle(.speakBone)
                 }
             }
 
@@ -351,17 +361,16 @@ private struct STTAudioWaveformInspectorSection: View {
                     }
                     .frame(height: 72)
                     .frame(maxWidth: .infinity)
-                    .background(Color.black.opacity(0.12))
-                    .cornerRadius(6)
+                    .speakInset(cornerRadius: 8)
 
                     HStack {
                         Label("16 kHz Mono Float32 PCM Input", systemImage: "waveform")
                             .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.speakHumanAmber)
                         Spacer()
                         Text(String(format: "RMS Peak: %.2f (%.1f dBFS)", peakLevel, 20 * log10(max(0.0001, peakLevel))))
                             .font(.speakMonoFace(.caption))
-                            .foregroundStyle(isSimulating ? Color.speakHumanAmber : .secondary)
+                            .foregroundStyle(isSimulating ? Color.speakHumanAmber : .speakMica)
                     }
                 }
 
@@ -371,34 +380,34 @@ private struct STTAudioWaveformInspectorSection: View {
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     Text("PCM Buffer & Transcriber Pipeline Metrics")
                         .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.speakHumanAmber)
 
                     Grid(alignment: .leading, horizontalSpacing: SpeakSpacing.lg, verticalSpacing: SpeakSpacing.xs) {
                         GridRow {
-                            Text("Target Rate:").font(.speakBody(.caption)).foregroundStyle(.secondary)
-                            Text("16,000 Hz (Standard ASR)").font(.speakMonoFace(.caption))
+                            Text("Target Rate:").font(.speakBody(.caption)).foregroundStyle(.speakMica)
+                            Text("16,000 Hz (Standard ASR)").font(.speakMonoFace(.caption)).foregroundStyle(.speakBone)
                         }
                         GridRow {
-                            Text("Channels:").font(.speakBody(.caption)).foregroundStyle(.secondary)
-                            Text("1 Channel (Mono)").font(.speakMonoFace(.caption))
+                            Text("Channels:").font(.speakBody(.caption)).foregroundStyle(.speakMica)
+                            Text("1 Channel (Mono)").font(.speakMonoFace(.caption)).foregroundStyle(.speakBone)
                         }
                         GridRow {
-                            Text("Tap Buffer Size:").font(.speakBody(.caption)).foregroundStyle(.secondary)
-                            Text("4,096 frames (~256 ms)").font(.speakMonoFace(.caption))
+                            Text("Tap Buffer Size:").font(.speakBody(.caption)).foregroundStyle(.speakMica)
+                            Text("4,096 frames (~256 ms)").font(.speakMonoFace(.caption)).foregroundStyle(.speakBone)
                         }
                         GridRow {
-                            Text("PCM Format:").font(.speakBody(.caption)).foregroundStyle(.secondary)
-                            Text("Float32 Non-interleaved").font(.speakMonoFace(.caption))
+                            Text("PCM Format:").font(.speakBody(.caption)).foregroundStyle(.speakMica)
+                            Text("Float32 Non-interleaved").font(.speakMonoFace(.caption)).foregroundStyle(.speakBone)
                         }
                         GridRow {
-                            Text("Signal Quality:").font(.speakBody(.caption)).foregroundStyle(.secondary)
-                            Text("SNR: ~38 dB (Clean)").font(.speakMonoFace(.caption)).foregroundStyle(Color.speakDelivered)
+                            Text("Signal Quality:").font(.speakBody(.caption)).foregroundStyle(.speakMica)
+                            Text("SNR: ~38 dB (Clean)").font(.speakMonoFace(.caption)).foregroundStyle(Color.speakOK)
                         }
                     }
                 }
             }
             .padding(SpeakSpacing.md)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Color.speakSurface))
+            .speakCard()
             .onDisappear {
                 stopSimulation()
             }
@@ -448,15 +457,26 @@ private struct AICleanupToggle: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-            Toggle("AI cleanup", isOn: Binding(
-                get: { settingsStore.cleanupEnabled },
-                set: { settingsStore.cleanupEnabled = $0 }
-            ))
-            .font(.speakBody(.base))
+            Text("AI Cleanup")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.speakBone)
 
-            Text("Off = raw transcript passes through untouched.")
-                .font(.speakBody(.caption))
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+                Toggle(isOn: Binding(
+                    get: { settingsStore.cleanupEnabled },
+                    set: { settingsStore.cleanupEnabled = $0 }
+                )) {
+                    Text("AI cleanup")
+                        .font(.speakBody(.base))
+                        .foregroundStyle(.speakBone)
+                }
+
+                Text("Off = raw transcript passes through untouched.")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(.speakMica)
+            }
+            .padding(SpeakSpacing.md)
+            .speakCard()
         }
     }
 }
@@ -470,23 +490,30 @@ private struct DefaultProfileSection: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Text("Default profile")
                 .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.speakBone)
 
-            Picker("Default profile", selection: Binding(
-                get: { context.profileStore.defaultProfileID },
-                set: { context.profileStore.defaultProfileID = $0 }
-            )) {
-                ForEach(context.profileStore.profiles, id: \.id) { profile in
-                    Label(profile.name, systemImage: profile.icon).tag(profile.id)
+            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+                Picker("Default profile", selection: Binding(
+                    get: { context.profileStore.defaultProfileID },
+                    set: { context.profileStore.defaultProfileID = $0 }
+                )) {
+                    ForEach(context.profileStore.profiles, id: \.id) { profile in
+                        Label(profile.name, systemImage: profile.icon)
+                            .foregroundStyle(.speakBone)
+                            .tag(profile.id)
+                    }
                 }
-            }
-            .pickerStyle(.menu)
+                .pickerStyle(.menu)
 
-            Text("Sets which profile governs the default path. Today the everyday writing "
-                 + "style is still set in the Style pane — full default-profile wiring is the "
-                 + "next step. App-specific profiles (below) are active now.")
-                .font(.speakBody(.caption))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                Text("Sets which profile governs the default path. Today the everyday writing "
+                     + "style is still set in the Style pane — full default-profile wiring is the "
+                     + "next step. App-specific profiles (below) are active now.")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(.speakMica)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(SpeakSpacing.md)
+            .speakCard()
         }
     }
 }
@@ -502,6 +529,7 @@ private struct ProfileListPanel: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Text("Profiles")
                 .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.speakBone)
 
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 ForEach(context.profileStore.profiles, id: \.id) { profile in
@@ -511,12 +539,13 @@ private struct ProfileListPanel: View {
                 Button(action: createNew) {
                     Label("New profile", systemImage: "plus")
                         .font(.speakBody(.caption))
+                        .foregroundStyle(.speakBone)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, SpeakSpacing.sm)
             }
             .padding(SpeakSpacing.sm)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Color.speakSurface))
+            .speakCard()
         }
     }
 
@@ -530,22 +559,24 @@ private struct ProfileListPanel: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(SpeakSpacing.xs)
-                .foregroundStyle(selectedID == profile.id ? Color.speakAccent : .primary)
-                .background(selectedID == profile.id ? Color.speakSurface : Color.clear)
-                .cornerRadius(4)
+                .foregroundStyle(selectedID == profile.id ? Color.speakUIAccent : .speakBone)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(selectedID == profile.id ? Color.speakUIAccent.opacity(0.12) : Color.clear)
+                )
             }
 
             if !profile.targetApps.isEmpty {
                 Text("Active in: " + profile.targetApps.joined(separator: ", "))
                     .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.speakMica)
                     .lineLimit(2)
                     .padding(.leading, SpeakSpacing.xs)
                     .padding(.top, SpeakSpacing.xs)
             } else if profile.isBuiltIn {
                 Text("Foundational")
                     .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.speakMica)
                     .padding(.leading, SpeakSpacing.xs)
                     .padding(.top, SpeakSpacing.xs)
             }
@@ -592,71 +623,80 @@ private struct ProfileEditorPanel: View {
         guard let p = profile else { return AnyView(EmptyView()) }
 
         return AnyView(
-            VStack(alignment: .leading, spacing: SpeakSpacing.md) {
-                profileNameField(p)
-                profileIconField(p)
-                profilePromptField(p)
-                profileExamplesField(p)
-                profileFormatOptions(p)
-                profileToneOptions(p)
-                profileLengthOptions(p)
-                profileTargetApps(p)
-                profileAutoSubmit(p)
+            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+                Text(p.name)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.speakBone)
 
-                Divider()
+                VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+                    profileNameField(p)
+                    profileIconField(p)
+                    profilePromptField(p)
+                    profileExamplesField(p)
+                    profileFormatOptions(p)
+                    profileToneOptions(p)
+                    profileLengthOptions(p)
+                    profileTargetApps(p)
+                    profileAutoSubmit(p)
 
-                previewBox(p)
-                actionButtons(p)
+                    Divider()
+
+                    previewBox(p)
+                    actionButtons(p)
+                }
+                .padding(SpeakSpacing.md)
+                .speakCard()
             }
-            .padding(SpeakSpacing.md)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Color.speakSurface))
         )
     }
 
     private func profileNameField(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Name").font(.speakBody(.caption)).foregroundStyle(.secondary)
+            Text("Name").font(.speakBody(.caption)).foregroundStyle(.speakMica)
             TextField("Profile name", text: Binding(
                 get: { p.name },
                 set: { newValue in updateProfile { $0.name = newValue } }
             ))
             .font(.speakMonoFace(.base))
             .textFieldStyle(.roundedBorder)
+            .foregroundStyle(.speakBone)
         }
     }
 
     private func profileIconField(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Icon (SF Symbol)").font(.speakBody(.caption)).foregroundStyle(.secondary)
+            Text("Icon (SF Symbol)").font(.speakBody(.caption)).foregroundStyle(.speakMica)
             TextField("SF Symbol name", text: Binding(
                 get: { p.icon },
                 set: { newValue in updateProfile { $0.icon = newValue } }
             ))
             .font(.speakMonoFace(.base))
             .textFieldStyle(.roundedBorder)
+            .foregroundStyle(.speakBone)
         }
     }
 
     private func profilePromptField(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("System prompt").font(.speakBody(.caption)).foregroundStyle(.secondary)
+            Text("System prompt").font(.speakBody(.caption)).foregroundStyle(.speakMica)
             TextEditor(text: Binding(
                 get: { p.systemPrompt },
                 set: { newValue in updateProfile { $0.systemPrompt = newValue } }
             ))
             .font(.speakMonoFace(.base))
+            .foregroundStyle(.speakBone)
             .frame(minHeight: 100)
-            .border(Color.gray.opacity(0.3), width: 1)
+            .border(Color.speakCardBorder, width: 1)
             .cornerRadius(4)
         }
     }
 
     private func profileExamplesField(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Few-shot examples").font(.speakBody(.caption)).foregroundStyle(.secondary)
+            Text("Few-shot examples").font(.speakBody(.caption)).foregroundStyle(.speakMica)
             Text("Spoken → written pairs that steer the model. Strongest lever for small on-device models.")
                 .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.speakMica)
 
             if !p.examples.isEmpty {
                 VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
@@ -667,7 +707,9 @@ private struct ProfileEditorPanel: View {
             }
 
             Button(action: { addExample() }) {
-                Label("Add example", systemImage: "plus").font(.speakBody(.caption))
+                Label("Add example", systemImage: "plus")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(.speakBone)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, SpeakSpacing.xs)
@@ -679,40 +721,41 @@ private struct ProfileEditorPanel: View {
             HStack {
                 Text("Example \(idx + 1)")
                     .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.speakMica)
                 Spacer(minLength: 0)
                 Button(action: { removeExample(idx) }) {
                     Image(systemName: "xmark")
                         .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.speakMica)
                 }
                 .buttonStyle(.borderless)
                 .help("Remove example \(idx + 1)")
             }
             HStack(spacing: SpeakSpacing.sm) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Spoken").font(.system(size: 9)).foregroundStyle(.tertiary)
+                    Text("Spoken").font(.system(size: 9)).foregroundStyle(.speakMica)
                     TextField("Spoken input", text: Binding(
                         get: { example.spoken },
                         set: { v in updateProfile { $0.examples[idx].spoken = v } }
                     ))
                     .font(.speakMonoFace(.caption))
                     .textFieldStyle(.roundedBorder)
+                    .foregroundStyle(.speakBone)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Written").font(.system(size: 9)).foregroundStyle(.tertiary)
+                    Text("Written").font(.system(size: 9)).foregroundStyle(.speakMica)
                     TextField("Written output", text: Binding(
                         get: { example.written },
                         set: { v in updateProfile { $0.examples[idx].written = v } }
                     ))
                     .font(.speakMonoFace(.caption))
                     .textFieldStyle(.roundedBorder)
+                    .foregroundStyle(.speakBone)
                 }
             }
         }
         .padding(SpeakSpacing.xs)
-        .background(Color.speakSurface)
-        .cornerRadius(4)
+        .speakInset(cornerRadius: 8)
     }
 
     private func addExample() {
@@ -725,13 +768,15 @@ private struct ProfileEditorPanel: View {
 
     private func profileFormatOptions(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Output format").font(.speakBody(.caption)).foregroundStyle(.secondary)
+            Text("Output format").font(.speakBody(.caption)).foregroundStyle(.speakMica)
             Picker("Format", selection: Binding(
                 get: { p.format },
                 set: { newValue in updateProfile { $0.format = newValue } }
             )) {
                 ForEach(OutputFormat.allCases, id: \.self) { fmt in
-                    Text(fmt.rawValue).tag(fmt)
+                    Text(fmt.rawValue)
+                        .foregroundStyle(.speakBone)
+                        .tag(fmt)
                 }
             }
             .pickerStyle(.segmented)
@@ -740,13 +785,15 @@ private struct ProfileEditorPanel: View {
 
     private func profileToneOptions(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Tone").font(.speakBody(.caption)).foregroundStyle(.secondary)
+            Text("Tone").font(.speakBody(.caption)).foregroundStyle(.speakMica)
             Picker("Tone", selection: Binding(
                 get: { p.tone },
                 set: { newValue in updateProfile { $0.tone = newValue } }
             )) {
                 ForEach(Tone.allCases, id: \.self) { tone in
-                    Text(tone.rawValue).tag(tone)
+                    Text(tone.rawValue)
+                        .foregroundStyle(.speakBone)
+                        .tag(tone)
                 }
             }
             .pickerStyle(.segmented)
@@ -755,13 +802,15 @@ private struct ProfileEditorPanel: View {
 
     private func profileLengthOptions(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Length bias").font(.speakBody(.caption)).foregroundStyle(.secondary)
+            Text("Length bias").font(.speakBody(.caption)).foregroundStyle(.speakMica)
             Picker("Length", selection: Binding(
                 get: { p.length },
                 set: { newValue in updateProfile { $0.length = newValue } }
             )) {
                 ForEach(LengthBias.allCases, id: \.self) { len in
-                    Text(len.rawValue).tag(len)
+                    Text(len.rawValue)
+                        .foregroundStyle(.speakBone)
+                        .tag(len)
                 }
             }
             .pickerStyle(.segmented)
@@ -770,7 +819,7 @@ private struct ProfileEditorPanel: View {
 
     private func profileTargetApps(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Target apps (bundle IDs or names)").font(.speakBody(.caption)).foregroundStyle(.secondary)
+            Text("Target apps (bundle IDs or names)").font(.speakBody(.caption)).foregroundStyle(.speakMica)
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 ForEach(Array(p.targetApps.enumerated()), id: \.offset) { idx, app in
                     HStack(spacing: SpeakSpacing.xs) {
@@ -780,41 +829,50 @@ private struct ProfileEditorPanel: View {
                         ))
                         .font(.speakMonoFace(.caption))
                         .textFieldStyle(.roundedBorder)
+                        .foregroundStyle(.speakBone)
 
                         Button(action: { removeTargetApp(idx) }) {
-                            Image(systemName: "xmark").foregroundStyle(.secondary)
+                            Image(systemName: "xmark").foregroundStyle(.speakMica)
                         }
                         .buttonStyle(.borderless)
                     }
                 }
 
                 Button(action: { addTargetApp() }) {
-                    Label("Add app", systemImage: "plus").font(.speakBody(.caption))
+                    Label("Add app", systemImage: "plus")
+                        .font(.speakBody(.caption))
+                        .foregroundStyle(.speakBone)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(SpeakSpacing.sm)
-            .background(RoundedRectangle(cornerRadius: 4).fill(Color.speakSurface))
+            .speakInset(cornerRadius: 8)
         }
     }
 
     private func profileAutoSubmit(_ p: Profile) -> some View {
-        Toggle("Auto-submit (paste immediately after cleanup)", isOn: Binding(
+        Toggle(isOn: Binding(
             get: { p.autoSubmit },
             set: { newValue in updateProfile { $0.autoSubmit = newValue } }
-        ))
-        .font(.speakBody(.caption))
+        )) {
+            Text("Auto-submit (paste immediately after cleanup)")
+                .font(.speakBody(.caption))
+                .foregroundStyle(.speakBone)
+        }
     }
 
     private func previewBox(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-            Text("Live preview").font(.speakBody(.caption)).foregroundStyle(.secondary)
+            Text("Live preview").font(.speakBody(.caption)).foregroundStyle(.speakMica)
             TextField("Enter sample text", text: $previewSample)
                 .font(.speakMonoFace(.base))
                 .textFieldStyle(.roundedBorder)
+                .foregroundStyle(.speakBone)
 
             Button(action: { runPreview(p) }) {
-                Label("Preview", systemImage: "play.fill").font(.speakBody(.caption))
+                Label("Preview", systemImage: "play.fill")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(.speakBone)
             }
             .disabled(previewSample.isEmpty || isPreviewing)
 
@@ -830,31 +888,30 @@ private struct ProfileEditorPanel: View {
             case .unavailable:
                 Text("Foundation Models unavailable — enable Apple Intelligence.")
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.speakMica)
             case .raw:
                 Text("Raw profile: output equals input (passthrough).")
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.speakMica)
             case .transformed(let output):
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                    Text("Transformed output:").font(.speakBody(.caption)).foregroundStyle(.secondary)
+                    Text("Transformed output:").font(.speakBody(.caption)).foregroundStyle(.speakMica)
                     Text(output)
                         .font(.speakMonoFace(.base))
+                        .foregroundStyle(.speakBone)
                         .textSelection(.enabled)
                         .padding(SpeakSpacing.sm)
-                        .background(Color.black.opacity(0.05))
-                        .cornerRadius(4)
-                    Text("[unverified on this Mac]").font(.system(size: 9)).foregroundStyle(.tertiary)
+                        .speakInset(cornerRadius: 8)
+                    Text("[unverified on this Mac]").font(.system(size: 9)).foregroundStyle(.speakMica)
                 }
             case .failed:
                 Text("Preview failed. Check the system log for details.")
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.speakMica)
             }
         }
         .padding(SpeakSpacing.sm)
-        .background(Color.speakSurface)
-        .cornerRadius(4)
+        .speakInset(cornerRadius: 8)
     }
 
     private func actionButtons(_ p: Profile) -> some View {

@@ -89,23 +89,23 @@ struct HomePaneView: View {
         return HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(ready ? Color.green.opacity(0.2) : Color.red.opacity(0.2))
+                    .fill(ready ? Color.speakOK.opacity(0.2) : Color.speakError.opacity(0.2))
                     .frame(width: 32, height: 32)
                 
                 Image(systemName: ready ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
-                    .foregroundStyle(ready ? Color.green : Color.red)
+                    .foregroundStyle(ready ? Color.speakOK : Color.speakError)
                     .font(.system(size: 16, weight: .semibold))
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(ready ? "System Ready" : "Missing Permissions")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.speakBone)
                 Text(ready
                     ? "Microphone & Accessibility granted"
                     : "Action required to enable dictation")
                     .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
             }
 
             Spacer(minLength: 0)
@@ -114,11 +114,11 @@ struct HomePaneView: View {
                 Button(action: { context.showOnboarding?() }) {
                     Text("Resolve Permissions →")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.speakOnAccent)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Color.red)
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .background(Color.speakError)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -156,7 +156,7 @@ struct HomePaneView: View {
                     ForEach(context.hotkeyCombo, id: \.self) { key in
                         Text(key)
                             .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Color.speakInk)
+                            .foregroundStyle(Color.speakBone)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(Color.speakInk.opacity(0.12))
@@ -167,12 +167,12 @@ struct HomePaneView: View {
             .padding(.horizontal, 24)
             .padding(.vertical, 20)
             .background(Color.speakBone)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
         .flowBorder(
             colors: Color.speakFlowOnAir,
-            cornerRadius: 20,
+            cornerRadius: 16,
             isActive: isRecording
         )
         .onHover { hovering in
@@ -217,7 +217,7 @@ struct HomePaneView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Activity Overview")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.speakBone)
 
             let stats = InsightsStats(entries: todayEntries, now: Date(), calendar: .current)
 
@@ -250,17 +250,17 @@ struct HomePaneView: View {
             HStack {
                 Image(systemName: icon)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                 Spacer()
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(value)
                     .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.speakBone)
                 Text(title)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
             }
         }
         .padding(16)
@@ -275,12 +275,12 @@ struct HomePaneView: View {
             HStack {
                 Text("Recent Dictations")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.speakBone)
                 Spacer(minLength: 0)
                 Button(action: { /* View all */ }) {
                     Text("View All")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                 }
                 .buttonStyle(.plain)
             }
@@ -293,6 +293,7 @@ struct HomePaneView: View {
                         RecentEntryRow(entry: entry)
                     }
                 }
+                .homeCard()
             }
         }
     }
@@ -301,13 +302,13 @@ struct HomePaneView: View {
         VStack(alignment: .center, spacing: 12) {
             Image(systemName: "mic.slash")
                 .font(.system(size: 32))
-                .foregroundStyle(.secondary.opacity(0.5))
+                .foregroundStyle(Color.speakMica.opacity(0.5))
             Text("No dictations today")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.speakBone)
             Text("Use your hotkey to start recording your thoughts.")
                 .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -352,7 +353,7 @@ private struct RecentEntryRow: View {
             // Timestamp Pill
             Text(entry.createdAt, format: .dateTime.hour().minute())
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(Color.primary.opacity(0.05))
@@ -361,17 +362,17 @@ private struct RecentEntryRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(truncatePreview(entry.rawText, maxChars: 60))
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.speakBone)
                     .lineLimit(1)
                 
                 if let cleaned = entry.cleanedText {
                     HStack(spacing: 4) {
                         Image(systemName: "wand.and.stars")
                             .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.speakMica)
                         Text(truncatePreview(cleaned, maxChars: 50))
                             .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.speakMica)
                             .lineLimit(1)
                     }
                 }
@@ -381,11 +382,10 @@ private struct RecentEntryRow: View {
             
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(.secondary.opacity(isHovered ? 1.0 : 0.0))
+                .foregroundStyle(Color.speakMica.opacity(isHovered ? 1.0 : 0.0))
         }
         .padding(12)
         .background(isHovered ? Color.primary.opacity(0.05) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.2)) {
                 isHovered = hovering

@@ -49,7 +49,10 @@ struct IntelligenceSettingsView: View {
 
     private var intensityCard: some View {
         SettingsSectionCard(title: "Intensity") {
-            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+            SettingsRow(
+                "Level",
+                description: store.effectiveCleanupLevel.levelDescription
+            ) {
                 Picker("", selection: Binding(
                     get: { store.effectiveCleanupLevel },
                     set: { store.effectiveCleanupLevel = $0 }
@@ -60,13 +63,8 @@ struct IntelligenceSettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-
-                Text(store.effectiveCleanupLevel.levelDescription + " None pastes the raw transcript untouched.")
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                .tint(.speakUIAccent)
             }
-            .padding(.horizontal, SpeakSpacing.md)
-            .padding(.vertical, SpeakSpacing.sm + 4)
         }
     }
 
@@ -99,7 +97,7 @@ struct IntelligenceSettingsView: View {
 
     private var engineCard: some View {
         SettingsSectionCard(title: "Engine") {
-            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+            VStack(alignment: .leading, spacing: 0) {
                 SettingsRow(
                     "Cleanup engine",
                     description: engineFootnoteText
@@ -120,17 +118,20 @@ struct IntelligenceSettingsView: View {
                 }
 
                 if let note = engineStatusNote {
+                    SettingsRowSeparator()
+
                     HStack(spacing: SpeakSpacing.xs) {
                         Image(systemName: "info.circle")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.speakMica)
                         Text(note)
                             .font(.speakBody(.caption))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.speakMica)
+                            .fixedSize(horizontal: false, vertical: true)
                         Spacer()
                         engineStatusAction
                     }
                     .padding(.horizontal, SpeakSpacing.md)
-                    .padding(.bottom, SpeakSpacing.sm)
+                    .padding(.vertical, SpeakSpacing.sm + 4)
                 }
             }
         }
@@ -173,11 +174,13 @@ struct IntelligenceSettingsView: View {
             Button("Setup guide…") { showOllamaSetup = true }
                 .font(.speakBody(.caption))
                 .buttonStyle(.borderless)
+                .tint(.speakUIAccent)
 
         case .openAICompatible:
             Button("Enter API key…") { showKeyEntry = true }
                 .font(.speakBody(.caption))
                 .buttonStyle(.borderless)
+                .tint(.speakUIAccent)
 
         case .foundationModels, .mlx:
             EmptyView()
@@ -216,6 +219,7 @@ struct IntelligenceSettingsView: View {
                 ))
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                .tint(.speakUIAccent)
             }
         }
     }

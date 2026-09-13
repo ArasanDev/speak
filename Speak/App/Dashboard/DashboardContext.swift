@@ -81,6 +81,11 @@ struct DashboardContext {
     /// the overlay readback does. Nil only in preview contexts.
     var voiceOut: (any SpeechSynthesizing)?
 
+    /// The runtime color-theme engine — `ThemedRoot` wraps each hosted root in
+    /// it so theme selection/editing repaints live. Nil in preview/test
+    /// contexts (the default `speak` palette then applies).
+    var themeEngine: ThemeEngine?
+
     /// AVB-6: the app's live agent-session registry — the SAME instance
     /// `CLIPortServer`/`AgentBridgeServer` touches on every `speak-mcp` call,
     /// so the Settings ▸ Agent Bridge heartbeat reflects real `lastSeen`
@@ -136,6 +141,7 @@ struct DashboardContext {
         activeExtraBindings: ExtraBindingSet = .empty,
         rebindExtraBindings: ((ExtraBindingSet) -> Void)? = nil,
         voiceOut: (any SpeechSynthesizing)? = nil,
+        themeEngine: ThemeEngine? = nil,
         agentSessionRegistry: AgentSessionRegistry? = nil,
         agentCallStore: (any AgentCallStoring)? = nil,
         conversationStore: (any ConversationStoring)? = nil,
@@ -162,6 +168,7 @@ struct DashboardContext {
         self.activeExtraBindings = activeExtraBindings
         self.rebindExtraBindings = rebindExtraBindings
         self.voiceOut = voiceOut
+        self.themeEngine = themeEngine
         self.agentSessionRegistry = agentSessionRegistry
         self.agentCallStore = agentCallStore
         self.conversationStore = conversationStore

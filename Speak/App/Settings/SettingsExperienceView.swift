@@ -102,7 +102,7 @@ struct SettingsExperienceView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(group.title.uppercased())
                                 .font(.speakBody(.caption))
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(Color.speakMica)
                                 .padding(.horizontal, SpeakSpacing.sm)
                                 .padding(.bottom, SpeakSpacing.xs)
 
@@ -135,10 +135,10 @@ struct SettingsExperienceView: View {
             HStack(spacing: SpeakSpacing.sm) {
                 Text(category.title)
                     .font(.headline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.speakBone)
                 Text(category.subtitle)
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                     .lineLimit(1)
 
                 Spacer(minLength: 0)
@@ -148,7 +148,7 @@ struct SettingsExperienceView: View {
                         KeyCapView(label: "esc")
                         Text("to go back")
                             .font(.speakBody(.caption))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color.speakMica)
                     }
                 }
             }
@@ -208,7 +208,7 @@ private struct BackToDashboardButton: View {
         Button(action: action) {
             Image(systemName: "chevron.left")
                 .font(.system(size: 15))
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.speakMica)
                 .frame(width: 26, height: 26)
                 .contentShape(Rectangle())
         }
@@ -239,11 +239,11 @@ private struct SettingsRailRow: View {
             HStack(spacing: SpeakSpacing.sm) {
                 Image(systemName: category.systemImage)
                     .font(.system(size: 14))
-                    .foregroundStyle(isSelected ? Color.white : .secondary)
+                    .foregroundStyle(isSelected ? Color.speakOnAccent : .secondary)
                     .frame(width: 20)
                 Text(category.title)
                     .font(.speakBody(.base, semibold: isSelected))
-                    .foregroundStyle(isSelected ? Color.white : .secondary)
+                    .foregroundStyle(isSelected ? Color.speakOnAccent : .secondary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
@@ -253,7 +253,7 @@ private struct SettingsRailRow: View {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(
                         isSelected
-                            ? Color.accentColor
+                            ? Color.speakUIAccent
                             : (isHovering ? Color.primary.opacity(0.05) : Color.clear)
                     )
             )

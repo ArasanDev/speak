@@ -1474,3 +1474,37 @@ t3code findings banked for later: sidebar **settings search** (`/` to
 focus, arrow-key results, scroll-to-row pulse) and muted `text-sm`
 section headings with optional `headerAction` — candidates if the rail
 grows.
+
+### Runtime theme system + full-app token migration (agent fleet)
+
+t3code-inspired runtime theming landed: `SpeakThemeSystem.swift` (role model +
+built-ins `speak`/`ember`), `ThemeEngine` (selection/persistence/live draft),
+`SpeakThemeRuntime.active` + `ThemedRoot` environment repaint, Appearance-pane
+theme picker + `ThemeEditorSheet` (role pickers, live preview, custom themes
+persist via `SettingsStore.customThemesJSON`), `--debug-theme <id>` debug arg.
+
+Fleet audit (4 read agents) → ~200 hardcoded sites mapped; 6 transform workers
+converted them. New roles `error`/`warning`/`ok`/`onAccent` cover status text +
+on-accent glyphs. Legacy frozen tokens in `SpeakTheme.swift` (`speakAccent`,
+`speakKeycapFace`, `speakState*`) now resolve through the runtime. Three
+hand-rolled gradient palettes (AnimatedGradientBorder, EdgeFlowBorder,
+ConversationOverlayView's magentaVioletPalette) collapsed onto `speakFlow*`
+spectra — spectra now anchor primary stops on roles, keep fixed pivots.
+`ShapeStyle where Self == Color` shim added so `.speakMica` shorthand works in
+`.foregroundStyle`.
+
+**WCAG audit (programmatic, python3):** light mode was broken — `mica` on
+`surface` was 1.10:1 (invisible secondary text on every card), `surface` was a
+solid #969696 card, most status hues failed as text. Reseeded: surface
+#969696→#EAE8E2, mica→#656C78, and all channel/status lights now pass ≥3:1
+(icons) or ≥4.4:1 (text). Dark mode already passed; only cardBorder raised for
+separation. `onAccent` fixes white-on-ember-orange (was 2.04:1 → now 7.96:1).
+
+**Mic card rework (STT pane):** Permission → Input Source (trailing-checkmark
+list, no duplicate pills) → Input Level → Current Input. Matches Sound>Input
+grouping.
+
+Verified: build clean · `SpeakThemeTests` 9/9 pass (fixed nonisolated
+`makeEngine`) · lint 3 serious pre-existing (file_length, unrelated) · moat
+7/7 · light speak + ember screenshot-verified (legible text, correct rail
+onAccent, warm canvas).

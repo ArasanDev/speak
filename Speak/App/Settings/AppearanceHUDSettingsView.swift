@@ -14,20 +14,29 @@ import SwiftUI
 struct AppearanceHUDSettingsView: View {
     let context: DashboardContext
 
+    @State private var editingTheme = false
+
     private var store: SettingsStore { context.settingsStore }
 
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
-            themeCard
+            appearanceCard
+            colorThemeCard
             hudCard
             borderCard
         }
+        .sheet(isPresented: $editingTheme) {
+            if let engine = context.themeEngine {
+                ThemeEditorSheet(engine: engine)
+                    .speakThemed(with: engine)
+            }
+        }
     }
 
-    // MARK: - Theme
+    // MARK: - Appearance mode (light / dark / system)
 
-    private var themeCard: some View {
-        SettingsSectionCard(title: "Theme") {
+    private var appearanceCard: some View {
+        SettingsSectionCard(title: "Appearance") {
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 Picker("", selection: Binding(
                     get: { store.appTheme },
@@ -42,10 +51,25 @@ struct AppearanceHUDSettingsView: View {
 
                 Text("Applies to the dashboard, settings, and HUD.")
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
             }
             .padding(.horizontal, SpeakSpacing.md)
             .padding(.vertical, SpeakSpacing.sm + 4)
+        }
+    }
+
+    // MARK: - Color theme (runtime palette)
+
+    /// The theme picker — rows of named palettes with preview dots (t3code's
+    /// ThemeSettings pattern). Built-ins select directly; customs can be
+    /// edited (the editor paints the app live) or deleted.
+    private var colorThemeCard: some View {
+        SettingsSectionCard(title: "Color Theme") {
+            if let engine = context.themeEngine {
+                ThemeRows(engine: engine, onEdit: { editingTheme = true })
+            } else {
+                SettingsRow("Color Theme", description: "Theme engine unavailable.")
+            }
         }
     }
 
@@ -136,5 +160,110 @@ struct AppearanceHUDSettingsView: View {
         case .edgeFlow:
             return "Traveling lights that move around the border perimeter."
         }
+    }
+}
+
+// MARK: - ThemeRows
+
+/// The theme list inside the "Color Theme" card: one row per theme —
+/// preview dots (canvas · accent · agent channel), name, active check.
+/// Custom themes get Edit (live draft editor) and Delete. Trailing "+"
+/// creates a new custom theme seeded from the active one — the same
+/// seed-from-active gesture as t3code's theme editor.
+@MainActor
+private struct ThemeRows: View {
+    @ObservedObject var engine: ThemeEngine
+    let onEdit: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(engine.themes) { theme in
+                if theme.id != engine.themes.first?.id {
+                    SettingsRowSeparator()
+                }
+                themeRow(theme)
+            }
+            SettingsRowSeparator()
+            SettingsRow("New Theme", description: "Seeded from the active theme — edit it live.") {
+                Button {
+                    engine.beginDraft()
+                    onEdit()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.speakMica)
+            }
+        }
+    }
+
+    private func themeRow(_ theme: SpeakTheme) -> some View {
+        let isActive = theme.id == engine.activeTheme.id
+        return Button {
+            engine.select(theme.id)
+        } label: {
+            HStack(spacing: SpeakSpacing.md) {
+                previewDots(for: theme)
+                Text(theme.name)
+                    .font(.speakBody(.base, semibold: isActive))
+                    .foregroundStyle(Color.speakBone)
+                if theme.isBuiltIn {
+                    Text("BUILT-IN")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color.speakMica)
+                }
+                Spacer(minLength: 0)
+                if !theme.isBuiltIn {
+                    Button {
+                        engine.editTheme(theme)
+                        onEdit()
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.speakMica)
+                    .help("Edit theme")
+
+                    Button(role: .destructive) {
+                        engine.deleteCustomTheme(id: theme.id)
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.speakMica)
+                    .help("Delete theme")
+                }
+                if isActive {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Color.speakUIAccent)
+                }
+            }
+            .padding(.horizontal, SpeakSpacing.md)
+            .padding(.vertical, SpeakSpacing.sm + 4)
+            .background(isActive ? Color.speakSidebarSelection : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Three dots: window canvas · accent · agent channel — the fastest
+    /// possible read of a palette's character (t3code's ThemePreviewCircles).
+    private func previewDots(for theme: SpeakTheme) -> some View {
+        HStack(spacing: -4) {
+            dot(theme.color(.windowCanvas))
+            dot(theme.color(.accent))
+            dot(theme.color(.agentViolet))
+        }
+    }
+
+    private func dot(_ color: Color) -> some View {
+        Circle()
+            .fill(color)
+            .frame(width: 14, height: 14)
+            .overlay(Circle().stroke(Color.speakCardBorder, lineWidth: 1))
     }
 }

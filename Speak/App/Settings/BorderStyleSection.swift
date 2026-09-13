@@ -46,7 +46,7 @@ struct BorderStyleSection: View {
 
             Text(captionText)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
         } header: {
             Text("Animated Border")
         }

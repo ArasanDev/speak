@@ -158,7 +158,7 @@ struct CodingCustomizationView: View {
             .padding(SpeakSpacing.xs)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.primary.opacity(0.05))
+                    .fill(Color.speakSurface)
             )
         }
     }
@@ -183,7 +183,7 @@ struct CodingCustomizationView: View {
             .padding(6)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(0.06))
+                    .fill(Color.speakSurface)
             )
             .accessibilityLabel("Additional instructions appended to the prompt for this dictation")
         }
@@ -215,7 +215,7 @@ struct CodingCustomizationView: View {
                             .padding(.vertical, 3)
                             .background(
                                 RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                    .fill(isSelected ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.06))
+                                    .fill(isSelected ? Color.speakUIAccent.opacity(0.30) : Color.speakSurface)
                             )
                             .foregroundStyle(isSelected ? Color.primary : Color.secondary)
                     }

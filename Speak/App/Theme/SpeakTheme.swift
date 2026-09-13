@@ -51,15 +51,16 @@ public extension Font {
 
 public extension Color {
 
-    /// The brand accent — a warm amber used for the active keycap and selection
+    /// The themed accent role — used for the active keycap and selection
     /// highlights. [decision: orange keycap, acceleration-plan.md Wave A]
-    static let speakAccent = Color(red: 0.95, green: 0.55, blue: 0.18)
+    static var speakAccent: Color { SpeakThemeRuntime.color(.accent) }
 
-    /// Resting keycap face fill (the un-pressed key). [decision]
-    static let speakKeycapFace = Color(nsColor: .controlBackgroundColor)
+    /// Resting keycap face fill (the un-pressed key). Role: `surface`. [decision]
+    static var speakKeycapFace: Color { SpeakThemeRuntime.color(.surface) }
 
-    /// Subtle panel background for cards/sections inside the dashboard. [decision]
-    static let speakSurface = Color(nsColor: .underPageBackgroundColor)
+    // `speakSurface` moved to SpeakColors.swift — it is now the themed
+    // `surface` role resolved through `SpeakThemeRuntime` (see
+    // SpeakThemeSystem.swift).
 
     // MARK: - Menubar icon state colors (roadmap P8)
     //
@@ -68,24 +69,27 @@ public extension Color {
     // SwiftUI Image — see SpeakApp.swift §MenuBarLabel for the rendering
     // mechanism and its [unverified] caveat.
     //
-    // [decision: roadmap P8 — idle=neutral, listening=red, processing=yellow,
-    //  done=green, error=red+X. System semantic colors are preferred so they
-    //  adapt correctly between light and dark menu bars.]
+    // [decision: roadmap P8 — idle=neutral, listening=on-air, processing=amber,
+    //  done=delivered, error=error+X. Themed roles are preferred so they adapt
+    //  correctly between light and dark menu bars and repaint with the theme.]
 
-    /// Idle — neutral gray, system secondary to blend into the menubar. [decision: P8]
-    static let speakStateIdle = Color(nsColor: .secondaryLabelColor)
+    /// Idle — neutral gray, blends into the menubar. Role: `mica`. [decision: P8]
+    static var speakStateIdle: Color { SpeakThemeRuntime.color(.mica) }
 
-    /// Listening (recording active) — system red to signal mic-on. [decision: P8]
-    static let speakStateListening = Color(nsColor: .systemRed)
+    /// Listening (recording active) — the on-air tally to signal mic-on.
+    /// Role: `onAir`. [decision: P8]
+    static var speakStateListening: Color { SpeakThemeRuntime.color(.onAir) }
 
-    /// Processing (cleanup / paste in flight) — system yellow to signal work. [decision: P8]
-    static let speakStateProcessing = Color(nsColor: .systemYellow)
+    /// Processing (cleanup / paste in flight) — warm amber to signal work.
+    /// Role: `humanAmber`. [decision: P8]
+    static var speakStateProcessing: Color { SpeakThemeRuntime.color(.humanAmber) }
 
-    /// Done flash (success) — system green, held 600ms then returns to idle. [decision: P8]
-    static let speakStateDone = Color(nsColor: .systemGreen)
+    /// Done flash (success) — held 600ms then returns to idle.
+    /// Role: `delivered`. [decision: P8]
+    static var speakStateDone: Color { SpeakThemeRuntime.color(.delivered) }
 
-    /// Error — system red, paired with an xmark symbol. [decision: P8]
-    static let speakStateError = Color(nsColor: .systemRed)
+    /// Error — paired with an xmark symbol. Role: `error`. [decision: P8]
+    static var speakStateError: Color { SpeakThemeRuntime.color(.error) }
 }
 
 // MARK: - Spacing tokens

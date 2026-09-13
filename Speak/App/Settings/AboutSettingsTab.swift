@@ -36,14 +36,15 @@ struct AboutSettingsTab: View {
                     .foregroundStyle(Color.speakAccent)
                 Text("speak")
                     .font(.speakDisplay())
+                    .foregroundStyle(Color.speakBone)
                 if !appVersion.isEmpty {
                     Text("v\(appVersion)")
                         .font(.speakMonoFace(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                 }
                 Text("Free · Open-source · MIT")
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
             }
 
             Divider()
@@ -94,9 +95,10 @@ struct PrivacyGuaranteeRow: View {
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Text(title)
                     .font(.speakBody(.base))
+                    .foregroundStyle(Color.speakBone)
                 Text(detail)
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
             }
         }
     }

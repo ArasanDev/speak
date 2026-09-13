@@ -95,6 +95,7 @@ struct InsightsPaneView: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Text("Stop → paste latency")
                 .font(.speakBody(.base))
+                .foregroundStyle(Color.speakBone)
 
             HStack(spacing: SpeakSpacing.sm) {
                 LatencyCard(
@@ -136,8 +137,6 @@ struct InsightsPaneView: View {
                 }
             }
         }
-        .padding(SpeakSpacing.md)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.speakSurface))
     }
 
     // MARK: - 7-day activity bar chart (plain SwiftUI — no Charts dep)
@@ -146,11 +145,12 @@ struct InsightsPaneView: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Text("Last 7 days")
                 .font(.speakBody(.base))
+                .foregroundStyle(Color.speakBone)
 
             ActivityBarChart(dataPoints: stats.dictationsPerDay)
         }
         .padding(SpeakSpacing.md)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.speakSurface))
+        .speakCard(cornerRadius: 10)
     }
 
     // MARK: - Loading view
@@ -161,7 +161,7 @@ struct InsightsPaneView: View {
                 .progressViewStyle(.circular)
             Text("Loading insights…")
                 .font(.speakBody(.caption))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(SpeakSpacing.xl)
@@ -198,14 +198,14 @@ private struct StatCard: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
             Text(value)
                 .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.speakBone)
             Text(label)
                 .font(.speakBody(.caption))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
         }
         .padding(SpeakSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.speakSurface))
+        .speakCard(cornerRadius: 10)
     }
 }
 
@@ -214,8 +214,8 @@ private struct StatCard: View {
 /// A compact latency metric card showing a value in milliseconds with a budget indicator.
 ///
 /// Color semantics (no magic numbers — thresholds from benchmark.md §7 via `budgetSeconds`):
-///   • Green (speakStateDone):    value ≤ budget — within target.
-///   • Red (speakStateError):     value > budget — over target.
+///   • Green (speakOK):           value ≤ budget — within target (standing health).
+///   • Red (speakError):            value > budget — over target.
 ///   • Secondary (neutral):       no data yet (value is nil).
 private struct LatencyCard: View {
     let label: String
@@ -232,28 +232,28 @@ private struct LatencyCard: View {
                 let withinBudget = valueSeconds <= budgetSeconds
                 Text(formattedMs(valueSeconds))
                     .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(withinBudget ? Color.speakStateDone : Color.speakStateError)
+                    .foregroundStyle(withinBudget ? Color.speakOK : Color.speakError)
                 Text(label)
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                 Text("n=\(sampleCount)")
                     .font(.speakMonoFace(.caption))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.speakMica)
             } else {
                 Text("—")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                 Text(label)
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                 Text("no data")
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.speakMica)
             }
         }
         .padding(SpeakSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.speakSurface))
+        .speakCard(cornerRadius: 10)
     }
 
     /// Format seconds as milliseconds with one decimal, e.g. "342.1ms".
@@ -289,7 +289,7 @@ private struct ActivityBarChart: View {
                                 ? CGFloat(dictations) / CGFloat(maxDictations)
                                 : 0
                             RoundedRectangle(cornerRadius: 3)
-                                .fill(dictations > 0 ? Color.speakAccent : Color.speakAccent.opacity(0.15))
+                                .fill(dictations > 0 ? Color.speakUIAccent : Color.speakUIAccent.opacity(0.15))
                                 // Minimum 2pt bar so the track is always visible.
                                 .frame(height: max(2, fraction * geo.size.height))
                         }
@@ -298,7 +298,7 @@ private struct ActivityBarChart: View {
 
                     Text(dayLabel(point.day))
                         .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                 }
                 .frame(maxWidth: .infinity)
             }

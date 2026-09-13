@@ -24,17 +24,17 @@ struct KeyCapView: View {
     var body: some View {
         Text(label)
             .font(.speakMonoKeycap)
-            .foregroundStyle(isAccented ? Color.black.opacity(0.85) : Color.primary)
+            .foregroundStyle(isAccented ? Color.speakOnAccent : Color.speakBone)
             .padding(.horizontal, SpeakSpacing.sm)
             .padding(.vertical, SpeakSpacing.xs)
             .frame(minWidth: 28)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isAccented ? Color.speakAccent : Color.speakKeycapFace)
+                    .fill(isAccented ? Color.speakAccent : Color.speakSurface)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
+                    .strokeBorder(Color.speakCardBorder, lineWidth: 1)
             )
             .accessibilityLabel("\(label) key")
     }
@@ -55,7 +55,7 @@ struct KeyComboView: View {
                 if index > 0 {
                     Text("+")
                         .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                 }
                 KeyCapView(label: key, isAccented: index == keys.count - 1)
             }

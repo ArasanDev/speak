@@ -47,18 +47,18 @@ struct HoldToTalkPill: View {
         .background(
             Capsule().fill(
                 active
-                    ? Color.speakStateListening.opacity(0.16)
+                    ? Color.speakOnAir.opacity(0.16)
                     : Color.primary.opacity(isEnabled ? 0.07 : 0.03)
             )
         )
         .overlay(
             Capsule().stroke(
-                active ? Color.speakStateListening : Color.speakCardBorder,
+                active ? Color.speakOnAir : Color.speakCardBorder,
                 lineWidth: 1
             )
         )
         .foregroundStyle(
-            active ? Color.speakStateListening : Color.primary.opacity(isEnabled ? 1 : 0.4)
+            active ? Color.speakOnAir : Color.speakBone.opacity(isEnabled ? 1 : 0.4)
         )
         .scaleEffect(pressing && !latched ? 0.97 : 1)
         .contentShape(Capsule())

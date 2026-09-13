@@ -19,7 +19,7 @@ struct DashboardView: View {
             Button(action: action) {
                 Image(systemName: "sidebar.left")
                     .font(.system(size: 15))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.speakMica)
                     .frame(width: 26, height: 26)
                     .contentShape(Rectangle())
             }
@@ -219,13 +219,13 @@ struct DashboardView: View {
 
                         Text(selection.title)
                             .font(.headline)
-                            .foregroundColor(.primary)
+                            .foregroundColor(Color.speakBone)
 
                         // The pane's "why am I here" line — carried by the
                         // section, not a duplicate in-pane hero title.
                         Text(selection.subtitle)
                             .font(.speakBody(.caption))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.speakMica)
                             .lineLimit(1)
 
                         Spacer()
@@ -258,11 +258,11 @@ struct DashboardView: View {
             Button(action: openSettings) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(selection == .settings ? Color.speakAccent : .secondary)
+                    .foregroundColor(selection == .settings ? Color.speakUIAccent : Color.speakMica)
                     .frame(width: 32, height: 32)
                     .background(
                         selection == .settings
-                            ? Color.primary.opacity(0.12)
+                            ? Color.speakSidebarSelection
                             : (isSettingsHovered ? Color.primary.opacity(0.06) : Color.clear)
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -281,19 +281,19 @@ struct DashboardView: View {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: "arrow.2.circlepath")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(isSelfHealed ? Color.speakStateDone : .secondary)
+                        .foregroundColor(isSelfHealed ? Color.speakDelivered : Color.speakMica)
                         .rotationEffect(.degrees(selfHealRotation))
                         .frame(width: 32, height: 32)
                         .background(
                             isSelfHealed
-                                ? Color.speakStateDone.opacity(0.15)
+                                ? Color.speakDelivered.opacity(0.15)
                                 : (isSelfHealHovered ? Color.primary.opacity(0.06) : Color.clear)
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 8))
 
                     // Future version update indicator on top of the circle
                     Circle()
-                        .fill(Color.speakAccent)
+                        .fill(Color.speakUIAccent)
                         .frame(width: 6, height: 6)
                         .offset(x: -2, y: 2)
                         .opacity(showUpdateNotification ? 1 : 0)
@@ -327,9 +327,9 @@ struct DashboardView: View {
             Button(action: openSettings) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(selection == .settings ? Color.speakAccent : .secondary)
+                    .foregroundColor(selection == .settings ? Color.speakUIAccent : Color.speakMica)
                     .frame(width: 32, height: 32)
-                    .background(selection == .settings ? Color.primary.opacity(0.12) : Color.clear)
+                    .background(selection == .settings ? Color.speakSidebarSelection : Color.clear)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             .buttonStyle(.plain)
@@ -341,14 +341,14 @@ struct DashboardView: View {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: "arrow.2.circlepath")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(isSelfHealed ? Color.speakStateDone : .secondary)
+                        .foregroundColor(isSelfHealed ? Color.speakDelivered : Color.speakMica)
                         .rotationEffect(.degrees(selfHealRotation))
                         .frame(width: 32, height: 32)
-                        .background(isSelfHealed ? Color.speakStateDone.opacity(0.15) : Color.clear)
+                        .background(isSelfHealed ? Color.speakDelivered.opacity(0.15) : Color.clear)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
 
                     Circle()
-                        .fill(Color.speakAccent)
+                        .fill(Color.speakUIAccent)
                         .frame(width: 6, height: 6)
                         .offset(x: -2, y: 2)
                         .opacity(showUpdateNotification ? 1 : 0)

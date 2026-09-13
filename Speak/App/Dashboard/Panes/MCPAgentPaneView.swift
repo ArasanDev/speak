@@ -38,7 +38,9 @@ struct MCPAgentPaneView: View {
             VStack(alignment: .leading, spacing: SpeakSpacing.md) {
                 Picker("MCP View", selection: $selectedTab) {
                     ForEach(MCPAgentTab.allCases) { tab in
-                        Label(tab.rawValue, systemImage: tab.icon).tag(tab)
+                        Label(tab.rawValue, systemImage: tab.icon)
+                            .foregroundStyle(.speakBone)
+                            .tag(tab)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -85,42 +87,39 @@ private struct MCPServerConfigSection: View {
     private let installCommand = "make install-mcp-user"
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.md) {
-            // Header card
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: SpeakSpacing.xs) {
-                        Text("speak-mcp Stdio Server")
-                            .font(.speakBody(.base, semibold: true))
-                        Text("READY")
-                            .font(.system(size: 10, weight: .bold))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.speakDelivered.opacity(0.2))
-                            .foregroundColor(.speakDelivered)
-                            .clipShape(Capsule())
-                    }
-                    Text("Standard input/output Model Context Protocol server bridging LLM agents to Speak's local voice interface.")
-                        .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
-                }
+        VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+            HStack(spacing: SpeakSpacing.xs) {
+                Text("speak-mcp Stdio Server")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.speakBone)
+                Text("READY")
+                    .font(.system(size: 10, weight: .bold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.speakOK.opacity(0.2))
+                    .foregroundStyle(.speakOK)
+                    .clipShape(Capsule())
                 Spacer()
             }
 
             VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+                Text("Standard input/output Model Context Protocol server bridging LLM agents to Speak's local voice interface.")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(.speakMica)
+
                 // Info Grid
                 Grid(alignment: .leading, horizontalSpacing: SpeakSpacing.lg, verticalSpacing: SpeakSpacing.xs) {
                     GridRow {
-                        Text("Binary Name:").font(.speakBody(.caption)).foregroundStyle(.secondary)
-                        Text("speak-mcp (~/.local/bin/speak-mcp)").font(.speakMonoFace(.caption))
+                        Text("Binary Name:").font(.speakBody(.caption)).foregroundStyle(.speakMica)
+                        Text("speak-mcp (~/.local/bin/speak-mcp)").font(.speakMonoFace(.caption)).foregroundStyle(.speakBone)
                     }
                     GridRow {
-                        Text("Protocol Version:").font(.speakBody(.caption)).foregroundStyle(.secondary)
-                        Text("2025-11-25 (JSON-RPC 2.0 via Stdio)").font(.speakMonoFace(.caption))
+                        Text("Protocol Version:").font(.speakBody(.caption)).foregroundStyle(.speakMica)
+                        Text("2025-11-25 (JSON-RPC 2.0 via Stdio)").font(.speakMonoFace(.caption)).foregroundStyle(.speakBone)
                     }
                     GridRow {
-                        Text("Capabilities:").font(.speakBody(.caption)).foregroundStyle(.secondary)
-                        Text("tools (speak_notify, speak_request_input, speak_say, …)").font(.speakMonoFace(.caption))
+                        Text("Capabilities:").font(.speakBody(.caption)).foregroundStyle(.speakMica)
+                        Text("tools (speak_notify, speak_request_input, speak_say, …)").font(.speakMonoFace(.caption)).foregroundStyle(.speakBone)
                     }
                 }
 
@@ -129,16 +128,18 @@ private struct MCPServerConfigSection: View {
                 // User Installation Command
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     HStack {
-                        Text("1-Click Stdio Install Command").font(.speakBody(.caption, semibold: true))
+                        Text("1-Click Stdio Install Command").font(.speakBody(.caption, semibold: true)).foregroundStyle(.speakBone)
                         Spacer()
                         Button(action: { copyToClipboard(installCommand, name: "Install Command") }) {
                             Label("Copy Command", systemImage: "doc.on.doc")
                                 .font(.speakBody(.caption))
+                                .foregroundStyle(.speakBone)
                         }
                     }
 
                     Text(installCommand)
                         .font(.speakMonoFace(.base))
+                        .foregroundStyle(.speakBone)
                         .padding(SpeakSpacing.sm)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .speakInset(cornerRadius: 8)
@@ -149,16 +150,18 @@ private struct MCPServerConfigSection: View {
                 // Client Config JSON
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     HStack {
-                        Text("Client Configuration Snippet (Claude / Cursor / Antigravity)").font(.speakBody(.caption, semibold: true))
+                        Text("Client Configuration Snippet (Claude / Cursor / Antigravity)").font(.speakBody(.caption, semibold: true)).foregroundStyle(.speakBone)
                         Spacer()
                         Button(action: { copyToClipboard(jsonSnippet, name: "JSON Config") }) {
                             Label("Copy JSON Config", systemImage: "doc.on.doc")
                                 .font(.speakBody(.caption))
+                                .foregroundStyle(.speakBone)
                         }
                     }
 
                     Text(jsonSnippet)
                         .font(.speakMonoFace(.base))
+                        .foregroundStyle(.speakBone)
                         .padding(SpeakSpacing.sm)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .speakInset(cornerRadius: 8)
@@ -177,7 +180,7 @@ private struct MCPServerConfigSection: View {
                 }
             }
             .padding(SpeakSpacing.md)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Color.speakSurface))
+            .speakCard()
         }
     }
 
@@ -205,118 +208,124 @@ private struct ActiveAgentSessionsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
-            // Sessions Card
-            VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+            // Sessions Section
+            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Connected Agent Sessions")
-                            .font(.speakBody(.base, semibold: true))
-                        Text("Active agent pings negotiated via speak_register_session tool calls.")
-                            .font(.speakBody(.caption))
-                            .foregroundStyle(.secondary)
-                    }
+                    Text("Connected Agent Sessions")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.speakBone)
                     Spacer()
                     Button(action: { Task { await refreshSessions() } }) {
                         Label(isLoading ? "Refreshing..." : "Refresh Sessions", systemImage: "arrow.clockwise")
                             .font(.speakBody(.caption))
+                            .foregroundStyle(.speakBone)
                     }
                     .disabled(isLoading)
                 }
 
-                if sessions.isEmpty {
-                    VStack(spacing: SpeakSpacing.sm) {
-                        Image(systemName: "network.badge.shield.half.filled")
-                            .font(.system(size: 28))
-                            .foregroundStyle(.tertiary)
-                        Text("No external agent sessions currently registered.")
-                            .font(.speakBody(.caption))
-                            .foregroundStyle(.secondary)
-                        Text("Agents registering via speak_register_session will appear here live.")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, SpeakSpacing.lg)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.1)))
-                } else {
-                    VStack(spacing: SpeakSpacing.sm) {
-                        ForEach(sessions, id: \.sessionId) { session in
-                            AgentSessionRow(session: session)
+                VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+                    Text("Active agent pings negotiated via speak_register_session tool calls.")
+                        .font(.speakBody(.caption))
+                        .foregroundStyle(.speakMica)
+
+                    if sessions.isEmpty {
+                        VStack(spacing: SpeakSpacing.sm) {
+                            Image(systemName: "network.badge.shield.half.filled")
+                                .font(.system(size: 28))
+                                .foregroundStyle(.speakMica)
+                            Text("No external agent sessions currently registered.")
+                                .font(.speakBody(.caption))
+                                .foregroundStyle(.speakMica)
+                            Text("Agents registering via speak_register_session will appear here live.")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.speakMica)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, SpeakSpacing.lg)
+                        .speakInset(cornerRadius: 8)
+                    } else {
+                        VStack(spacing: SpeakSpacing.sm) {
+                            ForEach(sessions, id: \.sessionId) { session in
+                                AgentSessionRow(session: session)
+                            }
                         }
                     }
                 }
+                .padding(SpeakSpacing.md)
+                .speakCard()
             }
-            .padding(SpeakSpacing.md)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Color.speakSurface))
             .task {
                 await refreshSessions()
             }
 
             Divider()
 
-            // MCP Tool Capability Registry Card
-            VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+            // MCP Tool Capability Registry Section
+            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Exposed MCP Tools & Capability Status")
-                        .font(.speakBody(.base, semibold: true))
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.speakBone)
                     Text("Registered tool interfaces available to connected stdio agents.")
                         .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.speakMica)
                 }
 
-                Grid(alignment: .leading, horizontalSpacing: SpeakSpacing.md, verticalSpacing: SpeakSpacing.sm) {
-                    toolRow(
-                        name: "speak_notify",
-                        summary: "Spoken or banner notifications",
-                        params: "summary, kind, interrupt",
-                        status: "Active"
-                    )
-                    toolRow(
-                        name: "speak_request_input",
-                        summary: "Human-in-the-loop interactive prompts",
-                        params: "requestId, prompt, mode, choices",
-                        status: "Active"
-                    )
-                    toolRow(
-                        name: "speak_say",
-                        summary: "Vocalize text aloud via on-device TTS",
-                        params: "text, interrupt",
-                        status: "Active"
-                    )
-                    toolRow(
-                        name: "speak_ask",
-                        summary: "Ask question by voice and dictation response",
-                        params: "question, timeout",
-                        status: "Active"
-                    )
-                    toolRow(
-                        name: "speak_confirm",
-                        summary: "Yes/No voice confirmation prompt",
-                        params: "question",
-                        status: "Active"
-                    )
-                    toolRow(
-                        name: "speak_status",
-                        summary: "Check dictation engine state and hotkey",
-                        params: "sessionId",
-                        status: "Active"
-                    )
-                    toolRow(
-                        name: "speak_register_session",
-                        summary: "Negotiate agent capabilities and session",
-                        params: "provider, label, cwd, capabilities",
-                        status: "Active"
-                    )
-                    toolRow(
-                        name: "speak_submit_call",
-                        summary: "Submit durable agent call to Agent Inbox",
-                        params: "requestId, prompt, mode, urgency",
-                        status: "Active"
-                    )
+                VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+                    Grid(alignment: .leading, horizontalSpacing: SpeakSpacing.md, verticalSpacing: SpeakSpacing.sm) {
+                        toolRow(
+                            name: "speak_notify",
+                            summary: "Spoken or banner notifications",
+                            params: "summary, kind, interrupt",
+                            status: "Active"
+                        )
+                        toolRow(
+                            name: "speak_request_input",
+                            summary: "Human-in-the-loop interactive prompts",
+                            params: "requestId, prompt, mode, choices",
+                            status: "Active"
+                        )
+                        toolRow(
+                            name: "speak_say",
+                            summary: "Vocalize text aloud via on-device TTS",
+                            params: "text, interrupt",
+                            status: "Active"
+                        )
+                        toolRow(
+                            name: "speak_ask",
+                            summary: "Ask question by voice and dictation response",
+                            params: "question, timeout",
+                            status: "Active"
+                        )
+                        toolRow(
+                            name: "speak_confirm",
+                            summary: "Yes/No voice confirmation prompt",
+                            params: "question",
+                            status: "Active"
+                        )
+                        toolRow(
+                            name: "speak_status",
+                            summary: "Check dictation engine state and hotkey",
+                            params: "sessionId",
+                            status: "Active"
+                        )
+                        toolRow(
+                            name: "speak_register_session",
+                            summary: "Negotiate agent capabilities and session",
+                            params: "provider, label, cwd, capabilities",
+                            status: "Active"
+                        )
+                        toolRow(
+                            name: "speak_submit_call",
+                            summary: "Submit durable agent call to Agent Inbox",
+                            params: "requestId, prompt, mode, urgency",
+                            status: "Active"
+                        )
+                    }
                 }
+                .padding(SpeakSpacing.md)
+                .speakCard()
             }
-            .padding(SpeakSpacing.md)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Color.speakSurface))
         }
     }
 
@@ -331,19 +340,20 @@ private struct ActiveAgentSessionsSection: View {
         GridRow {
             Text(name)
                 .font(.speakMonoFace(.base, semibold: true))
-                .foregroundStyle(Color.speakAccent)
+                .foregroundStyle(Color.speakUIAccent)
             Text(summary)
                 .font(.speakBody(.caption))
+                .foregroundStyle(.speakBone)
             Text("(\(params))")
                 .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.speakMica)
             Spacer()
             Text(status)
                 .font(.system(size: 9, weight: .bold))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(Color.speakDelivered.opacity(0.15))
-                .foregroundColor(.speakDelivered)
+                .background(Color.speakOK.opacity(0.15))
+                .foregroundStyle(.speakOK)
                 .clipShape(Capsule())
         }
     }
@@ -360,14 +370,15 @@ private struct AgentSessionRow: View {
                 HStack(spacing: SpeakSpacing.xs) {
                     Text(session.label)
                         .font(.speakMonoFace(.base, semibold: true))
+                        .foregroundStyle(.speakBone)
                     Text("[\(session.provider)]")
                         .font(.speakMonoFace(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.speakMica)
                 }
                 if let cwd = session.workingDirectory {
                     Text("CWD: \(cwd)")
                         .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.speakMica)
                 }
             }
 
@@ -378,18 +389,17 @@ private struct AgentSessionRow: View {
                     .font(.system(size: 9, weight: .bold))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(session.state == .active ? Color.speakDelivered.opacity(0.2) : Color.orange.opacity(0.2))
-                    .foregroundColor(session.state == .active ? .speakDelivered : .orange)
+                    .background(session.state == .active ? Color.speakOK.opacity(0.2) : Color.speakWarning.opacity(0.2))
+                    .foregroundStyle(session.state == .active ? .speakOK : .speakWarning)
                     .clipShape(Capsule())
 
                 Text("Capabilities: \(session.capabilities.joined(separator: ", "))")
                     .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.speakMica)
             }
         }
         .padding(SpeakSpacing.sm)
-        .background(Color.black.opacity(0.15))
-        .cornerRadius(6)
+        .speakInset(cornerRadius: 8)
     }
 }
 
@@ -408,15 +418,11 @@ private struct TagAgentAdaptersSection: View {
     @State private var newIsLocalMCP = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+        VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Spoken @tag Agent Adapters")
-                        .font(.speakBody(.base, semibold: true))
-                    Text("Register, inspect, and invoke dynamic agent adapters using spoken @tag references.")
-                        .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
-                }
+                Text("Spoken @tag Agent Adapters")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.speakBone)
                 Spacer()
                 Button(action: { showingAddModal = true }) {
                     Label("Register @tag Adapter", systemImage: "plus")
@@ -425,13 +431,19 @@ private struct TagAgentAdaptersSection: View {
                 .buttonStyle(.borderedProminent)
             }
 
-            VStack(spacing: SpeakSpacing.sm) {
-                ForEach(tags) { tag in
-                    TagRow(tag: tag, onRemove: { Task { await removeTag(tag.tagName) } })
+            VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+                Text("Register, inspect, and invoke dynamic agent adapters using spoken @tag references.")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(.speakMica)
+
+                VStack(spacing: SpeakSpacing.sm) {
+                    ForEach(tags) { tag in
+                        TagRow(tag: tag, onRemove: { Task { await removeTag(tag.tagName) } })
+                    }
                 }
             }
             .padding(SpeakSpacing.md)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Color.speakSurface))
+            .speakCard()
             .task {
                 await loadTags()
             }
@@ -445,26 +457,49 @@ private struct TagAgentAdaptersSection: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.md) {
             Text("Register Custom @tag Agent Adapter")
                 .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.speakBone)
 
             Form {
-                Section("Agent Metadata") {
+                Section {
                     TextField("Tag Name (e.g. @speak-mcp or @my-agent)", text: $newTagName)
+                        .foregroundStyle(.speakBone)
                     TextField("Display Name (e.g. Speak MCP Agent)", text: $newDisplayName)
+                        .foregroundStyle(.speakBone)
                     TextField("Description", text: $newDescription)
+                        .foregroundStyle(.speakBone)
+                } header: {
+                    Text("Agent Metadata")
+                        .font(.speakBody(.base, semibold: true))
+                        .foregroundStyle(.speakBone)
                 }
 
-                Section("Execution & Prompt (Optional)") {
+                Section {
                     TextField("Shell Command (e.g. /usr/local/bin/agent)", text: $newShellCommand)
+                        .foregroundStyle(.speakBone)
                     TextField("System Prompt", text: $newSystemPrompt)
-                    Toggle("Is Local MCP Server", isOn: $newIsLocalMCP)
+                        .foregroundStyle(.speakBone)
+                    Toggle(isOn: $newIsLocalMCP) {
+                        Text("Is Local MCP Server")
+                            .font(.speakBody(.base))
+                            .foregroundStyle(.speakBone)
+                    }
+                } header: {
+                    Text("Execution & Prompt (Optional)")
+                        .font(.speakBody(.base, semibold: true))
+                        .foregroundStyle(.speakBone)
                 }
             }
             .formStyle(.grouped)
 
             HStack {
-                Button("Cancel") {
+                Button {
                     showingAddModal = false
+                } label: {
+                    Text("Cancel")
+                        .font(.speakBody(.base))
+                        .foregroundStyle(.speakBone)
                 }
+                .buttonStyle(.plain)
                 Spacer()
                 Button("Register Adapter") {
                     Task { await addTag() }
@@ -526,19 +561,19 @@ private struct TagRow: View {
                 HStack(spacing: SpeakSpacing.xs) {
                     Text(tag.tagName)
                         .font(.speakMonoFace(.base, semibold: true))
-                        .foregroundStyle(Color.speakAccent)
+                        .foregroundStyle(Color.speakUIAccent)
 
                     Text(tag.tagKind.rawValue.capitalized)
                         .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.speakBone)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.08))
-                        .cornerRadius(4)
+                        .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Color.speakSurface))
                 }
 
                 Text(tag.description)
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.speakMica)
             }
 
             Spacer()
@@ -547,11 +582,10 @@ private struct TagRow: View {
                 ForEach(tag.capabilities, id: \.self) { cap in
                     Text(cap.rawValue)
                         .font(.system(size: 9))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.speakBone)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
-                        .background(Color.black.opacity(0.2))
-                        .cornerRadius(3)
+                        .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Color.speakSurface))
                 }
             }
 
@@ -559,14 +593,13 @@ private struct TagRow: View {
                 Button(action: onRemove) {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
-                        .foregroundStyle(.red.opacity(0.8))
+                        .foregroundStyle(Color.speakError.opacity(0.8))
                 }
                 .buttonStyle(.plain)
                 .help("Remove custom @tag adapter")
             }
         }
         .padding(SpeakSpacing.sm)
-        .background(Color.black.opacity(0.12))
-        .cornerRadius(6)
+        .speakInset(cornerRadius: 8)
     }
 }

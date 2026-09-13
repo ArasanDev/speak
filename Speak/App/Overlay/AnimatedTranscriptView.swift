@@ -84,7 +84,7 @@ private struct TokenView: View {
                 Group {
                     if token.state == .canceled {
                         AnimatedStrikethroughLine(progress: progress)
-                            .stroke(Color.red, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                            .stroke(Color.speakError, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
                             .onAppear {
                                 withAnimation(.easeOut(duration: 0.2)) {
                                     progress = 1.0

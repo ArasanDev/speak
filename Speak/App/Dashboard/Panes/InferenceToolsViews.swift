@@ -60,7 +60,10 @@ struct ModelRegistryCard: View {
                 ForEach(viewModel.backends) { backend in
                     BackendRow(backend: backend)
                     if backend.id != viewModel.backends.last?.id {
-                        Divider().opacity(0.4)
+                        Rectangle()
+                            .fill(Color.speakCardBorder)
+                            .frame(height: InferenceMetrics.hairline)
+                            .opacity(0.4)
                     }
                 }
             }
@@ -106,20 +109,21 @@ struct BackendRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(backend.name)
                     .font(.speakBody(.base, semibold: true))
+                    .foregroundStyle(Color.speakBone)
                     .lineLimit(1)
 
                 HStack(spacing: SpeakSpacing.xs) {
                     Text(backend.id)
                         .font(.speakMonoFace(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                         .lineLimit(1)
 
                     if let endpoint = backend.endpoint {
                         Text("·")
-                            .foregroundStyle(.quaternary)
+                            .foregroundStyle(Color.speakMica)
                         Text(endpoint)
                             .font(.speakMonoFace(.caption))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color.speakMica)
                             .lineLimit(1)
                     }
                 }
@@ -149,27 +153,27 @@ struct BackendRow: View {
     private var ownerBadge: some View {
         Text(backend.ownedBy)
             .font(.speakBody(.caption))
-            .foregroundStyle(Color.speakTagBadgeFg)
+            .foregroundStyle(Color.speakAgentViolet)
             .padding(.horizontal, SpeakSpacing.xs + 2)
             .padding(.vertical, 2)
             .background(
-                Capsule().fill(Color.speakTagBadgeBg)
+                Capsule().fill(Color.speakAgentViolet.opacity(0.15))
             )
     }
 
     private var statusColor: Color {
         switch backend.status {
         case .available:
-            return Color.speakDelivered
+            return Color.speakOK
 
         case .reachable:
-            return Color.speakDelivered
+            return Color.speakOK
 
         case .offline:
-            return Color(nsColor: .systemRed)
+            return Color.speakError
 
         case .unknown:
-            return Color(nsColor: .systemYellow)
+            return Color.speakWarning
         }
     }
 }
@@ -235,7 +239,7 @@ struct QuickTestConsole: View {
 
     private var promptField: some View {
         TextField("Ask the local model something…", text: $viewModel.testPrompt, axis: .vertical)
-            .font(.speakMonoFace(.base))
+            .font(.speakBody(.base))
             .textFieldStyle(.plain)
             .lineLimit(1...4)
             .padding(.horizontal, SpeakSpacing.sm + 2)
@@ -295,14 +299,7 @@ struct QuickTestConsole: View {
                 .padding(SpeakSpacing.sm)
         }
         .frame(maxHeight: 200)
-        .background(
-            RoundedRectangle(cornerRadius: InferenceMetrics.codeRadius, style: .continuous)
-                .fill(Color.primary.opacity(0.04))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: InferenceMetrics.codeRadius, style: .continuous)
-                .strokeBorder(Color.speakCardBorder, lineWidth: InferenceMetrics.hairline)
-        )
+        .speakInset(cornerRadius: InferenceMetrics.codeRadius)
         .transition(.opacity)
     }
 }

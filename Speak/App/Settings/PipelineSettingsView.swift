@@ -72,13 +72,14 @@ struct PipelineSettingsView: View {
     }
 
     /// One pipeline stage: bordered neutral tile + layer name + live config
-    /// summary on the left; status pill + chevron on the right. The tile is a
-    /// flow node — shape carries it, not hue (same icon language as the rail).
-    /// The whole row navigates.
+    /// summary on the left; optional status pill + chevron on the right. The
+    /// tile is a flow node — shape carries it, not hue (same icon language as
+    /// the rail). The whole row navigates. Pills are shown only for meaningful
+    /// state; the default healthy path is not badged.
     private func layerRow(
         category: SettingsCategory,
         summary: String,
-        status: (text: String, tint: Color)
+        status: (text: String, tint: Color)?
     ) -> some View {
         Button {
             onSelectCategory(category)
@@ -86,7 +87,7 @@ struct PipelineSettingsView: View {
             HStack(spacing: SpeakSpacing.sm + 2) {
                 Image(systemName: category.systemImage)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.speakMica)
                     .frame(width: 26, height: 26)
                     .background(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -100,19 +101,21 @@ struct PipelineSettingsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(category.title)
                         .font(.speakBody(.base, semibold: true))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(.speakBone)
                     Text(summary)
                         .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.speakMica)
                         .lineLimit(1)
                 }
 
                 Spacer(minLength: SpeakSpacing.sm)
 
-                SettingsStatusPill(text: status.text, tint: status.tint)
+                if let status {
+                    SettingsStatusPill(text: status.text, tint: status.tint)
+                }
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.speakMica)
             }
             .padding(.horizontal, SpeakSpacing.md)
             .padding(.vertical, SpeakSpacing.sm + 2)
@@ -126,7 +129,7 @@ struct PipelineSettingsView: View {
     private var connectorRow: some View {
         Image(systemName: "arrow.down")
             .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(.speakMica)
             .padding(.leading, SpeakSpacing.md + 8)
             .padding(.vertical, 2)
     }
@@ -143,10 +146,10 @@ struct PipelineSettingsView: View {
         return "\(engine) · \(store.language.identifier)"
     }
 
-    private var sttStatus: (text: String, tint: Color) {
+    private var sttStatus: (text: String, tint: Color)? {
         context.permissionManager?.status(.microphone) == .granted
-            ? ("Ready", .speakDelivered)
-            : ("Needs mic", .orange)
+            ? nil
+            : ("Needs mic", .speakWarning)
     }
 
     private var intelligenceSummary: String {
@@ -160,9 +163,9 @@ struct PipelineSettingsView: View {
         return "\(engine) · \(store.effectiveCleanupLevel.displayName)"
     }
 
-    private var intelligenceStatus: (text: String, tint: Color) {
+    private var intelligenceStatus: (text: String, tint: Color)? {
         store.effectiveCleanupLevel == .none
-            ? ("Off", .secondary)
+            ? nil
             : ("On", .speakAgentViolet)
     }
 
@@ -173,8 +176,8 @@ struct PipelineSettingsView: View {
         return "\(voice) · rate \(String(format: "%.2f", store.ttsSpeechRate))"
     }
 
-    private var ttsStatus: (text: String, tint: Color) {
-        store.readbackEnabled ? ("Readback", .teal) : ("Standby", .secondary)
+    private var ttsStatus: (text: String, tint: Color)? {
+        store.readbackEnabled ? ("Readback", .speakAgentViolet) : nil
     }
 
     // MARK: - Test the Loop
@@ -205,9 +208,11 @@ struct PipelineSettingsView: View {
                     if sandbox.phase == .listening {
                         Text(String(format: "%.1fs", sandbox.elapsed))
                             .font(.speakMonoFace(.caption))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.speakMica)
                     }
                 }
+
+                SettingsRowSeparator()
 
                 sandboxContent
             }
@@ -221,13 +226,17 @@ struct PipelineSettingsView: View {
         switch sandbox.phase {
         case .idle:
             if context.permissionManager?.status(.microphone) != .granted {
-                Label("Microphone permission is required to test the loop.", systemImage: "mic.slash")
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: SpeakSpacing.xs) {
+                    Image(systemName: "mic.slash")
+                        .foregroundStyle(.speakWarning)
+                    Text("Microphone permission is required to test the loop.")
+                        .font(.speakBody(.caption))
+                        .foregroundStyle(.speakMica)
+                }
             } else {
                 Text("Hold the pill (or tap once) and say a sentence — e.g. “um open the rippo and run cubectl get pods”. The pipeline cleans it on-device; nothing is pasted.")
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.speakMica)
             }
 
         case .listening, .processing:
@@ -235,7 +244,7 @@ struct PipelineSettingsView: View {
                 ScrollView {
                     Text(sandbox.transcriptText.isEmpty ? "Listening…" : sandbox.transcriptText)
                         .font(.speakMonoFace(.base))
-                        .foregroundStyle(sandbox.transcriptText.isEmpty ? .tertiary : .primary)
+                        .foregroundStyle(sandbox.transcriptText.isEmpty ? .speakMica : .speakBone)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(minHeight: 44, maxHeight: 96)
@@ -245,7 +254,7 @@ struct PipelineSettingsView: View {
                         ProgressView().controlSize(.small)
                         Text("Cleaning on-device…")
                             .font(.speakBody(.caption))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.speakMica)
                     }
                 }
             }
@@ -262,7 +271,7 @@ struct PipelineSettingsView: View {
                                  ? "delivered raw — cleanup off or engine unavailable"
                                  : "cleaned in \(ms) ms by \(result.engineId)")
                                 .font(.speakMonoFace(.caption))
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.speakMica)
                         }
                         Spacer()
                         if context.voiceOut != nil {
@@ -271,10 +280,12 @@ struct PipelineSettingsView: View {
                             }
                             .font(.speakBody(.caption))
                             .buttonStyle(.borderless)
+                            .tint(.speakUIAccent)
                         }
                         Button("Test again") { sandbox.reset() }
                             .font(.speakBody(.caption))
                             .buttonStyle(.borderless)
+                            .tint(.speakUIAccent)
                     }
                 }
             }
@@ -282,14 +293,15 @@ struct PipelineSettingsView: View {
         case .failed(let message):
             HStack(spacing: SpeakSpacing.xs) {
                 Image(systemName: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.speakError)
                 Text(message)
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.speakMica)
                 Spacer()
                 Button("Try again") { sandbox.reset() }
                     .font(.speakBody(.caption))
                     .buttonStyle(.borderless)
+                    .tint(.speakUIAccent)
             }
         }
     }
@@ -333,6 +345,7 @@ struct PipelineSettingsView: View {
                 ))
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                .tint(.speakUIAccent)
             }
 
             if store.voiceActionsEnabled {
@@ -348,6 +361,7 @@ struct PipelineSettingsView: View {
                     ))
                     .textFieldStyle(.roundedBorder)
                     .font(.speakBody(.caption))
+                    .tint(.speakUIAccent)
                     .frame(width: 140)
                 }
             }

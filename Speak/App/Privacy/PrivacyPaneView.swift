@@ -76,10 +76,10 @@ struct PrivacyPaneView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Nothing Leaves Your Device")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.speakBone)
                     Text("100% local architecture. Zero cloud APIs, zero telemetry, zero accounts.")
                         .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                 }
             }
         }
@@ -87,11 +87,11 @@ struct PrivacyPaneView: View {
         .padding(SpeakSpacing.md)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.04))
+                .fill(Color.speakSurface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                .stroke(Color.speakCardBorder, lineWidth: 1)
         )
     }
 
@@ -106,21 +106,21 @@ struct PrivacyPaneView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.speakBone)
                 Text(description)
                     .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
             }
             Spacer(minLength: 0)
         }
         .padding(SpeakSpacing.md)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(0.03))
+                .fill(Color.speakSurface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                .stroke(Color.speakCardBorder, lineWidth: 1)
         )
     }
 
@@ -142,14 +142,14 @@ struct PrivacyPaneView: View {
             .padding(.horizontal, 14)
             .background(
                 LinearGradient(
-                    colors: [Color.blue.opacity(0.9), Color.blue],
+                    colors: [Color.speakUIAccent.opacity(0.9), Color.speakUIAccent],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
             )
-            .foregroundStyle(.white)
+            .foregroundStyle(Color.speakOnAccent)
             .cornerRadius(8)
-            .shadow(color: Color.blue.opacity(0.3), radius: 4, x: 0, y: 2)
+            .shadow(color: Color.speakUIAccent.opacity(0.3), radius: 4, x: 0, y: 2)
         }
         .buttonStyle(.plain)
     }
@@ -160,7 +160,7 @@ struct PrivacyPaneView: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Text("Transparency & Open Source")
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.speakBone)
 
             HStack(spacing: SpeakSpacing.md) {
                 trustLinkCard("Source Code", "github.com", "https://github.com/tamilarasanraja14/speak", icon: "code")
@@ -176,23 +176,23 @@ struct PrivacyPaneView: View {
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.speakUIAccent)
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.speakBone)
                 Text(subtitle)
                     .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(SpeakSpacing.sm + 2)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.04))
+                    .fill(Color.speakSurface)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    .stroke(Color.speakCardBorder, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -204,7 +204,7 @@ struct PrivacyPaneView: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.md) {
             Text("Architecture Comparison")
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.speakBone)
 
             HStack(alignment: .top, spacing: SpeakSpacing.md) {
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
@@ -255,10 +255,10 @@ struct PrivacyPaneView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .font(.system(size: 12))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.speakBone)
             Text(description)
                 .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
                 .padding(.leading, 16)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

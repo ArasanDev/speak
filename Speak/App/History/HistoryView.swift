@@ -71,9 +71,10 @@ struct HistoryView: View {
             // Search bar
             HStack(spacing: SpeakSpacing.sm) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                 TextField("Search dictations", text: $viewModel.searchText)
                     .textFieldStyle(.plain)
+                    .foregroundStyle(Color.speakBone)
                 if viewModel.isLoading {
                     ProgressView()
                         .controlSize(.small)
@@ -86,7 +87,9 @@ struct HistoryView: View {
                 // Date filter
                 Picker("Date", selection: $selectedDateFilter) {
                     ForEach(DateFilter.allCases, id: \.self) { filter in
-                        Text(filter.label).tag(filter)
+                        Text(filter.label)
+                            .foregroundStyle(Color.speakBone)
+                            .tag(filter)
                     }
                 }
                 .pickerStyle(.menu)
@@ -96,6 +99,7 @@ struct HistoryView: View {
                 Picker("Engine", selection: $selectedEngineFilter) {
                     ForEach(availableEngines, id: \.self) { engine in
                         Text(engine == "all" ? "All engines" : engine)
+                            .foregroundStyle(Color.speakBone)
                             .tag(engine)
                     }
                 }
@@ -194,7 +198,7 @@ struct HistoryView: View {
     private func sectionHeader(for period: DatePeriod) -> some View {
         Text(period.label)
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.speakMica)
     }
 
     // MARK: - History row with expand
@@ -218,11 +222,17 @@ struct HistoryView: View {
 
     private var footer: some View {
         HStack {
-            Button("Export\u{2026}") { viewModel.exportToFile() }
-                .disabled(groupedAndFilteredEntries.isEmpty)
+            Button(action: { viewModel.exportToFile() }) {
+                Text("Export\u{2026}")
+                    .foregroundStyle(Color.speakBone)
+            }
+            .disabled(groupedAndFilteredEntries.isEmpty)
             Spacer()
-            Button("Clear History", role: .destructive) { viewModel.clearAll() }
-                .disabled(groupedAndFilteredEntries.isEmpty)
+            Button(role: .destructive, action: { viewModel.clearAll() }) {
+                Text("Clear History")
+                    .foregroundStyle(Color.speakError)
+            }
+            .disabled(groupedAndFilteredEntries.isEmpty)
         }
         .padding(SpeakSpacing.md)
     }
@@ -233,14 +243,14 @@ struct HistoryView: View {
         VStack(spacing: SpeakSpacing.md) {
             Image(systemName: "text.bubble")
                 .font(.largeTitle)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
             Text(viewModel.searchText.isEmpty && selectedDateFilter == .allTime
                  ? "No dictations yet"
                  : "No matches")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Color.speakWindowCanvas)
     }
 
     // MARK: - Helpers
@@ -371,26 +381,28 @@ private struct CollapsedHistoryEntryView: View {
         HStack(spacing: SpeakSpacing.sm) {
             Image(systemName: "chevron.right")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
                 .frame(width: 12)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: SpeakSpacing.sm) {
                     Text(entry.createdAt, style: .time)
                         .font(.speakMonoFace(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                     Text("·")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                     Text(entry.rawText.prefix(40))
                         .lineLimit(1)
                         .font(.speakMonoFace(.caption))
+                        .foregroundStyle(Color.speakBone)
                         .truncationMode(.tail)
                     if let cleaned = entry.cleanedText {
                         Text("|")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.speakMica)
                         Text(cleaned.prefix(40))
                             .lineLimit(1)
                             .font(.speakMonoFace(.caption))
+                            .foregroundStyle(Color.speakBone)
                             .truncationMode(.tail)
                     }
                     Spacer()
@@ -411,7 +423,7 @@ private struct CollapsedHistoryEntryView: View {
             .padding(.vertical, 2)
             .background(Color.speakSurface)
             .cornerRadius(4)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.speakMica)
     }
 }
 
@@ -433,27 +445,26 @@ private struct ExpandedHistoryEntryView: View {
             expandedActions
         }
         .padding(SpeakSpacing.md)
-        .background(Color.speakSurface)
-        .cornerRadius(SpeakSpacing.sm)
+        .speakCard(cornerRadius: 10)
     }
 
     private var expandedHeader: some View {
         HStack {
             Image(systemName: "chevron.down")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
                 .frame(width: 12)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.createdAt, style: .date)
                     .font(.speakMonoFace(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                 HStack(spacing: SpeakSpacing.sm) {
                     Text(entry.createdAt, style: .time)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                     Text("·")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                     engineBadge
                 }
                 .font(.caption2)
@@ -462,7 +473,7 @@ private struct ExpandedHistoryEntryView: View {
 
             Button(action: onClose) {
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
             }
             .buttonStyle(.plain)
         }
@@ -476,7 +487,7 @@ private struct ExpandedHistoryEntryView: View {
             .padding(.vertical, 2)
             .background(Color.speakSurface)
             .cornerRadius(4)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.speakMica)
     }
 
     private var expandedMetadata: some View {
@@ -485,9 +496,10 @@ private struct ExpandedHistoryEntryView: View {
                 HStack {
                     Text("Duration:")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                     Text(formatDuration(entry.duration))
                         .font(.speakMonoFace(.caption))
+                        .foregroundStyle(Color.speakBone)
                 }
             }
 
@@ -495,9 +507,10 @@ private struct ExpandedHistoryEntryView: View {
                 HStack {
                     Text("Latency:")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                     Text(String(format: "%.2fs", entry.stopToPasteSeconds))
                         .font(.speakMonoFace(.caption))
+                        .foregroundStyle(Color.speakBone)
                 }
             }
 
@@ -505,9 +518,10 @@ private struct ExpandedHistoryEntryView: View {
                 HStack {
                     Text("Cleanup time:")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                     Text(String(format: "%.2fs", entry.cleanupSeconds))
                         .font(.speakMonoFace(.caption))
+                        .foregroundStyle(Color.speakBone)
                 }
             }
         }
@@ -518,6 +532,7 @@ private struct ExpandedHistoryEntryView: View {
             Button(action: onCopyRaw) {
                 Label("Copy Raw", systemImage: "doc.on.doc")
                     .font(.caption)
+                    .foregroundStyle(Color.speakBone)
             }
             .buttonStyle(.bordered)
 
@@ -525,6 +540,7 @@ private struct ExpandedHistoryEntryView: View {
                 Button(action: onCopyClean) {
                     Label("Copy Cleaned", systemImage: "doc.on.doc")
                         .font(.caption)
+                        .foregroundStyle(Color.speakBone)
                 }
                 .buttonStyle(.bordered)
             }
@@ -532,6 +548,7 @@ private struct ExpandedHistoryEntryView: View {
             Button(action: onExport) {
                 Label("Export", systemImage: "arrow.up.doc")
                     .font(.caption)
+                    .foregroundStyle(Color.speakBone)
             }
             .buttonStyle(.bordered)
 
@@ -542,6 +559,7 @@ private struct ExpandedHistoryEntryView: View {
                 label: {
                     Label("Delete", systemImage: "trash")
                         .font(.caption)
+                        .foregroundStyle(Color.speakBone)
                 }
             )
             .buttonStyle(.bordered)
@@ -553,6 +571,7 @@ private struct ExpandedHistoryEntryView: View {
                 label: {
                     Label("Retry", systemImage: "arrow.clockwise")
                         .font(.caption)
+                        .foregroundStyle(Color.speakBone)
                 }
             )
             .buttonStyle(.bordered)
