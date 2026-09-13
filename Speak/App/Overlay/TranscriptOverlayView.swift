@@ -203,7 +203,7 @@ struct TranscriptOverlayView: View {
             } else {
                 HStack(spacing: SpeakSpacing.sm) {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Color.speakDelivered)
                         .font(.system(size: 15))
                     Text("Done")
                         .font(.speakBody(.base))
@@ -246,7 +246,7 @@ struct TranscriptOverlayView: View {
     private var errorContent: some View {
         HStack(spacing: SpeakSpacing.sm) {
             Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.speakError)
                 .font(.system(size: 15))
             VStack(alignment: .leading, spacing: 2) {
                 Text("Error")

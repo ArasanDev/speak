@@ -56,10 +56,11 @@ struct HotkeysSettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .foregroundStyle(Color.speakBone)
 
                 Text(triggerExplainer)
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
             }
             .padding(.horizontal, SpeakSpacing.md)
             .padding(.vertical, SpeakSpacing.sm + 4)
@@ -138,9 +139,9 @@ struct HotkeysSettingsView: View {
                 description: "Required for the global hotkey tap (CGEventTap). macOS gates it in Privacy & Security."
             ) {
                 if context.permissionManager?.status(.accessibility) == .granted {
-                    SettingsStatusPill(text: "Granted", tint: .speakDelivered)
+                    SettingsStatusPill(text: "Granted", tint: .speakOK)
                 } else {
-                    SettingsStatusPill(text: "Missing", tint: .orange)
+                    SettingsStatusPill(text: "Missing", tint: .speakWarning)
                 }
             }
 
@@ -200,16 +201,17 @@ private struct ExtraBindingsCard: View {
                 if bindings.bindings.isEmpty {
                     Text("No additional shortcuts. These fire immediately on press — no double-tap.")
                         .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                 } else {
                     ForEach(bindings.bindings) { binding in
                         HStack {
                             Text(binding.source.displayString)
                                 .font(.speakBody(.base))
+                                .foregroundStyle(Color.speakBone)
                             Spacer()
                             Text(binding.action.displayString)
                                 .font(.speakBody(.caption))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.speakMica)
                             Button(role: .destructive) {
                                 remove(binding)
                             } label: {
@@ -229,6 +231,7 @@ private struct ExtraBindingsCard: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
+                    .foregroundStyle(Color.speakBone)
                     .frame(width: 150)
 
                     if newSourceIsMouse {
@@ -238,6 +241,7 @@ private struct ExtraBindingsCard: View {
                             }
                         }
                         .labelsHidden()
+                        .foregroundStyle(Color.speakBone)
                         .fixedSize()
                     } else {
                         Picker("", selection: $newModifierKeyCode) {
@@ -246,6 +250,7 @@ private struct ExtraBindingsCard: View {
                             }
                         }
                         .labelsHidden()
+                        .foregroundStyle(Color.speakBone)
                         .fixedSize()
                     }
 
@@ -255,6 +260,7 @@ private struct ExtraBindingsCard: View {
                         }
                     }
                     .labelsHidden()
+                    .foregroundStyle(Color.speakBone)
                     .fixedSize()
 
                     Spacer()
@@ -266,7 +272,7 @@ private struct ExtraBindingsCard: View {
                 if let addErrorMessage {
                     Text(addErrorMessage)
                         .font(.speakBody(.caption))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.speakError)
                 }
             }
             .padding(.horizontal, SpeakSpacing.md)

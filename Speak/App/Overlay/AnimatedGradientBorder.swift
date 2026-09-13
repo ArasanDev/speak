@@ -9,13 +9,15 @@
 //   withAnimation(.linear.repeatForever), making colors "flow" continuously
 //   around the panel edge like sequential neon lighting.
 //
-// STATE-AWARE COLOR PALETTES:
-//   .listening  → violet–indigo–cyan–teal (aurora palette, matches AuroraOverlayView).
+// STATE-AWARE COLOR PALETTES — converged on the themed `speakFlow*` spectra
+// (SpeakColors.swift), so the border repaints with the active theme:
+//   .listening  → speakFlowOnAir (recording tally; humanAmber → onAir).
 //                 Glow intensity and blur radius scale with the live microphone level
 //                 so the border "breathes" with the user's voice.
-//   .processing → amber–orange–gold (warm "thinking" palette).
-//   .done       → green–mint (celebration, then auto-hidden by DictationController).
-//   .error      → red–crimson (urgent, persistent until dismissed).
+//   .processing → speakFlowProcessing (warm "thinking" amber spectrum).
+//   .done       → speakFlowSuccess (delivered celebration, then auto-hidden
+//                 by DictationController).
+//   .error      → speakFlowError (urgent, persistent until dismissed).
 //
 // REDUCE MOTION:
 //   Rotation is fully suppressed; the border remains as a static tinted outline
@@ -127,45 +129,18 @@ struct AnimatedGradientBorder<S: InsettableShape>: View {
     /// so the glow does not drown out the crisp line above it.
     private var glowColors: [Color] { (palette + [palette[0]]).map { $0.opacity(0.75) } }
 
-    /// State-specific base palette (4 stops + seamless wrap).
+    /// State-specific base palette — the themed `speakFlow*` spectra, so the
+    /// border animations repaint with the active theme (seamless wrap handled
+    /// by `borderColors`/`glowColors`).
     private var palette: [Color] {
         if let customPalette, !customPalette.isEmpty {
             return customPalette
         }
         switch state {
-        case .listening:
-            // Aurora: violet → indigo → cyan → teal.
-            // Hues match AuroraOverlayView.gradientColors(for: .listening). [decision H-UI]
-            return [
-                Color(hue: 0.760, saturation: 0.80, brightness: 1.00),  // violet
-                Color(hue: 0.650, saturation: 0.85, brightness: 1.00),  // indigo / blue
-                Color(hue: 0.540, saturation: 0.80, brightness: 0.95),  // cyan
-                Color(hue: 0.480, saturation: 0.72, brightness: 0.90),  // teal
-            ]
-        case .processing:
-            // Warm "thinking": amber → orange-gold. [decision: warm = active AI work]
-            return [
-                Color(hue: 0.085, saturation: 0.90, brightness: 1.00),  // amber
-                Color(hue: 0.110, saturation: 0.85, brightness: 1.00),  // orange-gold
-                Color(hue: 0.065, saturation: 0.92, brightness: 0.95),  // deep amber
-                Color(hue: 0.095, saturation: 0.88, brightness: 1.00),  // amber
-            ]
-        case .done:
-            // Celebration: green → mint. [decision: matches doneContent checkmark color]
-            return [
-                Color(hue: 0.360, saturation: 0.78, brightness: 0.95),  // green
-                Color(hue: 0.410, saturation: 0.68, brightness: 0.90),  // mint
-                Color(hue: 0.375, saturation: 0.72, brightness: 0.88),  // green-teal
-                Color(hue: 0.360, saturation: 0.78, brightness: 0.95),  // green (wrap)
-            ]
-        case .error:
-            // Urgent: red → crimson. [decision: matches errorContent icon color]
-            return [
-                Color(hue: 0.000, saturation: 0.90, brightness: 1.00),  // red
-                Color(hue: 0.975, saturation: 0.85, brightness: 0.95),  // crimson
-                Color(hue: 0.950, saturation: 0.80, brightness: 1.00),  // pink-red
-                Color(hue: 0.000, saturation: 0.90, brightness: 1.00),  // red (wrap)
-            ]
+        case .listening:  return Color.speakFlowOnAir
+        case .processing: return Color.speakFlowProcessing
+        case .done:       return Color.speakFlowSuccess
+        case .error:      return Color.speakFlowError
         }
     }
 

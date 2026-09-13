@@ -35,16 +35,15 @@ import SwiftUI
 // MARK: - Diff color tokens (extend SpeakTheme palette)
 
 public extension Color {
-    /// Background/tint for inserted words (AI additions). Calm green — visible but not
-    /// alarming. Chosen to pair with the speakAccent amber without competing.
-    /// [decision W4.1: green (0.2, 0.7, 0.3) at 15% opacity for background,
-    ///  full opacity for text indicator]
-    static let speakDiffInsert = Color(red: 0.2, green: 0.7, blue: 0.3)
+    /// Background/tint for inserted words (AI additions). Resolves the themed
+    /// `delivered` role — a calm green, visible but not alarming.
+    /// [decision W4.1: full opacity for text indicator]
+    static var speakDiffInsert: Color { SpeakThemeRuntime.color(.delivered) }
 
-    /// Background/tint for deleted words (AI removals). Muted red to signal removal
-    /// without creating visual alarm on every filler-word strip.
-    /// [decision W4.1: red (0.85, 0.25, 0.25)]
-    static let speakDiffDelete = Color(red: 0.85, green: 0.25, blue: 0.25)
+    /// Background/tint for deleted words (AI removals). Resolves the themed
+    /// `error` role — signals removal without hardcoding a red literal.
+    /// [decision W4.1]
+    static var speakDiffDelete: Color { SpeakThemeRuntime.color(.error) }
 }
 
 // MARK: - CleanupDiffView
@@ -113,7 +112,7 @@ public struct CleanupDiffView: View {
         HStack {
             Text("AI Changes")
                 .font(.speakBody(.base))
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.speakMica)
 
             Spacer()
 
@@ -165,11 +164,11 @@ public struct CleanupDiffView: View {
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Text("Raw")
                     .font(.speakBody(.caption))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.speakMica)
                 ScrollView {
                     Text(raw)
                         .font(.speakMonoFace(.base))
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color.speakBone)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
                 }
@@ -181,11 +180,11 @@ public struct CleanupDiffView: View {
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Text("Cleaned")
                     .font(.speakBody(.caption))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.speakMica)
                 ScrollView {
                     Text(cleaned)
                         .font(.speakMonoFace(.base))
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color.speakBone)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
                 }
@@ -200,7 +199,7 @@ public struct CleanupDiffView: View {
         ScrollView {
             Text(text)
                 .font(.speakMonoFace(.base))
-                .foregroundColor(.primary)
+                .foregroundColor(Color.speakBone)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
         }
@@ -212,12 +211,12 @@ public struct CleanupDiffView: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Label("No AI cleanup applied", systemImage: "wand.and.stars.inverse")
                 .font(.speakBody(.caption))
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.speakMica)
 
             ScrollView {
                 Text(rawText)
                     .font(.speakMonoFace(.base))
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.speakBone)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             }
@@ -231,7 +230,7 @@ public struct CleanupDiffView: View {
     /// styles — no `ForEach`, no `HStack` word-wrap issues. [decision W4.1]
     private func segmentedText(segments: [DiffSegment]) -> Text {
         guard !segments.isEmpty else {
-            return Text("(empty)").font(.speakMonoFace(.base)).foregroundColor(.secondary)
+            return Text("(empty)").font(.speakMonoFace(.base)).foregroundColor(Color.speakMica)
         }
 
         // Build from first segment so we can use + to accumulate.

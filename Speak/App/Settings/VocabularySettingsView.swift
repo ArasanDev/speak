@@ -48,52 +48,54 @@ private struct AcousticCorrectionsCard: View {
                         .frame(width: 190)
                         .onSubmit(addCorrection)
                     Image(systemName: "arrow.right")
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.speakMica)
                     TextField("What gets typed (e.g. “kubectl”)", text: $typed)
                         .textFieldStyle(.plain)
                         .font(.speakBody(.base))
                         .onSubmit(addCorrection)
-                    Button("Add", action: addCorrection)
-                        .disabled(!canAdd)
+                    Spacer(minLength: 0)
+                    AddButton(action: addCorrection, isEnabled: canAdd)
                 }
 
                 Text("Fixes systematic mishearings before cleanup — and biases the recognizer toward the corrected term. Applies to the next dictation.")
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
 
                 let rows = store.acousticCorrections
                 if !rows.isEmpty {
                     Divider()
+                        .overlay(Color.speakCardBorder.opacity(0.6))
 
                     // Column header — t3code-style table chrome.
                     HStack(spacing: SpeakSpacing.sm) {
-                        Text("YOU SAY")
+                        Text("You say")
                             .frame(width: 190, alignment: .leading)
                         Image(systemName: "arrow.right")
                             .font(.speakBody(.caption))
-                        Text("GETS TYPED")
+                        Text("Gets typed")
                         Spacer()
                     }
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.speakMica)
 
                     ForEach(rows) { correction in
                         HStack(spacing: SpeakSpacing.sm) {
                             Text(correction.heard)
                                 .font(.speakMonoFace(.base))
+                                .foregroundStyle(Color.speakBone)
                                 .frame(width: 190, alignment: .leading)
                             Image(systemName: "arrow.right")
                                 .font(.speakBody(.caption))
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(Color.speakMica)
                             Text(correction.typed)
                                 .font(.speakMonoFace(.base))
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(Color.speakBone)
                             Spacer()
                             Button {
                                 remove(correction)
                             } label: {
                                 Image(systemName: "trash")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.speakMica)
                             }
                             .buttonStyle(.borderless)
                             .help("Remove \(correction.heard) → \(correction.typed)")
@@ -143,27 +145,29 @@ private struct CustomVocabularyCard: View {
                         .textFieldStyle(.plain)
                         .font(.speakBody(.base))
                         .onSubmit(addTerm)
-                    Button("Add", action: addTerm)
-                        .disabled(newTerm.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Spacer(minLength: 0)
+                    AddButton(action: addTerm, isEnabled: !newTerm.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
 
                 Text("Fed to the speech recognizer as contextual hints so names and jargon spell correctly.")
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
 
                 let terms = store.customVocabulary
                 if !terms.isEmpty {
                     Divider()
+                        .overlay(Color.speakCardBorder.opacity(0.6))
                     ForEach(terms, id: \.self) { term in
                         HStack {
                             Text(term)
                                 .font(.speakMonoFace(.base))
+                                .foregroundStyle(Color.speakBone)
                             Spacer()
                             Button {
                                 removeTerm(term)
                             } label: {
                                 Image(systemName: "trash")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.speakMica)
                             }
                             .buttonStyle(.borderless)
                             .help("Remove \(term)")
@@ -201,38 +205,42 @@ private struct SnippetsCard: View {
                         .textFieldStyle(.plain)
                         .font(.speakBody(.base))
                         .frame(width: 180)
+                        .onSubmit(addSnippet)
                     Image(systemName: "arrow.right")
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.speakMica)
                     TextField("Expansion (what's inserted)", text: $expansion)
                         .textFieldStyle(.plain)
                         .font(.speakBody(.base))
-                    Button("Add", action: addSnippet)
-                        .disabled(!canAdd)
+                        .onSubmit(addSnippet)
+                    Spacer(minLength: 0)
+                    AddButton(action: addSnippet, isEnabled: canAdd)
                 }
 
                 Text("Say a short trigger, get the full text — expanded before AI cleanup.")
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
 
                 if !store.snippets.isEmpty {
                     Divider()
+                        .overlay(Color.speakCardBorder.opacity(0.6))
                     ForEach(store.snippets) { snippet in
                         HStack(spacing: SpeakSpacing.sm) {
                             Text(snippet.trigger)
                                 .font(.speakMonoFace(.base))
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(Color.speakBone)
                             Image(systemName: "arrow.right")
                                 .font(.speakBody(.caption))
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(Color.speakMica)
                             Text(snippet.expansion)
                                 .font(.speakMonoFace(.base))
+                                .foregroundStyle(Color.speakBone)
                                 .lineLimit(2)
                             Spacer()
                             Button {
                                 store.remove(id: snippet.id)
                             } label: {
                                 Image(systemName: "trash")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.speakMica)
                             }
                             .buttonStyle(.borderless)
                             .help("Remove snippet")
@@ -255,5 +263,22 @@ private struct SnippetsCard: View {
             trigger = ""
             expansion = ""
         }
+    }
+}
+
+// MARK: - Add button
+
+/// Shared "+ Add" affordance used by all three vocabulary cards.
+private struct AddButton: View {
+    let action: () -> Void
+    let isEnabled: Bool
+
+    var body: some View {
+        Button(action: action) {
+            Label("Add", systemImage: "plus")
+        }
+        .disabled(!isEnabled)
+        .controlSize(.small)
+        .tint(.speakUIAccent)
     }
 }

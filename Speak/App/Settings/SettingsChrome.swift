@@ -24,7 +24,7 @@ struct SettingsSectionCard<Content: View>: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Text(title)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(.speakBone)
                 .padding(.horizontal, SpeakSpacing.xs)
 
             VStack(spacing: 0) {
@@ -60,11 +60,11 @@ struct SettingsRow<Control: View>: View {
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Text(title)
                     .font(.speakBody(.base))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.speakBone)
                 if let description {
                     Text(description)
                         .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.speakMica)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -102,7 +102,7 @@ struct SettingsRowSeparator: View {
 /// the MCP pane uses for capability status.
 struct SettingsStatusPill: View {
     let text: String
-    var tint: Color = .secondary
+    var tint: Color = .speakMica
 
     var body: some View {
         Text(text.uppercased())

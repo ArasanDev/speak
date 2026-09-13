@@ -11,7 +11,7 @@
 //     - Interrupt Button (Escape / tap): Immediately cuts off AI speech.
 //     - Mode Switcher Chip: Toggle between Full-Duplex, Push-To-Talk, and Gated-Turn.
 //     - Send Button & Input Field: Submit typed / gated turn responses.
-//   - Applies Magenta / Violet color palette (`AnimatedGradientBorder` / `EdgeFlowBorder` with magenta hues).
+//   - Theme tokens: speakAgentViolet (agent activity), speakError (interrupt), speakMica (idle/paused), speakSurface (wells).
 
 import AppKit
 import os
@@ -28,8 +28,6 @@ struct ConversationOverlayView: View {
     @ObservedObject var loopManager: ConversationLoopManager
     let model: OverlayViewModel
     let settingsStore: SettingsStore
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // MARK: - Body
 
@@ -82,7 +80,7 @@ struct ConversationOverlayView: View {
             if case .agentSpeaking(_, let progress) = loopManager.state {
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)
-                    .tint(Color(hue: 0.83, saturation: 0.85, brightness: 1.00)) // Magenta tint
+                    .tint(Color.speakAgentViolet)
                     .frame(height: 3)
                     .transition(.opacity)
             }
@@ -90,7 +88,7 @@ struct ConversationOverlayView: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color(nsColor: .textBackgroundColor).opacity(0.3))
+                .fill(Color.speakSurface)
         )
     }
 
@@ -98,48 +96,6 @@ struct ConversationOverlayView: View {
 
     private var controlsSection: some View {
         ConversationControlsSection(loopManager: loopManager)
-    }
-
-    // MARK: - Border Layer (Magenta / Violet Palette)
-
-    @ViewBuilder
-    private var borderLayer: some View {
-        let roundedShape = RoundedRectangle(cornerRadius: 16, style: .continuous)
-        let mappedOverlayState = currentOverlayState
-
-        switch settingsStore.borderAnimationStyle {
-        case .none:
-            // Fallback crisp magenta outline if border animation style is disabled
-            roundedShape
-                .stroke(
-                    LinearGradient(
-                        colors: magentaVioletPalette,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1.5
-                )
-
-        case .fullGlow:
-            AnimatedGradientBorder(
-                shape: roundedShape,
-                state: mappedOverlayState,
-                level: model.level,
-                reduceMotion: reduceMotion,
-                customPalette: magentaVioletPalette
-            )
-
-        case .edgeFlow:
-            EdgeFlowBorder(
-                shape: roundedShape,
-                state: mappedOverlayState,
-                level: model.level,
-                speed: settingsStore.borderFlowSpeed,
-                count: settingsStore.borderFlowCount,
-                reduceMotion: reduceMotion,
-                customPalette: magentaVioletPalette
-            )
-        }
     }
 
     // MARK: - State Helpers
@@ -189,54 +145,12 @@ struct ConversationOverlayView: View {
         case .listening, .agentSpeaking:
             return .primary
         case .processing:
-            return Color(hue: 0.78, saturation: 0.88, brightness: 1.00)
+            return Color.speakAgentViolet
         case .interrupted:
-            return .pink
+            return Color.speakError
         }
     }
 
-    // MARK: - Magenta / Violet Palette
-
-    /// Magenta & Violet gradient stops for Layer 3 Bidirectional Voice UI.
-    private var magentaVioletPalette: [Color] {
-        switch loopManager.state {
-        case .listening:
-            return [
-                Color(hue: 0.83, saturation: 0.85, brightness: 1.00),  // Deep Magenta
-                Color(hue: 0.78, saturation: 0.88, brightness: 1.00),  // Violet
-                Color(hue: 0.72, saturation: 0.82, brightness: 0.95),  // Indigo-Violet
-                Color(hue: 0.88, saturation: 0.80, brightness: 1.00),  // Magenta-Rose
-            ]
-        case .agentSpeaking:
-            return [
-                Color(hue: 0.85, saturation: 0.90, brightness: 1.00),  // Vibrant Magenta
-                Color(hue: 0.80, saturation: 0.85, brightness: 1.00),  // Bright Violet
-                Color(hue: 0.75, saturation: 0.90, brightness: 1.00),  // Electric Violet
-                Color(hue: 0.85, saturation: 0.90, brightness: 1.00),  // Wrap Magenta
-            ]
-        case .processing:
-            return [
-                Color(hue: 0.80, saturation: 0.75, brightness: 0.90),  // Muted Violet
-                Color(hue: 0.85, saturation: 0.70, brightness: 0.95),  // Soft Magenta
-                Color(hue: 0.78, saturation: 0.80, brightness: 0.85),  // Deep Purple
-                Color(hue: 0.80, saturation: 0.75, brightness: 0.90),  // Wrap
-            ]
-        case .interrupted:
-            return [
-                Color(hue: 0.95, saturation: 0.88, brightness: 1.00),  // Crimson Pink
-                Color(hue: 0.85, saturation: 0.95, brightness: 0.90),  // Magenta Alert
-                Color(hue: 0.98, saturation: 0.80, brightness: 0.95),  // Deep Rose
-                Color(hue: 0.95, saturation: 0.88, brightness: 1.00),
-            ]
-        case .paused, .idle:
-            return [
-                Color(hue: 0.78, saturation: 0.50, brightness: 0.70),  // Dimmed Violet
-                Color(hue: 0.83, saturation: 0.45, brightness: 0.75),  // Dimmed Magenta
-                Color(hue: 0.76, saturation: 0.50, brightness: 0.65),  // Dimmed Purple
-                Color(hue: 0.78, saturation: 0.50, brightness: 0.70),
-            ]
-        }
-    }
 }
 
 // MARK: - ConversationHeaderRow
@@ -272,7 +186,7 @@ private struct ConversationHeaderRow: View {
         .padding(.vertical, 4)
         .background(
             Capsule()
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+                .fill(Color.speakSurface.opacity(0.6))
         )
     }
 
@@ -305,7 +219,7 @@ private struct ConversationHeaderRow: View {
             .padding(.vertical, 4)
             .background(
                 Capsule()
-                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+                    .fill(Color.speakSurface.opacity(0.5))
             )
         }
         .buttonStyle(.plain)
@@ -349,17 +263,13 @@ private struct ConversationHeaderRow: View {
     private var stateIconColor: Color {
         switch loopManager.state {
         case .idle:
-            return .secondary
-        case .listening:
-            return Color(hue: 0.83, saturation: 0.85, brightness: 1.00) // Magenta
-        case .processing:
-            return Color(hue: 0.78, saturation: 0.88, brightness: 1.00) // Violet
-        case .agentSpeaking:
-            return Color(hue: 0.85, saturation: 0.90, brightness: 1.00) // Vibrant Magenta
+            return Color.speakMica
+        case .listening, .processing, .agentSpeaking:
+            return Color.speakAgentViolet
         case .interrupted:
-            return .pink
+            return Color.speakError
         case .paused:
-            return .purple
+            return Color.speakMica
         }
     }
 
@@ -396,7 +306,7 @@ private struct ConversationControlsSection: View {
                     .padding(.vertical, 5)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.4))
+                            .fill(Color.speakSurface.opacity(0.4))
                     )
                     .focused($isInputFocused)
                     .onSubmit {
@@ -409,7 +319,7 @@ private struct ConversationControlsSection: View {
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(typedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : Color(hue: 0.83, saturation: 0.85, brightness: 1.00))
+                        .foregroundColor(typedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : Color.speakUIAccent)
                 }
                 .buttonStyle(.plain)
                 .disabled(typedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -434,9 +344,9 @@ private struct ConversationControlsSection: View {
                     .frame(maxWidth: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(loopManager.isMuted ? Color.purple.opacity(0.25) : Color(nsColor: .controlBackgroundColor).opacity(0.6))
+                            .fill(loopManager.isMuted ? Color.speakMica.opacity(0.25) : Color.speakSurface.opacity(0.6))
                     )
-                    .foregroundColor(loopManager.isMuted ? .purple : .primary)
+                    .foregroundColor(loopManager.isMuted ? Color.speakMica : .primary)
                 }
                 .buttonStyle(.plain)
 
@@ -456,9 +366,9 @@ private struct ConversationControlsSection: View {
                     .frame(maxWidth: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(isInterruptEnabled ? Color.pink.opacity(0.2) : Color(nsColor: .controlBackgroundColor).opacity(0.3))
+                            .fill(isInterruptEnabled ? Color.speakError.opacity(0.2) : Color.speakSurface.opacity(0.3))
                     )
-                    .foregroundColor(isInterruptEnabled ? .pink : .secondary)
+                    .foregroundColor(isInterruptEnabled ? Color.speakError : .secondary)
                 }
                 .buttonStyle(.plain)
                 .disabled(!isInterruptEnabled)

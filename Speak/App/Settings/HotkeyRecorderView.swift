@@ -228,11 +228,11 @@ struct HotkeyRecorderView: View {
             // Header
             VStack(alignment: .leading, spacing: 4) {
                 Text("Shortcuts")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.primary)
+                    .font(.speak2Title)
+                    .foregroundStyle(Color.speakBone)
                 Text("Choose your preferred shortcut for activating speak.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .font(.speak2Caption)
+                    .foregroundStyle(Color.speakMica)
             }
             .padding(.bottom, SpeakSpacing.xs)
 
@@ -242,6 +242,7 @@ struct HotkeyRecorderView: View {
                 Text("Hold (push-to-talk)").tag(HotkeyBinding.Trigger.hold)
             }
             .pickerStyle(.segmented)
+            .foregroundStyle(Color.speakBone)
             .padding(.bottom, SpeakSpacing.xs)
 
             Divider()
@@ -263,7 +264,7 @@ struct HotkeyRecorderView: View {
                     onCancel()
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
                 .keyboardShortcut(.cancelAction)
 
                 Spacer()
@@ -286,7 +287,7 @@ struct HotkeyRecorderView: View {
         }
         .padding(SpeakSpacing.lg)
         .frame(minWidth: 440, minHeight: 280)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Color.speakWindowCanvas)
         .onDisappear {
             stopMonitor()
         }
@@ -306,18 +307,18 @@ struct HotkeyRecorderView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 Text("Supports Right-Command, Fn double-tap, or modifier combinations.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakMica)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, SpeakSpacing.md)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.white.opacity(0.04))
+                    .fill(Color.speakSurface)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    .stroke(Color.speakCardBorder, lineWidth: 1)
             )
 
         case .recording:
@@ -325,35 +326,36 @@ struct HotkeyRecorderView: View {
                 HStack(spacing: SpeakSpacing.xs) {
                     ProgressView()
                         .controlSize(.small)
+                        .tint(Color.speakOnAir)
                     Text("Press your shortcut key combination\u{2026}")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.primary)
+                        .font(.speakBody(.base, semibold: true))
+                        .foregroundStyle(Color.speakBone)
                 }
 
                 Image(systemName: "record.circle.fill")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.speakOnAir)
                     .imageScale(.large)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, SpeakSpacing.lg)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.red.opacity(0.06))
+                    .fill(Color.speakOnAir.opacity(0.06))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.red.opacity(0.2), lineWidth: 1)
+                    .stroke(Color.speakOnAir.opacity(0.2), lineWidth: 1)
             )
 
         case .captured(let capture, _):
             let preview = bindingFromCapture(capture, trigger: selectedTrigger)
             VStack(spacing: SpeakSpacing.sm) {
                 Text("Captured:")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakMica)
                 Text(preview.displayString)
                     .font(.speakBody(.base))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.speakBone)
                     .padding(.horizontal, SpeakSpacing.sm)
                     .padding(.vertical, SpeakSpacing.xs)
                     .background(
@@ -366,10 +368,10 @@ struct HotkeyRecorderView: View {
         case .invalid(let reason):
             VStack(spacing: SpeakSpacing.sm) {
                 Image(systemName: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.speakWarning)
                 Text(reason)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakWarning)
                 Button("Try Again") {
                     recorderState = .idle
                     stopMonitor()
@@ -385,11 +387,11 @@ struct HotkeyRecorderView: View {
     private func warningLabel(for warning: HotkeyRecorderWarning) -> some View {
         HStack(alignment: .top, spacing: SpeakSpacing.sm) {
             Image(systemName: "exclamationmark.triangle")
-                .foregroundStyle(.orange)
+                .foregroundStyle(Color.speakWarning)
                 .imageScale(.small)
             Text(warningMessage(for: warning))
-                .font(.caption)
-                .foregroundStyle(.orange)
+                .font(.speakBody(.caption))
+                .foregroundStyle(Color.speakWarning)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, SpeakSpacing.xs)

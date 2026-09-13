@@ -141,10 +141,13 @@ struct PlaygroundEngineRoom: View {
             .buttonStyle(.plain)
             .help("Re-probe local inference backends")
         }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .speakCard(cornerRadius: 8)
     }
 }
 
-/// One backend: a status dot, a mono name, and — when selected — a violet ring.
+/// One backend: a status dot, a mono name, and — when selected — a UI-accent ring.
 struct PlaygroundEngineChip: View {
     let name: String
     let status: BackendStatus
@@ -162,7 +165,7 @@ struct PlaygroundEngineChip: View {
 
             Text(name)
                 .font(.speakBody(.caption))
-                .foregroundStyle(isSelected ? Color.speakBone : Color.speakMica)
+                .foregroundStyle(isSelected ? Color.speakUIAccent : Color.speakMica)
                 .lineLimit(1)
         }
         .padding(.horizontal, SpeakSpacing.sm)
@@ -185,12 +188,16 @@ struct PlaygroundEngineChip: View {
 
     private var background: some View {
         RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .fill(Color.speakAgentViolet.opacity(fillOpacity))
+            .fill(selectionColor.opacity(fillOpacity))
     }
 
     private var ring: some View {
         RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .strokeBorder(Color.speakAgentViolet.opacity(isSelected ? 0.35 : 0), lineWidth: 1)
+            .strokeBorder(selectionColor.opacity(isSelected ? 0.35 : 0), lineWidth: 1)
+    }
+
+    private var selectionColor: Color {
+        isSelected ? Color.speakUIAccent : Color.speakAgentViolet
     }
 
     private var fillOpacity: Double {
@@ -206,13 +213,13 @@ struct PlaygroundEngineChip: View {
     private var statusColor: Color {
         switch status {
         case .available, .reachable:
-            return Color.speakDelivered
+            return Color.speakOK
 
         case .offline:
-            return Color(nsColor: .systemRed).opacity(0.8)
+            return Color.speakError
 
         case .unknown:
-            return Color.speakMica.opacity(0.6)
+            return Color.speakWarning
         }
     }
 }

@@ -71,11 +71,11 @@ struct AgentBridgeSettingsView: View {
                 ) {
                     HStack(spacing: SpeakSpacing.xs) {
                         Circle()
-                            .fill(heartbeatLive ? Color.speakDelivered : Color.secondary.opacity(0.4))
+                            .fill(heartbeatLive ? Color.speakAgentViolet : Color.speakOK)
                             .frame(width: 7, height: 7)
                         SettingsStatusPill(
                             text: heartbeatLive ? "Agent attached" : "Listening",
-                            tint: heartbeatLive ? .speakDelivered : .secondary.opacity(0.4)
+                            tint: heartbeatLive ? .speakAgentViolet : .speakOK
                         )
                     }
                 }
@@ -86,32 +86,32 @@ struct AgentBridgeSettingsView: View {
                     HStack {
                         Text("Install")
                             .font(.speakBody(.caption, semibold: true))
+                            .foregroundStyle(Color.speakBone)
                         Spacer()
                         copyButton("Copy Command", text: installCommand, name: "Install command")
                     }
                     Text(installCommand)
                         .font(.speakMonoFace(.caption))
+                        .textSelection(.enabled)
                         .padding(SpeakSpacing.sm)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.speakWindowCanvas)
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.speakCardBorder, lineWidth: 1))
-                        .cornerRadius(6)
+                        .speakInset(cornerRadius: 6)
                 }
 
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     HStack {
                         Text("Client config (Claude / Cursor / Codex)")
                             .font(.speakBody(.caption, semibold: true))
+                            .foregroundStyle(Color.speakBone)
                         Spacer()
                         copyButton("Copy JSON", text: jsonSnippet, name: "JSON config")
                     }
                     Text(jsonSnippet)
                         .font(.speakMonoFace(.caption))
+                        .textSelection(.enabled)
                         .padding(SpeakSpacing.sm)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.speakWindowCanvas)
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.speakCardBorder, lineWidth: 1))
-                        .cornerRadius(6)
+                        .speakInset(cornerRadius: 6)
                 }
 
                 if let copiedItemName {
@@ -147,6 +147,7 @@ struct AgentBridgeSettingsView: View {
                     }
                 }
                 .pickerStyle(.menu)
+                .foregroundStyle(Color.speakBone)
                 .fixedSize()
             }
 
@@ -182,7 +183,7 @@ struct AgentBridgeSettingsView: View {
                 ) {
                     Text("\(sessions.filter { $0.state == .active }.count)")
                         .font(.speakBody(.base))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                 }
 
                 ForEach(sessions, id: \.sessionId) { session in
@@ -193,7 +194,7 @@ struct AgentBridgeSettingsView: View {
                     ) {
                         SettingsStatusPill(
                             text: session.state == .active ? "Active" : "Stale",
-                            tint: session.state == .active ? .speakDelivered : .orange
+                            tint: session.state == .active ? .speakAgentViolet : .speakWarning
                         )
                     }
                 }

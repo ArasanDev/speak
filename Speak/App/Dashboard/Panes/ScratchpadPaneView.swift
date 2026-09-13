@@ -31,7 +31,7 @@ struct ScratchpadPaneView: View {
                     if text.isEmpty {
                         Text("Start typing…")
                             .font(.speakBody(.base))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color.speakMica)
                             .padding(SpeakSpacing.md)
                             .allowsHitTesting(false)
                     }
@@ -46,7 +46,7 @@ struct ScratchpadPaneView: View {
         HStack(spacing: SpeakSpacing.md) {
             Text("\(wordCount) words")
                 .font(.speakBody(.caption))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
             Spacer()
             Button("Copy") {
                 let pasteboard = NSPasteboard.general

@@ -12,11 +12,12 @@
 //   - speed: BorderFlowSpeed (.slow = 6s, .medium = 3s, .fast = 1.5s per loop)
 //   - count: Int (1, 2, or 3 simultaneous blobs, evenly spaced around perimeter)
 //
-// STATE-AWARE COLOR PALETTES:
-//   .listening  → violet–indigo–cyan–teal (aurora palette).
-//   .processing → amber–orange–gold (warm "thinking" palette).
-//   .done       → green–mint (celebration).
-//   .error      → red–crimson (urgent).
+// STATE-AWARE COLOR PALETTES — converged on the themed `speakFlow*` spectra
+// (SpeakColors.swift), so the chaser repaints with the active theme:
+//   .listening  → speakFlowOnAir (recording tally).
+//   .processing → speakFlowProcessing (warm "thinking" amber spectrum).
+//   .done       → speakFlowSuccess (delivered celebration).
+//   .error      → speakFlowError (urgent).
 //
 // REDUCE MOTION:
 //   Suppresses rotation animation; shows static light segments at fixed positions.
@@ -140,7 +141,7 @@ struct EdgeFlowBorder<S: InsettableShape & Shape>: View {
     /// Dynamically pick color along the state palette based on phase position around perimeter.
     private func blobColor(phase: Double) -> Color {
         let colors = palette
-        guard !colors.isEmpty else { return .accentColor }
+        guard !colors.isEmpty else { return .speakUIAccent }
         let scaled = phase * Double(colors.count)
         let index = Int(scaled) % colors.count
         let nextIndex = (index + 1) % colors.count
@@ -179,29 +180,10 @@ struct EdgeFlowBorder<S: InsettableShape & Shape>: View {
             return customPalette
         }
         switch state {
-        case .listening:
-            return [
-                Color(hue: 0.760, saturation: 0.85, brightness: 1.00),  // violet
-                Color(hue: 0.650, saturation: 0.90, brightness: 1.00),  // indigo
-                Color(hue: 0.540, saturation: 0.85, brightness: 0.95),  // cyan
-                Color(hue: 0.480, saturation: 0.78, brightness: 0.90),  // teal
-            ]
-        case .processing:
-            return [
-                Color(hue: 0.085, saturation: 0.90, brightness: 1.00),  // amber
-                Color(hue: 0.110, saturation: 0.85, brightness: 1.00),  // orange-gold
-                Color(hue: 0.065, saturation: 0.95, brightness: 0.95),  // deep amber
-            ]
-        case .done:
-            return [
-                Color(hue: 0.360, saturation: 0.80, brightness: 0.95),  // green
-                Color(hue: 0.410, saturation: 0.70, brightness: 0.90),  // mint
-            ]
-        case .error:
-            return [
-                Color(hue: 0.000, saturation: 0.92, brightness: 1.00),  // red
-                Color(hue: 0.975, saturation: 0.88, brightness: 0.95),  // crimson
-            ]
+        case .listening:  return Color.speakFlowOnAir
+        case .processing: return Color.speakFlowProcessing
+        case .done:       return Color.speakFlowSuccess
+        case .error:      return Color.speakFlowError
         }
     }
 

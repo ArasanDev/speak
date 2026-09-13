@@ -116,13 +116,13 @@ struct CleanupEngineSheet: View {
             HStack(alignment: .top, spacing: SpeakSpacing.md) {
                 Image(systemName: "key")
                     .font(.system(size: 32))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     Text("\(viewModel.preset.displayName) API Key")
                         .font(.speakDisplay(.title))
                     Text("Stored in Keychain \u{2014} never sent anywhere except \(viewModel.preset.displayName).")
                         .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                 }
             }
             .padding(.bottom, SpeakSpacing.sm)
@@ -139,7 +139,7 @@ struct CleanupEngineSheet: View {
             if let errorMessage = viewModel.errorMessage {
                 Text(errorMessage)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.speakError)
             }
 
             Spacer()
@@ -174,7 +174,7 @@ struct CleanupEngineSheet: View {
             Text(viewModel.hasStoredKey ? "A key is currently set for \(viewModel.preset.displayName)." :
                  "No key set \u{2014} cleanup falls back to raw transcript until one is entered.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
         }
     }
 }

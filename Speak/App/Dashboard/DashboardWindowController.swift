@@ -125,7 +125,10 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
             initialSection: section,
             initialSettingsCategory: initialSettingsCategory
         )
-        let hosting = NSHostingView(rootView: contentView)
+        // ThemedRoot injects the active color theme so a theme switch repaints
+        // this window live (environment change → every Color.speak* static
+        // re-resolves through SpeakThemeRuntime).
+        let hosting = NSHostingView(rootView: contentView.speakThemed(with: context.themeEngine))
 
         let win = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 920, height: 640),

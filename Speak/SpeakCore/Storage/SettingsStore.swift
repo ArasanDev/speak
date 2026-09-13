@@ -188,6 +188,8 @@ public final class SettingsStore: @unchecked Sendable {
         static let acousticCorrections       = "speak.settings.acousticCorrections"
         static let dictationFeedbackSounds   = "speak.settings.dictationFeedbackSounds"
         static let dictationFeedbackHaptics  = "speak.settings.dictationFeedbackHaptics"
+        static let themeID                   = "speak.settings.themeID"
+        static let customThemesJSON          = "speak.settings.customThemes"
     }
 
     // MARK: - Injected defaults (the testability seam)
@@ -218,6 +220,7 @@ public final class SettingsStore: @unchecked Sendable {
             Keys.streamingRawTextEnabled: true,
             Keys.streamingMode: StreamingMode.keystrokeInjection.rawValue,
             Keys.appTheme: AppTheme.system.rawValue,
+            Keys.themeID: "speak",
             Keys.perAppContextEnabled: true,
             Keys.hudStyle: HUDStyle.classic.rawValue,
             Keys.borderAnimationStyle: BorderAnimationStyle.none.rawValue,
@@ -804,6 +807,37 @@ extension SettingsStore {
         set {
             withMutation(keyPath: \.appTheme) {
                 defaults.set(newValue.rawValue, forKey: Keys.appTheme)
+            }
+        }
+    }
+
+    // MARK: - Color theme (runtime palette, App/Theme/SpeakThemeSystem.swift)
+
+    /// The selected color-theme id ("speak", "ember", or "custom-<uuid>").
+    /// Default: `"speak"` — the FE-1 palette. Raw string; the App layer's
+    /// `ThemeEngine` owns resolution.
+    public var themeID: String {
+        get {
+            access(keyPath: \.themeID)
+            return defaults.string(forKey: Keys.themeID) ?? "speak"
+        }
+        set {
+            withMutation(keyPath: \.themeID) {
+                defaults.set(newValue, forKey: Keys.themeID)
+            }
+        }
+    }
+
+    /// JSON-encoded `[SpeakTheme]` of user-created themes. Raw storage only —
+    /// the App layer owns the schema (decode leniently; corrupt → empty).
+    public var customThemesJSON: String {
+        get {
+            access(keyPath: \.customThemesJSON)
+            return defaults.string(forKey: Keys.customThemesJSON) ?? "[]"
+        }
+        set {
+            withMutation(keyPath: \.customThemesJSON) {
+                defaults.set(newValue, forKey: Keys.customThemesJSON)
             }
         }
     }

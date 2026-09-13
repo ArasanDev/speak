@@ -87,7 +87,7 @@ struct AboutView: View {
                     // Icon
                     Image(systemName: "waveform")
                         .font(.system(size: 48))
-                        .foregroundStyle(Color.speakAccent)
+                        .foregroundStyle(Color.speakUIAccent)
 
                     // Headline: "speak v0.0.1"
                     HStack(spacing: SpeakSpacing.xs) {
@@ -95,13 +95,13 @@ struct AboutView: View {
                             .font(.speakDisplay(.display))
                         Text("v\(appVersion)")
                             .font(.speakMonoFace(.caption))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.speakMica)
                     }
 
                     // Tagline
                     Text("Speech → text → clean writing, 100% on your device")
                         .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                         .lineLimit(3)
                 }
                 .frame(maxWidth: .infinity)
@@ -133,7 +133,7 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                     Text("Quick Links")
                         .font(.speakBody(.base))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.speakBone)
                         .padding(.bottom, SpeakSpacing.xs)
 
                     // GitHub repo
@@ -141,14 +141,14 @@ struct AboutView: View {
                         Link(destination: url) {
                             HStack {
                                 Image(systemName: "link")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.speakMica)
                                 Text("View on GitHub")
                                     .font(.speakBody(.caption))
-                                    .foregroundStyle(Color.speakAccent)
+                                    .foregroundStyle(Color.speakUIAccent)
                                 Spacer()
                                 Image(systemName: "arrow.up.right")
                                     .font(.system(size: 10))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.speakMica)
                             }
                             .padding(.vertical, SpeakSpacing.sm)
                         }
@@ -159,14 +159,14 @@ struct AboutView: View {
                         Link(destination: url) {
                             HStack {
                                 Image(systemName: "exclamationmark.circle")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.speakMica)
                                 Text("Report an issue")
                                     .font(.speakBody(.caption))
-                                    .foregroundStyle(Color.speakAccent)
+                                    .foregroundStyle(Color.speakUIAccent)
                                 Spacer()
                                 Image(systemName: "arrow.up.right")
                                     .font(.system(size: 10))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.speakMica)
                             }
                             .padding(.vertical, SpeakSpacing.sm)
                         }
@@ -177,14 +177,14 @@ struct AboutView: View {
                         Link(destination: url) {
                             HStack {
                                 Image(systemName: "person.badge.plus")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.speakMica)
                                 Text("Learn how to contribute")
                                     .font(.speakBody(.caption))
-                                    .foregroundStyle(Color.speakAccent)
+                                    .foregroundStyle(Color.speakUIAccent)
                                 Spacer()
                                 Image(systemName: "arrow.up.right")
                                     .font(.system(size: 10))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.speakMica)
                             }
                             .padding(.vertical, SpeakSpacing.sm)
                         }
@@ -195,14 +195,14 @@ struct AboutView: View {
                         Link(destination: url) {
                             HStack {
                                 Image(systemName: "list.bullet.clipboard")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.speakMica)
                                 Text("What's new")
                                     .font(.speakBody(.caption))
-                                    .foregroundStyle(Color.speakAccent)
+                                    .foregroundStyle(Color.speakUIAccent)
                                 Spacer()
                                 Image(systemName: "arrow.up.right")
                                     .font(.system(size: 10))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.speakMica)
                             }
                             .padding(.vertical, SpeakSpacing.sm)
                         }
@@ -219,7 +219,7 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: SpeakSpacing.md) {
                     Text("Credits")
                         .font(.speakBody(.base))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.speakBone)
 
                     VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                         CreditRow(
@@ -267,12 +267,12 @@ private struct SystemInfoRow: View {
         HStack {
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
                 .frame(width: 80, alignment: .leading)
             Spacer()
             Text(value)
                 .font(.speakMonoFace(.caption))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.speakBone)
                 .lineLimit(1)
         }
     }
@@ -290,16 +290,16 @@ private struct CreditRow: View {
         HStack(alignment: .top, spacing: SpeakSpacing.md) {
             Image(systemName: icon)
                 .font(.system(size: 16))
-                .foregroundStyle(Color.speakAccent)
+                .foregroundStyle(Color.speakUIAccent)
                 .frame(width: 24, alignment: .center)
 
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Text(title)
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.speakBone)
                 Text(detail)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
             }
         }
     }

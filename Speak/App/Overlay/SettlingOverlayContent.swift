@@ -189,7 +189,7 @@ struct PolishedDiffContent: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: SpeakSpacing.sm) {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.speakDelivered)
                     .font(.system(size: 15))
                 Text("Polished")
                     .font(.speakBody(.base))

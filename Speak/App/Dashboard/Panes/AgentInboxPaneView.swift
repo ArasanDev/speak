@@ -24,7 +24,11 @@ struct AgentInboxPaneView: View {
             if let errorMessage {
                 Text(errorMessage)
                     .font(.speakBody(.caption))
-                    .foregroundColor(.speakOnAir)
+                    .foregroundColor(.speakError)
+                    .padding(.vertical, SpeakSpacing.sm)
+                    .padding(.horizontal, SpeakSpacing.md)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .speakCard(cornerRadius: 8)
                     .padding(.top, SpeakSpacing.sm)
                     .padding(.horizontal)
             }
@@ -147,7 +151,7 @@ private struct AgentCallRow: View {
                     Task { await onDecline() }
                 }
                 .buttonStyle(.bordered)
-                .tint(.speakOnAir)
+                .tint(.speakError)
                 .disabled(isBusy)
 
                 Button("Dismiss") {
@@ -163,12 +167,7 @@ private struct AgentCallRow: View {
             }
         }
         .padding(10)
-        .background(Color.speakInk2)
-        .cornerRadius(8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.speakCardBorder, lineWidth: 1)
-        )
+        .speakCard(cornerRadius: 8)
         .padding(.vertical, 4)
     }
 
@@ -177,8 +176,8 @@ private struct AgentCallRow: View {
             .font(.speakBody(.caption))
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
-            .background(call.urgency == .high ? Color.speakOnAir.opacity(0.2) : Color.speakAgentViolet.opacity(0.15))
-            .foregroundColor(call.urgency == .high ? .speakOnAir : .speakAgentViolet)
+            .background(Color.speakError.opacity(0.2))
+            .foregroundColor(.speakError)
             .clipShape(Capsule())
     }
 }

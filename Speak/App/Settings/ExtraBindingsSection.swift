@@ -44,17 +44,18 @@ struct ExtraBindingsSection: View {
             let bindings = controller.activeExtraBindings.bindings
             if bindings.isEmpty {
                 Text("No additional shortcuts configured.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakMica)
             } else {
                 ForEach(bindings) { binding in
                     HStack {
                         Text(binding.source.displayString)
                             .font(.speakBody(.base))
+                            .foregroundStyle(Color.speakBone)
                         Spacer()
                         Text(binding.action.displayString)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.speakBody(.caption))
+                            .foregroundStyle(Color.speakMica)
                         Button(role: .destructive) {
                             remove(binding)
                         } label: {
@@ -72,6 +73,7 @@ struct ExtraBindingsSection: View {
                 Text("Mouse Button").tag(true)
             }
             .pickerStyle(.segmented)
+            .foregroundStyle(Color.speakBone)
 
             if newSourceIsMouse {
                 Picker("Mouse Button", selection: $newMouseButton) {
@@ -79,12 +81,14 @@ struct ExtraBindingsSection: View {
                         Text("Button \(number)").tag(number)
                     }
                 }
+                .foregroundStyle(Color.speakBone)
             } else {
                 Picker("Key", selection: $newModifierKeyCode) {
                     ForEach(Self.modifierKeyOptions, id: \.keyCode) { option in
                         Text(option.label).tag(option.keyCode)
                     }
                 }
+                .foregroundStyle(Color.speakBone)
             }
 
             Picker("Action", selection: $newAction) {
@@ -92,6 +96,7 @@ struct ExtraBindingsSection: View {
                     Text(action.displayString).tag(action)
                 }
             }
+            .foregroundStyle(Color.speakBone)
 
             Button("Add Shortcut") {
                 addBinding()
@@ -99,18 +104,19 @@ struct ExtraBindingsSection: View {
 
             if let addErrorMessage {
                 Text(addErrorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakError)
             }
         } header: {
             Text("Additional Shortcuts")
+                .foregroundStyle(Color.speakBone)
         } footer: {
             Text(
                 "Up to \(ExtraBindingSet.maxPerAction) shortcuts per action. These fire immediately on press — "
                 + "no double-tap. A bound mouse button still performs its normal system action alongside dictation."
             )
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.speakBody(.caption))
+                .foregroundStyle(Color.speakMica)
         }
     }
 

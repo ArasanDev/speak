@@ -51,7 +51,7 @@ struct ConnectToolsCard: View {
             systemImage: "cable.connector",
             title: "Connect Your Tools",
             subtitle: "Point any OpenAI- or Anthropic-compatible client at speak",
-            tint: .speakDelivered,
+            tint: .speakUIAccent,
             accessory: { disclosureButton },
             content: { body(for: viewModel.showToolsCard) }
         )
@@ -70,7 +70,7 @@ struct ConnectToolsCard: View {
         } else {
             Text(InferenceSnippet.all.map(\.label).joined(separator: " · "))
                 .font(.speakBody(.caption))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.speakMica)
         }
     }
 
@@ -97,7 +97,7 @@ struct ConnectToolsCard: View {
         InferenceButton(
             title: viewModel.showToolsCard ? "Hide" : "Show snippets",
             systemImage: viewModel.showToolsCard ? "chevron.up" : "chevron.down",
-            tint: .speakDelivered,
+            tint: .speakUIAccent,
             emphasis: .quiet
         ) {
             withAnimation(SpeakMotion.state(reduceMotion: reduceMotion)) {
@@ -199,17 +199,17 @@ struct InferenceChip: View {
             }
             .padding(.horizontal, SpeakSpacing.sm + 2)
             .padding(.vertical, 5)
-            .foregroundStyle(isSelected ? Color.speakDelivered : Color.secondary)
+            .foregroundStyle(isSelected ? Color.speakUIAccent : Color.speakMica)
             .background(
                 Capsule().fill(
                     isSelected
-                        ? Color.speakDelivered.opacity(0.16)
+                        ? Color.speakUIAccent.opacity(0.16)
                         : Color.primary.opacity(isHovering ? 0.06 : 0.02)
                 )
             )
             .overlay(
                 Capsule().strokeBorder(
-                    isSelected ? Color.speakDelivered.opacity(0.35) : Color.speakCardBorder,
+                    isSelected ? Color.speakUIAccent.opacity(0.35) : Color.speakCardBorder,
                     lineWidth: InferenceMetrics.hairline
                 )
             )
@@ -234,7 +234,7 @@ struct InferenceCodeBlock: View {
             HStack(spacing: SpeakSpacing.sm) {
                 Text(hint)
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                 Spacer(minLength: 0)
                 InferenceCopyButton(text: code, label: "Copy")
             }
@@ -242,7 +242,10 @@ struct InferenceCodeBlock: View {
             .padding(.vertical, SpeakSpacing.xs + 2)
             .background(Color.primary.opacity(0.03))
 
-            Divider().opacity(0.4)
+            Rectangle()
+                .fill(Color.speakCardBorder)
+                .frame(height: InferenceMetrics.hairline)
+                .opacity(0.4)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
@@ -251,14 +254,6 @@ struct InferenceCodeBlock: View {
                     .padding(SpeakSpacing.sm + 2)
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: InferenceMetrics.codeRadius, style: .continuous)
-                .fill(Color.primary.opacity(0.04))
-        )
-        .clipShape(RoundedRectangle(cornerRadius: InferenceMetrics.codeRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: InferenceMetrics.codeRadius, style: .continuous)
-                .strokeBorder(Color.speakCardBorder, lineWidth: InferenceMetrics.hairline)
-        )
+        .speakInset(cornerRadius: InferenceMetrics.codeRadius)
     }
 }

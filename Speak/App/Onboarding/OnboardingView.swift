@@ -96,7 +96,7 @@ struct OnboardingView: View {
                 viewModel.skip()
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.speakMica)
             .font(.caption)
             Spacer()
             progressDots
@@ -117,7 +117,7 @@ struct OnboardingView: View {
         return HStack(spacing: 6) {
             ForEach(0..<allSteps.count, id: \.self) { idx in
                 Circle()
-                    .fill(idx == currentIndex ? Color.accentColor : Color.secondary.opacity(0.3))
+                    .fill(idx == currentIndex ? Color.speakUIAccent : Color.speakMica.opacity(0.3))
                     .frame(width: 7, height: 7)
             }
         }
@@ -141,7 +141,7 @@ private struct WelcomeStepView: View {
                     .font(.title.bold())
                 Text("speak turns your voice into polished text, entirely on your Mac. Nothing leaves your device.")
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 340)
             }
@@ -195,7 +195,7 @@ private struct PermissionStepView: View {
                     .font(.title2.bold())
                 Text(description)
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 360)
             }
@@ -209,7 +209,7 @@ private struct PermissionStepView: View {
                         ProgressView()
                             .controlSize(.small)
                         Text("Requesting access\u{2026}")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.speakMica)
                     }
                 } else {
                     VStack(spacing: 10) {
@@ -229,14 +229,14 @@ private struct PermissionStepView: View {
                                 onOpenSettings()
                             }
                             .buttonStyle(.plain)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.speakMica)
                             .font(.caption)
                         } else {
                             Button(isWaiting ? "Re-check Accessibility / Open Settings →" : "Open System Settings") {
                                 onOpenSettings()
                             }
                             .buttonStyle(.plain)
-                            .foregroundStyle(isWaiting ? Color.blue : Color.secondary)
+                            .foregroundStyle(isWaiting ? Color.speakUIAccent : Color.speakMica)
                             .font(isWaiting ? .caption.bold() : .caption)
                         }
                     }
@@ -246,9 +246,9 @@ private struct PermissionStepView: View {
                 // Success state: green checkmark + Continue
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Color.speakOK)
                     Text("Permission granted")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                 }
                 Button("Continue") {
                     onContinue()
@@ -304,11 +304,11 @@ private struct PermissionStepView: View {
     }
 
     private var iconBackground: Color {
-        status == .granted ? Color.green.opacity(0.15) : Color.accentColor.opacity(0.12)
+        status == .granted ? Color.speakOK.opacity(0.15) : Color.speakUIAccent.opacity(0.12)
     }
 
     private var iconForeground: Color {
-        status == .granted ? .green : .accentColor
+        status == .granted ? Color.speakOK : Color.speakUIAccent
     }
 }
 
@@ -339,7 +339,7 @@ private struct HotkeyStepView: View {
                 // swiftlint:disable:next line_length
                 Text("Trigger the hotkey to start dictating; trigger it again to stop. speak listens while you work in any app.")
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 360)
 
@@ -375,14 +375,14 @@ private struct HotkeyConflictNoteView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "info.circle")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
                 .font(.body)
                 .padding(.top, 1)
 
             // swiftlint:disable:next line_length
             Text("speak uses double-tap Right-Command so it won't clash with macOS dictation. If you switch to Fn in Settings, disable **System Settings \u{2192} Keyboard \u{2192} Dictation** shortcut first.")
                 .font(.speakBody(.caption))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -390,7 +390,7 @@ private struct HotkeyConflictNoteView: View {
         .padding(.vertical, SpeakSpacing.sm)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
+                .fill(Color.speakSurface)
         )
         .frame(maxWidth: 360)
     }
@@ -414,22 +414,22 @@ private struct HotkeyTryPillView: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: triggered ? "checkmark.circle.fill" : "hand.tap")
-                .foregroundStyle(triggered ? .green : .secondary)
+                .foregroundStyle(triggered ? Color.speakOK : Color.speakMica)
                 .font(.body)
             Text(triggered ? "Nice \u{2014} that worked." : "Try it now \u{2014} \(hotkeyLabel)")
                 .font(.speakBody(.caption))
-                .foregroundStyle(triggered ? .primary : .secondary)
+                .foregroundStyle(triggered ? Color.speakBone : Color.speakMica)
         }
         .padding(.horizontal, SpeakSpacing.md)
         .padding(.vertical, SpeakSpacing.sm)
         .background(
             Capsule()
-                .fill(triggered ? Color.green.opacity(0.12) : Color.secondary.opacity(0.1))
+                .fill(triggered ? Color.speakOK.opacity(0.12) : Color.speakMica.opacity(0.1))
         )
         .overlay(
             Capsule()
                 .strokeBorder(
-                    triggered ? Color.green.opacity(0.4) : Color.secondary.opacity(0.2),
+                    triggered ? Color.speakOK.opacity(0.4) : Color.speakMica.opacity(0.2),
                     lineWidth: 1
                 )
         )
@@ -447,7 +447,7 @@ private struct DoneStepView: View {
         VStack(spacing: 24) {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(.green)
+                .foregroundStyle(Color.speakOK)
                 .padding(.top, 40)
 
             VStack(spacing: 8) {
@@ -456,13 +456,13 @@ private struct DoneStepView: View {
                 // `hotkeyLabel` encodes the full gesture — shown directly, no prefix.
                 Text("Use \(hotkeyLabel) to start dictating. speak will paste polished text wherever your cursor is.")
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 340)
             }
             Text("This window will close in a moment.")
                 .font(.speakBody(.caption))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.speakMica)
         }
         .padding(.horizontal, 40)
     }

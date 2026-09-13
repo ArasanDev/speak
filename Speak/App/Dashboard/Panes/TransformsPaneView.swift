@@ -30,14 +30,14 @@ struct TransformsPaneView: View {
         HStack(alignment: .top, spacing: SpeakSpacing.md) {
             Image(systemName: transform.systemImage)
                 .font(.system(size: 18))
-                .foregroundStyle(Color.speakAccent)
+                .foregroundStyle(Color.speakUIAccent)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Text(transform.name)
                     .font(.speakBody(.base))
                 Text(transform.blurb)
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
             }
             Spacer(minLength: 0)
         }

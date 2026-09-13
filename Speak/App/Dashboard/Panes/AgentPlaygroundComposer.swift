@@ -112,7 +112,7 @@ struct PlaygroundComposer: View {
         if viewModel.isStreaming {
             PlaygroundCircleButton(
                 symbol: "stop.fill",
-                tint: Color(nsColor: .systemRed),
+                tint: Color.speakError,
                 isEnabled: true,
                 help: "Stop generating",
                 action: { viewModel.cancelStream() }
@@ -254,9 +254,9 @@ struct PlaygroundContextMeter: View {
     }
 
     private var barColor: Color {
-        if progress > 0.85 { return Color(nsColor: .systemRed).opacity(0.8) }
-        if progress > 0.6 { return Color.speakHumanAmber.opacity(0.8) }
-        return Color.speakAgentViolet.opacity(0.7)
+        if progress > 0.85 { return Color.speakError.opacity(0.8) }
+        if progress > 0.6 { return Color.speakWarning.opacity(0.8) }
+        return Color.speakOK.opacity(0.7)
     }
 }
 
@@ -272,7 +272,7 @@ struct PlaygroundErrorStrip: View {
         HStack(alignment: .top, spacing: SpeakSpacing.sm) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 11))
-                .foregroundStyle(Color(nsColor: .systemRed))
+                .foregroundStyle(Color.speakError)
 
             Text(message)
                 .font(.speakBody(.caption))
@@ -295,7 +295,7 @@ struct PlaygroundErrorStrip: View {
         .padding(.vertical, SpeakSpacing.sm)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(nsColor: .systemRed).opacity(0.09))
+                .fill(Color.speakError.opacity(0.09))
         )
     }
 }
@@ -325,14 +325,7 @@ struct PlaygroundPersonaEditor: View {
                 .frame(width: 340, height: 120)
                 .scrollContentBackground(.hidden)
                 .padding(SpeakSpacing.sm)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.speakSidebarSelection.opacity(0.5))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.speakCardBorder, lineWidth: 1)
-                )
+                .speakInset(cornerRadius: 8)
 
             HStack(spacing: SpeakSpacing.sm) {
                 Button("Clear") { viewModel.systemPrompt = "" }

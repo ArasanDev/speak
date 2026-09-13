@@ -316,6 +316,11 @@ final class DictationController: CLICommandHandler {
 
     private(set) var settingsStore: SettingsStore
 
+    /// Runtime color-theme owner (Settings → Appearance → Color Theme). Paints
+    /// `SpeakThemeRuntime` and republishes `activeTheme` so every `ThemedRoot`
+    /// repaints. See App/Theme/ThemeEngine.swift.
+    let themeEngine: ThemeEngine
+
     /// The current active hotkey binding. Observed reactively so the Shortcuts settings tab
     /// refreshes its "Current Hotkey" label without a relaunch.
     /// Updated atomically by `rebindHotkey(_:)` alongside `monitor.updateBinding`.
@@ -415,6 +420,9 @@ final class DictationController: CLICommandHandler {
         self.agentSpeechQueue = AgentSpeechQueue(synthesizer: speechSynthesizer)
         let store = SettingsStore()
         self.settingsStore = store
+        // ThemeEngine paints SpeakThemeRuntime at init, so the palette is live
+        // before any window/overlay renders.
+        self.themeEngine = ThemeEngine(settingsStore: store)
         self.overlayController = OverlayController(settingsStore: store)
         // Felt-speed filmstrip: reuse the engine's cleaner for live per-block AI polish.
         // `defaultCleaner(for:)` is the same stateless factory the engine uses, so
@@ -636,7 +644,8 @@ final class DictationController: CLICommandHandler {
             snippetStore: snippetStore,
             hotkeyComboProvider: { [weak self] in self?.currentHotkeyCombo() ?? ["Fn"] },
             hotkeyFiredPublisher: hotkeyFiredPublisher,
-            dictationController: self
+            dictationController: self,
+            themeEngine: themeEngine
         )
         windowPresenter = presenter
         return presenter

@@ -101,7 +101,7 @@ struct PrivacyHealthSettingsView: View {
         let granted = state == .granted
         return SettingsStatusPill(
             text: granted ? "Granted" : "Missing",
-            tint: granted ? .speakDelivered : .orange
+            tint: granted ? .speakDelivered : .speakWarning
         )
     }
 
@@ -154,12 +154,13 @@ struct PrivacyHealthSettingsView: View {
                             Text("Run Moat Verification")
                         }
                         .font(.speakBody(.base, semibold: true))
+                        .foregroundStyle(Color.speakOnAccent)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, SpeakSpacing.sm)
                     }
                 )
                 .buttonStyle(.borderedProminent)
-                .tint(.speakDelivered)
+                .tint(.speakUIAccent)
 
                 if let lastAuditAt, !moatResults.isEmpty {
                     let passed = moatResults.filter { $0.status == .pass }.count
@@ -167,10 +168,10 @@ struct PrivacyHealthSettingsView: View {
                         Image(systemName: passed == moatResults.count
                               ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                             .foregroundStyle(passed == moatResults.count
-                                             ? Color.speakDelivered : .orange)
+                                             ? Color.speakDelivered : Color.speakWarning)
                         Text("\(passed)/\(moatResults.count) guarantees verified · \(lastAuditAt.formatted(date: .omitted, time: .standard))")
                             .font(.speakBody(.caption))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.speakMica)
                         Spacer()
                         Button("Details") { showMoatResults = true }
                             .font(.speakBody(.caption))

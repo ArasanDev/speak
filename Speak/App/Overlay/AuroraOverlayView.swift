@@ -370,27 +370,23 @@ private struct AmbientOrbView: View {
     private func gradientColors(for phase: Phase, time: Double) -> [Color] {
         switch phase {
         case .listening:
-            // Aurora palette: violet core → teal edge. [decision H-UI]
+            // Aurora palette: teal → agent violet. Cyan stop is fixed; violet stop
+            // is themed so the orb follows the agent channel. [decision H-UI]
             return [
                 Color(hue: 0.58, saturation: 0.75, brightness: 0.95),
-                Color(hue: 0.78, saturation: 0.65, brightness: 0.85)
+                Color.speakAgentViolet
             ]
 
         case .processing:
-            // Slow hue drift signals "thinking" — suppressed to a fixed amber
-            // hue under Reduce Motion (still distinct from listening/done/error).
-            let hue = reduceMotion ? 0.12 : cyclicPhase(time: time, cycleDuration: Self.hueCycle)
-            let edgeHue = (hue + 0.15).truncatingRemainder(dividingBy: 1.0)
-            return [
-                Color(hue: hue, saturation: 0.7, brightness: 0.95),
-                Color(hue: edgeHue, saturation: 0.6, brightness: 0.8)
-            ]
+            // Processing / cleanup-in-flight — anchored on the warm amber flow spectrum.
+            let _ = time
+            return Color.speakFlowProcessing
 
         case .done:
-            return [Color.green.opacity(0.95), Color.green.opacity(0.6)]
+            return [Color.speakDelivered.opacity(0.95), Color.speakDelivered.opacity(0.6)]
 
         case .error:
-            return [Color.red.opacity(0.95), Color.red.opacity(0.6)]
+            return [Color.speakError.opacity(0.95), Color.speakError.opacity(0.6)]
         }
     }
 }

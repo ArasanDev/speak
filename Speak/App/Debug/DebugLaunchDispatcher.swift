@@ -254,6 +254,13 @@ final class DebugLaunchDispatcher {
         let snippets = SnippetStore(defaults: defaults)
         snippets.add(trigger: "omw", expansion: "on my way")
         snippets.add(trigger: "sig", expansion: "Best,\nTamil")
+        // `--debug-theme <id>` seeds the active color theme so themed
+        // screenshots are verifiable headlessly (the suite is wiped above, so
+        // this must run AFTER removePersistentDomain).
+        if let themeIdx = CommandLine.arguments.firstIndex(of: "--debug-theme"),
+           CommandLine.arguments.indices.contains(themeIdx + 1) {
+            settings.themeID = CommandLine.arguments[themeIdx + 1]
+        }
 
         let (section, settingsCategory) = Self.parseDashboardSection()
         let context = DashboardContext(
@@ -263,7 +270,10 @@ final class DebugLaunchDispatcher {
             snippetStore: snippets,
             // A real synthesizer so Settings ▸ Text to Speech previews and the
             // Pipeline "Read it aloud" affordance actually speak in debug runs.
-            voiceOut: AppleSpeechSynthesizer()
+            voiceOut: AppleSpeechSynthesizer(),
+            // Bound to the SAME seeded defaults suite so debug theme edits
+            // never touch the user's real settings.
+            themeEngine: ThemeEngine(settingsStore: settings)
         )
         let vc = DashboardWindowController(
             context: context,

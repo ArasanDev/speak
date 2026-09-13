@@ -75,7 +75,7 @@ struct OverlayKnobsRow: View {
                 .padding(.vertical, 3)
                 .background(
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(isActive ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.06))
+                        .fill(isActive ? Color.speakUIAccent.opacity(0.30) : Color.speakSurface)
                 )
                 .foregroundStyle(isActive ? Color.primary : Color.secondary)
         }

@@ -97,7 +97,7 @@ struct WaveformView: View {
     }
 
     private var barColor: Color {
-        isActive ? Color.primary.opacity(0.7) : Color.primary.opacity(0.35)
+        isActive ? Color.speakHumanAmber : Color.speakMica.opacity(0.35)
     }
 
     private var barHeights: [Double] {

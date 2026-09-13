@@ -6,7 +6,7 @@
 // meters. The caller feeds a perceptual, smoothed level
 // (`levelPerceptual` + `levelSmoothedAsymmetric`); this view is pure display.
 //
-// Tokens: lit segments use speakDelivered/speakAccent/systemRed; unlit use a
+// Tokens: lit segments use speakOK/speakAccent/speakStateError; unlit use a
 // hairline fill — no glow, no gradient, no pulse. [decision: restrained chrome]
 
 import SpeakCore
@@ -25,7 +25,7 @@ struct VUMeterView: View {
         HStack(spacing: 2) {
             ForEach(0 ..< segmentCount, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(index < lit ? segmentColor(at: index) : Color.primary.opacity(0.10))
+                    .fill(index < lit ? segmentColor(at: index) : Color.speakSurface)
                     .frame(width: 3, height: 14)
             }
         }
@@ -36,12 +36,12 @@ struct VUMeterView: View {
         .animation(.spring(duration: 0.15), value: lit)
     }
 
-    /// Threshold coloring: green body, amber shoulder, red peak — the standard
+    /// Threshold coloring: OK body, amber shoulder, red peak — the standard
     /// pro-audio VU ramp, expressed with existing SpeakTheme tokens.
     private func segmentColor(at index: Int) -> Color {
         let t = Double(index) / Double(max(segmentCount - 1, 1))
         if t >= 0.9 { return .speakStateError }
         if t >= 0.7 { return .speakAccent }
-        return .speakDelivered
+        return .speakOK
     }
 }

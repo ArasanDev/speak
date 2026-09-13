@@ -28,7 +28,7 @@ struct MoatResultsSheet: View {
                     label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 14))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.speakMica)
                     }
                 )
                 .buttonStyle(.plain)
@@ -42,6 +42,7 @@ struct MoatResultsSheet: View {
                     }
 
                     Divider()
+                        .overlay(Color.speakCardBorder.opacity(0.6))
                         .padding(.vertical, SpeakSpacing.sm)
 
                     Text(
@@ -50,9 +51,9 @@ struct MoatResultsSheet: View {
                             + "CI — they are not re-scanned by this button."
                     )
                     .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                     .padding(SpeakSpacing.md)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .controlBackgroundColor)))
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.speakSurface))
                 }
             }
 
@@ -64,8 +65,8 @@ struct MoatResultsSheet: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
                         .padding(.horizontal, 12)
-                        .background(Color(nsColor: .controlBackgroundColor))
-                        .foregroundStyle(.primary)
+                        .background(Color.speakSurface)
+                        .foregroundStyle(Color.speakBone)
                         .cornerRadius(6)
                 }
             )
@@ -75,6 +76,7 @@ struct MoatResultsSheet: View {
         }
         .padding(SpeakSpacing.lg)
         .frame(minWidth: 400, minHeight: 500)
+        .background(Color.speakWindowCanvas)
     }
 }
 
@@ -88,7 +90,7 @@ private struct MoatResultRow: View {
             HStack(spacing: SpeakSpacing.sm) {
                 Text(result.guarantee)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.speakBone)
                 Spacer(minLength: SpeakSpacing.sm)
                 Text(result.status == .pass ? "PASS" : "FAIL")
                     .font(.system(size: 12, weight: .semibold))
@@ -97,18 +99,18 @@ private struct MoatResultRow: View {
 
             Text(kindLabel(result.kind))
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: 4).fill(Color(nsColor: .separatorColor).opacity(0.3)))
+                .background(RoundedRectangle(cornerRadius: 4).fill(Color.speakMica.opacity(0.15)))
 
             Text(result.detail)
                 .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(SpeakSpacing.md)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .controlBackgroundColor)))
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.speakSurface))
     }
 
     private func kindLabel(_ kind: MoatVerificationKind) -> String {

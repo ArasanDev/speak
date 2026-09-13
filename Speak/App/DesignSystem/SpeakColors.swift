@@ -4,17 +4,13 @@
 // system rule everything obeys: **warm = human, cool = agent.** Every surface,
 // badge, waveform, and state color answers "who is acting?"
 //
-// This file adds a NEW token namespace (`Color.speak*`) alongside the existing
-// `SpeakTheme.swift` tokens (`Color.speak*` there are the Monaco-era dashboard
-// tokens). No existing surface is restyled by FE-1 (spec §6) — these tokens
-// exist for Voice Desktop Pet (FE-1) and are adopted by the HUD/dashboard in FE-2/FE-3.
-//
-// LIGHT/DARK: dark values are the spec §2 table verbatim. Light-mode values are
-// derivations per §2 ("bone surfaces, ink text, identical channel hues at
-// adjusted luminance") — [decision: FE-1, no separate light-mode table was
-// specified, so light derivations invert surface roles (ink↔bone) and keep
-// channel hues fixed while nudging brightness/saturation for legibility on a
-// light ground]. Respect system appearance; never force dark (spec §2).
+// RUNTIME THEMING [decision]: every token resolves through
+// `SpeakThemeRuntime.active` — the palette `ThemeEngine` paints when the user
+// picks or edits a theme (Settings → Appearance → Color Theme). Tokens are
+// `static var` (not `let`) so the same call sites repaint live when
+// `ThemedRoot` re-injects `\.speakTheme` into the environment. Token NAMES
+// stay stable across themes — only values change. Role semantics are
+// load-bearing (see SEMANTICS below): a theme may change hue, never meaning.
 //
 // SEMANTICS (load-bearing — future agents must preserve these):
 //   - `humanAmber`: the human channel. Live mic, dictation levels, hotkey
@@ -26,6 +22,10 @@
 //     chips. Anything an AGENT is doing on the human's behalf.
 //   - `delivered`: terminal success only — pasted, answered, completed. Not a
 //     general "positive" green; reserve it for completion states.
+//
+// Light/dark is handled inside each role's `ThemeHexPair`; the pair resolves
+// against the current NSAppearance, so system appearance keeps working per
+// theme (never force a mode — spec §2).
 
 import AppKit
 import SwiftUI
@@ -34,125 +34,140 @@ public extension Color {
 
     // MARK: - Surfaces
 
-    /// Primary dark surface — not pure black. [decision: spec §2, #16181D]
-    static let speakInk = Color(
-        light: Color(red: 0xE9 / 255, green: 0xE6 / 255, blue: 0xE0 / 255),
-        dark: Color(red: 0x16 / 255, green: 0x18 / 255, blue: 0x1D / 255)
-    )
+    /// Primary dark surface — not pure black. Role: `ink`.
+    static var speakInk: Color { SpeakThemeRuntime.color(.ink) }
 
-    /// Raised surface / cards. [decision: spec §2, #1F232B]
-    static let speakInk2 = Color(
-        light: Color(red: 0xFF / 255, green: 0xFF / 255, blue: 0xFF / 255),
-        dark: Color(red: 0x1F / 255, green: 0x23 / 255, blue: 0x2B / 255)
-    )
+    /// Raised surface / cards. Role: `ink2`.
+    static var speakInk2: Color { SpeakThemeRuntime.color(.ink2) }
 
-    /// Primary text on `speakInk`. [decision: spec §2, #E9E6E0]
-    static let speakBone = Color(
-        light: Color(red: 0x16 / 255, green: 0x18 / 255, blue: 0x1D / 255),
-        dark: Color(red: 0xE9 / 255, green: 0xE6 / 255, blue: 0xE0 / 255)
-    )
+    /// Primary text on `speakInk`. Role: `bone`.
+    static var speakBone: Color { SpeakThemeRuntime.color(.bone) }
 
-    /// Secondary text, hairlines. [decision: spec §2, #8A8F98 — same hue both
-    /// modes, hairlines read the same regardless of ground.]
-    static let speakMica = Color(red: 0x8A / 255, green: 0x8F / 255, blue: 0x98 / 255)
+    /// Secondary text, hairlines. Role: `mica`.
+    static var speakMica: Color { SpeakThemeRuntime.color(.mica) }
 
     // MARK: - Channels ("who is acting?")
 
     /// The HUMAN channel: live mic, dictation levels, hotkey affordances.
-    /// [decision: spec §2, #FFB25A]
-    static let speakHumanAmber = Color(red: 0xFF / 255, green: 0xB2 / 255, blue: 0x5A / 255)
+    /// Role: `humanAmber`. [spec §2]
+    static var speakHumanAmber: Color { SpeakThemeRuntime.color(.humanAmber) }
 
     /// Recording tally light. HARD RULE (spec §2): appears IFF the microphone
     /// is capturing. No marketing use, no hover states, nothing else.
-    /// [decision: spec §2, #FF5C49]
-    static let speakOnAir = Color(red: 0xFF / 255, green: 0x5C / 255, blue: 0x49 / 255)
+    /// Role: `onAir`.
+    static var speakOnAir: Color { SpeakThemeRuntime.color(.onAir) }
 
     /// The AGENT channel: agent speech, agent activity, session chips.
-    /// [decision: spec §2, #9D8CFF]
-    static let speakAgentViolet = Color(red: 0x9D / 255, green: 0x8C / 255, blue: 0xFF / 255)
+    /// Role: `agentViolet`. [spec §2]
+    static var speakAgentViolet: Color { SpeakThemeRuntime.color(.agentViolet) }
 
     /// Terminal success ONLY: pasted, answered, completed. Not a general
-    /// "positive" indicator. [decision: spec §2, #5FBF8F]
-    static let speakDelivered = Color(red: 0x5F / 255, green: 0xBF / 255, blue: 0x8F / 255)
+    /// "positive" indicator. Role: `delivered`. [spec §2]
+    static var speakDelivered: Color { SpeakThemeRuntime.color(.delivered) }
+
+    // MARK: - Status
+
+    /// Failure / error signal. Role: `error`.
+    static var speakError: Color { SpeakThemeRuntime.color(.error) }
+
+    /// Attention needed — caution, not failure. Role: `warning`.
+    static var speakWarning: Color { SpeakThemeRuntime.color(.warning) }
+
+    /// Healthy / nominal level — the non-terminal positive (e.g. VU body).
+    /// Distinct from `delivered`, which is reserved for completion. Role: `ok`.
+    static var speakOK: Color { SpeakThemeRuntime.color(.ok) }
 
     // MARK: - Workspace & Slack-Inspired Identity Tokens
 
-    /// Channel Sidebar background — deep ink in dark mode, light slate in light mode.
-    static let speakSidebarBg = Color(
-        light: Color(red: 0xF3 / 255, green: 0xF2 / 255, blue: 0xEE / 255),
-        dark: Color(red: 0x12 / 255, green: 0x14 / 255, blue: 0x18 / 255)
-    )
+    /// Channel Sidebar background. Role: `sidebarBg`.
+    static var speakSidebarBg: Color { SpeakThemeRuntime.color(.sidebarBg) }
 
-    /// Unified window canvas background (F5F3EF light / 16181D dark).
-    static let speakWindowCanvas = Color(
-        light: Color(red: 0xF5 / 255, green: 0xF3 / 255, blue: 0xEF / 255),
-        dark: Color(red: 0x16 / 255, green: 0x18 / 255, blue: 0x1D / 255)
-    )
+    /// Unified window canvas background. Role: `windowCanvas`.
+    static var speakWindowCanvas: Color { SpeakThemeRuntime.color(.windowCanvas) }
 
-    /// Main detail card canvas (FFFFFF light / 1C1F26 dark).
-    static let speakCardCanvas = Color(
-        light: Color(red: 0xFF / 255, green: 0xFF / 255, blue: 0xFF / 255),
-        dark: Color(red: 0x1C / 255, green: 0x1F / 255, blue: 0x26 / 255)
-    )
+    /// Main detail card canvas. Role: `cardCanvas`.
+    static var speakCardCanvas: Color { SpeakThemeRuntime.color(.cardCanvas) }
 
-    /// Sidebar selection pills (E8E5DE light / 262A34 dark).
-    static let speakSidebarSelection = Color(
-        light: Color(red: 0xE8 / 255, green: 0xE5 / 255, blue: 0xDE / 255),
-        dark: Color(red: 0x26 / 255, green: 0x2A / 255, blue: 0x34 / 255)
-    )
+    /// Sidebar selection pills. Role: `sidebarSelection`.
+    static var speakSidebarSelection: Color { SpeakThemeRuntime.color(.sidebarSelection) }
 
-    /// Active channel item highlight.
-    static let speakSidebarActiveBg = Color.speakAgentViolet.opacity(0.18)
+    /// Active channel item highlight — derived from the agent channel.
+    static var speakSidebarActiveBg: Color { speakAgentViolet.opacity(0.18) }
 
     /// Tag mention badge background (@Claude, @terminal).
-    static let speakTagBadgeBg = Color.speakAgentViolet.opacity(0.15)
+    static var speakTagBadgeBg: Color { speakAgentViolet.opacity(0.15) }
 
     /// Tag mention badge text color.
-    static let speakTagBadgeFg = Color.speakAgentViolet
+    static var speakTagBadgeFg: Color { speakAgentViolet }
 
-    /// Card & Container subtle border (E5E2DA light / 2B2F3A dark).
-    static let speakCardBorder = Color(
-        light: Color(red: 0xE5 / 255, green: 0xE2 / 255, blue: 0xDA / 255),
-        dark: Color(red: 0x2B / 255, green: 0x2F / 255, blue: 0x3A / 255)
-    )
+    /// Card & container hairline border. Role: `cardBorder`.
+    static var speakCardBorder: Color { SpeakThemeRuntime.color(.cardBorder) }
+
+    /// Inset/well surface (the legacy `speakSurface` token, now a role).
+    /// Role: `surface`.
+    static var speakSurface: Color { SpeakThemeRuntime.color(.surface) }
+
+    /// UI accent — selection pills, focus, `.tint`. A theme that leaves
+    /// `accent` unset resolves to `Color.accentColor` (system).
+    static var speakUIAccent: Color { SpeakThemeRuntime.color(.accent) }
+
+    /// Text/glyph drawn on the `accent` fill — dark when the accent is bright
+    /// (ember dark), white on the system accent. Role: `onAccent`.
+    static var speakOnAccent: Color { SpeakThemeRuntime.color(.onAccent) }
 
     // MARK: - Flow Border Spectra (AnimatedFlowBorderModifier)
     //
-    // Each spectrum is an [Color] array designed to wrap cleanly as a
-    // repeating AngularGradient. The first and last element match so the
-    // gradient tiles without a visible seam.
-    // [decision: semantic arrays not inline literals; every use goes through
-    //  the modifier's `colors:` parameter so future palette changes are one-edit.]
+    // Spectra keep their pivot hues but take endpoints from the themed
+    // channel colors, so a theme re-tints the border animations too.
+    // HARD RULE (mirrors speakOnAir): onAir spectrum shows only while the
+    // microphone is capturing.
 
-    /// On-Air / dictation-active border — warm amber → hot red → amber.
-    /// HARD RULE (mirrors speakOnAir): only show while mic is capturing.
-    static let speakFlowOnAir: [Color] = [
-        Color(red: 1.0, green: 0.698, blue: 0.353),   // humanAmber #FFB25A
-        Color(red: 1.0, green: 0.361, blue: 0.286),   // onAir #FF5C49
-        Color(red: 1.0, green: 0.2,   blue: 0.1  ),   // deep red pivot
-        Color(red: 1.0, green: 0.361, blue: 0.286),   // onAir mirror
-        Color(red: 1.0, green: 0.698, blue: 0.353),   // humanAmber close
-    ]
+    /// On-Air / dictation-active border — humanAmber → onAir → deep red.
+    static var speakFlowOnAir: [Color] {
+        [
+            speakHumanAmber,
+            speakOnAir,
+            Color(red: 1.0, green: 0.2,   blue: 0.1  ),   // deep red pivot
+            speakOnAir,
+            speakHumanAmber,
+        ]
+    }
 
-    /// Agent-working border — violet → electric blue → violet.
-    static let speakFlowAgent: [Color] = [
-        Color(red: 0.616, green: 0.549, blue: 1.0),   // agentViolet #9D8CFF
-        Color(red: 0.2,   green: 0.5,   blue: 1.0),   // electric blue
-        Color(red: 0.0,   green: 0.75,  blue: 1.0),   // cyan pivot
-        Color(red: 0.2,   green: 0.5,   blue: 1.0),   // electric blue mirror
-        Color(red: 0.616, green: 0.549, blue: 1.0),   // agentViolet close
-    ]
+    /// Agent-working border — agentViolet → electric blue → cyan → violet.
+    static var speakFlowAgent: [Color] {
+        [
+            speakAgentViolet,
+            Color(red: 0.2,   green: 0.5,   blue: 1.0),   // electric blue
+            Color(red: 0.0,   green: 0.75,  blue: 1.0),   // cyan pivot
+            Color(red: 0.2,   green: 0.5,   blue: 1.0),   // electric blue mirror
+            speakAgentViolet,
+        ]
+    }
 
-    /// Inference-running border — blue → cyan → violet → blue.
-    static let speakFlowInference: [Color] = [
-        Color(red: 0.2,   green: 0.5,   blue: 1.0),   // electric blue
-        Color(red: 0.0,   green: 0.85,  blue: 1.0),   // cyan
-        Color(red: 0.616, green: 0.549, blue: 1.0),   // agentViolet
-        Color(red: 0.4,   green: 0.2,   blue: 1.0),   // deep violet pivot
-        Color(red: 0.2,   green: 0.5,   blue: 1.0),   // electric blue close
-    ]
+    /// Inference-running border — blue → cyan → agentViolet → blue.
+    static var speakFlowInference: [Color] {
+        [
+            Color(red: 0.2,   green: 0.5,   blue: 1.0),   // electric blue
+            Color(red: 0.0,   green: 0.85,  blue: 1.0),   // cyan
+            speakAgentViolet,
+            Color(red: 0.4,   green: 0.2,   blue: 1.0),   // deep violet pivot
+            Color(red: 0.2,   green: 0.5,   blue: 1.0),   // electric blue close
+        ]
+    }
+
+    /// Processing / cleanup-in-flight border — humanAmber → warm pivots.
+    static var speakFlowProcessing: [Color] {
+        [
+            speakHumanAmber,
+            Color(red: 1.0,  green: 0.6,  blue: 0.1 ),   // warm amber pivot
+            Color(red: 0.95, green: 0.45, blue: 0.05),   // deep amber pivot
+            Color(red: 1.0,  green: 0.6,  blue: 0.1 ),   // warm amber mirror
+            speakHumanAmber,
+        ]
+    }
 
     /// Hover / glass shimmer — subtle white sheen for always-on brand mark.
+    /// Unthemed: it is a light effect, not a palette color.
     static let speakFlowGlass: [Color] = [
         Color.white.opacity(0.08),
         Color.white.opacity(0.35),
@@ -161,33 +176,46 @@ public extension Color {
         Color.white.opacity(0.08),
     ]
 
-    /// Error state border — red pulse.
-    static let speakFlowError: [Color] = [
-        Color(red: 1.0, green: 0.2, blue: 0.2),
-        Color(red: 0.7, green: 0.0, blue: 0.0),
-        Color(red: 1.0, green: 0.2, blue: 0.2),
-    ]
+    /// Error state border — error role → deep red pivot → error.
+    static var speakFlowError: [Color] {
+        [
+            speakError,
+            Color(red: 0.7, green: 0.0, blue: 0.0),   // deep red pivot
+            speakError,
+        ]
+    }
 
-    /// Success / delivered border — green pulse.
-    static let speakFlowSuccess: [Color] = [
-        Color(red: 0.373, green: 0.749, blue: 0.561),  // speakDelivered #5FBF8F
-        Color(red: 0.0,   green: 0.6,   blue: 0.35 ),  // deep green pivot
-        Color(red: 0.373, green: 0.749, blue: 0.561),  // close
-    ]
+    /// Success / delivered border — delivered → deep green → delivered.
+    static var speakFlowSuccess: [Color] {
+        [
+            speakDelivered,
+            Color(red: 0.0, green: 0.6, blue: 0.35),  // deep green pivot
+            speakDelivered,
+        ]
+    }
 }
 
-
-// MARK: - Light/dark color helper
-
-private extension Color {
-    /// Build a `Color` that resolves to `light` or `dark` per the current
-    /// system appearance (`NSAppearance`), tracked live like any other SwiftUI
-    /// `Color` — required because `speakInk`/`speakInk2`/`speakBone` invert
-    /// their roles between modes (spec §2), unlike the fixed-hue channel colors.
-    init(light: Color, dark: Color) {
-        self = Color(nsColor: NSColor(name: nil) { appearance in
-            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            return NSColor(isDark ? dark : light)
-        })
-    }
+// ShapeStyle shim — same mechanism SwiftUI uses for `.primary`/`.secondary`:
+// lets `.speakMica` shorthand resolve inside `.foregroundStyle(...)`, which
+// looks members up on `ShapeStyle`, not `Color`.
+public extension ShapeStyle where Self == Color {
+    static var speakInk: Color { SpeakThemeRuntime.color(.ink) }
+    static var speakInk2: Color { SpeakThemeRuntime.color(.ink2) }
+    static var speakBone: Color { SpeakThemeRuntime.color(.bone) }
+    static var speakMica: Color { SpeakThemeRuntime.color(.mica) }
+    static var speakHumanAmber: Color { SpeakThemeRuntime.color(.humanAmber) }
+    static var speakOnAir: Color { SpeakThemeRuntime.color(.onAir) }
+    static var speakAgentViolet: Color { SpeakThemeRuntime.color(.agentViolet) }
+    static var speakDelivered: Color { SpeakThemeRuntime.color(.delivered) }
+    static var speakError: Color { SpeakThemeRuntime.color(.error) }
+    static var speakWarning: Color { SpeakThemeRuntime.color(.warning) }
+    static var speakOK: Color { SpeakThemeRuntime.color(.ok) }
+    static var speakSidebarBg: Color { SpeakThemeRuntime.color(.sidebarBg) }
+    static var speakWindowCanvas: Color { SpeakThemeRuntime.color(.windowCanvas) }
+    static var speakCardCanvas: Color { SpeakThemeRuntime.color(.cardCanvas) }
+    static var speakSidebarSelection: Color { SpeakThemeRuntime.color(.sidebarSelection) }
+    static var speakCardBorder: Color { SpeakThemeRuntime.color(.cardBorder) }
+    static var speakSurface: Color { SpeakThemeRuntime.color(.surface) }
+    static var speakUIAccent: Color { SpeakThemeRuntime.color(.accent) }
+    static var speakOnAccent: Color { SpeakThemeRuntime.color(.onAccent) }
 }

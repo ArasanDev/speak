@@ -25,7 +25,7 @@ struct HUDStyleSection: View {
             .pickerStyle(.menu)
             Text("Aurora is an ambient, orb-based HUD with live materializing transcript words.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
         } header: {
             Text("Recording HUD")
         }

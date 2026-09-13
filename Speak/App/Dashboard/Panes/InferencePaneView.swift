@@ -102,7 +102,10 @@ private struct ServerStatusCard: View {
     private var cardBody: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.md) {
             statusRow
-            Divider().opacity(0.5)
+            Rectangle()
+                .fill(Color.speakCardBorder)
+                .frame(height: InferenceMetrics.hairline)
+                .opacity(0.5)
             metricsRow
 
             if let error = viewModel.errorMessage {
@@ -119,11 +122,11 @@ private struct ServerStatusCard: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(viewModel.isServerRunning ? "Running" : "Stopped")
                     .font(.speakBody(.body, semibold: true))
-                    .foregroundStyle(viewModel.isServerRunning ? statusTint : Color.secondary)
+                    .foregroundStyle(viewModel.isServerRunning ? statusTint : Color.speakMica)
 
                 Text("http://localhost:\(viewModel.serverPort)")
                     .font(.speakMonoFace(.caption))
-                    .foregroundStyle(viewModel.isServerRunning ? .secondary : .tertiary)
+                    .foregroundStyle(Color.speakMica)
                     .textSelection(.enabled)
             }
 
@@ -166,11 +169,11 @@ private struct ServerStatusCard: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value)
                 .font(.speakMonoFace(.body))
-                .foregroundStyle(viewModel.isServerRunning ? .primary : .tertiary)
+                .foregroundStyle(viewModel.isServerRunning ? Color.speakBone : Color.speakMica)
                 .lineLimit(1)
             Text(label)
                 .font(.speakBody(.caption))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -192,11 +195,11 @@ private struct ServerStatusCard: View {
             .buttonStyle(.plain)
             .help("Dismiss")
         }
-        .foregroundStyle(Color(nsColor: .systemRed))
+        .foregroundStyle(Color.speakError)
         .padding(SpeakSpacing.sm)
         .background(
             RoundedRectangle(cornerRadius: InferenceMetrics.controlRadius, style: .continuous)
-                .fill(Color(nsColor: .systemRed).opacity(0.08))
+                .fill(Color.speakError.opacity(0.08))
         )
         .transition(.opacity)
     }
@@ -207,7 +210,7 @@ private struct ServerStatusCard: View {
         InferenceButton(
             title: viewModel.isServerRunning ? "Stop" : "Start Server",
             systemImage: viewModel.isServerRunning ? "stop.fill" : "play.fill",
-            tint: viewModel.isServerRunning ? Color(nsColor: .systemRed) : Color.speakDelivered,
+            tint: viewModel.isServerRunning ? Color.speakError : Color.speakOK,
             emphasis: viewModel.isServerRunning ? .tinted : .filled,
             isBusy: viewModel.isTogglingServer
         ) {
@@ -219,9 +222,9 @@ private struct ServerStatusCard: View {
     // MARK: - Derived values
 
     /// [decision: `speakOnAir` is reserved by hard rule for the mic tally, so a
-    ///  stopped server uses the system red — same as the pre-redesign code.]
+    ///  stopped server uses the themed `error` role.]
     private var statusTint: Color {
-        viewModel.isServerRunning ? Color.speakDelivered : Color(nsColor: .systemRed)
+        viewModel.isServerRunning ? Color.speakOK : Color.speakError
     }
 
     private func formatUptime(_ seconds: TimeInterval) -> String {
@@ -271,7 +274,7 @@ private struct APIKeyCard: View {
         HStack(spacing: SpeakSpacing.sm) {
             Text(maskedKey(viewModel.apiKey))
                 .font(.speakMonoFace(.base))
-                .foregroundStyle(viewModel.apiKey.isEmpty ? .tertiary : .primary)
+                .foregroundStyle(viewModel.apiKey.isEmpty ? Color.speakMica : Color.speakBone)
                 .textSelection(.enabled)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -283,14 +286,7 @@ private struct APIKeyCard: View {
         }
         .padding(.horizontal, SpeakSpacing.sm + 2)
         .padding(.vertical, SpeakSpacing.sm)
-        .background(
-            RoundedRectangle(cornerRadius: InferenceMetrics.codeRadius, style: .continuous)
-                .fill(Color.primary.opacity(0.04))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: InferenceMetrics.codeRadius, style: .continuous)
-                .strokeBorder(Color.speakCardBorder, lineWidth: InferenceMetrics.hairline)
-        )
+        .speakInset(cornerRadius: InferenceMetrics.codeRadius)
     }
 
     private var regenerateButton: some View {

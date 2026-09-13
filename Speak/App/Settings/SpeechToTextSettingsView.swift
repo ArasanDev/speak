@@ -163,7 +163,7 @@ private struct LanguageCard: View {
             if listState == .unavailable {
                 Text("The full language list couldn't be loaded — your current selection still applies.")
                     .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.speakMica)
                     .padding(.horizontal, SpeakSpacing.md)
                     .padding(.bottom, SpeakSpacing.sm)
             }
@@ -229,36 +229,46 @@ private struct MicrophoneCard: View {
 
     var body: some View {
         SettingsSectionCard(title: "Microphone") {
-            if let dev = currentDevice {
-                SettingsRow(
-                    dev.name,
-                    description: deviceDescription(dev)
-                ) {
-                    if routeFlash {
-                        SettingsStatusPill(text: "Switched")
-                            .transition(.opacity)
-                    } else {
-                        SettingsStatusPill(text: "Active")
+            SettingsRow(
+                "Microphone Permission",
+                description: "Required for on-device voice dictation. Audio never leaves your Mac."
+            ) {
+                if micStatus == .granted {
+                    SettingsStatusPill(text: "Granted", tint: .speakOK)
+                } else {
+                    HStack(spacing: SpeakSpacing.sm) {
+                        SettingsStatusPill(text: "Missing", tint: .speakWarning)
+                        Button("Grant Access") {
+                            Task {
+                                await context.permissionManager?.requestMicrophone()
+                                updateStatus()
+                                startMonitorIfAble()
+                            }
+                        }
+                        .controlSize(.small)
+                        .buttonStyle(.borderedProminent)
                     }
                 }
-            } else {
-                SettingsRow(
-                    "System Default Microphone",
-                    description: "Automatically follows connected headphones, AirPods, or external mics."
-                )
             }
 
             if inputDevices.count > 1 {
                 SettingsRowSeparator()
 
-                SettingsRow(
-                    "Input Source",
-                    description: pinnedDeviceMissing
-                        ? "\(context.settingsStore.preferredInputDeviceName ?? "Pinned microphone") isn't connected — using the system default until it returns."
-                        : "Pick a mic, or follow the system default. Applies live, even mid-dictation."
-                )
+                if pinnedDeviceMissing {
+                    SettingsRow(
+                        "Input Source",
+                        description: "\(context.settingsStore.preferredInputDeviceName ?? "Pinned microphone") isn't connected — using the system default until it returns."
+                    )
+                } else {
+                    Text("Input Source")
+                        .font(.speakBody(.caption, semibold: true))
+                        .foregroundStyle(Color.speakMica)
+                        .padding(.horizontal, SpeakSpacing.md)
+                        .padding(.vertical, SpeakSpacing.sm)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
-                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                VStack(alignment: .leading, spacing: 0) {
                     inputSourceRow(
                         uid: nil,
                         name: "System Default",
@@ -272,44 +282,43 @@ private struct MicrophoneCard: View {
                         )
                     }
                 }
-                .padding(.vertical, SpeakSpacing.xs)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             SettingsRowSeparator()
 
             SettingsRow(
                 "Input Level",
-                description: monitorError ?? "Live while this card is open — speak to confirm your voice is heard."
+                description: monitorError ?? "Monitors while this card is open — speak to confirm your voice is heard."
             ) {
                 HStack(spacing: SpeakSpacing.sm) {
                     VUMeterView(level: level)
                     Text(dbLabel)
                         .font(.speakMonoFace(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                         .frame(width: 62, alignment: .trailing)
                 }
             }
 
-            SettingsRowSeparator()
+            if let dev = currentDevice {
+                SettingsRowSeparator()
 
-            SettingsRow(
-                "Microphone Permission",
-                description: "Required for on-device voice dictation. Audio never leaves your Mac."
-            ) {
-                if micStatus == .granted {
-                    SettingsStatusPill(text: "Granted", tint: .speakDelivered)
-                } else {
-                    HStack(spacing: SpeakSpacing.sm) {
-                        SettingsStatusPill(text: "Missing", tint: .orange)
-                        Button("Grant Access") {
-                            Task {
-                                await context.permissionManager?.requestMicrophone()
-                                updateStatus()
-                                startMonitorIfAble()
-                            }
-                        }
+                SettingsRow(
+                    "Current Input",
+                    description: currentInputDescription(dev)
+                ) {
+                    if routeFlash {
+                        SettingsStatusPill(text: "Switched", tint: .speakMica)
+                            .transition(.opacity)
+                    } else {
+                        EmptyView()
                     }
                 }
+            } else {
+                SettingsRow(
+                    "Current Input",
+                    description: "No input device detected — grant permission or connect a microphone."
+                )
             }
         }
         .onAppear {
@@ -375,34 +384,40 @@ private struct MicrophoneCard: View {
             refreshDevices()
         } label: {
             HStack(spacing: SpeakSpacing.sm) {
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selected ? Color.primary : Color.secondary)
-                    .font(.speakBody(.caption))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(name)
                         .font(.speakBody(.caption))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.speakBone)
                     Text(detail)
                         .font(.speakMonoFace(.caption))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.speakMica)
                 }
                 Spacer()
-                if uid != nil, uid == currentDevice?.uid {
-                    SettingsStatusPill(text: "Active")
-                }
+                Image(systemName: "checkmark")
+                    .font(.speakBody(.caption, semibold: true))
+                    .foregroundStyle(selected ? Color.speakUIAccent : Color.speakMica.opacity(0.4))
+                    .opacity(selected ? 1 : 0)
             }
+            .padding(.horizontal, SpeakSpacing.md)
+            .padding(.vertical, SpeakSpacing.sm)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
-    /// Top-row description: format string for the effective device, noting
-    /// whether it arrived via the system default or the picker pin.
-    private func deviceDescription(_ dev: CoreAudioDeviceMonitor.DeviceInfo) -> String {
-        let source = context.settingsStore.preferredInputDeviceUID == nil
-            ? "follows the system default input"
-            : "pinned below"
-        return "\(Int(dev.sampleRate)) Hz · \(dev.channelCount) channel\(dev.channelCount == 1 ? "" : "s") — \(source)."
+    /// Description for the effective input — name, rate, channels, and whether
+    /// it came from the system default or a pinned selection.
+    private func currentInputDescription(_ dev: CoreAudioDeviceMonitor.DeviceInfo) -> String {
+        let rate = "\(Int(dev.sampleRate)) Hz"
+        let channels = "\(dev.channelCount) channel\(dev.channelCount == 1 ? "" : "s")"
+        if let uid = context.settingsStore.preferredInputDeviceUID, uid == dev.uid {
+            return "\(dev.name) · \(rate) · \(channels) (pinned)"
+        }
+        if pinnedDeviceMissing {
+            return "\(dev.name) · \(rate) · \(channels) (system default — pinned mic disconnected)"
+        }
+        return "\(dev.name) · \(rate) · \(channels) (system default)"
     }
 
     /// `true` when a pin is stored but its device isn't in the current roster —
@@ -413,7 +428,7 @@ private struct MicrophoneCard: View {
     }
 
     /// Refreshes both the roster and the EFFECTIVE device (pinned-or-default)
-    /// shown at the top of the card — the honest "what's feeding you" answer.
+    /// shown in the Current Input row — the honest "what's feeding you" answer.
     private func refreshDevices() {
         inputDevices = CoreAudioDeviceMonitor.shared.listInputDevices()
         currentDevice = CoreAudioDeviceMonitor.shared.resolvedInputDevice(

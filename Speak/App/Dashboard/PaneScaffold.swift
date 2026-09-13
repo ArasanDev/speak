@@ -25,10 +25,10 @@ struct PanePlaceholder: View {
         VStack(spacing: SpeakSpacing.sm) {
             Image(systemName: systemImage)
                 .font(.system(size: 34))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.speakMica)
             Text(message)
                 .font(.speakBody(.caption))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
