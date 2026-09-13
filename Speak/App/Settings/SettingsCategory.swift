@@ -14,9 +14,9 @@
 // with live status. One home per capability: vocabulary/style/dictionary live
 // ONLY here, never duplicated on the desk.
 //
-// Each category carries a `tileColor` — the System-Settings-style colored icon
-// tile. Layer categories reuse the FE-1 channel hues (STT = human amber,
-// Intelligence = agent violet) so color stays semantic, not decorative.
+// Rail icons are plain monochrome glyphs — matching the desk sidebar's
+// `Label` rows and t3code's settings nav (muted icon, accent selection pill).
+// No colored tiles: shape and weight carry selection state, not hue.
 //
 // Adding a category = adding a case here + a view in the detail-canvas switch.
 
@@ -108,26 +108,6 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .privacy:      return "lock.shield"
         case .general:      return "gearshape"
         case .about:        return "info.circle"
-        }
-    }
-
-    /// The System-Settings-style colored icon tile. Layer categories reuse the
-    /// FE-1 channel hues so color stays semantic: STT is the human channel
-    /// (amber), Intelligence is the agent channel (violet); Text→Speech is the
-    /// machine's voice (teal). Remaining categories get muted system hues.
-    var tileColor: Color {
-        switch self {
-        case .pipeline:     return .indigo
-        case .speechToText: return .speakHumanAmber
-        case .textToSpeech: return .teal
-        case .intelligence: return .speakAgentViolet
-        case .hotkeys:      return .gray
-        case .vocabulary:   return .orange
-        case .agentBridge:  return .mint
-        case .appearance:   return .pink
-        case .privacy:      return .blue
-        case .general:      return .gray
-        case .about:        return .gray
         }
     }
 

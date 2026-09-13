@@ -222,10 +222,11 @@ private struct BackToDashboardButton: View {
 
 // MARK: - SettingsRailRow
 
-/// One rail destination: a System-Settings-style colored icon tile + label in a
-/// selection pill. Selection uses the same neutral `speakSidebarSelection` pill
-/// the desk sidebar renders (the tile keeps its hue, like System Settings), so
-/// both surfaces share one selection language.
+/// One rail destination: a plain monochrome glyph + label, exactly like the
+/// desk sidebar's `Label` rows (and t3code's `SettingsSidebarNav`, where icons
+/// are muted `size-3.5` glyphs with no tiles). Selection is the same accent
+/// pill the desk's `.listStyle(.sidebar)` renders — shape and weight carry the
+/// state, never icon color.
 private struct SettingsRailRow: View {
     let category: SettingsCategory
     let isSelected: Bool
@@ -237,16 +238,12 @@ private struct SettingsRailRow: View {
         Button(action: action) {
             HStack(spacing: SpeakSpacing.sm) {
                 Image(systemName: category.systemImage)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 20, height: 20)
-                    .background(
-                        RoundedRectangle(cornerRadius: 5.5, style: .continuous)
-                            .fill(category.tileColor.gradient)
-                    )
+                    .font(.system(size: 14))
+                    .foregroundStyle(isSelected ? Color.white : .secondary)
+                    .frame(width: 20)
                 Text(category.title)
                     .font(.speakBody(.base, semibold: isSelected))
-                    .foregroundStyle(isSelected ? Color.primary : .secondary)
+                    .foregroundStyle(isSelected ? Color.white : .secondary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
@@ -256,7 +253,7 @@ private struct SettingsRailRow: View {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(
                         isSelected
-                            ? Color.speakSidebarSelection
+                            ? Color.accentColor
                             : (isHovering ? Color.primary.opacity(0.05) : Color.clear)
                     )
             )
