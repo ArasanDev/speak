@@ -7,62 +7,54 @@
 // the frame code rather than sharing it, per the zero-regression-risk
 // convention below. [decision: zero regression risk]
 //
-// LAYOUT — the capsule-with-inscribed-circles frame shared with the classic
-// HUD, in Aurora's voice (the ambient orb inside the left circle instead of
-// the bar waveform):
+// LAYOUT — the same flat capsule-bar frame as the classic HUD (locked design
+// per the owner's sketch `img/speak-overlay-ui.png`): two hairline dividers
+// bound the text box; interior contrast is deliberately low — no discs, no
+// rings inside the capsule.
 //
-//    ╭─────────╮┌────────────────────────┐╭─────────╮
-//   (  voice   )(   text lane — proper   )(  live    )
-//   (  anim    )(   rectangle bounded    )( seconds  )
-//   (          )(   by the circles       )(  or ✓    )
-//    ╰─────────╯└────────────────────────┘╰─────────╯
-//      circle                               circle
+//   ╭──┬──────────────────────────────────────────────┬──╮
+//   (≋ │  LISTENING · ⌘⌘ to finish                 ✕  │ ○)
+//   (≋ │  streamed transcript text, bounded box        │ ○)
+//    ╰─┴──────────────────────────────────────────────┴──╯
+//   waveform        text box between the lines      timer/✓
 //
-//   • Left circle — `AmbientOrbView` (the style's signature — already
-//     circular, a natural fit) inside a `speakSurface` disc + `speakCardBorder`
-//     ring inscribed in the capsule's left endcap. Level-reactivity and
-//     per-phase gradients unchanged.
-//   • Center     — the "proper rectangle": `model.windowText` (the FIFO
-//     window — `OverlayController` feeds it for BOTH hud styles) at
-//     `.speakMonoFace(.caption)`, multi-line, topLeading, clipped — text can
-//     never touch the circles. Quiet control strip in the lane's trailing top
-//     corner; stop hint tucked into the lane's trailing bottom corner.
-//   • Right circle — the response: live seconds while `.listening`, spinner
-//     while `.processing`, delivered ✓ on `.done`, error mark on `.error`.
+//   • Left zone — the live mic-level `WaveformView` (the app's signature
+//     asset — shared with the classic HUD) centered in the left endcap.
+//   • Center     — the bounded text box: phase header row + `model.windowText`
+//     (the FIFO window — `OverlayController` feeds it for BOTH hud styles) at
+//     `.speakMonoFace(.caption)`, topLeading, clipped — text can never cross
+//     a hairline. Quiet controls ride the header row's trailing edge.
+//   • Right zone — the response: live seconds while `.listening`, spinner
+//     while `.processing`, delivered ✓ + final time on `.done`, error mark.
 //
 //   All four states share this silhouette — only the lane content and the
-//   right circle's glyph swap. Processing/done lane content is REUSED from
+//   right zone's glyph swap. Processing/done lane content is REUSED from
 //   `SettlingOverlayContent.swift` (`SettlingProcessingContent`,
 //   `PolishedDiffContent` — internal, same module) so the felt-speed reveal
 //   isn't style-gated.
 //
-// VISUAL LANGUAGE (unchanged):
-//   • `AmbientOrbView` (`Canvas` + `TimelineView`) breathes slowly at rest,
-//     swells with live microphone level while listening, and recolors per
-//     state: violet→teal aurora gradient (listening), warm flow spectrum
-//     (processing — "thinking"), solid green (done), solid red (error).
+// VISUAL LANGUAGE:
+//   • Aurora's identity is the animated border (`AnimatedGradientBorder` /
+//     `EdgeFlowBorder` — full-glow or edge-flow spectra on the capsule edge,
+//     user-configurable) — the strong outside edge the sketch calls for —
+//     not interior furniture.
 //   • Same 4-state contract as the classic HUD: listening / processing /
 //     done / error — same `OverlayViewModel`, same honest copy.
 //
 // MOTION + ACCESSIBILITY:
-//   • All decorative motion (breathing, ripple, hue drift) is suppressed when
-//     `accessibilityReduceMotion` is on. The orb still reflects live state —
-//     motion is decoration, information is not.
-//   • VoiceOver: the orb is `accessibilityHidden` (decorative); state and
+//   • Decorative border motion is suppressed when `accessibilityReduceMotion`
+//     is on. The waveform still reflects live state — motion is decoration,
+//     information is not.
+//   • VoiceOver: the waveform is `accessibilityHidden` (decorative); state and
 //     transcript text carry the accessibility labels, and state transitions
 //     post the same `NSAccessibility.post` announcement pattern as the
 //     classic HUD (duplicated here, not shared, to keep `TranscriptOverlayView`
 //     fully unmodified per the zero-regression-risk constraint).
 //
-// Pure math (`cyclicPhase`, `orbRadius`) lives in
-// `SpeakCore/Overlay/AuroraMath.swift` so it is unit-testable without a
-// Canvas/display — see `AuroraMathTests.swift`.
-//
 // Tokens: `speakBone` primary text, `speakMica` secondary, `speakOnAir` capture
-// tally ONLY (the left circle's ring tint while listening — the orb gradient
-// stays agent-violet per its design), `speakDelivered` done, `speakError`
-// error, `speakCardBorder` circle rings, `speakSurface` disc fill. No raw hex;
-// `SpeakSpacing.*` for all spacing.
+// tally ONLY (waveform + phase label while listening), `speakAgentViolet`
+// polish phase, `speakDelivered` done, `speakError` error, `speakCardBorder`
+// divider hairlines. No raw hex; `SpeakSpacing.*` for all spacing.
 
 import AppKit
 import SpeakCore
@@ -70,10 +62,10 @@ import SwiftUI
 
 // MARK: - AuroraOverlayView
 
-/// The Aurora-style HUD content. Same capsule-with-inscribed-circles frame and
-/// panel footprint as the classic HUD (hosted inside the same
-/// `TranscriptOverlayPanel`), different visual voice: the ambient orb lives
-/// inside the left circle.
+/// The Aurora-style HUD content. Same flat capsule-bar frame and panel
+/// footprint as the classic HUD (hosted inside the same
+/// `TranscriptOverlayPanel`), different visual voice: Aurora's identity is the
+/// animated capsule border, not interior furniture.
 struct AuroraOverlayView: View {
     let model: OverlayViewModel
     let settingsStore: SettingsStore
@@ -81,35 +73,17 @@ struct AuroraOverlayView: View {
 
     // MARK: Locked geometry constants (mirrors the classic HUD's frame)
 
-    /// Inscribed circle diameter. [decision: 90 pt — the panel is 112 pt tall,
-    ///  so the card interior is 108 pt (4 pt of outer shadow padding); a 90 pt
-    ///  circle centered in a 108 pt endcap leaves a 9 pt margin on every side —
-    ///  it reads as inscribed inside the rounded end, never touching it.
-    ///  COUPLED to `TranscriptOverlayPanel.panelHeight` = 112.]
-    private static let circleSize: CGFloat = 80
+    /// Width of each end zone (waveform left, response right). [decision: 72 pt —
+    ///  the panel is 76 pt tall, so the card interior is ~72 pt: a square end
+    ///  zone centers its content on the capsule endcap's center (cap radius
+    ///  ≈ 34, center at x ≈ 34). COUPLED to `TranscriptOverlayPanel.panelHeight`.]
+    private static let endZoneWidth: CGFloat = 72
 
-    /// Width of each end zone holding an inscribed circle. [decision: 108 pt =
-    ///  the card interior height — the endcap is a semicircle of radius 54 whose
-    ///  center sits at x = 54; a zone this wide centers the 90 pt circle exactly
-    ///  on the cap's center, so the ring is concentric with the capsule end.]
-    private static let endZoneWidth: CGFloat = 96
-
-    /// Circle ring stroke. [decision: 1 pt ring.]
-    private static let ringWidth: CGFloat = 1
-
-    /// Orb frame size inside the left circle. [decision: 56 pt — centered in the
-    ///  ~78 pt clear disc; max drawn radius (~23 pt core + ripple ring to 22 pt
-    ///  radius) fits with headroom.]
-    private static let orbSize: CGFloat = 56
-
-    /// Lane line budget WITHOUT the stop-hint strip (processing / done / error).
-    /// [decision: 5 lines — ~15 pt per line at 11 pt mono + 2 pt spacing; the
-    ///  lane has ~82 pt of text height once the control strip is reserved.]
-    private static let centerLineBudget = 5
-
-    /// Lane line budget while `.listening` (the stop-hint strip is visible).
-    /// [decision: 4 lines — the hint row reclaims ~18 pt, leaving ~64 pt.]
-    private static let listeningLineBudget = 4
+    /// Lane text line budget — one value for every state now that the stop hint
+    /// rides inline in the header row instead of claiming its own strip.
+    /// [decision: 3 lines — ~15 pt per line at 11 pt mono + 2 pt spacing ≈ 45 pt,
+    ///  inside the ~56 pt lane left after the ~14 pt header row.]
+    private static let laneLineBudget = 3
 
     /// Line spacing inside the capture lane. [decision: ~2 pt per spec.]
     private static let laneLineSpacing: CGFloat = SpeakSpacing.xs / 2
@@ -162,158 +136,160 @@ struct AuroraOverlayView: View {
         }
     }
 
-    /// All four states render inside the shared capsule-with-circles frame —
+    /// All four states render inside the shared capsule-bar frame —
     /// Aurora has no alternate content layer (the conversation-loop path is a
     /// classic-HUD surface; unchanged behavior).
     private var contentLayer: some View {
         capsuleFrame
     }
 
-    // MARK: - The capsule-with-inscribed-circles frame (Aurora voice)
+    // MARK: - The capsule-bar frame
 
-    /// ( circle ) [ bounded text lane ] ( circle )
-    /// Fixed geometry shared by all four states. The two circles ARE the
-    /// boundary elements — the lane between them is a proper rectangle,
-    /// clipped so text can never touch a ring.
+    /// ( zone ) │ bounded text box │ ( zone )
+    /// Fixed geometry shared by all four states. The two hairlines ARE the
+    /// boundary elements — the box between them is a proper rectangle,
+    /// clipped so text can never cross a divider.
     private var capsuleFrame: some View {
         HStack(alignment: .center, spacing: 0) {
-            leftCircleZone
+            leftZone
+            laneDivider
             centerLane
-            rightCircleZone
+            laneDivider
+            rightZone
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// A circle inscribed in one capsule endcap: `speakSurface` disc for subtle
-    /// separation from the frosted glass, `speakCardBorder` ring. The zone width
-    /// equals the interior height so the circle lands concentric with the
-    /// capsule's rounded end.
-    private func inscribedCircle<Content: View>(
-        ringTint: Color,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        ZStack {
-            Circle()
-                .fill(Color.speakBone.opacity(0.06))
-                .overlay(Circle().strokeBorder(ringTint, lineWidth: Self.ringWidth))
-            content()
-        }
-        .frame(width: Self.circleSize, height: Self.circleSize)
-        .frame(width: Self.endZoneWidth)
-        .frame(maxHeight: .infinity)
+    /// One boundary hairline — a 1 pt `speakCardBorder` rule inset from the
+    /// capsule's top and bottom edges (the sketch's two lines; interior
+    /// contrast stays low, so it is a hairline, not a wall).
+    private var laneDivider: some View {
+        Rectangle()
+            .fill(Color.speakCardBorder)
+            .frame(width: 1)
+            .padding(.vertical, SpeakSpacing.md)
     }
 
-    // MARK: Left circle — the ambient orb
+    // MARK: Left zone — the voice waveform
 
-    /// `AmbientOrbView` is the style's signature — already circular, so it sits
-    /// naturally inside the inscribed ring. The orb's gradient follows the
-    /// overlay phase (aurora gradient while listening, warm spectrum while
-    /// processing, delivered green on done, error red on error); its
-    /// level-reactivity is live only while the mic is capturing (the controller
-    /// zeroes `level` at `.processing`).
-    private var leftCircleZone: some View {
-        inscribedCircle(ringTint: leftRingTint) {
-            AmbientOrbView(level: model.level, phase: orbPhase, reduceMotion: reduceMotion)
-                .frame(width: Self.orbSize, height: Self.orbSize)
-        }
+    /// The live mic-level waveform centered in the left endcap — the app's
+    /// signature asset, shared with the classic HUD and drawn directly on the
+    /// glass (no disc, no ring). `isActive` is pinned to `.listening` — the
+    /// mic is capturing iff the bars are lit `speakOnAir` (frozen tally rule).
+    private var leftZone: some View {
+        WaveformView(level: model.level, isActive: model.overlayState == .listening)
+            .frame(width: Self.endZoneWidth)
+            .frame(maxHeight: .infinity)
+            .accessibilityHidden(true)
     }
 
-    /// The left ring takes a restrained onAir tint while the mic is capturing —
-    /// the circle is the capture chamber. Card border otherwise.
-    private var leftRingTint: Color {
-        model.overlayState == .listening ? .speakOnAir.opacity(0.6) : .speakCardBorder
-    }
+    // MARK: Right zone — the response
 
-    private var orbPhase: AmbientOrbView.Phase {
-        switch model.overlayState {
-        case .listening:  return .listening
-        case .processing: return .processing
-        case .done:       return .done
-        case .error:      return .error
-        }
-    }
-
-    // MARK: Right circle — the response
-
-    /// The response chamber. Live elapsed seconds while `.listening`, spinner
-    /// while `.processing`, delivered ✓ on `.done`, error mark on `.error`.
-    private var rightCircleZone: some View {
-        inscribedCircle(ringTint: rightRingTint) {
-            rightCircleContent
-        }
-    }
-
-    /// Restrained state tint on the response ring — delivered on done, error on
-    /// error, neutral card border while working.
-    private var rightRingTint: Color {
-        switch model.overlayState {
-        case .done:  return .speakDelivered.opacity(0.6)
-        case .error: return .speakError.opacity(0.6)
-        case .listening, .processing: return .speakCardBorder
-        }
+    /// The response zone, centered in the right endcap. Live elapsed seconds
+    /// while `.listening`, spinner while `.processing`, delivered ✓ + the
+    /// final elapsed time on `.done`, error mark on `.error`.
+    private var rightZone: some View {
+        rightZoneContent
+            .frame(width: Self.endZoneWidth)
+            .frame(maxHeight: .infinity)
     }
 
     @ViewBuilder
-    private var rightCircleContent: some View {
+    private var rightZoneContent: some View {
         switch model.overlayState {
         case .listening:
-            // Live seconds — the "response" while capturing. m:ss at title-scale
-            // mono: "10:00" is ~5 glyphs ≈ 60 pt, inside the ~78 pt clear disc.
+            // Live seconds — the "response" while capturing. m:ss at
+            // body-scale mono: "10:00" is ~5 glyphs ≈ 45 pt inside the 72 pt
+            // end zone.
             Text(Self.durationLabel(model.elapsedSeconds))
-                .font(.speakMonoFace(.title))
+                .font(.speakMonoFace(.body))
                 .monospacedDigit()
                 .foregroundStyle(Color.speakBone)
                 .accessibilityLabel("Elapsed \(Self.durationLabel(model.elapsedSeconds))")
         case .processing:
             ProgressView()
-                .controlSize(.regular)
-                .scaleEffect(1.1)  // [decision: present, not lost, inside the 90 pt disc]
+                .controlSize(.small)
                 .accessibilityLabel(model.isCleaningUp ? "Cleaning up" : "Pasting")
         case .done:
-            Image(systemName: "checkmark")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(Color.speakDelivered)
-                .accessibilityLabel("Done")
+            // Tick + the frozen final time — "how many seconds it ran."
+            VStack(spacing: 2) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.speakDelivered)
+                Text(Self.durationLabel(model.elapsedSeconds))
+                    .font(.speakMonoFace(.caption))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.speakMica)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Done in \(Self.durationLabel(model.elapsedSeconds))")
         case .error:
             Image(systemName: "exclamationmark")
-                .font(.system(size: 20, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Color.speakError)
                 .accessibilityLabel("Error")
         }
     }
 
-    // MARK: Center lane — the bounded rectangle between the circles
+    // MARK: Center lane — the text box between the hairlines
 
-    /// The "proper rectangle": a bounded text lane with a quiet control strip
-    /// in its trailing top corner and the stop hint tucked into its trailing
-    /// bottom corner (while listening). `.clipped()` is the hard guarantee that
-    /// no glyph ever touches a circle.
+    /// The bounded text box: a phase header row (LISTENING / POLISHING /
+    /// DONE / ERROR, the inline stop hint while listening, and the quiet
+    /// control cluster) over the capture text. `.clipped()` is the hard
+    /// guarantee that no glyph ever crosses a hairline.
     private var centerLane: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            // Quiet control strip — trailing top corner of the lane.
-            HStack(spacing: SpeakSpacing.sm) {
-                Spacer(minLength: 0)
-                controlCluster
-            }
-
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs / 2) {
+            headerRow
             centerContent
-
-            // Stop hint — lane bottom, trailing edge, tucked under the right
-            // circle's side. Never breaks the circle's silhouette.
-            if model.overlayState == .listening, !model.stopHint.isEmpty {
-                HStack {
-                    Spacer(minLength: 0)
-                    Text("\(model.stopHint) to finish")
-                        .font(.speakBody(.caption))
-                        .foregroundStyle(Color.speakMica.opacity(0.8))
-                        .lineLimit(1)
-                }
-            }
         }
-        .padding(.horizontal, SpeakSpacing.sm)
+        .padding(.leading, SpeakSpacing.sm)
+        .padding(.trailing, SpeakSpacing.xs)
         .padding(.vertical, SpeakSpacing.xs)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
+    }
+
+    /// The header row — phase word leading ("maybe listening, then polishing
+    /// … on the top, a header kind of"), stop hint inline, controls trailing.
+    private var headerRow: some View {
+        HStack(alignment: .center, spacing: SpeakSpacing.xs) {
+            Text(phaseWord)
+                .font(.speakMonoFace(.caption, semibold: true))
+                .tracking(1.2)
+                .foregroundStyle(phaseTint)
+
+            if model.overlayState == .listening, !model.stopHint.isEmpty {
+                Text("· \(model.stopHint) to finish")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakMica.opacity(0.8))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+            controlCluster
+        }
+    }
+
+    /// The phase word for the header — the pipeline's current job.
+    private var phaseWord: String {
+        switch model.overlayState {
+        case .listening:  return "LISTENING"
+        case .processing: return model.isCleaningUp ? "POLISHING" : "PASTING"
+        case .done:       return "DONE"
+        case .error:      return "ERROR"
+        }
+    }
+
+    /// Header tint — `speakOnAir` iff capturing (listening is capture, so the
+    /// tally rule holds), `speakAgentViolet` while the LLM polishes,
+    /// `speakDelivered` on done, `speakError` on error.
+    private var phaseTint: Color {
+        switch model.overlayState {
+        case .listening:  return .speakOnAir
+        case .processing: return .speakAgentViolet
+        case .done:       return .speakDelivered
+        case .error:      return .speakError
+        }
     }
 
     @ViewBuilder
@@ -337,8 +313,7 @@ struct AuroraOverlayView: View {
 
     /// The FIFO capture window — same lane as classic. `windowText` holds the
     /// newest end of the transcript (oldest leaves when the char budget fills),
-    /// rendered at footnote-scale mono so multiple lines fit inside the lane.
-    /// The line budget shrinks to 4 while the stop-hint strip is visible.
+    /// rendered at footnote-scale mono inside the bounded box.
     @ViewBuilder
     private var listeningCenter: some View {
         if model.windowText.isEmpty {
@@ -352,7 +327,7 @@ struct AuroraOverlayView: View {
             Text(model.windowText)
                 .font(.speakMonoFace(.caption))
                 .foregroundStyle(Color.speakBone)
-                .lineLimit(model.stopHint.isEmpty ? Self.centerLineBudget : Self.listeningLineBudget)
+                .lineLimit(Self.laneLineBudget)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(Self.laneLineSpacing)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -366,32 +341,27 @@ struct AuroraOverlayView: View {
     /// `.done` center — "polish inside the line itself": the raw→clean diff
     /// reveals inside the bounded lane (shared `PolishedDiffContent` →
     /// `AnimatedTranscriptView`, internally scrollable so it stays bounded).
-    /// Non-diff fallbacks show the revealed text, else a quiet confirmation.
+    /// Non-diff fallbacks show the revealed text; the header's DONE word and
+    /// the right zone's tick already carry the state, so no extra glyph here.
     @ViewBuilder
     private var doneCenter: some View {
         if model.isDiffTransforming, let cleaned = model.revealedText {
             PolishedDiffContent(model: model, cleaned: cleaned)
+        } else if let revealed = model.revealedText, !revealed.isEmpty {
+            Text(revealed)
+                .font(.speakMonoFace(.caption))
+                .foregroundStyle(Color.speakBone)
+                .lineLimit(Self.laneLineBudget)
+                .multilineTextAlignment(.leading)
+                .lineSpacing(Self.laneLineSpacing)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .accessibilityLabel("Dictation complete. \(revealed)")
         } else {
-            HStack(alignment: .center, spacing: SpeakSpacing.xs) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color.speakDelivered)
-                    .font(.system(size: 12))
-                if let revealed = model.revealedText, !revealed.isEmpty {
-                    Text(revealed)
-                        .font(.speakMonoFace(.caption))
-                        .foregroundStyle(Color.speakBone)
-                        .lineLimit(Self.centerLineBudget)
-                        .multilineTextAlignment(.leading)
-                        .lineSpacing(Self.laneLineSpacing)
-                } else {
-                    Text("Done")
-                        .font(.speakBody(.base))
-                        .foregroundStyle(Color.speakMica)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Dictation complete")
+            Text("Pasted at cursor")
+                .font(.speakBody(.caption))
+                .foregroundStyle(Color.speakMica)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .accessibilityLabel("Dictation complete")
         }
     }
 
@@ -520,103 +490,6 @@ struct AuroraOverlayView: View {
     }
 }
 
-// MARK: - AmbientOrbView
-
-/// The breathing/reactive orb — the Aurora HUD's signature element. Pure
-/// `Canvas` + `TimelineView` drawing, driven entirely by `SpeakCore`'s
-/// `cyclicPhase(time:cycleDuration:)` and `orbRadius(...)` so the numeric
-/// behavior is unit-testable independent of rendering.
-private struct AmbientOrbView: View {
-    enum Phase: Equatable {
-        case listening, processing, done, error
-    }
-
-    let level: Double
-    let phase: Phase
-    let reduceMotion: Bool
-
-    // Geometry/cadence constants — all [decision H-UI], no measured source
-    // (this is a new decorative element, not a physical/platform constraint).
-    private static let geometry = OrbGeometry(baseRadius: 12.0, breatheAmplitude: 3.0, levelBoost: 8.0)
-    private static let rippleMaxExtra: Double = 10.0
-    private static let breatheCycle: TimeInterval = 3.0      // slow ambient "alive" feel
-    private static let rippleCycle: TimeInterval = 1.6       // matches classic HUD ripple cadence
-    private static let hueCycle: TimeInterval = 6.0          // slow "thinking" color drift
-    // Refresh cadence for the TimelineView while animating. [decision H-UI: 60fps —
-    // matches the "fluid, 60fps" requirement; a single small decorative Canvas
-    // redraw at this size is negligible cost.]
-    private static let frameInterval: TimeInterval = 1.0 / 60.0
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: Self.frameInterval, paused: reduceMotion && level == 0)) { timeline in
-            Canvas { context, size in
-                draw(context: context, size: size, date: timeline.date)
-            }
-        }
-        // Decorative — state is conveyed via text + VoiceOver announcements, not the orb.
-        .accessibilityHidden(true)
-    }
-
-    private func draw(context: GraphicsContext, size: CGSize, date: Date) {
-        let time = date.timeIntervalSinceReferenceDate
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
-
-        let breathePhase = reduceMotion ? 0 : cyclicPhase(time: time, cycleDuration: Self.breatheCycle)
-        let radius = orbRadius(
-            geometry: Self.geometry,
-            level: level,
-            breathePhase: breathePhase,
-            reduceMotion: reduceMotion
-        )
-
-        let colors = gradientColors(for: phase, time: time)
-        let coreRect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
-        context.fill(
-            Path(ellipseIn: coreRect),
-            with: .radialGradient(Gradient(colors: colors), center: center, startRadius: 0, endRadius: radius)
-        )
-
-        // Ripple ring — only while actively listening with audible level, and
-        // only when motion is not reduced (purely decorative reinforcement).
-        guard !reduceMotion, phase == .listening, level > 0.05 else { return }
-        let rippleT = cyclicPhase(time: time, cycleDuration: Self.rippleCycle)
-        let rippleRadius = Self.geometry.baseRadius + rippleT * Self.rippleMaxExtra
-        let rippleOpacity = (1 - rippleT) * 0.5
-        let ringRect = CGRect(
-            x: center.x - rippleRadius, y: center.y - rippleRadius,
-            width: rippleRadius * 2, height: rippleRadius * 2
-        )
-        context.stroke(
-            Path(ellipseIn: ringRect),
-            with: .color((colors.first ?? .white).opacity(rippleOpacity)),
-            lineWidth: 1.5
-        )
-    }
-
-    private func gradientColors(for phase: Phase, time: Double) -> [Color] {
-        switch phase {
-        case .listening:
-            // Aurora palette: teal → agent violet. Cyan stop is fixed; violet stop
-            // is themed so the orb follows the agent channel. [decision H-UI]
-            return [
-                Color(hue: 0.58, saturation: 0.75, brightness: 0.95),
-                Color.speakAgentViolet
-            ]
-
-        case .processing:
-            // Processing / cleanup-in-flight — anchored on the warm amber flow spectrum.
-            let _ = time
-            return Color.speakFlowProcessing
-
-        case .done:
-            return [Color.speakDelivered.opacity(0.95), Color.speakDelivered.opacity(0.6)]
-
-        case .error:
-            return [Color.speakError.opacity(0.95), Color.speakError.opacity(0.6)]
-        }
-    }
-}
-
 // MARK: - Preview
 
 // HONESTY BOUNDARY: same as `TranscriptOverlayView` previews — these verify
@@ -629,7 +502,7 @@ private struct AmbientOrbView: View {
     model.stopHint = "⌘⌘ Right Command"
     model.level = 0.0
     return AuroraOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Aurora — listening, live words") {
@@ -640,7 +513,7 @@ private struct AmbientOrbView: View {
     model.elapsedSeconds = 12
     model.level = 0.6
     return AuroraOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Aurora — listening, long stream") {
@@ -652,7 +525,7 @@ private struct AmbientOrbView: View {
     model.elapsedSeconds = 83
     model.level = 0.45
     return AuroraOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Aurora — processing") {
@@ -663,7 +536,7 @@ private struct AmbientOrbView: View {
     model.isSettling = true
     model.elapsedSeconds = 14
     return AuroraOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Aurora — done") {
@@ -671,7 +544,7 @@ private struct AmbientOrbView: View {
     model.overlayState = .done
     model.elapsedSeconds = 14
     return AuroraOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Aurora — done, diff + actions") {
@@ -684,7 +557,7 @@ private struct AmbientOrbView: View {
     model.onReadback = {}
     model.onReclean = {}
     return AuroraOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Aurora — error") {
@@ -692,6 +565,6 @@ private struct AmbientOrbView: View {
     model.overlayState = .error
     model.errorReason = "Speech engine unavailable"
     return AuroraOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 #endif

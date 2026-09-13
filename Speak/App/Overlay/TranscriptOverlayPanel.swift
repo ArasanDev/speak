@@ -74,17 +74,16 @@ final class TranscriptOverlayPanel: NSPanel {
 
     // MARK: - Constants
 
-    /// Width of the overlay card. [decision: 600 pt — capsule-with-inscribed-
-    ///  circles HUD: two 108 pt end zones (each holding a 90 pt circle
-    ///  concentric with the capsule endcap) + a ~380 pt bounded text lane
-    ///  between them — ~55 mono chars/line at 11 pt caption.]
-    private static let panelWidth: CGFloat = 600
+    /// Width of the overlay card. [decision: 640 pt — flat capsule-bar HUD:
+    ///  two 72 pt end zones (waveform left, response right) + a ~490 pt text
+    ///  box between two hairlines — ~64 mono chars/line at 11 pt caption.]
+    private static let panelWidth: CGFloat = 640
 
-    /// Height of the overlay card. [decision: 112 pt — the capsule interior is
-    ///  108 pt tall, so a 90 pt circle inscribes in each rounded endcap with a
-    ///  9 pt margin on every side; the lane between them holds 4–5 lines of
-    ///  11 pt mono plus the quiet control strip.]
-    private static let panelHeight: CGFloat = 112
+    /// Height of the overlay card. [decision: 76 pt — deliberately minimal
+    ///  vertical footprint per the owner's sketch: a straight horizontal bar.
+    ///  Interior ~72 pt holds the ~14 pt phase header + 3 lines of 11 pt mono
+    ///  (~45 pt) + vertical padding.]
+    private static let panelHeight: CGFloat = 76
 
     /// Distance from the bottom of the visible frame to the bottom edge of the panel.
     /// [decision: spec §4 specifies "~24pt from minY"; clears Dock + standard margin.]

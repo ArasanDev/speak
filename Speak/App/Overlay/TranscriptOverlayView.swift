@@ -1,36 +1,33 @@
 // App/Overlay/TranscriptOverlayView.swift
 //
 // The SwiftUI content hosted inside `TranscriptOverlayPanel`.
-// Floating HUD card — the capsule-with-inscribed-circles frame (locked design):
+// Floating HUD — a flat capsule bar with two hairline dividers (locked design
+// per the owner's sketch `img/speak-overlay-ui.png`):
 //
-//    ╭─────────╮┌────────────────────────┐╭─────────╮
-//   (  voice   )(   text lane — proper   )(  live    )
-//   (  anim    )(   rectangle bounded    )( seconds  )
-//   (          )(   by the circles       )(  or ✓    )
-//    ╰─────────╯└────────────────────────┘╰─────────╯
-//      circle                               circle
+//   ╭──┬──────────────────────────────────────────────┬──╮
+//   (≋ │  LISTENING · ⌘⌘ to finish                ⚙ ✕  │ ○)
+//   (≋ │  streamed transcript text, bounded box        │ ○)
+//    ╰─┴──────────────────────────────────────────────┴──╯
+//   waveform        text box between the lines      timer/✓
 //
-//   • Card      — a Capsule (stadium): a rectangle whose ends are fully curved
-//     semicircles. Same silhouette as Aurora — one structural design for both
-//     HUD styles.
-//   • Left circle — inscribed in the capsule's left endcap: a `speakSurface`
-//     disc with a 1 pt `speakCardBorder` ring. Inside it, the live mic-level
-//     `WaveformView` — `speakOnAir` iff the mic is capturing (the frozen
-//     frontend-identity rule), and the ring itself takes a restrained onAir
-//     tint while listening.
-//   • Center    — the "proper rectangle": the bounded text lane between the
-//     two circles. `model.windowText` (the FIFO window) at
-//     `.speakMonoFace(.caption)`, multi-line, topLeading, clipped — text can
-//     never touch the circles. A quiet control strip rides the lane's
-//     trailing top corner; the stop hint tucks into the lane's trailing
-//     bottom corner while listening.
-//   • Right circle — inscribed in the right endcap: the response. Seconds
-//     ticking live while `.listening`, a spinner while `.processing`, a
-//     delivered ✓ on `.done`, an error mark on `.error`. The ring tints
-//     subtly with state (delivered on done, error on error).
+//   • Shell     — a Capsule (stadium) with the strong outer edge (frosted
+//     glass + border layer). Interior contrast is deliberately low: no discs,
+//     no rings, no fills inside — the sketch's circles were positional marks.
+//   • Left zone — the live mic-level `WaveformView`, the app's signature
+//     asset, centered in the left endcap. `speakOnAir` iff the mic is
+//     capturing (the frozen frontend-identity rule); resting mica otherwise.
+//   • Divider ×2 — two 1 pt `speakCardBorder` hairlines, inset from the
+//     capsule's top/bottom edges. Between them is the text box.
+//   • Center    — the bounded text box: a phase header row (LISTENING /
+//     POLISHING / DONE / ERROR + inline stop hint + quiet controls) over
+//     `model.windowText` (the FIFO window) at `.speakMonoFace(.caption)`,
+//     topLeading, clipped — text can never touch an end zone.
+//   • Right zone — the response: live elapsed seconds while `.listening`,
+//     a spinner while `.processing`, a delivered ✓ + final time on `.done`,
+//     an error mark on `.error`.
 //
 //   All four states share this silhouette — only the lane content and the
-//   right circle's glyph swap. Nothing overlays or merges; geometry is fixed.
+//   right zone's glyph swap. Nothing overlays or merges; geometry is fixed.
 //
 // Decomposed for strict modularity (<800 lines):
 //   • State & models in `OverlayViewModel.swift`
@@ -39,9 +36,9 @@
 //   • Provisional settling content + raw→clean diff in `SettlingOverlayContent.swift`
 //
 // Tokens: `speakBone` primary text, `speakMica` secondary, `speakOnAir` capture
-// tally ONLY, `speakDelivered` done, `speakError` error, `speakCardBorder`
-// circle rings, `speakSurface` disc fill. No raw hex; `SpeakSpacing.*` for
-// all spacing.
+// tally ONLY (waveform + phase label while listening), `speakAgentViolet`
+// polish phase, `speakDelivered` done, `speakError` error, `speakCardBorder`
+// divider hairlines. No raw hex; `SpeakSpacing.*` for all spacing.
 
 import AppKit
 import SpeakCore
@@ -59,30 +56,17 @@ struct TranscriptOverlayView: View {
 
     // MARK: Locked geometry constants
 
-    /// Inscribed circle diameter. [decision: 90 pt — the panel is 112 pt tall,
-    ///  so the card interior is 108 pt (4 pt of outer shadow padding); a 90 pt
-    ///  circle centered in a 108 pt endcap leaves a 9 pt margin on every side —
-    ///  it reads as inscribed inside the rounded end, never touching it.
-    ///  COUPLED to `TranscriptOverlayPanel.panelHeight` = 112.]
-    private static let circleSize: CGFloat = 80
+    /// Width of each end zone (waveform left, response right). [decision: 72 pt —
+    ///  the panel is 76 pt tall, so the card interior is ~72 pt: a square end
+    ///  zone centers its content on the capsule endcap's center (cap radius
+    ///  ≈ 34, center at x ≈ 34). COUPLED to `TranscriptOverlayPanel.panelHeight`.]
+    private static let endZoneWidth: CGFloat = 72
 
-    /// Width of each end zone holding an inscribed circle. [decision: 108 pt =
-    ///  the card interior height — the endcap is a semicircle of radius 54 whose
-    ///  center sits at x = 54; a zone this wide centers the 90 pt circle exactly
-    ///  on the cap's center, so the ring is concentric with the capsule end.]
-    private static let endZoneWidth: CGFloat = 96
-
-    /// Circle ring stroke. [decision: 1 pt ring.]
-    private static let ringWidth: CGFloat = 1
-
-    /// Lane line budget WITHOUT the stop-hint strip (processing / done / error).
-    /// [decision: 5 lines — ~15 pt per line at 11 pt mono + 2 pt spacing; the
-    ///  lane has ~82 pt of text height once the control strip is reserved.]
-    private static let centerLineBudget = 5
-
-    /// Lane line budget while `.listening` (the stop-hint strip is visible).
-    /// [decision: 4 lines — the hint row reclaims ~18 pt, leaving ~64 pt.]
-    private static let listeningLineBudget = 4
+    /// Lane text line budget — one value for every state now that the stop hint
+    /// rides inline in the header row instead of claiming its own strip.
+    /// [decision: 3 lines — ~15 pt per line at 11 pt mono + 2 pt spacing ≈ 45 pt,
+    ///  inside the ~56 pt lane left after the ~14 pt header row.]
+    private static let laneLineBudget = 3
 
     /// Line spacing inside the capture lane. [decision: ~2 pt per spec.]
     private static let laneLineSpacing: CGFloat = SpeakSpacing.xs / 2
@@ -151,143 +135,154 @@ struct TranscriptOverlayView: View {
         }
     }
 
-    // MARK: - The capsule-with-inscribed-circles frame
+    // MARK: - The capsule-bar frame
 
-    /// ( circle ) [ bounded text lane ] ( circle )
-    /// Fixed geometry shared by all four states. The two circles ARE the
-    /// boundary elements — the lane between them is a proper rectangle,
-    /// clipped so text can never touch a ring.
+    /// ( zone ) │ bounded text box │ ( zone )
+    /// Fixed geometry shared by all four states. The two hairlines ARE the
+    /// boundary elements — the box between them is a proper rectangle,
+    /// clipped so text can never touch an end zone.
     private var capsuleFrame: some View {
         HStack(alignment: .center, spacing: 0) {
-            leftCircleZone
+            leftZone
+            laneDivider
             centerLane
-            rightCircleZone
+            laneDivider
+            rightZone
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// A circle inscribed in one capsule endcap: `speakSurface` disc for subtle
-    /// separation from the frosted glass, `speakCardBorder` ring. The zone width
-    /// equals the interior height so the circle lands concentric with the
-    /// capsule's rounded end.
-    private func inscribedCircle<Content: View>(
-        ringTint: Color,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        ZStack {
-            Circle()
-                .fill(Color.speakBone.opacity(0.06))
-                .overlay(Circle().strokeBorder(ringTint, lineWidth: Self.ringWidth))
-            content()
-        }
-        .frame(width: Self.circleSize, height: Self.circleSize)
-        .frame(width: Self.endZoneWidth)
-        .frame(maxHeight: .infinity)
+    /// One boundary hairline — a 1 pt `speakCardBorder` rule inset from the
+    /// capsule's top and bottom edges (the sketch's two lines; interior
+    /// contrast stays low, so it is a hairline, not a wall).
+    private var laneDivider: some View {
+        Rectangle()
+            .fill(Color.speakCardBorder)
+            .frame(width: 1)
+            .padding(.vertical, SpeakSpacing.md)
     }
 
-    // MARK: Left circle — the voice animation
+    // MARK: Left zone — the voice waveform
 
-    /// The live mic-level waveform centered inside the left circle. `isActive`
-    /// is pinned to `.listening` — the mic is capturing iff the bars are lit
-    /// `speakOnAir` (frozen tally rule). In every other state the bars rest at
-    /// idle mica.
-    private var leftCircleZone: some View {
-        inscribedCircle(ringTint: leftRingTint) {
-            WaveformView(level: model.level, isActive: model.overlayState == .listening)
-                // [decision: 1.2× — the 58×≤20 pt bar block fills the ~78 pt
-                //  clear disc better; worst-case visual size ~70×24 pt still
-                //  clears the ring at every chord.]
-                .scaleEffect(1.2)
-        }
+    /// The live mic-level waveform centered in the left endcap — the app's
+    /// signature asset, drawn directly on the glass (no disc, no ring).
+    /// `isActive` is pinned to `.listening` — the mic is capturing iff the
+    /// bars are lit `speakOnAir` (frozen tally rule). In every other state
+    /// the bars rest at idle mica.
+    private var leftZone: some View {
+        WaveformView(level: model.level, isActive: model.overlayState == .listening)
+            .frame(width: Self.endZoneWidth)
+            .frame(maxHeight: .infinity)
+            .accessibilityHidden(true)
     }
 
-    /// The left ring takes a restrained onAir tint while the mic is capturing —
-    /// the circle is the capture chamber. Card border otherwise.
-    private var leftRingTint: Color {
-        model.overlayState == .listening ? .speakOnAir.opacity(0.6) : .speakCardBorder
-    }
+    // MARK: Right zone — the response
 
-    // MARK: Right circle — the response
-
-    /// The response chamber. Live elapsed seconds while `.listening`, spinner
-    /// while `.processing`, delivered ✓ on `.done`, error mark on `.error`.
-    private var rightCircleZone: some View {
-        inscribedCircle(ringTint: rightRingTint) {
-            rightCircleContent
-        }
-    }
-
-    /// Restrained state tint on the response ring — delivered on done, error on
-    /// error, neutral card border while working.
-    private var rightRingTint: Color {
-        switch model.overlayState {
-        case .done:  return .speakDelivered.opacity(0.6)
-        case .error: return .speakError.opacity(0.6)
-        case .listening, .processing: return .speakCardBorder
-        }
+    /// The response zone, centered in the right endcap. Live elapsed seconds
+    /// while `.listening`, spinner while `.processing`, delivered ✓ + the
+    /// final elapsed time on `.done`, error mark on `.error`.
+    private var rightZone: some View {
+        rightZoneContent
+            .frame(width: Self.endZoneWidth)
+            .frame(maxHeight: .infinity)
     }
 
     @ViewBuilder
-    private var rightCircleContent: some View {
+    private var rightZoneContent: some View {
         switch model.overlayState {
         case .listening:
-            // Live seconds — the "response" while capturing. m:ss at title-scale
-            // mono: "10:00" is ~5 glyphs ≈ 60 pt, inside the ~78 pt clear disc.
+            // Live seconds — the "response" while capturing. m:ss at
+            // body-scale mono: "10:00" is ~5 glyphs ≈ 45 pt inside the 72 pt
+            // end zone.
             Text(Self.durationLabel(model.elapsedSeconds))
-                .font(.speakMonoFace(.title))
+                .font(.speakMonoFace(.body))
                 .monospacedDigit()
                 .foregroundStyle(Color.speakBone)
                 .accessibilityLabel("Elapsed \(Self.durationLabel(model.elapsedSeconds))")
         case .processing:
             ProgressView()
-                .controlSize(.regular)
-                .scaleEffect(1.1)  // [decision: present, not lost, inside the 90 pt disc]
+                .controlSize(.small)
                 .accessibilityLabel(model.isCleaningUp ? "Cleaning up" : "Pasting")
         case .done:
-            Image(systemName: "checkmark")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(Color.speakDelivered)
-                .accessibilityLabel("Done")
+            // Tick + the frozen final time — "how many seconds it ran."
+            VStack(spacing: 2) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.speakDelivered)
+                Text(Self.durationLabel(model.elapsedSeconds))
+                    .font(.speakMonoFace(.caption))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.speakMica)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Done in \(Self.durationLabel(model.elapsedSeconds))")
         case .error:
             Image(systemName: "exclamationmark")
-                .font(.system(size: 20, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Color.speakError)
                 .accessibilityLabel("Error")
         }
     }
 
-    // MARK: Center lane — the bounded rectangle between the circles
+    // MARK: Center lane — the text box between the hairlines
 
-    /// The "proper rectangle": a bounded text lane with a quiet control strip
-    /// in its trailing top corner and the stop hint tucked into its trailing
-    /// bottom corner (while listening). `.clipped()` is the hard guarantee that
-    /// no glyph ever touches a circle.
+    /// The bounded text box: a phase header row (LISTENING / POLISHING /
+    /// DONE / ERROR, the inline stop hint while listening, and the quiet
+    /// control cluster) over the capture text. `.clipped()` is the hard
+    /// guarantee that no glyph ever crosses a hairline.
     private var centerLane: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            // Quiet control strip — trailing top corner of the lane.
-            HStack(spacing: SpeakSpacing.sm) {
-                Spacer(minLength: 0)
-                controlCluster
-            }
-
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs / 2) {
+            headerRow
             centerContent
-
-            // Stop hint — lane bottom, trailing edge, tucked under the right
-            // circle's side. Never breaks the circle's silhouette.
-            if model.overlayState == .listening, !model.stopHint.isEmpty {
-                HStack {
-                    Spacer(minLength: 0)
-                    Text("\(model.stopHint) to finish")
-                        .font(.speakBody(.caption))
-                        .foregroundStyle(Color.speakMica.opacity(0.8))
-                        .lineLimit(1)
-                }
-            }
         }
-        .padding(.horizontal, SpeakSpacing.sm)
+        .padding(.leading, SpeakSpacing.sm)
+        .padding(.trailing, SpeakSpacing.xs)
         .padding(.vertical, SpeakSpacing.xs)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
+    }
+
+    /// The header row — phase word leading ("maybe listening, then polishing
+    /// … on the top, a header kind of"), stop hint inline, controls trailing.
+    private var headerRow: some View {
+        HStack(alignment: .center, spacing: SpeakSpacing.xs) {
+            Text(phaseWord)
+                .font(.speakMonoFace(.caption, semibold: true))
+                .tracking(1.2)
+                .foregroundStyle(phaseTint)
+
+            if model.overlayState == .listening, !model.stopHint.isEmpty {
+                Text("· \(model.stopHint) to finish")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakMica.opacity(0.8))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+            controlCluster
+        }
+    }
+
+    /// The phase word for the header — the pipeline's current job.
+    private var phaseWord: String {
+        switch model.overlayState {
+        case .listening:  return "LISTENING"
+        case .processing: return model.isCleaningUp ? "POLISHING" : "PASTING"
+        case .done:       return "DONE"
+        case .error:      return "ERROR"
+        }
+    }
+
+    /// Header tint — `speakOnAir` iff capturing (listening is capture, so the
+    /// tally rule holds), `speakAgentViolet` while the LLM polishes,
+    /// `speakDelivered` on done, `speakError` on error.
+    private var phaseTint: Color {
+        switch model.overlayState {
+        case .listening:  return .speakOnAir
+        case .processing: return .speakAgentViolet
+        case .done:       return .speakDelivered
+        case .error:      return .speakError
+        }
     }
 
     @ViewBuilder
@@ -309,9 +304,8 @@ struct TranscriptOverlayView: View {
 
     /// The FIFO capture window. `windowText` holds the newest end of the
     /// transcript (oldest leaves when the char budget fills) — long dictation
-    /// flows instead of growing. Rendered at footnote-scale mono; the line
-    /// budget drops to 4 while the stop-hint strip is visible so no line ever
-    /// clips mid-glyph.
+    /// flows instead of growing. Rendered at footnote-scale mono inside the
+    /// bounded box.
     @ViewBuilder
     private var listeningCenter: some View {
         if model.windowText.isEmpty {
@@ -325,7 +319,7 @@ struct TranscriptOverlayView: View {
             Text(model.windowText)
                 .font(.speakMonoFace(.caption))
                 .foregroundStyle(Color.speakBone)
-                .lineLimit(model.stopHint.isEmpty ? Self.centerLineBudget : Self.listeningLineBudget)
+                .lineLimit(Self.laneLineBudget)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(Self.laneLineSpacing)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -339,32 +333,27 @@ struct TranscriptOverlayView: View {
     /// `.done` center — "polish inside the line itself": the raw→clean diff
     /// reveals inside the bounded lane (`PolishedDiffContent` →
     /// `AnimatedTranscriptView`, internally scrollable so it stays bounded).
-    /// Non-diff fallbacks show the revealed text, else a quiet confirmation.
+    /// Non-diff fallbacks show the revealed text; the header's DONE word and
+    /// the right zone's tick already carry the state, so no extra glyph here.
     @ViewBuilder
     private var doneCenter: some View {
         if model.isDiffTransforming, let cleaned = model.revealedText {
             PolishedDiffContent(model: model, cleaned: cleaned)
+        } else if let revealed = model.revealedText, !revealed.isEmpty {
+            Text(revealed)
+                .font(.speakMonoFace(.caption))
+                .foregroundStyle(Color.speakBone)
+                .lineLimit(Self.laneLineBudget)
+                .multilineTextAlignment(.leading)
+                .lineSpacing(Self.laneLineSpacing)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .accessibilityLabel("Dictation complete. \(revealed)")
         } else {
-            HStack(alignment: .center, spacing: SpeakSpacing.xs) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color.speakDelivered)
-                    .font(.system(size: 12))
-                if let revealed = model.revealedText, !revealed.isEmpty {
-                    Text(revealed)
-                        .font(.speakMonoFace(.caption))
-                        .foregroundStyle(Color.speakBone)
-                        .lineLimit(Self.centerLineBudget)
-                        .multilineTextAlignment(.leading)
-                        .lineSpacing(Self.laneLineSpacing)
-                } else {
-                    Text("Done")
-                        .font(.speakBody(.base))
-                        .foregroundStyle(Color.speakMica)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Dictation complete")
+            Text("Pasted at cursor")
+                .font(.speakBody(.caption))
+                .foregroundStyle(Color.speakMica)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .accessibilityLabel("Dictation complete")
         }
     }
 
@@ -512,7 +501,7 @@ struct TranscriptOverlayView: View {
     model.stopHint = "⌘⌘ Right Command"
     model.level = 0.0
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Listening — live level 0.6") {
@@ -523,7 +512,7 @@ struct TranscriptOverlayView: View {
     model.elapsedSeconds = 12
     model.level = 0.6
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Listening — long stream (FIFO window full)") {
@@ -535,7 +524,7 @@ struct TranscriptOverlayView: View {
     model.elapsedSeconds = 83
     model.level = 0.45
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Processing — cleanup on") {
@@ -546,7 +535,7 @@ struct TranscriptOverlayView: View {
     model.isSettling = true
     model.elapsedSeconds = 14
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Processing — cleanup off") {
@@ -554,7 +543,7 @@ struct TranscriptOverlayView: View {
     model.overlayState = .processing
     model.isCleaningUp = false
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Done") {
@@ -562,7 +551,7 @@ struct TranscriptOverlayView: View {
     model.overlayState = .done
     model.elapsedSeconds = 14
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Done — readback + re-clean") {
@@ -572,7 +561,7 @@ struct TranscriptOverlayView: View {
     model.onReadback = {}
     model.onReclean = {}
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Done — raw→clean diff") {
@@ -583,7 +572,7 @@ struct TranscriptOverlayView: View {
     model.isDiffTransforming = true
     model.elapsedSeconds = 9
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Error") {
@@ -591,7 +580,7 @@ struct TranscriptOverlayView: View {
     model.overlayState = .error
     model.errorReason = "Speech engine unavailable"
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Error — no reason") {
@@ -599,7 +588,7 @@ struct TranscriptOverlayView: View {
     model.overlayState = .error
     model.errorReason = nil
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 
 #Preview("Listening — customize panel open") {
@@ -609,6 +598,6 @@ struct TranscriptOverlayView: View {
     model.stopHint = "⌘⌘ Right Command"
     model.isCodingPanelOpen = true
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 600, height: 112)
+        .frame(width: 640, height: 76)
 }
 #endif

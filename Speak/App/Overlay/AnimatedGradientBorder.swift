@@ -51,7 +51,7 @@ private enum AnimatedGradientBorderC {
     /// Extra blur headroom at full microphone level. [decision: +10 pt at level = 1.0]
     static let levelBlurBoost: CGFloat = 10
     /// One full gradient rotation in seconds.
-    /// [decision: 3 s — matches AmbientOrbView.rippleCycle; feels organic, not frantic]
+    /// [decision: 3 s — slow ambient cadence; feels organic, not frantic]
     static let rotationDuration: Double = 3.0
 }
 
