@@ -12,8 +12,9 @@ import Testing
 @Suite("SpeakTheme — runtime palette model")
 struct SpeakThemeTests {
 
-    @MainActor private func makeEngine() -> (ThemeEngine, SettingsStore) {
-        let store = SettingsStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+    @MainActor private func makeEngine() throws -> (ThemeEngine, SettingsStore) {
+        let defaults = try #require(UserDefaults(suiteName: UUID().uuidString))
+        let store = SettingsStore(defaults: defaults)
         return (ThemeEngine(settingsStore: store), store)
     }
 
@@ -61,8 +62,8 @@ struct SpeakThemeTests {
     // MARK: Engine
 
     @Test("Selection persists and resolves")
-    @MainActor func selectPersists() {
-        let (engine, store) = makeEngine()
+    @MainActor func selectPersists() throws {
+        let (engine, store) = try makeEngine()
         engine.select("ember")
         #expect(engine.activeTheme.id == "ember")
         #expect(store.themeID == "ember")
@@ -72,15 +73,15 @@ struct SpeakThemeTests {
     }
 
     @Test("Unknown selection id is ignored")
-    @MainActor func selectUnknownIgnored() {
-        let (engine, _) = makeEngine()
+    @MainActor func selectUnknownIgnored() throws {
+        let (engine, _) = try makeEngine()
         engine.select("no-such-theme")
         #expect(engine.activeTheme.id == "speak")
     }
 
     @Test("Draft edits repaint live; discard restores committed theme")
-    @MainActor func draftLifecycle() {
-        let (engine, _) = makeEngine()
+    @MainActor func draftLifecycle() throws {
+        let (engine, _) = try makeEngine()
         engine.beginDraft()
         engine.updateDraft(.windowCanvas, light: "#010203", dark: "#040506")
         #expect(SpeakThemeRuntime.active.pair(for: .windowCanvas)?.dark == "#040506")
@@ -90,8 +91,8 @@ struct SpeakThemeTests {
     }
 
     @Test("Commit persists custom theme and selects it")
-    @MainActor func commitPersists() {
-        let (engine, store) = makeEngine()
+    @MainActor func commitPersists() throws {
+        let (engine, store) = try makeEngine()
         engine.beginDraft()
         engine.renameDraft("Test Theme")
         engine.commitDraft()
@@ -103,8 +104,8 @@ struct SpeakThemeTests {
     }
 
     @Test("Deleting the active custom theme falls back to speak")
-    @MainActor func deleteActiveFallsBack() {
-        let (engine, store) = makeEngine()
+    @MainActor func deleteActiveFallsBack() throws {
+        let (engine, store) = try makeEngine()
         engine.beginDraft()
         engine.commitDraft()
         let customID = engine.activeTheme.id
@@ -115,8 +116,8 @@ struct SpeakThemeTests {
     }
 
     @Test("Corrupt stored JSON yields no customs, keeps default")
-    @MainActor func corruptJSONLenient() {
-        let store = SettingsStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+    @MainActor func corruptJSONLenient() throws {
+        let store = SettingsStore(defaults: try #require(UserDefaults(suiteName: UUID().uuidString)))
         store.customThemesJSON = "{ not json"
         let engine = ThemeEngine(settingsStore: store)
         #expect(engine.themes == SpeakTheme.builtInThemes)

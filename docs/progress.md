@@ -1508,3 +1508,47 @@ Verified: build clean · `SpeakThemeTests` 9/9 pass (fixed nonisolated
 `makeEngine`) · lint 3 serious pre-existing (file_length, unrelated) · moat
 7/7 · light speak + ember screenshot-verified (legible text, correct rail
 onAccent, warm canvas).
+
+### Dictation dead-hotkey root cause + recovery-path fixes (live-verified)
+
+**Root cause of "double-tap does nothing":** the dev build was ad-hoc signed,
+so the Accessibility TCC grant bound to the binary's cdhash — which changes
+every rebuild. The System Settings toggle showed ON while
+`AXIsProcessTrusted()` returned false; the CGEventTap never armed ("tap armed"
+absent from logs), so no hotkey events ever fired. Fixed durably:
+`make dev-cert` recreated `speak-local-codesign` (it had vanished from the
+keychain), `Signing.local.xcconfig` → xcodebuild now signs every build with the
+cert — DR is cert-anchored (`identifier "com.speak.app" and certificate leaf =
+H"22810a…"`), so the grant survives rebuilds.
+
+**Live E2E verified on the cert-signed build:** `tap armed, keyCode=54` on
+launch → synthetic Right-Cmd double-tap (`flagsChanged` @ .cghidEventTap) →
+`beginDictation → .listening` → capture+STT → single-tap → cleanup → Cmd+V
+paste → history → idle. Also: a running Speak instance blocks the TEST_HOST
+launch — the earlier `IDELaunchErrorDomain 20` test failure was that, not a
+code bug.
+
+**Bugs fixed in the recovery path:**
+- `OnboardingViewModel.onAppear`: `displayedStep` persisted `.done` across
+  re-opens, so "Resolve Permissions" flashed "You're all set" and auto-closed —
+  the AX grant UI (and the `prompt:true` call that re-adds the app to the AX
+  list) was unreachable forever after first completion. Now lands on the first
+  missing-permission step.
+- `resetToDefaults()` gaps: now also clears `preferredInputDeviceUID/Name`
+  (pinned mic → system default) and `themeID` → `speak`. Custom themes kept
+  (user content, like history).
+- `ThemeEngine` observes `settingsStore.themeID` (withObservationTracking,
+  one-shot re-arm) so Reset / `defaults write` repaints live.
+- General → Reset now calls `context.rebindHotkey?(.defaultBinding)` — restores
+  double-tap Right-Command live (binding persisted + tap re-armed).
+- `SettingsStore.swift` reset block extracted to `SettingsStore+Reset.swift`
+  (was 1046 lines > 1000 cap — lint error; now 879, 0 serious).
+
+**User-facing answer to "how do I reset":** Settings → General → Reset All
+Settings (settings + hotkey + mic pin + theme; keeps history/custom themes);
+`make reset-permissions` for TCC (then relaunch + re-grant once);
+`defaults delete com.speak.app` + remove `~/Library/Application Support/Speak`
+for a full wipe.
+
+Gates: build clean · `make test` 985 tests / 0 failures · lint 0 serious ·
+moat 7/7.

@@ -96,6 +96,17 @@ final class OnboardingViewModel {
     /// Call when the onboarding window appears. Starts the status-poll loop and app-active listener.
     func onAppear() {
         refreshEvaluation()
+        // Re-entry fix: `displayedStep` persists on the shared view model, so
+        // after a completed run it stays `.done`. If the window re-opens because
+        // a permission was lost (e.g. "Resolve Permissions" after a signing
+        // change invalidated the TCC grant), jump straight to the first
+        // missing-permission step — otherwise the window flashes "You're all
+        // set" and auto-closes, and the grant UI (and with it the
+        // `AXIsProcessTrustedWithOptions(prompt:)` call that re-adds the app to
+        // the Accessibility list) becomes unreachable forever.
+        if displayedStep == .done && !evaluation.blockingPermissions.isEmpty {
+            displayedStep = evaluation.currentStep
+        }
         startPolling()
         startListeningForAppActivation()
     }

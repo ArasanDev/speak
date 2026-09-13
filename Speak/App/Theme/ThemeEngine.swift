@@ -40,6 +40,10 @@ final class ThemeEngine: ObservableObject {
 
     private let settingsStore: SettingsStore
 
+    /// `settingsStore.themeID` is observed in `init` via `observeThemeID()` —
+    /// writes by ANYONE (picker, "Reset All Settings", `defaults write`)
+    /// repaint the live app. Same `withObservationTracking` one-shot/re-arm
+    /// pattern as DictationController's trigger observer.
     init(settingsStore: SettingsStore) {
         self.settingsStore = settingsStore
         let customs = Self.decodeCustomThemes(settingsStore.customThemesJSON)
@@ -49,6 +53,29 @@ final class ThemeEngine: ObservableObject {
             ?? .speak
         self.activeTheme = resolved
         SpeakThemeRuntime.active = resolved
+        observeThemeID()
+    }
+
+    /// Apply the stored selection if it differs (called on themeID changes).
+    private func applyStoredThemeSelection() {
+        let id = settingsStore.themeID
+        guard activeTheme.id != id,
+              let theme = themes.first(where: { $0.id == id }) else { return }
+        discardDraft()
+        activeTheme = theme
+        SpeakThemeRuntime.active = theme
+    }
+
+    private func observeThemeID() {
+        withObservationTracking {
+            _ = settingsStore.themeID
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.applyStoredThemeSelection()
+                self.observeThemeID()
+            }
+        }
     }
 
     // MARK: - Selection
