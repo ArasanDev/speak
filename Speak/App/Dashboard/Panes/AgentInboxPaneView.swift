@@ -25,7 +25,7 @@ struct AgentInboxPaneView: View {
 
             if let errorMessage {
                 Text(errorMessage)
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundColor(.speakOnAir)
                     .padding(.horizontal)
             }
@@ -111,7 +111,7 @@ private struct AgentCallRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(call.prompt)
-                    .font(.speakMonoBody)
+                    .font(.speakBody(.base))
                     .foregroundColor(.speakBone)
                     .lineLimit(2)
                 Spacer()
@@ -120,22 +120,25 @@ private struct AgentCallRow: View {
 
             HStack(spacing: 8) {
                 Text(call.mode.rawValue.capitalized)
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundColor(.speakAgentViolet)
 
                 Text("·")
                     .foregroundColor(.speakMica)
 
                 Text(call.createdAt, style: .relative)
-                    .font(.speakMonoCaption)
+                    .font(.speakMonoFace(.caption))
                     .foregroundColor(.speakMica)
             }
 
             HStack(spacing: 10) {
-                Button(action: { Task { await onAnswerByVoice() } }) {
-                    Label("Answer by voice", systemImage: "mic.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                }
+                Button(
+                    action: { Task { await onAnswerByVoice() } },
+                    label: {
+                        Label("Answer by voice", systemImage: "mic.fill")
+                            .font(.speakBody(.caption, semibold: true))
+                    }
+                )
                 .buttonStyle(.borderedProminent)
                 .tint(.speakHumanAmber)
                 .disabled(isBusy)
@@ -171,7 +174,7 @@ private struct AgentCallRow: View {
 
     private var urgencyBadge: some View {
         Text(call.urgency.rawValue.capitalized)
-            .font(.speakMonoCaption)
+            .font(.speakBody(.caption))
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
             .background(call.urgency == .high ? Color.speakOnAir.opacity(0.2) : Color.speakAgentViolet.opacity(0.15))

@@ -98,7 +98,7 @@ struct AIModelsSettingsView: View {
 
                     if sandbox.phase == .listening {
                         Text(String(format: "%.1fs", sandbox.elapsed))
-                            .font(.speakMonoCaption)
+                            .font(.speakMonoFace(.caption))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -128,7 +128,7 @@ struct AIModelsSettingsView: View {
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 ScrollView {
                     Text(sandbox.transcriptText.isEmpty ? "Listening…" : sandbox.transcriptText)
-                        .font(.speakMonoBody)
+                        .font(.speakMonoFace(.base))
                         .foregroundStyle(sandbox.transcriptText.isEmpty ? .tertiary : .primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -155,7 +155,7 @@ struct AIModelsSettingsView: View {
                             Text(result.cleanedText == nil
                                  ? "delivered raw — cleanup off or engine unavailable"
                                  : "cleaned in \(ms) ms by \(result.engineId)")
-                                .font(.speakMonoCaption)
+                                .font(.speakMonoFace(.caption))
                                 .foregroundStyle(.tertiary)
                         }
                         Spacer()

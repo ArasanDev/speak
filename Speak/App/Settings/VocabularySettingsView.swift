@@ -45,14 +45,14 @@ private struct AcousticCorrectionsCard: View {
                 HStack(spacing: SpeakSpacing.sm) {
                     TextField("What you say (e.g. “cubectl”)", text: $heard)
                         .textFieldStyle(.plain)
-                        .font(.speakMonoBody)
+                        .font(.speakBody(.base))
                         .frame(width: 190)
                         .onSubmit(addCorrection)
                     Image(systemName: "arrow.right")
                         .foregroundStyle(.tertiary)
                     TextField("What gets typed (e.g. “kubectl”)", text: $typed)
                         .textFieldStyle(.plain)
-                        .font(.speakMonoBody)
+                        .font(.speakBody(.base))
                         .onSubmit(addCorrection)
                     Button("Add", action: addCorrection)
                         .disabled(!canAdd)
@@ -71,7 +71,7 @@ private struct AcousticCorrectionsCard: View {
                         Text("YOU SAY")
                             .frame(width: 190, alignment: .leading)
                         Image(systemName: "arrow.right")
-                            .font(.speakMonoCaption)
+                            .font(.speakBody(.caption))
                         Text("GETS TYPED")
                         Spacer()
                     }
@@ -81,13 +81,13 @@ private struct AcousticCorrectionsCard: View {
                     ForEach(rows) { correction in
                         HStack(spacing: SpeakSpacing.sm) {
                             Text(correction.heard)
-                                .font(.speakMonoBody)
+                                .font(.speakMonoFace(.base))
                                 .frame(width: 190, alignment: .leading)
                             Image(systemName: "arrow.right")
-                                .font(.speakMonoCaption)
+                                .font(.speakBody(.caption))
                                 .foregroundStyle(.tertiary)
                             Text(correction.typed)
-                                .font(.speakMonoBody)
+                                .font(.speakMonoFace(.base))
                                 .foregroundStyle(.primary)
                             Spacer()
                             Button {
@@ -142,7 +142,7 @@ private struct CustomVocabularyCard: View {
                 HStack(spacing: SpeakSpacing.sm) {
                     TextField("Add a word or name…", text: $newTerm)
                         .textFieldStyle(.plain)
-                        .font(.speakMonoBody)
+                        .font(.speakBody(.base))
                         .onSubmit(addTerm)
                     Button("Add", action: addTerm)
                         .disabled(newTerm.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -158,7 +158,7 @@ private struct CustomVocabularyCard: View {
                     ForEach(terms, id: \.self) { term in
                         HStack {
                             Text(term)
-                                .font(.speakMonoBody)
+                                .font(.speakMonoFace(.base))
                             Spacer()
                             Button {
                                 removeTerm(term)
@@ -200,13 +200,13 @@ private struct SnippetsCard: View {
                 HStack(spacing: SpeakSpacing.sm) {
                     TextField("Trigger (what you say)", text: $trigger)
                         .textFieldStyle(.plain)
-                        .font(.speakMonoBody)
+                        .font(.speakBody(.base))
                         .frame(width: 180)
                     Image(systemName: "arrow.right")
                         .foregroundStyle(.tertiary)
                     TextField("Expansion (what's inserted)", text: $expansion)
                         .textFieldStyle(.plain)
-                        .font(.speakMonoBody)
+                        .font(.speakBody(.base))
                     Button("Add", action: addSnippet)
                         .disabled(!canAdd)
                 }
@@ -220,13 +220,13 @@ private struct SnippetsCard: View {
                     ForEach(store.snippets) { snippet in
                         HStack(spacing: SpeakSpacing.sm) {
                             Text(snippet.trigger)
-                                .font(.speakMonoBody)
+                                .font(.speakMonoFace(.base))
                                 .foregroundStyle(.primary)
                             Image(systemName: "arrow.right")
-                                .font(.speakMonoCaption)
+                                .font(.speakBody(.caption))
                                 .foregroundStyle(.tertiary)
                             Text(snippet.expansion)
-                                .font(.speakMonoBody)
+                                .font(.speakMonoFace(.base))
                                 .lineLimit(2)
                             Spacer()
                             Button {

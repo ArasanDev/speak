@@ -30,14 +30,7 @@ struct SettingsSectionCard<Content: View>: View {
             VStack(spacing: 0) {
                 content()
             }
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.speakSurface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.speakCardBorder, lineWidth: 1)
-            )
+            .speakCard()
         }
     }
 }

@@ -98,7 +98,7 @@ struct InsightsPaneView: View {
     private func latencySection(_ latency: LatencyStats) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Text("Stop → paste latency")
-                .font(.speakMonoBody)
+                .font(.speakBody(.base))
 
             HStack(spacing: SpeakSpacing.sm) {
                 LatencyCard(
@@ -149,7 +149,7 @@ struct InsightsPaneView: View {
     private func activityChart(_ stats: InsightsStats) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Text("Last 7 days")
-                .font(.speakMonoBody)
+                .font(.speakBody(.base))
 
             ActivityBarChart(dataPoints: stats.dictationsPerDay)
         }
@@ -164,7 +164,7 @@ struct InsightsPaneView: View {
             ProgressView()
                 .progressViewStyle(.circular)
             Text("Loading insights…")
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -201,10 +201,10 @@ private struct StatCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
             Text(value)
-                .font(.speakMonoStat)
-                .foregroundStyle(Color.speakAccent)
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
             Text(label)
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(.secondary)
         }
         .padding(SpeakSpacing.md)
@@ -235,23 +235,23 @@ private struct LatencyCard: View {
             if let valueSeconds {
                 let withinBudget = valueSeconds <= budgetSeconds
                 Text(formattedMs(valueSeconds))
-                    .font(.speakMonoStat)
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(withinBudget ? Color.speakStateDone : Color.speakStateError)
                 Text(label)
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.secondary)
                 Text("n=\(sampleCount)")
-                    .font(.speakMonoCaption)
+                    .font(.speakMonoFace(.caption))
                     .foregroundStyle(.tertiary)
             } else {
                 Text("—")
-                    .font(.speakMonoStat)
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(.secondary)
                 Text(label)
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.secondary)
                 Text("no data")
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.tertiary)
             }
         }
@@ -301,7 +301,7 @@ private struct ActivityBarChart: View {
                     .frame(height: Self.barAreaHeight)
 
                     Text(dayLabel(point.day))
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)

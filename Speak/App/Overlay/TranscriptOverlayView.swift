@@ -115,7 +115,7 @@ struct TranscriptOverlayView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(Self.durationLabel(model.elapsedSeconds))
-                .font(.speakMonoCaption)
+                .font(.speakMonoFace(.caption))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
             customizeButton
@@ -130,7 +130,7 @@ struct TranscriptOverlayView: View {
     private var fifoWindowContent: some View {
         if model.windowText.isEmpty {
             Text("Listening\u{2026}")
-                .font(.speakMono(9.5, weight: .medium))
+                .font(.speakBody(.caption))
                 .foregroundStyle(.secondary)
                 .lineLimit(4)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -138,7 +138,7 @@ struct TranscriptOverlayView: View {
                 .accessibilityAddTraits(.updatesFrequently)
         } else {
             Text(model.windowText)
-                .font(.speakMono(9.5, weight: .medium))
+                .font(.speakMonoFace(.caption))
                 .foregroundStyle(.primary)
                 .lineLimit(4)
                 .multilineTextAlignment(.leading)
@@ -206,7 +206,7 @@ struct TranscriptOverlayView: View {
                         .foregroundStyle(.green)
                         .font(.system(size: 15))
                     Text("Done")
-                        .font(.speakMonoBody)
+                        .font(.speakBody(.base))
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                     if model.onReadback != nil {
@@ -250,17 +250,17 @@ struct TranscriptOverlayView: View {
                 .font(.system(size: 15))
             VStack(alignment: .leading, spacing: 2) {
                 Text("Error")
-                    .font(.speakMonoBody)
+                    .font(.speakBody(.base))
                     .foregroundStyle(.primary)
                 if let reason = model.errorReason, !reason.isEmpty {
                     Text(reason)
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
                 Text("Press Escape or try again")
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(Color.secondary.opacity(0.7))
             }
             Spacer(minLength: 0)

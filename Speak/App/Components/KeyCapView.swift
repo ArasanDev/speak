@@ -54,7 +54,7 @@ struct KeyComboView: View {
             ForEach(Array(keys.enumerated()), id: \.offset) { index, key in
                 if index > 0 {
                     Text("+")
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                         .foregroundStyle(.secondary)
                 }
                 KeyCapView(label: key, isAccented: index == keys.count - 1)

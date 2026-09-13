@@ -9,7 +9,7 @@
 // signal) and the send button becomes a stop.
 //
 // The footer is the instrument panel: persona, context pressure, and the key hint.
-// Everything there is SF Mono, because it is all data.
+// Persona / key-hint labels are chrome (SF Pro); the token count is data (SF Mono).
 
 import Foundation
 import SpeakCore
@@ -80,7 +80,7 @@ struct PlaygroundComposer: View {
     private var inputRow: some View {
         HStack(alignment: .top, spacing: SpeakSpacing.sm + 2) {
             Text("›")
-                .font(.speakMonoFace(.body, semibold: true))
+                .font(.speakBody(.body, semibold: true))
                 .foregroundStyle(Color.speakHumanAmber.opacity(isFocused ? 0.9 : 0.5))
                 .padding(.top, 1)
 
@@ -172,8 +172,8 @@ struct PlaygroundCircleButton: View {
 
 // MARK: - Footer
 
-/// Persona · context pressure · key hint. All data, so all SF Mono, all tertiary
-/// until something asks for attention.
+/// Persona · context pressure · key hint. Persona/key hint are chrome (SF Pro);
+/// the token count is data (SF Mono). All tertiary until something asks for attention.
 struct PlaygroundComposerFooter: View {
     @ObservedObject var viewModel: PlaygroundViewModel
 
@@ -189,7 +189,7 @@ struct PlaygroundComposerFooter: View {
             )
 
             Text("⇧⏎ newline")
-                .font(.speakMonoFace(.caption))
+                .font(.speakBody(.caption))
                 .foregroundStyle(Color.speakMica.opacity(0.6))
         }
     }
@@ -202,7 +202,7 @@ struct PlaygroundComposerFooter: View {
                 Image(systemName: hasPersona ? "person.crop.square.filled.and.at.rectangle" : "person.crop.square")
                     .font(.system(size: 10))
                 Text(hasPersona ? "persona set" : "persona")
-                    .font(.speakMonoFace(.caption))
+                    .font(.speakBody(.caption))
             }
             .foregroundStyle(hasPersona ? Color.speakAgentViolet : Color.speakMica)
             .padding(.horizontal, SpeakSpacing.sm - 1)
@@ -275,7 +275,7 @@ struct PlaygroundErrorStrip: View {
                 .foregroundStyle(Color(nsColor: .systemRed))
 
             Text(message)
-                .font(.speakMonoFace(.caption))
+                .font(.speakBody(.caption))
                 .foregroundStyle(Color.speakBone.opacity(0.9))
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
@@ -310,7 +310,7 @@ struct PlaygroundPersonaEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Text("Persona")
-                .font(.speakDisplay(.body))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color.speakBone)
 
             Text("Prepended to every request. The voice and constraints the agent writes in.")

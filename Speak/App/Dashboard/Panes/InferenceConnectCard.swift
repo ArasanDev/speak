@@ -246,7 +246,7 @@ struct InferenceCodeBlock: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
-                    .font(.speakMonoCaption)
+                    .font(.speakMonoFace(.caption))
                     .textSelection(.enabled)
                     .padding(SpeakSpacing.sm + 2)
             }

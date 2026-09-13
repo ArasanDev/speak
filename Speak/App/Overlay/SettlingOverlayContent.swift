@@ -40,7 +40,7 @@ struct FilmstripView: View {
         HStack(spacing: SpeakSpacing.xs) {
             // The active streaming text at full size (the live capture) — the anchor.
             Text(model.activeStreamText.isEmpty ? "Listening\u{2026}" : model.activeStreamText)
-                .font(.speakMono(9.5, weight: .medium))
+                .font(model.activeStreamText.isEmpty ? .speakBody(.caption) : .speakMonoFace(.caption))
                 .foregroundStyle(.primary)
                 .lineLimit(4)
                 .lineSpacing(1.5)
@@ -120,12 +120,12 @@ struct SettlingProcessingContent: View {
                         .frame(width: 16, height: 16)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(model.isCleaningUp ? "Polishing\u{2026}" : "Pasting\u{2026}")
-                            .font(.speakMonoBody)
+                            .font(.speakBody(.base))
                             .foregroundStyle(.secondary)
                         // Provisional raw transcript — dimmed + italic to signal it's
                         // not final. The transformation (diff) replaces it on reveal.
                         Text(model.settlingText)
-                            .font(.speakMono(9.5, weight: .medium))
+                            .font(.speakMonoFace(.caption))
                             .foregroundStyle(.secondary.opacity(0.8))
                             .italic()
                             .lineLimit(4)
@@ -147,7 +147,7 @@ struct SettlingProcessingContent: View {
                         .scaleEffect(0.7)
                         .frame(width: 16, height: 16)
                     Text(model.isCleaningUp ? "Cleaning up\u{2026}" : "Pasting\u{2026}")
-                        .font(.speakMonoBody)
+                        .font(.speakBody(.base))
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                     closeButton
@@ -192,7 +192,7 @@ struct PolishedDiffContent: View {
                     .foregroundStyle(.green)
                     .font(.system(size: 15))
                 Text("Polished")
-                    .font(.speakMonoBody)
+                    .font(.speakBody(.base))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
                 closeButton

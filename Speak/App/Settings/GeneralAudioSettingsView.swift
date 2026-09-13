@@ -289,7 +289,7 @@ private struct MicrophoneCard: View {
                 HStack(spacing: SpeakSpacing.sm) {
                     VUMeterView(level: level)
                     Text(dbLabel)
-                        .font(.speakMonoCaption)
+                        .font(.speakMonoFace(.caption))
                         .foregroundStyle(.secondary)
                         .frame(width: 62, alignment: .trailing)
                 }
@@ -388,7 +388,7 @@ private struct MicrophoneCard: View {
                         .font(.speakBody(.caption))
                         .foregroundStyle(.primary)
                     Text(detail)
-                        .font(.speakMonoCaption)
+                        .font(.speakMonoFace(.caption))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()

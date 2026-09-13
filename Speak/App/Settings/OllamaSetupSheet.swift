@@ -66,9 +66,9 @@ struct OllamaSetupSheet: View {
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     Text("Set up Ollama")
-                        .font(.speakMonoTitle)
+                        .font(.speakDisplay(.title))
                     Text("Run a local LLM on your Mac \u{2014} no cloud, no account.")
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -90,8 +90,8 @@ struct OllamaSetupSheet: View {
                 detail: "Open Terminal and run one of these commands:"
             )
 
-            // Command blocks — Monaco for commands (content voice).
-            // [decision: speakMonoBody for terminal commands]
+            // Command blocks — mono face for terminal commands (data voice).
+            // [decision: speakMonoFace for terminal commands]
             modelCommandBlock
 
             // Step 3: keep running
@@ -143,7 +143,7 @@ struct OllamaSetupSheet: View {
                         .foregroundStyle(.secondary)
                     HStack(spacing: SpeakSpacing.sm) {
                         Text("ollama pull \(entry.tag)")
-                            .font(.speakMonoBody)
+                            .font(.speakMonoFace(.base))
                             .textSelection(.enabled)
                             .padding(.horizontal, SpeakSpacing.sm)
                             .padding(.vertical, SpeakSpacing.xs)
@@ -188,18 +188,18 @@ struct SetupStepRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: SpeakSpacing.md) {
-            // Step number bubble — accent color, Monaco for the numeral.
+            // Step number bubble — SF Pro for the numeral.
             // [decision: 24pt bubble = 3× SpeakSpacing.sm; matches PrivacyGuaranteeRow icon column]
             Text(number)
-                .font(.speakMonoBody)
+                .font(.speakBody(.base))
                 .foregroundStyle(Color.speakInk)
                 .frame(width: 24, height: 24)
                 .background(Circle().fill(Color.speakBone))
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Text(title)
-                    .font(.speakMonoBody)
+                    .font(.speakBody(.base))
                 Text(detail)
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.secondary)
             }
         }

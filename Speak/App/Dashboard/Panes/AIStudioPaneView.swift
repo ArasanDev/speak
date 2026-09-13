@@ -120,7 +120,7 @@ struct AIStudioPaneView: View {
                 .font(.system(size: 34))
                 .foregroundStyle(.tertiary)
             Text("Select a profile to edit")
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -143,23 +143,22 @@ private struct VoiceTTSConfigSection: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Voice & TTS Configuration")
-                        .font(.speakMonoBody)
-                        .bold()
+                        .font(.system(size: 16, weight: .semibold))
                     Text("Configure on-device AVSpeechSynthesizer voices, speech rate, pitch, volume, and test live audio readbacks.")
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button(action: resetTTSDefaults) {
                     Label("Reset Voice Defaults", systemImage: "arrow.counterclockwise")
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                 }
             }
 
             VStack(alignment: .leading, spacing: SpeakSpacing.md) {
                 // On-Device Voice picker
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                    Text("On-Device TTS Voice").font(.speakMonoCaption).foregroundStyle(.secondary)
+                    Text("On-Device TTS Voice").font(.speakBody(.caption)).foregroundStyle(.secondary)
                     Picker("Voice", selection: Binding(
                         get: { context.settingsStore.ttsVoiceIdentifier },
                         set: { context.settingsStore.ttsVoiceIdentifier = $0 }
@@ -176,10 +175,10 @@ private struct VoiceTTSConfigSection: View {
                 // Speech Rate
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     HStack {
-                        Text("Speech Rate").font(.speakMonoCaption).foregroundStyle(.secondary)
+                        Text("Speech Rate").font(.speakBody(.caption)).foregroundStyle(.secondary)
                         Spacer()
                         Text(String(format: "%.2fx (Default: 0.50x)", context.settingsStore.ttsSpeechRate))
-                            .font(.speakMonoCaption)
+                            .font(.speakMonoFace(.caption))
                             .foregroundStyle(.tertiary)
                     }
                     Slider(value: Binding(
@@ -191,10 +190,10 @@ private struct VoiceTTSConfigSection: View {
                 // Pitch Multiplier
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     HStack {
-                        Text("Pitch Multiplier").font(.speakMonoCaption).foregroundStyle(.secondary)
+                        Text("Pitch Multiplier").font(.speakBody(.caption)).foregroundStyle(.secondary)
                         Spacer()
                         Text(String(format: "%.2fx (Default: 1.00x)", context.settingsStore.ttsPitchMultiplier))
-                            .font(.speakMonoCaption)
+                            .font(.speakMonoFace(.caption))
                             .foregroundStyle(.tertiary)
                     }
                     Slider(value: Binding(
@@ -206,10 +205,10 @@ private struct VoiceTTSConfigSection: View {
                 // Volume Slider
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     HStack {
-                        Text("Volume").font(.speakMonoCaption).foregroundStyle(.secondary)
+                        Text("Volume").font(.speakBody(.caption)).foregroundStyle(.secondary)
                         Spacer()
                         Text(String(format: "%.0f%%", context.settingsStore.ttsVolume * 100))
-                            .font(.speakMonoCaption)
+                            .font(.speakMonoFace(.caption))
                             .foregroundStyle(.tertiary)
                     }
                     Slider(value: Binding(
@@ -222,23 +221,23 @@ private struct VoiceTTSConfigSection: View {
 
                 // Live Audio Readback Test
                 VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-                    Text("Live Audio Readback Test").font(.speakMonoCaption).foregroundStyle(.secondary)
+                    Text("Live Audio Readback Test").font(.speakBody(.caption)).foregroundStyle(.secondary)
 
                     TextField("Test utterance text", text: $testText)
-                        .font(.speakMonoBody)
+                        .font(.speakMonoFace(.base))
                         .textFieldStyle(.roundedBorder)
 
                     HStack(spacing: SpeakSpacing.sm) {
                         Button(action: testReadback) {
                             Label(isSpeaking ? "Speaking..." : "Test Voice Readback", systemImage: "speaker.wave.2.fill")
-                                .font(.speakMonoCaption)
+                                .font(.speakBody(.caption))
                         }
                         .disabled(testText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSpeaking)
 
                         if isSpeaking {
                             Button(action: stopReadback) {
                                 Label("Stop", systemImage: "square.fill")
-                                    .font(.speakMonoCaption)
+                                    .font(.speakBody(.caption))
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(.red)
@@ -332,16 +331,15 @@ private struct STTAudioWaveformInspectorSection: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("STT Audio Waveform Inspector")
-                        .font(.speakMonoBody)
-                        .bold()
+                        .font(.system(size: 16, weight: .semibold))
                     Text("Inspect real-time audio signal dynamics, peak RMS levels, and PCM stream metrics.")
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button(action: toggleSimulation) {
                     Label(isSimulating ? "Pause Inspection" : "Simulate Live Audio", systemImage: isSimulating ? "pause.fill" : "play.fill")
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                 }
             }
 
@@ -367,7 +365,7 @@ private struct STTAudioWaveformInspectorSection: View {
                             .foregroundStyle(.secondary)
                         Spacer()
                         Text(String(format: "RMS Peak: %.2f (%.1f dBFS)", peakLevel, 20 * log10(max(0.0001, peakLevel))))
-                            .font(.speakMonoCaption)
+                            .font(.speakMonoFace(.caption))
                             .foregroundStyle(isSimulating ? Color.speakHumanAmber : .secondary)
                     }
                 }
@@ -377,29 +375,29 @@ private struct STTAudioWaveformInspectorSection: View {
                 // Metadata Details
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     Text("PCM Buffer & Transcriber Pipeline Metrics")
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                         .foregroundStyle(.secondary)
 
                     Grid(alignment: .leading, horizontalSpacing: SpeakSpacing.lg, verticalSpacing: SpeakSpacing.xs) {
                         GridRow {
-                            Text("Target Rate:").font(.speakMonoCaption).foregroundStyle(.secondary)
-                            Text("16,000 Hz (Standard ASR)").font(.speakMonoCaption)
+                            Text("Target Rate:").font(.speakBody(.caption)).foregroundStyle(.secondary)
+                            Text("16,000 Hz (Standard ASR)").font(.speakMonoFace(.caption))
                         }
                         GridRow {
-                            Text("Channels:").font(.speakMonoCaption).foregroundStyle(.secondary)
-                            Text("1 Channel (Mono)").font(.speakMonoCaption)
+                            Text("Channels:").font(.speakBody(.caption)).foregroundStyle(.secondary)
+                            Text("1 Channel (Mono)").font(.speakMonoFace(.caption))
                         }
                         GridRow {
-                            Text("Tap Buffer Size:").font(.speakMonoCaption).foregroundStyle(.secondary)
-                            Text("4,096 frames (~256 ms)").font(.speakMonoCaption)
+                            Text("Tap Buffer Size:").font(.speakBody(.caption)).foregroundStyle(.secondary)
+                            Text("4,096 frames (~256 ms)").font(.speakMonoFace(.caption))
                         }
                         GridRow {
-                            Text("PCM Format:").font(.speakMonoCaption).foregroundStyle(.secondary)
-                            Text("Float32 Non-interleaved").font(.speakMonoCaption)
+                            Text("PCM Format:").font(.speakBody(.caption)).foregroundStyle(.secondary)
+                            Text("Float32 Non-interleaved").font(.speakMonoFace(.caption))
                         }
                         GridRow {
-                            Text("Signal Quality:").font(.speakMonoCaption).foregroundStyle(.secondary)
-                            Text("SNR: ~38 dB (Clean)").font(.speakMonoCaption).foregroundStyle(Color.speakDelivered)
+                            Text("Signal Quality:").font(.speakBody(.caption)).foregroundStyle(.secondary)
+                            Text("SNR: ~38 dB (Clean)").font(.speakMonoFace(.caption)).foregroundStyle(Color.speakDelivered)
                         }
                     }
                 }
@@ -459,10 +457,10 @@ private struct AICleanupToggle: View {
                 get: { settingsStore.cleanupEnabled },
                 set: { settingsStore.cleanupEnabled = $0 }
             ))
-            .font(.speakMonoBody)
+            .font(.speakBody(.base))
 
             Text("Off = raw transcript passes through untouched.")
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(.secondary)
         }
     }
@@ -476,7 +474,7 @@ private struct DefaultProfileSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Text("Default profile")
-                .font(.speakMonoBody)
+                .font(.system(size: 16, weight: .semibold))
 
             Picker("Default profile", selection: Binding(
                 get: { context.profileStore.defaultProfileID },
@@ -491,7 +489,7 @@ private struct DefaultProfileSection: View {
             Text("Sets which profile governs the default path. Today the everyday writing "
                  + "style is still set in the Style pane — full default-profile wiring is the "
                  + "next step. App-specific profiles (below) are active now.")
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -508,7 +506,7 @@ private struct ProfileListPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Text("Profiles")
-                .font(.speakMonoBody)
+                .font(.system(size: 16, weight: .semibold))
 
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 ForEach(context.profileStore.profiles, id: \.id) { profile in
@@ -517,7 +515,7 @@ private struct ProfileListPanel: View {
 
                 Button(action: createNew) {
                     Label("New profile", systemImage: "plus")
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, SpeakSpacing.sm)
@@ -532,7 +530,7 @@ private struct ProfileListPanel: View {
             Button(action: { selectProfile(profile) }) {
                 HStack(spacing: SpeakSpacing.sm) {
                     Image(systemName: profile.icon).font(.system(size: 12))
-                    Text(profile.name).font(.speakMonoCaption)
+                    Text(profile.name).font(.speakMonoFace(.caption))
                     Spacer(minLength: 0)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -622,36 +620,36 @@ private struct ProfileEditorPanel: View {
 
     private func profileNameField(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Name").font(.speakMonoCaption).foregroundStyle(.secondary)
+            Text("Name").font(.speakBody(.caption)).foregroundStyle(.secondary)
             TextField("Profile name", text: Binding(
                 get: { p.name },
                 set: { newValue in updateProfile { $0.name = newValue } }
             ))
-            .font(.speakMonoBody)
+            .font(.speakMonoFace(.base))
             .textFieldStyle(.roundedBorder)
         }
     }
 
     private func profileIconField(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Icon (SF Symbol)").font(.speakMonoCaption).foregroundStyle(.secondary)
+            Text("Icon (SF Symbol)").font(.speakBody(.caption)).foregroundStyle(.secondary)
             TextField("SF Symbol name", text: Binding(
                 get: { p.icon },
                 set: { newValue in updateProfile { $0.icon = newValue } }
             ))
-            .font(.speakMonoBody)
+            .font(.speakMonoFace(.base))
             .textFieldStyle(.roundedBorder)
         }
     }
 
     private func profilePromptField(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("System prompt").font(.speakMonoCaption).foregroundStyle(.secondary)
+            Text("System prompt").font(.speakBody(.caption)).foregroundStyle(.secondary)
             TextEditor(text: Binding(
                 get: { p.systemPrompt },
                 set: { newValue in updateProfile { $0.systemPrompt = newValue } }
             ))
-            .font(.speakMonoBody)
+            .font(.speakMonoFace(.base))
             .frame(minHeight: 100)
             .border(Color.gray.opacity(0.3), width: 1)
             .cornerRadius(4)
@@ -660,7 +658,7 @@ private struct ProfileEditorPanel: View {
 
     private func profileExamplesField(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Few-shot examples").font(.speakMonoCaption).foregroundStyle(.secondary)
+            Text("Few-shot examples").font(.speakBody(.caption)).foregroundStyle(.secondary)
             Text("Spoken → written pairs that steer the model. Strongest lever for small on-device models.")
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
@@ -674,7 +672,7 @@ private struct ProfileEditorPanel: View {
             }
 
             Button(action: { addExample() }) {
-                Label("Add example", systemImage: "plus").font(.speakMonoCaption)
+                Label("Add example", systemImage: "plus").font(.speakBody(.caption))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, SpeakSpacing.xs)
@@ -703,7 +701,7 @@ private struct ProfileEditorPanel: View {
                         get: { example.spoken },
                         set: { v in updateProfile { $0.examples[idx].spoken = v } }
                     ))
-                    .font(.speakMonoCaption)
+                    .font(.speakMonoFace(.caption))
                     .textFieldStyle(.roundedBorder)
                 }
                 VStack(alignment: .leading, spacing: 2) {
@@ -712,7 +710,7 @@ private struct ProfileEditorPanel: View {
                         get: { example.written },
                         set: { v in updateProfile { $0.examples[idx].written = v } }
                     ))
-                    .font(.speakMonoCaption)
+                    .font(.speakMonoFace(.caption))
                     .textFieldStyle(.roundedBorder)
                 }
             }
@@ -732,7 +730,7 @@ private struct ProfileEditorPanel: View {
 
     private func profileFormatOptions(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Output format").font(.speakMonoCaption).foregroundStyle(.secondary)
+            Text("Output format").font(.speakBody(.caption)).foregroundStyle(.secondary)
             Picker("Format", selection: Binding(
                 get: { p.format },
                 set: { newValue in updateProfile { $0.format = newValue } }
@@ -747,7 +745,7 @@ private struct ProfileEditorPanel: View {
 
     private func profileToneOptions(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Tone").font(.speakMonoCaption).foregroundStyle(.secondary)
+            Text("Tone").font(.speakBody(.caption)).foregroundStyle(.secondary)
             Picker("Tone", selection: Binding(
                 get: { p.tone },
                 set: { newValue in updateProfile { $0.tone = newValue } }
@@ -762,7 +760,7 @@ private struct ProfileEditorPanel: View {
 
     private func profileLengthOptions(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Length bias").font(.speakMonoCaption).foregroundStyle(.secondary)
+            Text("Length bias").font(.speakBody(.caption)).foregroundStyle(.secondary)
             Picker("Length", selection: Binding(
                 get: { p.length },
                 set: { newValue in updateProfile { $0.length = newValue } }
@@ -777,7 +775,7 @@ private struct ProfileEditorPanel: View {
 
     private func profileTargetApps(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Target apps (bundle IDs or names)").font(.speakMonoCaption).foregroundStyle(.secondary)
+            Text("Target apps (bundle IDs or names)").font(.speakBody(.caption)).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 ForEach(Array(p.targetApps.enumerated()), id: \.offset) { idx, app in
                     HStack(spacing: SpeakSpacing.xs) {
@@ -785,7 +783,7 @@ private struct ProfileEditorPanel: View {
                             get: { app },
                             set: { newValue in updateProfile { $0.targetApps[idx] = newValue } }
                         ))
-                        .font(.speakMonoCaption)
+                        .font(.speakMonoFace(.caption))
                         .textFieldStyle(.roundedBorder)
 
                         Button(action: { removeTargetApp(idx) }) {
@@ -796,7 +794,7 @@ private struct ProfileEditorPanel: View {
                 }
 
                 Button(action: { addTargetApp() }) {
-                    Label("Add app", systemImage: "plus").font(.speakMonoCaption)
+                    Label("Add app", systemImage: "plus").font(.speakBody(.caption))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -810,18 +808,18 @@ private struct ProfileEditorPanel: View {
             get: { p.autoSubmit },
             set: { newValue in updateProfile { $0.autoSubmit = newValue } }
         ))
-        .font(.speakMonoCaption)
+        .font(.speakBody(.caption))
     }
 
     private func previewBox(_ p: Profile) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-            Text("Live preview").font(.speakMonoCaption).foregroundStyle(.secondary)
+            Text("Live preview").font(.speakBody(.caption)).foregroundStyle(.secondary)
             TextField("Enter sample text", text: $previewSample)
-                .font(.speakMonoBody)
+                .font(.speakMonoFace(.base))
                 .textFieldStyle(.roundedBorder)
 
             Button(action: { runPreview(p) }) {
-                Label("Preview", systemImage: "play.fill").font(.speakMonoCaption)
+                Label("Preview", systemImage: "play.fill").font(.speakBody(.caption))
             }
             .disabled(previewSample.isEmpty || isPreviewing)
 
@@ -836,17 +834,17 @@ private struct ProfileEditorPanel: View {
             switch result {
             case .unavailable:
                 Text("Foundation Models unavailable — enable Apple Intelligence.")
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.secondary)
             case .raw:
                 Text("Raw profile: output equals input (passthrough).")
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.secondary)
             case .transformed(let output):
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                    Text("Transformed output:").font(.speakMonoCaption).foregroundStyle(.secondary)
+                    Text("Transformed output:").font(.speakBody(.caption)).foregroundStyle(.secondary)
                     Text(output)
-                        .font(.speakMonoBody)
+                        .font(.speakMonoFace(.base))
                         .textSelection(.enabled)
                         .padding(SpeakSpacing.sm)
                         .background(Color.black.opacity(0.05))
@@ -855,7 +853,7 @@ private struct ProfileEditorPanel: View {
                 }
             case .failed:
                 Text("Preview failed. Check the system log for details.")
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.secondary)
             }
         }
@@ -873,7 +871,7 @@ private struct ProfileEditorPanel: View {
                         profile = reset
                     }
                 }
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
             }
 
             if !p.isBuiltIn {
@@ -883,7 +881,7 @@ private struct ProfileEditorPanel: View {
                 }) {
                     Label("Delete", systemImage: "trash")
                 }
-                .font(.speakMonoCaption)
+                .font(.speakBody(.caption))
             }
 
             Spacer(minLength: 0)

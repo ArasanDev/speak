@@ -125,7 +125,7 @@ struct AuroraOverlayView: View {
                 .frame(width: Self.orbSize, height: Self.orbSize)
             WordTickerView(fullText: model.partialText, reduceMotion: reduceMotion)
             Text(Self.durationLabel(model.elapsedSeconds))
-                .font(.speakMonoCaption)
+                .font(.speakMonoFace(.caption))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
@@ -149,14 +149,14 @@ struct AuroraOverlayView: View {
                 AmbientOrbView(level: 0, phase: .processing, reduceMotion: reduceMotion)
                     .frame(width: Self.orbSize, height: Self.orbSize)
                 Text(model.isCleaningUp ? "Cleaning up\u{2026}" : "Pasting\u{2026}")
-                    .font(.speakMonoBody)
+                    .font(.speakBody(.base))
                     .foregroundStyle(.secondary)
             }
             // [input-felt-speed §3.3] Same progressive reveal as `TranscriptOverlayView`
             // (classic HUD) — kept in sync so the felt-speed benefit isn't style-gated.
             if settingsStore.revealTextWhileProcessing, !model.partialText.isEmpty {
                 Text(model.partialText)
-                    .font(.speakMonoBody)
+                    .font(.speakMonoFace(.base))
                     .foregroundStyle(.secondary.opacity(0.75))
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
@@ -178,7 +178,7 @@ struct AuroraOverlayView: View {
             AmbientOrbView(level: 0, phase: .done, reduceMotion: reduceMotion)
                 .frame(width: Self.orbSize, height: Self.orbSize)
             Text("Done")
-                .font(.speakMonoBody)
+                .font(.speakBody(.base))
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, SpeakSpacing.md)
@@ -196,17 +196,17 @@ struct AuroraOverlayView: View {
                 .frame(width: Self.orbSize, height: Self.orbSize)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Error")
-                    .font(.speakMonoBody)
+                    .font(.speakBody(.base))
                     .foregroundStyle(.primary)
                 if let reason = model.errorReason, !reason.isEmpty {
                     Text(reason)
-                        .font(.speakMonoCaption)
+                        .font(.speakBody(.caption))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
                 Text("Press Escape or try again")
-                    .font(.speakMonoCaption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(Color.secondary.opacity(0.7))
             }
             Spacer(minLength: 0)
@@ -267,12 +267,12 @@ private struct WordTickerView: View {
         HStack(spacing: 6) {
             if fullText.isEmpty {
                 Text("Listening\u{2026}")
-                    .font(.speakMonoBody)
+                    .font(.speakBody(.base))
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(wordWindow(fullText: fullText, maxWords: Self.maxWords), id: \.id) { token in
                     Text(token.word)
-                        .font(.speakMonoBody)
+                        .font(.speakMonoFace(.base))
                         .foregroundStyle(.primary)
                         .transition(
                             reduceMotion

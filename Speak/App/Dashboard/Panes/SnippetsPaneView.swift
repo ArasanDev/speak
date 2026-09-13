@@ -40,13 +40,13 @@ struct SnippetsPaneView: View {
             HStack(spacing: SpeakSpacing.sm) {
                 TextField("Trigger (what you say)", text: $trigger)
                     .textFieldStyle(.plain)
-                    .font(.speakMonoBody)
+                    .font(.speakBody(.base))
                     .frame(width: 180)
                 Image(systemName: "arrow.right")
                     .foregroundStyle(.tertiary)
                 TextField("Expansion (what's inserted)", text: $expansion)
                     .textFieldStyle(.plain)
-                    .font(.speakMonoBody)
+                    .font(.speakBody(.base))
             }
             HStack {
                 Spacer()
@@ -74,13 +74,13 @@ struct SnippetsPaneView: View {
                 ForEach(store.snippets) { snippet in
                     HStack(spacing: SpeakSpacing.sm) {
                         Text(snippet.trigger)
-                            .font(.speakMonoBody)
+                            .font(.speakMonoFace(.base))
                             .foregroundStyle(Color.speakAccent)
                         Image(systemName: "arrow.right")
-                            .font(.speakMonoCaption)
+                            .font(.speakBody(.caption))
                             .foregroundStyle(.tertiary)
                         Text(snippet.expansion)
-                            .font(.speakMonoBody)
+                            .font(.speakMonoFace(.base))
                             .lineLimit(2)
                         Spacer()
                         Button {
