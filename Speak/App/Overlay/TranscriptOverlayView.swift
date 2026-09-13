@@ -1,13 +1,47 @@
 // App/Overlay/TranscriptOverlayView.swift
 //
 // The SwiftUI content hosted inside `TranscriptOverlayPanel`.
-// Fluid, minimal floating pill HUD inspired by modern living audio interfaces.
+// Floating HUD card — the capsule-with-inscribed-circles frame (locked design):
+//
+//    ╭─────────╮┌────────────────────────┐╭─────────╮
+//   (  voice   )(   text lane — proper   )(  live    )
+//   (  anim    )(   rectangle bounded    )( seconds  )
+//   (          )(   by the circles       )(  or ✓    )
+//    ╰─────────╯└────────────────────────┘╰─────────╯
+//      circle                               circle
+//
+//   • Card      — a Capsule (stadium): a rectangle whose ends are fully curved
+//     semicircles. Same silhouette as Aurora — one structural design for both
+//     HUD styles.
+//   • Left circle — inscribed in the capsule's left endcap: a `speakSurface`
+//     disc with a 1 pt `speakCardBorder` ring. Inside it, the live mic-level
+//     `WaveformView` — `speakOnAir` iff the mic is capturing (the frozen
+//     frontend-identity rule), and the ring itself takes a restrained onAir
+//     tint while listening.
+//   • Center    — the "proper rectangle": the bounded text lane between the
+//     two circles. `model.windowText` (the FIFO window) at
+//     `.speakMonoFace(.caption)`, multi-line, topLeading, clipped — text can
+//     never touch the circles. A quiet control strip rides the lane's
+//     trailing top corner; the stop hint tucks into the lane's trailing
+//     bottom corner while listening.
+//   • Right circle — inscribed in the right endcap: the response. Seconds
+//     ticking live while `.listening`, a spinner while `.processing`, a
+//     delivered ✓ on `.done`, an error mark on `.error`. The ring tints
+//     subtly with state (delivered on done, error on error).
+//
+//   All four states share this silhouette — only the lane content and the
+//   right circle's glyph swap. Nothing overlays or merges; geometry is fixed.
 //
 // Decomposed for strict modularity (<800 lines):
 //   • State & models in `OverlayViewModel.swift`
 //   • Live reactive waveform in `OverlayWaveformView.swift`
 //   • Per-dictation knob chips in `OverlayKnobsRow.swift`
-//   • Provisional settling content in `SettlingOverlayContent.swift`
+//   • Provisional settling content + raw→clean diff in `SettlingOverlayContent.swift`
+//
+// Tokens: `speakBone` primary text, `speakMica` secondary, `speakOnAir` capture
+// tally ONLY, `speakDelivered` done, `speakError` error, `speakCardBorder`
+// circle rings, `speakSurface` disc fill. No raw hex; `SpeakSpacing.*` for
+// all spacing.
 
 import AppKit
 import SpeakCore
@@ -16,11 +50,42 @@ import SwiftUI
 // MARK: - TranscriptOverlayView
 
 /// The visible card shown during live dictation.
-/// Renders four visual states: listening, processing, done, error.
+/// Renders four visual states — listening, processing, done, error — all inside
+/// the same capsule-with-inscribed-circles silhouette.
 struct TranscriptOverlayView: View {
     let model: OverlayViewModel
     let settingsStore: SettingsStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    // MARK: Locked geometry constants
+
+    /// Inscribed circle diameter. [decision: 90 pt — the panel is 112 pt tall,
+    ///  so the card interior is 108 pt (4 pt of outer shadow padding); a 90 pt
+    ///  circle centered in a 108 pt endcap leaves a 9 pt margin on every side —
+    ///  it reads as inscribed inside the rounded end, never touching it.
+    ///  COUPLED to `TranscriptOverlayPanel.panelHeight` = 112.]
+    private static let circleSize: CGFloat = 80
+
+    /// Width of each end zone holding an inscribed circle. [decision: 108 pt =
+    ///  the card interior height — the endcap is a semicircle of radius 54 whose
+    ///  center sits at x = 54; a zone this wide centers the 90 pt circle exactly
+    ///  on the cap's center, so the ring is concentric with the capsule end.]
+    private static let endZoneWidth: CGFloat = 96
+
+    /// Circle ring stroke. [decision: 1 pt ring.]
+    private static let ringWidth: CGFloat = 1
+
+    /// Lane line budget WITHOUT the stop-hint strip (processing / done / error).
+    /// [decision: 5 lines — ~15 pt per line at 11 pt mono + 2 pt spacing; the
+    ///  lane has ~82 pt of text height once the control strip is reserved.]
+    private static let centerLineBudget = 5
+
+    /// Lane line budget while `.listening` (the stop-hint strip is visible).
+    /// [decision: 4 lines — the hint row reclaims ~18 pt, leaving ~64 pt.]
+    private static let listeningLineBudget = 4
+
+    /// Line spacing inside the capture lane. [decision: ~2 pt per spec.]
+    private static let laneLineSpacing: CGFloat = SpeakSpacing.xs / 2
 
     var body: some View {
         ZStack {
@@ -28,11 +93,14 @@ struct TranscriptOverlayView: View {
             ZStack {
                 // Frosted-glass background — pulls from behind the panel.
                 VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .clipShape(Capsule(style: .continuous))
 
                 contentLayer
             }
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            // Capsule — "a full rectangle but on the edges it is fully curvy,
+            // like a circle": fully rounded ends shared with the Aurora style.
+            // [decision: one structural silhouette for both HUD styles.]
+            .clipShape(Capsule(style: .continuous))
 
             // Animated border layer — switches based on settingsStore.borderAnimationStyle
             borderLayer
@@ -51,7 +119,7 @@ struct TranscriptOverlayView: View {
 
         case .fullGlow:
             AnimatedGradientBorder(
-                shape: RoundedRectangle(cornerRadius: 14, style: .continuous),
+                shape: Capsule(style: .continuous),
                 state: model.overlayState,
                 level: model.level,
                 reduceMotion: reduceMotion
@@ -59,7 +127,7 @@ struct TranscriptOverlayView: View {
 
         case .edgeFlow:
             EdgeFlowBorder(
-                shape: RoundedRectangle(cornerRadius: 14, style: .continuous),
+                shape: Capsule(style: .continuous),
                 state: model.overlayState,
                 level: model.level,
                 speed: settingsStore.borderFlowSpeed,
@@ -71,87 +139,291 @@ struct TranscriptOverlayView: View {
 
     @ViewBuilder
     private var contentLayer: some View {
+        if model.overlayState == .listening, let loopManager = model.conversationLoopManager {
+            // Bidirectional conversation mode replaces the content layer entirely.
+            ConversationOverlayView(
+                loopManager: loopManager,
+                model: model,
+                settingsStore: settingsStore
+            )
+        } else {
+            capsuleFrame
+        }
+    }
+
+    // MARK: - The capsule-with-inscribed-circles frame
+
+    /// ( circle ) [ bounded text lane ] ( circle )
+    /// Fixed geometry shared by all four states. The two circles ARE the
+    /// boundary elements — the lane between them is a proper rectangle,
+    /// clipped so text can never touch a ring.
+    private var capsuleFrame: some View {
+        HStack(alignment: .center, spacing: 0) {
+            leftCircleZone
+            centerLane
+            rightCircleZone
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// A circle inscribed in one capsule endcap: `speakSurface` disc for subtle
+    /// separation from the frosted glass, `speakCardBorder` ring. The zone width
+    /// equals the interior height so the circle lands concentric with the
+    /// capsule's rounded end.
+    private func inscribedCircle<Content: View>(
+        ringTint: Color,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        ZStack {
+            Circle()
+                .fill(Color.speakBone.opacity(0.06))
+                .overlay(Circle().strokeBorder(ringTint, lineWidth: Self.ringWidth))
+            content()
+        }
+        .frame(width: Self.circleSize, height: Self.circleSize)
+        .frame(width: Self.endZoneWidth)
+        .frame(maxHeight: .infinity)
+    }
+
+    // MARK: Left circle — the voice animation
+
+    /// The live mic-level waveform centered inside the left circle. `isActive`
+    /// is pinned to `.listening` — the mic is capturing iff the bars are lit
+    /// `speakOnAir` (frozen tally rule). In every other state the bars rest at
+    /// idle mica.
+    private var leftCircleZone: some View {
+        inscribedCircle(ringTint: leftRingTint) {
+            WaveformView(level: model.level, isActive: model.overlayState == .listening)
+                // [decision: 1.2× — the 58×≤20 pt bar block fills the ~78 pt
+                //  clear disc better; worst-case visual size ~70×24 pt still
+                //  clears the ring at every chord.]
+                .scaleEffect(1.2)
+        }
+    }
+
+    /// The left ring takes a restrained onAir tint while the mic is capturing —
+    /// the circle is the capture chamber. Card border otherwise.
+    private var leftRingTint: Color {
+        model.overlayState == .listening ? .speakOnAir.opacity(0.6) : .speakCardBorder
+    }
+
+    // MARK: Right circle — the response
+
+    /// The response chamber. Live elapsed seconds while `.listening`, spinner
+    /// while `.processing`, delivered ✓ on `.done`, error mark on `.error`.
+    private var rightCircleZone: some View {
+        inscribedCircle(ringTint: rightRingTint) {
+            rightCircleContent
+        }
+    }
+
+    /// Restrained state tint on the response ring — delivered on done, error on
+    /// error, neutral card border while working.
+    private var rightRingTint: Color {
+        switch model.overlayState {
+        case .done:  return .speakDelivered.opacity(0.6)
+        case .error: return .speakError.opacity(0.6)
+        case .listening, .processing: return .speakCardBorder
+        }
+    }
+
+    @ViewBuilder
+    private var rightCircleContent: some View {
         switch model.overlayState {
         case .listening:
-            listeningContent
-
+            // Live seconds — the "response" while capturing. m:ss at title-scale
+            // mono: "10:00" is ~5 glyphs ≈ 60 pt, inside the ~78 pt clear disc.
+            Text(Self.durationLabel(model.elapsedSeconds))
+                .font(.speakMonoFace(.title))
+                .monospacedDigit()
+                .foregroundStyle(Color.speakBone)
+                .accessibilityLabel("Elapsed \(Self.durationLabel(model.elapsedSeconds))")
         case .processing:
-            processingContent
-
+            ProgressView()
+                .controlSize(.regular)
+                .scaleEffect(1.1)  // [decision: present, not lost, inside the 90 pt disc]
+                .accessibilityLabel(model.isCleaningUp ? "Cleaning up" : "Pasting")
         case .done:
-            doneContent
-
+            Image(systemName: "checkmark")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(Color.speakDelivered)
+                .accessibilityLabel("Done")
         case .error:
-            errorContent
+            Image(systemName: "exclamationmark")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(Color.speakError)
+                .accessibilityLabel("Error")
         }
     }
 
-    // MARK: - Listening state
+    // MARK: Center lane — the bounded rectangle between the circles
 
-    private var listeningContent: some View {
-        Group {
-            if let loopManager = model.conversationLoopManager {
-                ConversationOverlayView(
-                    loopManager: loopManager,
-                    model: model,
-                    settingsStore: settingsStore
-                )
-            } else {
-                calmListeningRow
-                    .padding(.horizontal, SpeakSpacing.md)
-                    .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)   // = 12 pt [decision]
+    /// The "proper rectangle": a bounded text lane with a quiet control strip
+    /// in its trailing top corner and the stop hint tucked into its trailing
+    /// bottom corner (while listening). `.clipped()` is the hard guarantee that
+    /// no glyph ever touches a circle.
+    private var centerLane: some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            // Quiet control strip — trailing top corner of the lane.
+            HStack(spacing: SpeakSpacing.sm) {
+                Spacer(minLength: 0)
+                controlCluster
+            }
+
+            centerContent
+
+            // Stop hint — lane bottom, trailing edge, tucked under the right
+            // circle's side. Never breaks the circle's silhouette.
+            if model.overlayState == .listening, !model.stopHint.isEmpty {
+                HStack {
+                    Spacer(minLength: 0)
+                    Text("\(model.stopHint) to finish")
+                        .font(.speakBody(.caption))
+                        .foregroundStyle(Color.speakMica.opacity(0.8))
+                        .lineLimit(1)
+                }
             }
         }
+        .padding(.horizontal, SpeakSpacing.sm)
+        .padding(.vertical, SpeakSpacing.xs)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
     }
 
-    /// Layout (locked 2026-08-06 — 3-line FIFO window):
-    ///   [ waveform ] [ last ≤3 lines of speech — CENTER ] [ timer ] [ customize ] [ close ]
-    private var calmListeningRow: some View {
-        HStack(alignment: .center, spacing: SpeakSpacing.sm) {
-            WaveformView(level: model.level, isActive: true)
-                .frame(width: WaveformView.totalWidth)
-
-            fifoWindowContent
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text(Self.durationLabel(model.elapsedSeconds))
-                .font(.speakMonoFace(.caption))
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-            customizeButton
-            closeButton
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    /// The fixed 3-line capture window. Shows `windowText` (FIFO remainder), not
-    /// the full accumulated transcript — so long dictation flows instead of growing.
     @ViewBuilder
-    private var fifoWindowContent: some View {
+    private var centerContent: some View {
+        switch model.overlayState {
+        case .listening:
+            listeningCenter
+        case .processing:
+            SettlingProcessingContent(
+                model: model,
+                revealTextWhileProcessing: settingsStore.revealTextWhileProcessing
+            )
+        case .done:
+            doneCenter
+        case .error:
+            errorCenter
+        }
+    }
+
+    /// The FIFO capture window. `windowText` holds the newest end of the
+    /// transcript (oldest leaves when the char budget fills) — long dictation
+    /// flows instead of growing. Rendered at footnote-scale mono; the line
+    /// budget drops to 4 while the stop-hint strip is visible so no line ever
+    /// clips mid-glyph.
+    @ViewBuilder
+    private var listeningCenter: some View {
         if model.windowText.isEmpty {
             Text("Listening\u{2026}")
                 .font(.speakBody(.caption))
-                .foregroundStyle(.secondary)
-                .lineLimit(4)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .foregroundStyle(Color.speakMica)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .accessibilityLabel("Listening for speech")
                 .accessibilityAddTraits(.updatesFrequently)
         } else {
             Text(model.windowText)
                 .font(.speakMonoFace(.caption))
-                .foregroundStyle(.primary)
-                .lineLimit(4)
+                .foregroundStyle(Color.speakBone)
+                .lineLimit(model.stopHint.isEmpty ? Self.centerLineBudget : Self.listeningLineBudget)
                 .multilineTextAlignment(.leading)
-                .lineSpacing(1.5)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineSpacing(Self.laneLineSpacing)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .contentTransition(.interpolate)
-                .animation(.easeOut(duration: 0.2), value: model.windowText)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: model.windowText)
                 .accessibilityLabel(model.windowText)
                 .accessibilityAddTraits(.updatesFrequently)
         }
     }
 
-    /// The base HUD's single button: opens the separate `CodingCustomizationPanel`.
+    /// `.done` center — "polish inside the line itself": the raw→clean diff
+    /// reveals inside the bounded lane (`PolishedDiffContent` →
+    /// `AnimatedTranscriptView`, internally scrollable so it stays bounded).
+    /// Non-diff fallbacks show the revealed text, else a quiet confirmation.
+    @ViewBuilder
+    private var doneCenter: some View {
+        if model.isDiffTransforming, let cleaned = model.revealedText {
+            PolishedDiffContent(model: model, cleaned: cleaned)
+        } else {
+            HStack(alignment: .center, spacing: SpeakSpacing.xs) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Color.speakDelivered)
+                    .font(.system(size: 12))
+                if let revealed = model.revealedText, !revealed.isEmpty {
+                    Text(revealed)
+                        .font(.speakMonoFace(.caption))
+                        .foregroundStyle(Color.speakBone)
+                        .lineLimit(Self.centerLineBudget)
+                        .multilineTextAlignment(.leading)
+                        .lineSpacing(Self.laneLineSpacing)
+                } else {
+                    Text("Done")
+                        .font(.speakBody(.base))
+                        .foregroundStyle(Color.speakMica)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Dictation complete")
+        }
+    }
+
+    /// `.error` center — the reason plus the recovery hint, inside the lane.
+    private var errorCenter: some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            HStack(spacing: SpeakSpacing.xs) {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .foregroundStyle(Color.speakError)
+                    .font(.system(size: 12))
+                if let reason = model.errorReason, !reason.isEmpty {
+                    Text(reason)
+                        .font(.speakBody(.caption))
+                        .foregroundStyle(Color.speakBone)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                }
+            }
+            Text("Press Escape or try again")
+                .font(.speakBody(.caption))
+                .foregroundStyle(Color.speakMica.opacity(0.7))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityErrorLabel)
+    }
+
+    private var accessibilityErrorLabel: String {
+        var label = "Dictation error."
+        if let reason = model.errorReason, !reason.isEmpty {
+            label += " \(reason)."
+        }
+        label += " Press Escape or try again."
+        return label
+    }
+
+    // MARK: - Lane control strip
+
+    /// State-dependent controls, quiet mica glyphs in the lane's trailing top
+    /// corner. Listening: customize + close. Processing: close only. Done:
+    /// readback / re-clean (when wired) + close. Error: close.
+    @ViewBuilder
+    private var controlCluster: some View {
+        switch model.overlayState {
+        case .listening:
+            customizeButton
+            closeButton
+        case .processing:
+            closeButton
+        case .done:
+            if model.onReadback != nil { readbackButton }
+            if model.onReclean != nil { recleanButton }
+            closeButton
+        case .error:
+            closeButton
+        }
+    }
+
+    /// Opens the separate `CodingCustomizationPanel` (per-dictation knobs).
     private var customizeButton: some View {
         Button {
             model.isCodingPanelOpen.toggle()
@@ -159,7 +431,7 @@ struct TranscriptOverlayView: View {
         } label: {
             Image(systemName: "slider.horizontal.3")
                 .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.speakMica)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Customize the prompt for this dictation")
@@ -172,112 +444,42 @@ struct TranscriptOverlayView: View {
         } label: {
             Image(systemName: "xmark.circle.fill")
                 .font(.system(size: 12))
-                .foregroundStyle(.secondary.opacity(0.8))
+                .foregroundStyle(Color.speakMica.opacity(0.8))
         }
         .buttonStyle(.plain)
         .help("Cancel dictation and hide overlay")
         .accessibilityLabel("Cancel dictation")
     }
 
+    private var readbackButton: some View {
+        Button {
+            model.onReadback?()
+        } label: {
+            Image(systemName: "speaker.wave.2")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.speakMica)
+        }
+        .buttonStyle(.plain)
+        .help("Read this back aloud")
+        .accessibilityLabel("Read the transcript back aloud")
+    }
+
+    private var recleanButton: some View {
+        Button {
+            model.onReclean?()
+        } label: {
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.speakMica)
+        }
+        .buttonStyle(.plain)
+        .help("Re-clean with current settings")
+    }
+
     /// Format elapsed seconds as `m:ss` for the HUD (e.g. 0:05, 1:23).
     static func durationLabel(_ seconds: Int) -> String {
         let s = max(0, seconds)
         return "\(s / 60):\(String(format: "%02d", s % 60))"
-    }
-
-    // MARK: - Processing state
-
-    private var processingContent: some View {
-        SettlingProcessingContent(
-            model: model,
-            revealTextWhileProcessing: settingsStore.revealTextWhileProcessing
-        )
-    }
-
-    // MARK: - Done state
-
-    private var doneContent: some View {
-        Group {
-            if model.isDiffTransforming, let cleaned = model.revealedText {
-                PolishedDiffContent(model: model, cleaned: cleaned)
-            } else {
-                HStack(spacing: SpeakSpacing.sm) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.speakDelivered)
-                        .font(.system(size: 15))
-                    Text("Done")
-                        .font(.speakBody(.base))
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
-                    if model.onReadback != nil {
-                        Button {
-                            model.onReadback?()
-                        } label: {
-                            Image(systemName: "speaker.wave.2")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Read this back aloud")
-                        .accessibilityLabel("Read the transcript back aloud")
-                    }
-                    if model.onReclean != nil {
-                        Button {
-                            model.onReclean?()
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Re-clean with current settings")
-                    }
-                }
-                .padding(.horizontal, SpeakSpacing.md)
-                .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel("Dictation complete")
-            }
-        }
-    }
-
-    // MARK: - Error state (W2.2)
-
-    private var errorContent: some View {
-        HStack(spacing: SpeakSpacing.sm) {
-            Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(Color.speakError)
-                .font(.system(size: 15))
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Error")
-                    .font(.speakBody(.base))
-                    .foregroundStyle(.primary)
-                if let reason = model.errorReason, !reason.isEmpty {
-                    Text(reason)
-                        .font(.speakBody(.caption))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                Text("Press Escape or try again")
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(Color.secondary.opacity(0.7))
-            }
-            Spacer(minLength: 0)
-            closeButton
-        }
-        .padding(.horizontal, SpeakSpacing.md)
-        .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)
-        .accessibilityLabel(accessibilityErrorLabel)
-    }
-
-    private var accessibilityErrorLabel: String {
-        var label = "Dictation error."
-        if let reason = model.errorReason, !reason.isEmpty {
-            label += " \(reason)."
-        }
-        label += " Press Escape or try again."
-        return label
     }
 
     // MARK: - VoiceOver state announcements
@@ -307,27 +509,44 @@ struct TranscriptOverlayView: View {
 #Preview("Listening — placeholder") {
     let model = OverlayViewModel()
     model.overlayState = .listening
-    model.partialText = ""
+    model.stopHint = "⌘⌘ Right Command"
     model.level = 0.0
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 340, height: 60)
+        .frame(width: 600, height: 112)
 }
 
 #Preview("Listening — live level 0.6") {
     let model = OverlayViewModel()
     model.overlayState = .listening
-    model.partialText = "the quick brown fox"
+    model.windowText = "the quick brown fox jumps over the lazy dog and keeps on streaming words into the bounded capture lane"
+    model.stopHint = "⌘⌘ Right Command"
+    model.elapsedSeconds = 12
     model.level = 0.6
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 340, height: 60)
+        .frame(width: 600, height: 112)
+}
+
+#Preview("Listening — long stream (FIFO window full)") {
+    let model = OverlayViewModel()
+    model.overlayState = .listening
+    model.windowText = "newest speech stays in the window while the oldest words flow out first so a long dictation "
+            + "keeps streaming inside the two circles without ever overflowing the lane or growing the panel"
+    model.stopHint = "Fn ×2"
+    model.elapsedSeconds = 83
+    model.level = 0.45
+    return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
+        .frame(width: 600, height: 112)
 }
 
 #Preview("Processing — cleanup on") {
     let model = OverlayViewModel()
     model.overlayState = .processing
     model.isCleaningUp = true
+    model.settlingText = "the quick brown fox jumps over the lazy dog while the model polishes the raw transcript in place"
+    model.isSettling = true
+    model.elapsedSeconds = 14
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 340, height: 60)
+        .frame(width: 600, height: 112)
 }
 
 #Preview("Processing — cleanup off") {
@@ -335,23 +554,36 @@ struct TranscriptOverlayView: View {
     model.overlayState = .processing
     model.isCleaningUp = false
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 340, height: 60)
+        .frame(width: 600, height: 112)
 }
 
 #Preview("Done") {
     let model = OverlayViewModel()
     model.overlayState = .done
+    model.elapsedSeconds = 14
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 340, height: 60)
+        .frame(width: 600, height: 112)
 }
 
 #Preview("Done — readback + re-clean") {
     let model = OverlayViewModel()
     model.overlayState = .done
+    model.elapsedSeconds = 21
     model.onReadback = {}
     model.onReclean = {}
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 340, height: 60)
+        .frame(width: 600, height: 112)
+}
+
+#Preview("Done — raw→clean diff") {
+    let model = OverlayViewModel()
+    model.overlayState = .done
+    model.settlingText = "um so i think we should uh meet on tuesday maybe to go over the budget"
+    model.revealedText = "I think we should meet on Tuesday to go over the budget."
+    model.isDiffTransforming = true
+    model.elapsedSeconds = 9
+    return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
+        .frame(width: 600, height: 112)
 }
 
 #Preview("Error") {
@@ -359,7 +591,7 @@ struct TranscriptOverlayView: View {
     model.overlayState = .error
     model.errorReason = "Speech engine unavailable"
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 340, height: 60)
+        .frame(width: 600, height: 112)
 }
 
 #Preview("Error — no reason") {
@@ -367,15 +599,16 @@ struct TranscriptOverlayView: View {
     model.overlayState = .error
     model.errorReason = nil
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 340, height: 60)
+        .frame(width: 600, height: 112)
 }
 
 #Preview("Listening — customize panel open") {
     let model = OverlayViewModel()
     model.overlayState = .listening
-    model.partialText = "open the customization panel"
+    model.windowText = "open the customization panel"
+    model.stopHint = "⌘⌘ Right Command"
     model.isCodingPanelOpen = true
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
-        .frame(width: 340, height: 60)
+        .frame(width: 600, height: 112)
 }
 #endif

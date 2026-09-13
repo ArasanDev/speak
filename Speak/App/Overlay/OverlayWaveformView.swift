@@ -97,7 +97,10 @@ struct WaveformView: View {
     }
 
     private var barColor: Color {
-        isActive ? Color.speakHumanAmber : Color.speakMica.opacity(0.35)
+        // Active = `speakOnAir`: the waveform is the recording tally while the
+        // mic is capturing (frontend-identity frozen rule — onAir iff capture).
+        // Idle = resting mica bars.
+        isActive ? Color.speakOnAir : Color.speakMica.opacity(0.35)
     }
 
     private var barHeights: [Double] {

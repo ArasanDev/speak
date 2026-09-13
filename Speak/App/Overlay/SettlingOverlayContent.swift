@@ -41,7 +41,7 @@ struct FilmstripView: View {
             // The active streaming text at full size (the live capture) — the anchor.
             Text(model.activeStreamText.isEmpty ? "Listening\u{2026}" : model.activeStreamText)
                 .font(model.activeStreamText.isEmpty ? .speakBody(.caption) : .speakMonoFace(.caption))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.speakBone)
                 .lineLimit(4)
                 .lineSpacing(1.5)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -86,7 +86,7 @@ private struct FilmstripBlockView: View {
             }
             Text(block.displayText)
                 .font(.system(size: 9, weight: block.isPolished ? .medium : .regular, design: .monospaced))
-                .foregroundStyle(block.isPolished ? Color.primary : Color.secondary.opacity(0.75))
+                .foregroundStyle(block.isPolished ? Color.speakBone : Color.speakMica.opacity(0.75))
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
@@ -102,44 +102,44 @@ private struct FilmstripBlockView: View {
 
 // MARK: - Settling processing content
 
-/// The `.processing` window. Felt-speed (input-felt-speed.md §3.3): when the raw
-/// transcript is available (`settlingText` non-empty) we show it marked provisional —
-/// a small spinner + "Polishing…" — instead of a blank "Cleaning up…" spinner. The
-/// user sees their words the moment they stop speaking. This is NOT capture, so it
+/// The `.processing` CENTER LANE inside the shared capsule-with-circles frame.
+/// Felt-speed (input-felt-speed.md §3.3): when the raw transcript is available
+/// (`settlingText` non-empty) we show it marked provisional — dimmed + italic,
+/// with a small spinner — instead of a blank "Cleaning up…" spinner. The user
+/// sees their words the moment they stop speaking. This is NOT capture, so it
 /// never lights `onAir` (frontend-identity.md, frozen).
+///
+/// Owns only the lane content: the right circle carries the spinner, and the
+/// lane's quiet strip carries the close button. The lane is bounded — the text
+/// is line-limited and the parent clips it, so it can never touch the circles.
 struct SettlingProcessingContent: View {
     let model: OverlayViewModel
     let revealTextWhileProcessing: Bool
 
+    /// Same line budget as the listening lane — the provisional text occupies
+    /// the identical bounded column it was captured in.
+    private static let lineBudget = 5
+
     var body: some View {
         Group {
             if revealTextWhileProcessing, !model.settlingText.isEmpty {
-                HStack(alignment: .top, spacing: SpeakSpacing.sm) {
+                HStack(alignment: .top, spacing: SpeakSpacing.xs) {
                     ProgressView()
                         .scaleEffect(0.7)
                         .frame(width: 16, height: 16)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(model.isCleaningUp ? "Polishing\u{2026}" : "Pasting\u{2026}")
-                            .font(.speakBody(.base))
-                            .foregroundStyle(.secondary)
-                        // Provisional raw transcript — dimmed + italic to signal it's
-                        // not final. The transformation (diff) replaces it on reveal.
-                        Text(model.settlingText)
-                            .font(.speakMonoFace(.caption))
-                            .foregroundStyle(.secondary.opacity(0.8))
-                            .italic()
-                            .lineLimit(4)
-                            .multilineTextAlignment(.leading)
-                            .lineSpacing(1.5)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .accessibilityLabel("Polishing transcription: \(model.settlingText)")
-                    }
-                    Spacer(minLength: 0)
-                    closeButton
+                    // Provisional raw transcript — dimmed + italic to signal it's
+                    // not final. The transformation (diff) replaces it on reveal.
+                    Text(model.settlingText)
+                        .font(.speakMonoFace(.caption))
+                        .foregroundStyle(Color.speakMica.opacity(0.85))
+                        .italic()
+                        .lineLimit(Self.lineBudget)
+                        .multilineTextAlignment(.leading)
+                        .lineSpacing(2)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .accessibilityLabel("Polishing transcription: \(model.settlingText)")
                 }
-                .padding(.horizontal, SpeakSpacing.md)
-                .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 // Escape hatch / no raw text — spinner only (matches Aurora + Settings).
                 HStack(spacing: SpeakSpacing.sm) {
@@ -147,75 +147,36 @@ struct SettlingProcessingContent: View {
                         .scaleEffect(0.7)
                         .frame(width: 16, height: 16)
                     Text(model.isCleaningUp ? "Cleaning up\u{2026}" : "Pasting\u{2026}")
-                        .font(.speakBody(.base))
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
-                    closeButton
+                        .font(.speakBody(.caption))
+                        .foregroundStyle(Color.speakMica)
                 }
-                .padding(.horizontal, SpeakSpacing.md)
-                .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .accessibilityLabel(model.isCleaningUp ? "Cleaning up transcription" : "Pasting transcription")
             }
         }
-    }
-
-    /// The same close/cancel affordance the base HUD uses.
-    private var closeButton: some View {
-        Button {
-            model.onCancel?()
-        } label: {
-            Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary.opacity(0.8))
-        }
-        .buttonStyle(.plain)
-        .help("Cancel dictation and hide overlay")
-        .accessibilityLabel("Cancel dictation")
     }
 }
 
 // MARK: - Polished diff content
 
-/// The `.done` reveal. Felt-speed (input-felt-speed.md §3.3): the AI's transformation,
-/// made visible — raw → clean word diff. Canceled words get the animated strikethrough,
-/// inserted words fade in, kept words stay. The user WATCHES the edit happen instead of
-/// seeing a hard swap. This is refinement, not capture — `onAir` is never lit.
+/// The `.done` reveal — CENTER LANE inside the shared capsule-with-circles
+/// frame. Felt-speed (input-felt-speed.md §3.3): the AI's transformation, made
+/// visible — raw → clean word diff. Canceled words get the animated
+/// strikethrough, inserted words fade in, kept words stay. The user WATCHES
+/// the edit happen inside the same bounded column the raw words were captured
+/// in ("polish inside the line itself"). This is refinement, not capture —
+/// `onAir` is never lit.
+///
+/// `AnimatedTranscriptView` owns an internal ScrollView, so a long diff stays
+/// bounded inside the lane height instead of pushing past the lane. The right
+/// circle carries the delivered ✓; the lane's quiet strip carries the controls.
 struct PolishedDiffContent: View {
     let model: OverlayViewModel
     let cleaned: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: SpeakSpacing.sm) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color.speakDelivered)
-                    .font(.system(size: 15))
-                Text("Polished")
-                    .font(.speakBody(.base))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                closeButton
-            }
-            AnimatedTranscriptView(rawText: model.settlingText, cleanedText: cleaned)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, SpeakSpacing.md)
-        .padding(.vertical, SpeakSpacing.sm + SpeakSpacing.xs)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityLabel("Polished transcription. \(cleaned)")
-    }
-
-    private var closeButton: some View {
-        Button {
-            model.onCancel?()
-        } label: {
-            Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary.opacity(0.8))
-        }
-        .buttonStyle(.plain)
-        .help("Dismiss")
-        .accessibilityLabel("Dismiss")
+        AnimatedTranscriptView(rawText: model.settlingText, cleanedText: cleaned)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .accessibilityLabel("Polished transcription. \(cleaned)")
     }
 }

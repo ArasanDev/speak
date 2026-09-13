@@ -93,7 +93,10 @@ final class OverlayController {
     private var partialsTask: Task<Void, Never>?
     /// W2.1: parallel task draining the RMS level stream into `overlayModel.level`.
     private var levelsTask: Task<Void, Never>?
-    /// 1 Hz timer driving the HUD duration counter. Lives only while listening.
+    /// 1 Hz timer driving the HUD duration counter. Lives through `.listening`
+    /// AND `.processing` (the right-rail timer keeps running while cleanup is
+    /// in flight); cancelled at `.done` (showTransformation), `stop()`,
+    /// `showError`, and `cancelImmediate()`.
     private var durationTask: Task<Void, Never>?
     /// W2.2: global NSEvent monitor for the Escape key. Installed while the panel
     /// is showing, removed on stop/cancel. Nil when idle.
@@ -284,6 +287,10 @@ final class OverlayController {
         overlayModel.onCancel = { [weak self] in
             self?.cancelImmediate()
         }
+        // Stop-gesture hint for the lane's bottom-trailing strip — resolved
+        // next to onCancel so the "how do I get out of this" affordance lives
+        // beside the cancel wiring.
+        overlayModel.stopHint = resolvedStopHint()
         overlayModel.onReclean = nil
         overlayModel.onReadback = nil              // [H-2] reset alongside onReclean — same lifetime
         overlayModel.customInstructions = ""       // P-Code v2: reset per-dictation prompt addition
@@ -330,10 +337,12 @@ final class OverlayController {
                     self.overlayModel.partialText = displayed
                     self.partialText = displayed
                     self.onPartialTextUpdated?(displayed)
-                    // Classic HUD: keep a fixed 3-line FIFO window. Oldest leaves
-                    // when full; newest stays. Outbound text is discarded (no
-                    // floating panel, no filmstrip chips). [decision: 2026-08-06]
-                    guard self.settingsStore.hudStyle == .classic else { return }
+                    // FIFO window: keep a fixed multi-line capture window.
+                    // Oldest leaves when full; newest stays. Outbound text is
+                    // discarded (no floating panel, no filmstrip chips).
+                    // [decision: 2026-08-06] Fed for BOTH hud styles — the
+                    // classic and Aurora capture lanes both render
+                    // `windowText` inside the shared capsule-with-circles frame.
                     self.ingestWindowPartial(displayed)
                 }
             }
@@ -374,9 +383,11 @@ final class OverlayController {
             levelsTask = nil
             // Reset level to 0 — bars should be at rest during processing.
             overlayModel.level = 0.0
-            // Stop the duration counter — dictation has ended, cleanup is running.
-            durationTask?.cancel()
-            durationTask = nil
+            // Keep the duration counter RUNNING through .processing — the
+            // right-circle readout shows capture + cleanup elapsed (locked
+            // capsule HUD: "process and time in seconds running on the right").
+            // It is frozen when `.done` arrives (showTransformation) and torn
+            // down by `stop()` / `showError` / `cancelImmediate` as before.
         }
         SpeakLog.engine.info(
             "OverlayController: overlay transitioned to .\(String(describing: state), privacy: .public)"
@@ -410,6 +421,7 @@ final class OverlayController {
         overlayModel.perDictationLength = .preserve
         overlayModel.onKnobChanged = nil
         overlayModel.onCancel = nil
+        overlayModel.stopHint = ""
         overlayModel.customInstructions = ""       // P-Code v2: reset per-dictation prompt addition
         overlayModel.defaultSystemPrompt = ""      // P-Code v2: reset until next beginDictation
         resetCodingPanel()   // P-Code: close the coding panel with the rest of overlay state
@@ -469,6 +481,7 @@ final class OverlayController {
         overlayModel.perDictationLength = .preserve
         overlayModel.onKnobChanged = nil
         overlayModel.onCancel = nil
+        overlayModel.stopHint = ""
         overlayModel.customInstructions = ""       // P-Code v2: reset per-dictation prompt addition
         overlayModel.defaultSystemPrompt = ""      // P-Code v2: reset until next beginDictation
         resetCodingPanel()   // P-Code: close the coding panel with the rest of overlay state
@@ -477,9 +490,29 @@ final class OverlayController {
         SpeakLog.engine.info("OverlayController: dictation cancelled (immediate hide).")
     }
 
+    // MARK: - Stop-gesture hint
+
+    /// The bound stop gesture shown as the right-rail hint while listening,
+    /// e.g. "Fn ×2" or "⌘⌘ Right Command".
+    ///
+    /// Resolved at dictation start from the same persisted `HotkeyBinding` the
+    /// `HotkeyMonitor` loads (`UserDefaultsBindingStore`), reconciled with the
+    /// user-facing `SettingsStore.triggerMode` — mirroring the reconcile
+    /// `DictationController.init` performs (`monitor.binding.with(trigger:)`).
+    /// [decision: read the persisted binding here rather than plumbing the live
+    ///  `HotkeyMonitor` through `OverlayController` — the hint is display-only
+    ///  and the binding cannot change mid-dictation.]
+    private func resolvedStopHint() -> String {
+        let persisted = UserDefaultsBindingStore().load() ?? .defaultBinding
+        return persisted.with(trigger: settingsStore.triggerMode).displayString
+    }
+
     // MARK: - Duration timer
 
-    /// Increment `overlayModel.elapsedSeconds` once per second while listening.
+    /// Increment `overlayModel.elapsedSeconds` once per second. Runs from
+    /// `start()` until `.done`/`stop()`/`showError`/`cancelImmediate` — it is
+    /// intentionally NOT cancelled at the `.processing` transition so the HUD
+    /// timer keeps counting while cleanup runs.
     private func startDurationTimer() {
         durationTask?.cancel()
         durationTask = Task { [weak self] in
@@ -698,6 +731,11 @@ extension OverlayController {
         }
         overlayModel.isSettling = false
         overlayModel.overlayState = .done
+        // Freeze the duration counter at the final capture+cleanup total — the
+        // done flash (and any re-clean dwell inside it) shows the dictation's
+        // completed time, not a still-running clock.
+        durationTask?.cancel()
+        durationTask = nil
         let isDiff = overlayModel.isDiffTransforming
         let revealedCharCount = overlayModel.revealedText?.count ?? -1
         SpeakLog.engine.info(
