@@ -1665,3 +1665,26 @@ and the divider geometry:
 - `speakOnAir` survives as a 5 pt tally lamp beside the phase word — shows
   iff the mic is capturing, preserving the frontend-identity hard rule
   (tally light, not a red wall).
+
+### HUD overlay — contrast + circle pass #2 (owner dictation 2026-09-13)
+
+Owner feedback decoded: shape locked; colors wrong (orange — the system accent
+is orange on his machine, so `speakUIAccent` was orange); light-on-light
+elements washed out; dividers should be dotted; waveform belongs inside a
+circle with the colorful animated ring "previously available."
+
+- New functional color `speakVoiceBlue` (fixed #2973F2-ish blue, NOT themed —
+  like `onAir`, a signal not chrome; never follows the system accent).
+  Waveform bars + LISTENING header use it.
+- Left zone: waveform inside a quiet inner ring (Ø48) + a rotating
+  conic-gradient spectrum ring (Ø60, `speakFlowInference` blue→cyan→violet,
+  5 s cycle, dimmed when not listening, reduce-motion off).
+- Dividers: DOTTED (VRule shape, dash [4,3], 1.5 pt, `speakBone` 50%),
+  full top-to-bottom, no inset.
+- Light-on-light sweep: stop hint, "Listening…" placeholder, ✕/⚙/↻/🔊
+  controls all moved mica → `speakBone` (dark on the light glass).
+- `speakFlowOnAir` border spectrum re-anchored: voiceBlue → onAir → cyan.
+- Timer kept dark/small (owner: "very dark and it was so good").
+
+Gates: build clean · 985 tests / 0 failures · lint 0 serious · moat 7/7 ·
+screenshot-verified (listening state, light capsule).

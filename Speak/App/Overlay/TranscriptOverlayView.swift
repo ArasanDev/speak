@@ -62,6 +62,15 @@ struct TranscriptOverlayView: View {
     ///  ≈ 34, center at x ≈ 34). COUPLED to `TranscriptOverlayPanel.panelHeight`.]
     private static let endZoneWidth: CGFloat = 72
 
+    /// Left-zone circle sizes — "waveform inside one circle, then another
+    ///  circle, a colorful animation thing." Outer = rotating spectrum ring,
+    ///  inner = quiet ring holding the waveform. [decision: 60/48 pt — outer
+    ///  leaves ~6 pt margin inside the 72 pt zone; inner holds the ~44 pt
+    ///  scaled waveform block with ring clearance.]
+    private static let outerRingSize: CGFloat = 60
+    private static let innerCircleSize: CGFloat = 48
+    private static let waveformScale: CGFloat = 0.75
+
     /// Lane text line budget — one value for every state now that the stop hint
     /// rides inline in the header row instead of claiming its own strip.
     /// [decision: 3 lines — ~15 pt per line at 11 pt mono + 2 pt spacing ≈ 45 pt,
@@ -152,29 +161,65 @@ struct TranscriptOverlayView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// One boundary rule — a straight 1 pt line, top-to-bottom, no inset
-    /// (the sketch's two lines: "a straight line that is black, dark, and
-    /// completely from top to bottom, not in the middle"). `speakBone` at
-    /// 45% reads dark in light themes and light in dark themes — visible
-    /// against the glass either way.
+    /// One boundary rule — a straight DOTTED line, top-to-bottom, no inset
+    /// (the sketch's two lines: "a little thicker… a dotted line, maybe 3 to
+    /// 5"). `speakBone` at 50% reads dark in light themes and light in dark —
+    /// visible against the glass either way.
     private var laneDivider: some View {
-        Rectangle()
-            .fill(Color.speakBone.opacity(0.45))
-            .frame(width: 1)
+        VRule()
+            .stroke(
+                Color.speakBone.opacity(0.5),
+                style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [4, 3])
+            )
+            .frame(width: 4)
     }
 
-    // MARK: Left zone — the voice waveform
+    // MARK: Left zone — the voice waveform inside two circles
 
-    /// The live mic-level waveform centered in the left endcap — the app's
-    /// signature asset, drawn directly on the glass (no disc, no ring).
-    /// `isActive` is pinned to `.listening` — the mic is capturing iff the
-    /// bars are lit `speakOnAir` (frozen tally rule). In every other state
-    /// the bars rest at idle mica.
+    /// Rotation driver for the colorful outer ring. [decision: continuous
+    ///  slow spin while the panel is up; suppressed under reduce-motion.]
+    @State private var ringAngle: Double = 0
+
+    /// "Waveform inside one circle, then another circle — a colorful
+    /// animation thing": the live mic-level waveform (the app's signature
+    /// asset) sits inside a quiet inner ring; around it, a rotating
+    /// conic-gradient spectrum ring carries the motion. `isActive` is pinned
+    /// to `.listening` — bars lit `speakVoiceBlue` iff the mic is capturing.
     private var leftZone: some View {
-        WaveformView(level: model.level, isActive: model.overlayState == .listening)
-            .frame(width: Self.endZoneWidth)
-            .frame(maxHeight: .infinity)
-            .accessibilityHidden(true)
+        ZStack {
+            // Outer colorful ring — the animated circle. Rotates slowly;
+            // the spectrum is the cool inference palette (blue → cyan →
+            // violet), "blue or some other colors" per owner direction.
+            Circle()
+                .strokeBorder(
+                    AngularGradient(
+                        colors: Color.speakFlowInference,
+                        center: .center,
+                        angle: .degrees(ringAngle)
+                    ),
+                    lineWidth: 2.5
+                )
+                .frame(width: Self.outerRingSize, height: Self.outerRingSize)
+                .opacity(model.overlayState == .listening ? 1 : 0.4)
+
+            // Inner circle — the waveform's chamber, kept quiet (low-contrast
+            // interior is deliberate; contrast lives on the edge).
+            Circle()
+                .strokeBorder(Color.speakBone.opacity(0.25), lineWidth: 1)
+                .frame(width: Self.innerCircleSize, height: Self.innerCircleSize)
+
+            WaveformView(level: model.level, isActive: model.overlayState == .listening)
+                .scaleEffect(Self.waveformScale)
+        }
+        .frame(width: Self.endZoneWidth)
+        .frame(maxHeight: .infinity)
+        .accessibilityHidden(true)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.linear(duration: 5).repeatForever(autoreverses: false)) {
+                ringAngle = 360
+            }
+        }
     }
 
     // MARK: Right zone — the response
@@ -264,7 +309,7 @@ struct TranscriptOverlayView: View {
             if model.overlayState == .listening, !model.stopHint.isEmpty {
                 Text("· \(model.stopHint) to finish")
                     .font(.speakBody(.caption))
-                    .foregroundStyle(Color.speakMica.opacity(0.8))
+                    .foregroundStyle(Color.speakBone.opacity(0.55))
                     .lineLimit(1)
             }
 
@@ -283,12 +328,13 @@ struct TranscriptOverlayView: View {
         }
     }
 
-    /// Header tint — `speakHumanAmber` while capturing (the human channel:
-    /// LISTENING is your voice, warm amber not red), `speakAgentViolet` while
-    /// the LLM polishes, `speakDelivered` on done, `speakError` on error.
+    /// Header tint — `speakVoiceBlue` while capturing (fixed voice blue —
+    /// never follows the system accent, which can be orange),
+    /// `speakAgentViolet` while the LLM polishes, `speakDelivered` on done,
+    /// `speakError` on error.
     private var phaseTint: Color {
         switch model.overlayState {
-        case .listening:  return .speakHumanAmber
+        case .listening:  return .speakVoiceBlue
         case .processing: return .speakAgentViolet
         case .done:       return .speakDelivered
         case .error:      return .speakError
@@ -321,7 +367,7 @@ struct TranscriptOverlayView: View {
         if model.windowText.isEmpty {
             Text("Listening\u{2026}")
                 .font(.speakBody(.caption))
-                .foregroundStyle(Color.speakMica)
+                .foregroundStyle(Color.speakBone.opacity(0.55))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .accessibilityLabel("Listening for speech")
                 .accessibilityAddTraits(.updatesFrequently)
@@ -430,7 +476,7 @@ struct TranscriptOverlayView: View {
         } label: {
             Image(systemName: "slider.horizontal.3")
                 .font(.system(size: 12))
-                .foregroundStyle(Color.speakMica)
+                .foregroundStyle(Color.speakBone.opacity(0.55))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Customize the prompt for this dictation")
@@ -441,9 +487,11 @@ struct TranscriptOverlayView: View {
         Button {
             model.onCancel?()
         } label: {
-            Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 12))
-                .foregroundStyle(Color.speakMica.opacity(0.8))
+            // Plain dark ✕ — the faint mica `xmark.circle.fill` washed out on
+            // the light capsule glass (light-on-light feedback).
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color.speakBone.opacity(0.65))
         }
         .buttonStyle(.plain)
         .help("Cancel dictation and hide overlay")
@@ -456,7 +504,7 @@ struct TranscriptOverlayView: View {
         } label: {
             Image(systemName: "speaker.wave.2")
                 .font(.system(size: 13))
-                .foregroundStyle(Color.speakMica)
+                .foregroundStyle(Color.speakBone.opacity(0.55))
         }
         .buttonStyle(.plain)
         .help("Read this back aloud")
@@ -469,7 +517,7 @@ struct TranscriptOverlayView: View {
         } label: {
             Image(systemName: "arrow.clockwise")
                 .font(.system(size: 13))
-                .foregroundStyle(Color.speakMica)
+                .foregroundStyle(Color.speakBone.opacity(0.55))
         }
         .buttonStyle(.plain)
         .help("Re-clean with current settings")
