@@ -63,6 +63,9 @@ struct WaveformView: View {
 
     let level: Double
     let isActive: Bool          // true = listening; false = silent/idle
+    /// The voice signal color — the user's `voiceAnimationColor` pick
+    /// (a fixed functional hue, never the system accent).
+    let tint: Color
 
     // [decision: 15 bars — VoiceInk blueprint, benchmark.md §7]
     private static let barCount: Int = 15
@@ -111,12 +114,11 @@ struct WaveformView: View {
     }
 
     private var barColor: Color {
-        // Active = `speakVoiceBlue`: the fixed voice-capture blue — owner
-        // direction: blue, not orange/red, and it must not follow the system
-        // accent. The `speakOnAir` tally lamp lives in the header row
-        // instead. Idle = resting bone bars, dark enough to read on the
-        // light glass (mica washed out).
-        isActive ? Color.speakVoiceBlue : Color.speakBone.opacity(0.3)
+        // Active = the configured voice tint (fixed functional hues — never
+        // the system accent, which can be orange). The `speakOnAir` tally
+        // lamp lives in the header row instead. Idle = resting bone bars,
+        // dark enough to read on the light glass (mica washed out).
+        isActive ? tint : Color.speakBone.opacity(0.3)
     }
 
     private var barHeights: [Double] {

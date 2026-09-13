@@ -110,6 +110,42 @@ struct AppearanceHUDSettingsView: View {
                 .pickerStyle(.menu)
                 .fixedSize()
             }
+
+            SettingsRowSeparator()
+
+            SettingsRow(
+                "Animation color",
+                description: "The hue the voice animation draws with."
+            ) {
+                HStack(spacing: SpeakSpacing.sm) {
+                    ForEach(VoiceAnimationColor.allCases, id: \.self) { choice in
+                        Button {
+                            store.voiceAnimationColor = choice
+                        } label: {
+                            Circle()
+                                .fill(choice.color)
+                                .frame(width: 18, height: 18)
+                                .overlay(
+                                    Circle()
+                                        .strokeBorder(
+                                            choice == store.voiceAnimationColor
+                                                ? Color.speakBone
+                                                : Color.clear,
+                                            lineWidth: 2
+                                        )
+                                        .padding(-3)
+                                )
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(choice.rawValue.capitalized)
+                        .accessibilityLabel("\(choice.rawValue) animation color")
+                        .accessibilityAddTraits(
+                            choice == store.voiceAnimationColor ? .isSelected : []
+                        )
+                    }
+                }
+            }
         }
     }
 

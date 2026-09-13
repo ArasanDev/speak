@@ -128,6 +128,17 @@ public enum VoiceAnimationStyle: String, Codable, Sendable, Equatable, CaseItera
     case ringGauge
 }
 
+/// The color the HUD's left-zone voice animation draws with — a runtime
+/// choice like the style itself. Raw values match the design-menu palette
+/// (`img/overlay-anim-options.html`). Default: `.blue`.
+public enum VoiceAnimationColor: String, Codable, Sendable, Equatable, CaseIterable {
+    case blue
+    case cyan
+    case violet
+    case green
+    case amber
+}
+
 /// Which border animation style to show on the recording HUD overlay.
 /// Default = `.none` — zero regression risk for existing users.
 public enum BorderAnimationStyle: String, Codable, Sendable, Equatable, CaseIterable {
@@ -185,6 +196,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let extraBindings         = "speak.settings.extraHotkeyBindings"
         static let hudStyle              = "speak.settings.hudStyle"
         static let voiceAnimationStyle   = "speak.settings.voiceAnimationStyle"
+        static let voiceAnimationColor   = "speak.settings.voiceAnimationColor"
         static let borderAnimationStyle  = "speak.settings.borderAnimationStyle"
         static let borderFlowSpeed       = "speak.settings.borderFlowSpeed"
         static let borderFlowCount       = "speak.settings.borderFlowCount"
@@ -237,6 +249,7 @@ public final class SettingsStore: @unchecked Sendable {
             Keys.perAppContextEnabled: true,
             Keys.hudStyle: HUDStyle.classic.rawValue,
             Keys.voiceAnimationStyle: VoiceAnimationStyle.sonar.rawValue,
+            Keys.voiceAnimationColor: VoiceAnimationColor.blue.rawValue,
             Keys.borderAnimationStyle: BorderAnimationStyle.none.rawValue,
             Keys.borderFlowSpeed: BorderFlowSpeed.medium.rawValue,
             Keys.borderFlowCount: 1,
@@ -728,6 +741,21 @@ extension SettingsStore {
         set {
             withMutation(keyPath: \.voiceAnimationStyle) {
                 defaults.set(newValue.rawValue, forKey: Keys.voiceAnimationStyle)
+            }
+        }
+    }
+
+    /// Color the left-zone voice animation draws with. Default: `.blue`.
+    public var voiceAnimationColor: VoiceAnimationColor {
+        get {
+            access(keyPath: \.voiceAnimationColor)
+            let raw = defaults.string(forKey: Keys.voiceAnimationColor)
+                ?? VoiceAnimationColor.blue.rawValue
+            return VoiceAnimationColor(rawValue: raw) ?? .blue
+        }
+        set {
+            withMutation(keyPath: \.voiceAnimationColor) {
+                defaults.set(newValue.rawValue, forKey: Keys.voiceAnimationColor)
             }
         }
     }

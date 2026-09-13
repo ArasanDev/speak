@@ -1711,3 +1711,27 @@ at runtime, same pattern as color themes.
 
 Gates: build clean · 989 tests / 0 failures · lint 0 serious · moat 7/7 ·
 screenshot-verified listening state for sonar + ringGauge.
+
+### HUD voice animation — distinct variants + runtime color (owner correction)
+
+Owner: "you merge two things together… both the designs are too different,
+distinct." The first pass nested each picked animation inside the shared
+inner-circle + spectrum ring — mingled. Corrected: each variant now owns its
+COMPLETE look; no shared chamber wraps them.
+
+- `VoiceAnimationColor` (SpeakCore): blue/cyan/violet/green/amber — fixed
+  functional palette (menu hues), never the system accent. New
+  `speak.settings.voiceAnimationColor` key, default `.blue`, reset + 2 tests.
+- `OverlayVoiceAnimation.swift` reworked: `VoiceAnimationView(style:tint:…)`
+  switcher; `SpectrumChamberView` carries the chamber (inner ring + rotating
+  spectrum ring) as SPECTRUM's own look; `SonarPingView` draws only its
+  hairline ring + pings + dot; `RingGaugeView` draws only track + fill arc +
+  needle + micro-bars. All take `tint` (`color` extension resolves hues).
+- `WaveformView` gains `tint: Color` — barColor now `isActive ? tint : bone`.
+- Both HUD views' `leftZone` = bare `VoiceAnimationView` in the 72 pt endcap;
+  the old ZStack chamber + `ringAngle` state removed.
+- Settings → Appearance & HUD → Recording HUD: "Voice animation" picker +
+  "Animation color" swatch row (5 dots, selection ring).
+
+Gates: build clean · 991 tests / 0 failures · lint 0 serious · moat 7/7 ·
+screenshot-verified sonar/blue + ringGauge/violet listening states.

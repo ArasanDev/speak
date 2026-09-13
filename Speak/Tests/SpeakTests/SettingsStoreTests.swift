@@ -269,6 +269,22 @@ final class SettingsStoreTests: XCTestCase {
             "An unreadable rawValue must fall back to the .sonar default, never crash.")
     }
 
+    func testVoiceAnimationColorDefaultIsBlue() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertEqual(store.voiceAnimationColor, .blue,
+            "voiceAnimationColor default must be .blue — the menu's voice hue.")
+    }
+
+    func testVoiceAnimationColorRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.voiceAnimationColor = .violet
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.voiceAnimationColor, .violet,
+            ".violet must round-trip across a fresh SettingsStore.")
+    }
+
     // resetToDefaults() coverage moved to SettingsStoreResetAndMiscTests.swift
     // (split out to keep this class under SwiftLint's type_body_length cap).
 

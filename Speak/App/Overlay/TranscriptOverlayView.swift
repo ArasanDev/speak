@@ -62,14 +62,6 @@ struct TranscriptOverlayView: View {
     ///  ≈ 34, center at x ≈ 34). COUPLED to `TranscriptOverlayPanel.panelHeight`.]
     private static let endZoneWidth: CGFloat = 72
 
-    /// Left-zone circle sizes — "waveform inside one circle, then another
-    ///  circle, a colorful animation thing." Outer = rotating spectrum ring,
-    ///  inner = quiet ring holding the waveform. [decision: 60/48 pt — outer
-    ///  leaves ~6 pt margin inside the 72 pt zone; inner holds the ~44 pt
-    ///  scaled waveform block with ring clearance.]
-    private static let outerRingSize: CGFloat = 60
-    private static let innerCircleSize: CGFloat = 48
-
     /// Lane text line budget — one value for every state now that the stop hint
     /// rides inline in the header row instead of claiming its own strip.
     /// [decision: 3 lines — ~15 pt per line at 11 pt mono + 2 pt spacing ≈ 45 pt,
@@ -173,57 +165,24 @@ struct TranscriptOverlayView: View {
             .frame(width: 4)
     }
 
-    // MARK: Left zone — the voice waveform inside two circles
+    // MARK: Left zone — the voice animation
 
-    /// Rotation driver for the colorful outer ring. [decision: continuous
-    ///  slow spin while the panel is up; suppressed under reduce-motion.]
-    @State private var ringAngle: Double = 0
-
-    /// "Waveform inside one circle, then another circle — a colorful
-    /// animation thing": the live mic-level voice animation (the app's
-    /// signature asset, runtime-configurable via
-    /// `SettingsStore.voiceAnimationStyle` — sonar / ring gauge / spectrum)
-    /// sits inside a quiet inner ring; around it, a rotating conic-gradient
-    /// spectrum ring carries the motion. `isActive` is pinned to
-    /// `.listening` — lit `speakVoiceBlue` iff the mic is capturing.
+    /// The live mic-level voice animation — the app's signature asset,
+    /// runtime-configurable via `SettingsStore.voiceAnimationStyle`
+    /// (sonar / ring gauge / spectrum) and `voiceAnimationColor`. Each
+    /// variant owns its complete look (`OverlayVoiceAnimation.swift`) —
+    /// no shared chamber wraps them; the menu designs are distinct.
+    /// `isActive` is pinned to `.listening` — lit iff the mic is capturing.
     private var leftZone: some View {
-        ZStack {
-            // Outer colorful ring — the animated circle. Rotates slowly;
-            // the spectrum is the cool inference palette (blue → cyan →
-            // violet), "blue or some other colors" per owner direction.
-            Circle()
-                .strokeBorder(
-                    AngularGradient(
-                        colors: Color.speakFlowInference,
-                        center: .center,
-                        angle: .degrees(ringAngle)
-                    ),
-                    lineWidth: 2.5
-                )
-                .frame(width: Self.outerRingSize, height: Self.outerRingSize)
-                .opacity(model.overlayState == .listening ? 1 : 0.4)
-
-            // Inner circle — the waveform's chamber, kept quiet (low-contrast
-            // interior is deliberate; contrast lives on the edge).
-            Circle()
-                .strokeBorder(Color.speakBone.opacity(0.25), lineWidth: 1)
-                .frame(width: Self.innerCircleSize, height: Self.innerCircleSize)
-
-            VoiceAnimationView(
-                style: settingsStore.voiceAnimationStyle,
-                level: model.level,
-                isActive: model.overlayState == .listening
-            )
-        }
+        VoiceAnimationView(
+            style: settingsStore.voiceAnimationStyle,
+            tint: settingsStore.voiceAnimationColor.color,
+            level: model.level,
+            isActive: model.overlayState == .listening
+        )
         .frame(width: Self.endZoneWidth)
         .frame(maxHeight: .infinity)
         .accessibilityHidden(true)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.linear(duration: 5).repeatForever(autoreverses: false)) {
-                ringAngle = 360
-            }
-        }
     }
 
     // MARK: Right zone — the response
