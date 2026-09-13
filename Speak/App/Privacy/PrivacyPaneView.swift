@@ -5,14 +5,19 @@
 //
 // Layout:
 //   Headline: "Nothing Leaves Your Device"
-//   Visual Guarantees: 5 rows (microphone, transcripts, cleanup, hotkey, offline)
+//   Visual Guarantees: 5 rows in one grouped card (mic, transcripts, cleanup,
+//     hotkey, offline)
 //   [Verify Moat] button → sheet with audit results
 //   Trust Links: source code, license, report concern
-//   Comparison: Wispr vs. speak (factual, not marketing)
+//   Comparison: cloud competitors vs. speak (factual, not marketing)
 //
-// Chrome uses system font; content uses Monaco where appropriate. Colors are
-// semantic: green for local guarantees, red for what we don't do.
+// Design contract: speakCard/speakInset surfaces, speakBody chrome, mono for
+// data. Colors are semantic — `speakOK` for local guarantees, `speakError`
+// for what we don't do. The comparison's red/green contrast is intentional:
+// it IS the data (design-contract exception), expressed through the themed
+// error/ok roles so it still repaints with the active theme.
 
+import AppKit
 import SpeakCore
 import SwiftUI
 
@@ -25,243 +30,274 @@ struct PrivacyPaneView: View {
     @State private var moatResults: [MoatCheckResult] = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
-                    headline
+        ScrollView {
+            VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
+                headline
 
-                    VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-                        guaranteeRow("Microphone: Processed Locally", "Deleted immediately, never uploaded")
-                        guaranteeRow("Transcripts: Stored Locally", "Searchable archive, your Mac only")
-                        guaranteeRow("Cleanup: On-Device Only", "Foundation Models run locally, no API calls")
-                        guaranteeRow("Hotkey: Global, Not Tracked", "No analytics, no telemetry, just listening")
-                        guaranteeRow("Offline: Works 100%", "Zero internet required, always ready")
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                guaranteesCard
 
-                    verifyButton
+                verifyButton
 
-                    Divider()
-                        .padding(.vertical, SpeakSpacing.sm)
+                hairline
 
-                    trustLinks
+                trustLinks
 
-                    Divider()
-                        .padding(.vertical, SpeakSpacing.sm)
+                hairline
 
-                    comparisonSection
-                }
-                .padding(.horizontal, SpeakSpacing.lg)
-                .padding(.vertical, SpeakSpacing.md)
+                comparisonSection
             }
+            .padding(.horizontal, SpeakSpacing.lg)
+            .padding(.vertical, SpeakSpacing.md)
         }
         .sheet(isPresented: $showMoatResults) {
             MoatResultsSheet(results: moatResults)
         }
     }
 
+    /// Theme-aware hairline — the same tint `SettingsRowSeparator` uses.
+    private var hairline: some View {
+        Divider()
+            .overlay(Color.speakCardBorder.opacity(0.6))
+            .padding(.vertical, SpeakSpacing.xs)
+    }
+
     // MARK: - Headline
 
     private var headline: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            HStack(spacing: SpeakSpacing.sm) {
-                ZStack {
-                    Circle()
-                        .fill(Color.green.opacity(0.15))
-                        .frame(width: 32, height: 32)
-                    Image(systemName: "lock.shield.fill")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.green)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Nothing Leaves Your Device")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(Color.speakBone)
-                    Text("100% local architecture. Zero cloud APIs, zero telemetry, zero accounts.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.speakMica)
-                }
+        HStack(spacing: SpeakSpacing.md) {
+            ZStack {
+                Circle()
+                    .fill(Color.speakOK.opacity(0.15))
+                    .frame(width: 40, height: 40)
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color.speakOK)
             }
+
+            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                Text("Nothing Leaves Your Device")
+                    .font(.speakDisplay(.title))
+                    .foregroundStyle(Color.speakBone)
+                Text("100% local architecture. Zero cloud APIs, zero telemetry, zero accounts.")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakMica)
+            }
+
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(SpeakSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.speakSurface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.speakCardBorder, lineWidth: 1)
-        )
+        .speakCard()
     }
 
-    // MARK: - Guarantee Rows
+    // MARK: - Guarantee rows
 
-    private func guaranteeRow(_ title: String, _ description: String) -> some View {
+    private var guaranteesCard: some View {
+        VStack(spacing: 0) {
+            guaranteeRow(
+                icon: "mic.slash.fill",
+                title: "Microphone: processed locally",
+                detail: "Audio is transcribed on-device and deleted immediately — never uploaded."
+            )
+            rowSeparator
+            guaranteeRow(
+                icon: "doc.text.magnifyingglass",
+                title: "Transcripts: stored locally",
+                detail: "A searchable archive that lives on your Mac only."
+            )
+            rowSeparator
+            guaranteeRow(
+                icon: "brain.head.profile",
+                title: "Cleanup: on-device only",
+                detail: "Apple Foundation Models run locally — no API calls, no account."
+            )
+            rowSeparator
+            guaranteeRow(
+                icon: "keyboard",
+                title: "Hotkey: global, not tracked",
+                detail: "No analytics, no telemetry — just listening for your gesture."
+            )
+            rowSeparator
+            guaranteeRow(
+                icon: "wifi.slash",
+                title: "Offline: works 100%",
+                detail: "Zero internet required — dictation is always ready."
+            )
+        }
+        .speakCard()
+    }
+
+    private var rowSeparator: some View {
+        Divider()
+            .overlay(Color.speakCardBorder.opacity(0.6))
+            .padding(.leading, SpeakSpacing.md + 20 + SpeakSpacing.md)
+    }
+
+    private func guaranteeRow(icon: String, title: String, detail: String) -> some View {
         HStack(spacing: SpeakSpacing.md) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.green)
-            
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.speakOK)
+                .frame(width: 20, alignment: .center)
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.speakBody(.base, semibold: true))
                     .foregroundStyle(Color.speakBone)
-                Text(description)
-                    .font(.system(size: 12))
+                Text(detail)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(Color.speakMica)
             }
             Spacer(minLength: 0)
         }
-        .padding(SpeakSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.speakSurface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.speakCardBorder, lineWidth: 1)
-        )
+        .padding(.horizontal, SpeakSpacing.md)
+        .padding(.vertical, SpeakSpacing.sm + 4)
     }
 
-    // MARK: - Verify Moat Button
+    // MARK: - Verify moat button
 
     private var verifyButton: some View {
-        Button(action: {
-            moatResults = MoatAuditor.runAudit()
-            showMoatResults = true
-        }) {
-            HStack(spacing: SpeakSpacing.sm) {
-                Image(systemName: "shield.checkmark.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                Text("Verify Privacy & Security Moat")
-                    .font(.system(size: 13, weight: .semibold))
+        Button(
+            action: {
+                moatResults = MoatAuditor.runAudit()
+                showMoatResults = true
+            },
+            label: {
+                HStack(spacing: SpeakSpacing.sm) {
+                    Image(systemName: "shield.checkmark.fill")
+                    Text("Verify Privacy & Security Moat")
+                        .font(.speakBody(.base, semibold: true))
+                }
+                .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 14)
-            .background(
-                LinearGradient(
-                    colors: [Color.speakUIAccent.opacity(0.9), Color.speakUIAccent],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .foregroundStyle(Color.speakOnAccent)
-            .cornerRadius(8)
-            .shadow(color: Color.speakUIAccent.opacity(0.3), radius: 4, x: 0, y: 2)
-        }
-        .buttonStyle(.plain)
+        )
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .tint(.speakUIAccent)
     }
 
-    // MARK: - Trust Links
+    // MARK: - Trust links
 
     private var trustLinks: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Text("Transparency & Open Source")
-                .font(.system(size: 13, weight: .bold))
+                .font(.speakBody(.base, semibold: true))
                 .foregroundStyle(Color.speakBone)
 
             HStack(spacing: SpeakSpacing.md) {
-                trustLinkCard("Source Code", "github.com", "https://github.com/tamilarasanraja14/speak", icon: "code")
-                trustLinkCard("MIT License", "Open Source", "https://github.com/tamilarasanraja14/speak/blob/main/LICENSE", icon: "doc.text")
-                trustLinkCard("Report Concern", "GitHub Issues", "https://github.com/tamilarasanraja14/speak/issues", icon: "exclamationmark.bubble")
+                trustLinkCard(
+                    "Source Code", "github.com",
+                    "https://github.com/ArasanDev/speak",
+                    icon: "chevron.left.forwardslash.chevron.right"
+                )
+                trustLinkCard(
+                    "MIT License", "Open source",
+                    "https://github.com/ArasanDev/speak/blob/main/LICENSE",
+                    icon: "doc.text"
+                )
+                trustLinkCard(
+                    "Report Concern", "GitHub Issues",
+                    "https://github.com/ArasanDev/speak/issues",
+                    icon: "exclamationmark.bubble"
+                )
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func trustLinkCard(_ title: String, _ subtitle: String, _ url: String, icon: String) -> some View {
-        Button(action: { openURL(url) }) {
-            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color.speakUIAccent)
-                Text(title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.speakBone)
-                Text(subtitle)
-                    .font(.system(size: 10))
-                    .foregroundStyle(Color.speakMica)
+        Button(
+            action: { openURL(url) },
+            label: {
+                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.speakUIAccent)
+                    Text(title)
+                        .font(.speakBody(.caption, semibold: true))
+                        .foregroundStyle(Color.speakBone)
+                    Text(subtitle)
+                        .font(.speakBody(.caption))
+                        .foregroundStyle(Color.speakMica)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(SpeakSpacing.sm + 2)
+                .speakCard(cornerRadius: 8)
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(SpeakSpacing.sm + 2)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.speakSurface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.speakCardBorder, lineWidth: 1)
-            )
-        }
+        )
         .buttonStyle(.plain)
     }
 
-    // MARK: - Comparison Section
+    // MARK: - Comparison section
+    //
+    // The red/green contrast here is intentional and load-bearing — it IS the
+    // data (design-contract exception). Expressed through the themed
+    // `speakError` / `speakOK` roles so the comparison still repaints with
+    // the active theme instead of pinning raw system colors.
 
     private var comparisonSection: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.md) {
             Text("Architecture Comparison")
-                .font(.system(size: 13, weight: .bold))
+                .font(.speakBody(.base, semibold: true))
                 .foregroundStyle(Color.speakBone)
 
             HStack(alignment: .top, spacing: SpeakSpacing.md) {
-                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                    Text("Cloud Competitors")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.red.opacity(0.9))
-
-                    comparisonItem("Cloud Upload", "Audio sent to third-party servers")
-                    comparisonItem("Account Required", "Login & tracking tied to email")
-                    comparisonItem("Subscription Tiers", "Word limits & monthly subscriptions")
-                }
-                .padding(SpeakSpacing.md)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.red.opacity(0.05))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color.red.opacity(0.15), lineWidth: 1)
+                comparisonColumn(
+                    title: "Cloud Competitors",
+                    tint: .speakError,
+                    items: [
+                        ("Cloud upload", "Audio sent to third-party servers"),
+                        ("Account required", "Login & tracking tied to email"),
+                        ("Subscription tiers", "Word limits & monthly fees")
+                    ]
                 )
 
-                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                    Text("speak Architecture")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.green.opacity(0.9))
-
-                    comparisonItem("100% Local On-Device", "SpeechAnalyzer & Apple Silicon")
-                    comparisonItem("Zero Account Needed", "Instant open-source dictation")
-                    comparisonItem("100% Free Forever", "Unlimited dictation & neat-writing")
-                }
-                .padding(SpeakSpacing.md)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.green.opacity(0.05))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color.green.opacity(0.15), lineWidth: 1)
+                comparisonColumn(
+                    title: "speak Architecture",
+                    tint: .speakOK,
+                    items: [
+                        ("100% local on-device", "SpeechAnalyzer on Apple Silicon"),
+                        ("Zero account needed", "Instant open-source dictation"),
+                        ("100% free forever", "Unlimited dictation & neat-writing")
+                    ]
                 )
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func comparisonItem(_ label: String, _ description: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundStyle(Color.speakBone)
-            Text(description)
-                .font(.system(size: 11))
-                .foregroundStyle(Color.speakMica)
-                .padding(.leading, 16)
+    private func comparisonColumn(
+        title: String,
+        tint: Color,
+        items: [(String, String)]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+            Text(title)
+                .font(.speakBody(.caption, semibold: true))
+                .foregroundStyle(tint)
+
+            ForEach(items, id: \.0) { label, description in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label)
+                        .font(.speakBody(.caption, semibold: true))
+                        .foregroundStyle(Color.speakBone)
+                    Text(description)
+                        .font(.speakBody(.caption))
+                        .foregroundStyle(Color.speakMica)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
+        .padding(SpeakSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(tint.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(tint.opacity(0.15), lineWidth: 1)
+        )
     }
 
     // MARK: - Helpers

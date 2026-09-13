@@ -4,7 +4,12 @@
 // experience. Recognition engine, speech language, live microphone status,
 // and text delivery (insertion + streaming). Rows use the SettingsChrome
 // card/row primitives (title + description left, control right).
+//
+// The Microphone card is ordered as the diagnostic flow a user runs when
+// dictation "isn't hearing me": permission gate → what the current input
+// actually is → live level proof → the input-source chooser.
 
+import AppKit
 import SpeakCore
 import SwiftUI
 
@@ -50,11 +55,11 @@ struct SpeechToTextSettingsView: View {
     private var engineNote: String {
         switch store.sttEngine {
         case .appleSpeech:
-            return "On-device SpeechAnalyzer — the shipping engine."
+            return "On-device Apple speech recognition — private, free, always available."
         case .whisperKit:
-            return "WhisperKit lands in v0.1 — falls back to Apple Speech until then."
+            return "Arrives in v0.1 — dictation uses Apple Speech until then."
         case .whisperCpp:
-            return "whisper.cpp is a v1 option for Intel-era compatibility."
+            return "A v1 option aimed at Intel-era compatibility."
         }
     }
 
@@ -64,7 +69,7 @@ struct SpeechToTextSettingsView: View {
         SettingsSectionCard(title: "Text Insertion") {
             SettingsRow(
                 "Paste Mode",
-                description: "Cmd+V works in almost every app."
+                description: "Simulates ⌘V at the insertion point — works in almost every app."
             ) {
                 Picker("", selection: Binding(
                     get: { store.pasteMode },
@@ -106,6 +111,7 @@ struct SpeechToTextSettingsView: View {
                 ))
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                .tint(.speakUIAccent)
             }
         }
     }
@@ -161,11 +167,24 @@ private struct LanguageCard: View {
                 }
             }
             if listState == .unavailable {
-                Text("The full language list couldn't be loaded — your current selection still applies.")
+                HStack(spacing: SpeakSpacing.xs) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.speakBody(.caption))
+                        .foregroundStyle(Color.speakWarning)
+                    Text("The full language list couldn't be loaded — your current selection still applies.")
+                        .font(.speakBody(.caption))
+                        .foregroundStyle(Color.speakMica)
+                    Spacer(minLength: SpeakSpacing.sm)
+                    Button("Retry") {
+                        listState = .loading
+                        Task { await loadLocales() }
+                    }
                     .font(.speakBody(.caption))
-                    .foregroundStyle(Color.speakMica)
-                    .padding(.horizontal, SpeakSpacing.md)
-                    .padding(.bottom, SpeakSpacing.sm)
+                    .buttonStyle(.borderless)
+                    .tint(.speakUIAccent)
+                }
+                .padding(.horizontal, SpeakSpacing.md)
+                .padding(.bottom, SpeakSpacing.sm)
             }
         }
         .task { await loadLocales() }
@@ -208,14 +227,17 @@ private struct LanguageCard: View {
 
 // MARK: - MicrophoneCard
 
-/// Live mic check: current default input device (CoreAudioDeviceMonitor),
-/// a real-time 20-segment VU meter driven by a `MicLevelMonitor` side-channel
-/// capture, and a route-switch flash when the input device changes mid-view
+/// Live mic check, ordered as the "is it hearing me?" diagnostic flow:
+/// permission gate → the effective input device → live level proof → the
+/// input-source picker. A real-time 20-segment VU meter is driven by a
+/// `MicLevelMonitor` side-channel capture while the card is visible, and a
+/// route-switch flash fires only when the EFFECTIVE device actually changes
 /// (AudioCapture rebuilds its tap on `.AVAudioEngineConfigurationChange`, so
 /// AirPods connect/disconnect never surfaces CoreAudio -10868).
 private struct MicrophoneCard: View {
     let context: DashboardContext
     @State private var currentDevice: CoreAudioDeviceMonitor.DeviceInfo?
+    @State private var systemDefaultDevice: CoreAudioDeviceMonitor.DeviceInfo?
     @State private var monitorToken: UUID?
     @State private var topologyToken: UUID?
     @State private var micStatus: PermissionState = .notDetermined
@@ -229,96 +251,73 @@ private struct MicrophoneCard: View {
 
     var body: some View {
         SettingsSectionCard(title: "Microphone") {
+            // 1 — The gate: nothing below this row works until it's granted.
             SettingsRow(
                 "Microphone Permission",
-                description: "Required for on-device voice dictation. Audio never leaves your Mac."
+                description: permissionDescription
             ) {
-                if micStatus == .granted {
-                    SettingsStatusPill(text: "Granted", tint: .speakOK)
-                } else {
-                    HStack(spacing: SpeakSpacing.sm) {
-                        SettingsStatusPill(text: "Missing", tint: .speakWarning)
-                        Button("Grant Access") {
-                            Task {
-                                await context.permissionManager?.requestMicrophone()
-                                updateStatus()
-                                startMonitorIfAble()
-                            }
-                        }
-                        .controlSize(.small)
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-            }
-
-            if inputDevices.count > 1 {
-                SettingsRowSeparator()
-
-                if pinnedDeviceMissing {
-                    SettingsRow(
-                        "Input Source",
-                        description: "\(context.settingsStore.preferredInputDeviceName ?? "Pinned microphone") isn't connected — using the system default until it returns."
-                    )
-                } else {
-                    Text("Input Source")
-                        .font(.speakBody(.caption, semibold: true))
-                        .foregroundStyle(Color.speakMica)
-                        .padding(.horizontal, SpeakSpacing.md)
-                        .padding(.vertical, SpeakSpacing.sm)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                VStack(alignment: .leading, spacing: 0) {
-                    inputSourceRow(
-                        uid: nil,
-                        name: "System Default",
-                        detail: "Follows whatever macOS selects — recommended"
-                    )
-                    ForEach(inputDevices, id: \.id) { dev in
-                        inputSourceRow(
-                            uid: dev.uid,
-                            name: dev.name,
-                            detail: "\(Int(dev.sampleRate)) Hz · \(dev.channelCount)ch"
-                        )
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                permissionControl
             }
 
             SettingsRowSeparator()
 
-            SettingsRow(
-                "Input Level",
-                description: monitorError ?? "Monitors while this card is open — speak to confirm your voice is heard."
-            ) {
-                HStack(spacing: SpeakSpacing.sm) {
-                    VUMeterView(level: level)
-                    Text(dbLabel)
-                        .font(.speakMonoFace(.caption))
-                        .foregroundStyle(Color.speakMica)
-                        .frame(width: 62, alignment: .trailing)
-                }
-            }
-
+            // 2 — The answer to "what's hearing me right now": the device name
+            // sits prominent on the trailing edge; specs + routing source
+            // carry the description.
             if let dev = currentDevice {
-                SettingsRowSeparator()
-
                 SettingsRow(
                     "Current Input",
                     description: currentInputDescription(dev)
                 ) {
-                    if routeFlash {
-                        SettingsStatusPill(text: "Switched", tint: .speakMica)
-                            .transition(.opacity)
-                    } else {
-                        EmptyView()
+                    HStack(spacing: SpeakSpacing.sm) {
+                        if routeFlash {
+                            SettingsStatusPill(text: "Switched", tint: .speakHumanAmber)
+                                .transition(.opacity)
+                        }
+                        Text(dev.name)
+                            .font(.speakBody(.base))
+                            .foregroundStyle(Color.speakBone)
+                            .lineLimit(1)
                     }
                 }
             } else {
                 SettingsRow(
                     "Current Input",
-                    description: "No input device detected — grant permission or connect a microphone."
-                )
+                    description: micStatus == .granted
+                        ? "No input device detected — connect a microphone or check macOS Sound settings."
+                        : "Unknown until microphone access is granted."
+                ) {
+                    if micStatus == .granted {
+                        SettingsStatusPill(text: "No Device", tint: .speakWarning)
+                    }
+                }
+            }
+
+            SettingsRowSeparator()
+
+            // 3 — Live proof. The meter is a side-channel capture, paused while
+            // a real dictation owns the mic.
+            SettingsRow(
+                "Input Level",
+                description: levelDescription
+            ) {
+                HStack(spacing: SpeakSpacing.sm) {
+                    VUMeterView(level: level)
+                        .opacity(monitoring ? 1 : 0.35)
+                    Text(dbLabel)
+                        .font(.speakMonoFace(.caption))
+                        .foregroundStyle(Color.speakMica)
+                        // [decision] fixed readout width — keeps the meter from
+                        // reflowing as the dB readout changes digit count.
+                        .frame(width: 62, alignment: .trailing)
+                }
+            }
+
+            // 4 — The chooser. Only shown when there's a real choice to make
+            // or a stale pin to explain.
+            if showsInputSource {
+                SettingsRowSeparator()
+                inputSourceSection
             }
         }
         .onAppear {
@@ -327,20 +326,23 @@ private struct MicrophoneCard: View {
             if monitorToken == nil {
                 monitorToken = CoreAudioDeviceMonitor.shared.registerCallback { _ in
                     Task { @MainActor in
-                        flashRouteChange()
-                        refreshDevices()
+                        refreshDevices(flashOnResolvedChange: true)
                     }
                 }
             }
             if topologyToken == nil {
                 topologyToken = CoreAudioDeviceMonitor.shared.registerTopologyCallback { _ in
                     Task { @MainActor in
-                        refreshDevices()
+                        refreshDevices(flashOnResolvedChange: true)
                     }
                 }
             }
             startMonitorIfAble()
         }
+        // TCC grants made in System Settings don't notify the app — poll so a
+        // "Denied → user fixes it → returns" round-trip turns green live.
+        // [decision: matches PrivacyHealthSettingsView; no KVO exists for TCC]
+        .task { await pollMicStatus() }
         .onChange(of: context.settingsStore.preferredInputDeviceUID) { _, _ in
             refreshDevices()
         }
@@ -356,6 +358,7 @@ private struct MicrophoneCard: View {
             levelMonitor.stop()
             monitoring = false
             level = 0
+            rawRMS = 0
         }
         .onChange(of: context.isDictating?() ?? false) { _, dictating in
             // A real dictation owns the mic + shows its own level HUD — pause
@@ -363,13 +366,176 @@ private struct MicrophoneCard: View {
             if dictating {
                 levelMonitor.stop()
                 monitoring = false
+                level = 0
+                rawRMS = 0
             } else {
                 startMonitorIfAble()
             }
         }
     }
 
+    // MARK: - Permission row
+
+    @ViewBuilder
+    private var permissionControl: some View {
+        switch micStatus {
+        case .granted:
+            SettingsStatusPill(text: "Granted", tint: .speakOK)
+
+        case .requesting:
+            HStack(spacing: SpeakSpacing.sm) {
+                ProgressView().controlSize(.small)
+                SettingsStatusPill(text: "Requesting", tint: .speakMica)
+            }
+
+        case .notDetermined:
+            HStack(spacing: SpeakSpacing.sm) {
+                SettingsStatusPill(text: "Not Granted", tint: .speakWarning)
+                Button("Grant Access") { requestMicrophoneAccess() }
+                    .controlSize(.small)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.speakUIAccent)
+            }
+
+        case .denied:
+            // Once denied, `requestMicrophone()` never re-prompts — the only
+            // path back is the TCC toggle in System Settings.
+            HStack(spacing: SpeakSpacing.sm) {
+                SettingsStatusPill(text: "Denied", tint: .speakError)
+                Button("Open System Settings…") { openMicrophoneSettings() }
+                    .controlSize(.small)
+            }
+
+        case .restricted:
+            // MDM / Screen Time policy — no user-side toggle exists.
+            SettingsStatusPill(text: "Restricted", tint: .speakError)
+        }
+    }
+
+    private var permissionDescription: String {
+        switch micStatus {
+        case .granted:
+            return "Audio is captured and transcribed on this Mac — it never leaves the device."
+        case .notDetermined:
+            return "Required for dictation — macOS will ask once."
+        case .requesting:
+            return "Answer the macOS prompt to continue."
+        case .denied:
+            return "speak is off under System Settings → Privacy & Security → Microphone."
+        case .restricted:
+            return "Blocked by a device-management or parental-controls policy on this Mac."
+        }
+    }
+
+    private func requestMicrophoneAccess() {
+        guard let manager = context.permissionManager else {
+            openMicrophoneSettings()
+            return
+        }
+        micStatus = .requesting
+        Task {
+            let result = await manager.requestMicrophone()
+            micStatus = result
+            if result == .granted { startMonitorIfAble() }
+        }
+    }
+
+    private func openMicrophoneSettings() {
+        let urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        if let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func updateStatus() {
+        micStatus = context.permissionManager?.status(.microphone) ?? .notDetermined
+    }
+
+    /// Re-checks TCC every 1.5 s while visible — grants can change in System
+    /// Settings without notifying the app. Skips `.requesting` so the poll
+    /// doesn't overwrite the in-flight prompt state.
+    private func pollMicStatus() async {
+        while !Task.isCancelled {
+            let latest = context.permissionManager?.status(.microphone) ?? .notDetermined
+            if latest != micStatus, micStatus != .requesting {
+                micStatus = latest
+                if latest == .granted { startMonitorIfAble() }
+            }
+            try? await Task.sleep(for: .milliseconds(1500))
+        }
+    }
+
+    // MARK: - Input level row
+
+    private var levelDescription: String {
+        if micStatus != .granted {
+            return "Grant microphone access above to see a live level."
+        }
+        if context.isDictating?() ?? false {
+            return "Paused while dictating — the floating HUD shows your live level."
+        }
+        if let monitorError {
+            return "Meter unavailable — \(monitorError)"
+        }
+        if currentDevice == nil {
+            return "No input device to meter — connect a microphone."
+        }
+        return "Live while this card is open — speak to confirm your voice is heard."
+    }
+
+    private var dbLabel: String {
+        guard monitoring, rawRMS > 0 else { return monitoring ? "−∞ dB" : "—" }
+        let db = max(20.0 * log10(rawRMS), -60)
+        return String(format: "%.0f dB", db)
+    }
+
     // MARK: - Input source picker
+
+    /// The chooser only earns its space when it can change something: more
+    /// than one connected input, or a stale pin that needs explaining.
+    private var showsInputSource: Bool {
+        inputDevices.count > 1 || pinnedDeviceMissing
+    }
+
+    private var inputSourceSection: some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            Text("Input Source")
+                .font(.speakBody(.caption, semibold: true))
+                .foregroundStyle(Color.speakMica)
+                .padding(.horizontal, SpeakSpacing.md)
+                .padding(.top, SpeakSpacing.sm)
+
+            VStack(spacing: 0) {
+                inputSourceRow(
+                    uid: nil,
+                    name: "System Default",
+                    detail: systemDefaultDetail
+                )
+                ForEach(inputDevices, id: \.id) { dev in
+                    inputSourceSeparator
+                    inputSourceRow(
+                        uid: dev.uid,
+                        name: dev.name,
+                        detail: deviceDetail(dev)
+                    )
+                }
+                if pinnedDeviceMissing {
+                    inputSourceSeparator
+                    missingPinRow
+                }
+            }
+            .speakInset()
+            .padding(.horizontal, SpeakSpacing.md)
+            .padding(.bottom, SpeakSpacing.sm)
+        }
+    }
+
+    /// Hairline inside the picker well, aligned to the row text.
+    private var inputSourceSeparator: some View {
+        Divider()
+            .overlay(Color.speakCardBorder.opacity(0.6))
+            .padding(.leading, SpeakSpacing.sm)
+    }
 
     /// One selectable row in the Input Source list. `uid == nil` is the
     /// "System Default" option; device rows persist the stable hardware UID
@@ -384,9 +550,9 @@ private struct MicrophoneCard: View {
             refreshDevices()
         } label: {
             HStack(spacing: SpeakSpacing.sm) {
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     Text(name)
-                        .font(.speakBody(.caption))
+                        .font(.speakBody(.base))
                         .foregroundStyle(Color.speakBone)
                     Text(detail)
                         .font(.speakMonoFace(.caption))
@@ -395,29 +561,82 @@ private struct MicrophoneCard: View {
                 Spacer()
                 Image(systemName: "checkmark")
                     .font(.speakBody(.caption, semibold: true))
-                    .foregroundStyle(selected ? Color.speakUIAccent : Color.speakMica.opacity(0.4))
+                    .foregroundStyle(Color.speakUIAccent)
                     .opacity(selected ? 1 : 0)
             }
-            .padding(.horizontal, SpeakSpacing.md)
+            .padding(.horizontal, SpeakSpacing.sm)
             .padding(.vertical, SpeakSpacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    /// Description for the effective input — name, rate, channels, and whether
-    /// it came from the system default or a pinned selection.
+    /// The stored pin whose hardware is gone — shown dimmed inside the list so
+    /// the fallback is explained where the choice lives, and picking "System
+    /// Default" clears it.
+    private var missingPinRow: some View {
+        HStack(spacing: SpeakSpacing.sm) {
+            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                Text(context.settingsStore.preferredInputDeviceName ?? "Pinned microphone")
+                    .font(.speakBody(.base))
+                    .foregroundStyle(Color.speakMica)
+                Text("Not connected — using the system default until it returns.")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakMica)
+            }
+            Spacer()
+            SettingsStatusPill(text: "Disconnected", tint: .speakWarning)
+        }
+        .padding(.horizontal, SpeakSpacing.sm)
+        .padding(.vertical, SpeakSpacing.sm)
+    }
+
+    /// What "System Default" currently resolves to — a name (data → mono),
+    /// more informative than a "recommended" tagline.
+    private var systemDefaultDetail: String {
+        if let dev = systemDefaultDevice {
+            return "Currently \(dev.name)"
+        }
+        return "No input device detected"
+    }
+
+    /// Specs line for a device row — omits anything the HAL couldn't report
+    /// (a 0 sample rate or channel count reads as absence, not "0 Hz").
+    private func deviceDetail(_ dev: CoreAudioDeviceMonitor.DeviceInfo) -> String {
+        var parts: [String] = []
+        if let rate = formattedSampleRate(dev.sampleRate) { parts.append(rate) }
+        if dev.channelCount > 0 { parts.append("\(dev.channelCount) ch") }
+        return parts.isEmpty ? "Input device" : parts.joined(separator: " · ")
+    }
+
+    /// "48 kHz" / "44.1 kHz" style — nil when the device reports no rate.
+    private func formattedSampleRate(_ rate: Double) -> String? {
+        guard rate > 0 else { return nil }
+        if rate >= 1000 {
+            return String(format: "%g kHz", rate / 1000)
+        }
+        return "\(Int(rate)) Hz"
+    }
+
+    /// Description for the effective input — specs plus whether it came from
+    /// the system default, a live pin, or a fallback because the pin is gone.
     private func currentInputDescription(_ dev: CoreAudioDeviceMonitor.DeviceInfo) -> String {
-        let rate = "\(Int(dev.sampleRate)) Hz"
-        let channels = "\(dev.channelCount) channel\(dev.channelCount == 1 ? "" : "s")"
+        var parts: [String] = []
+        if let rate = formattedSampleRate(dev.sampleRate) { parts.append(rate) }
+        if dev.channelCount > 0 {
+            parts.append("\(dev.channelCount) channel\(dev.channelCount == 1 ? "" : "s")")
+        }
         if let uid = context.settingsStore.preferredInputDeviceUID, uid == dev.uid {
-            return "\(dev.name) · \(rate) · \(channels) (pinned)"
+            parts.append("pinned")
+        } else if pinnedDeviceMissing {
+            let name = context.settingsStore.preferredInputDeviceName ?? "pinned mic"
+            parts.append("system default — “\(name)” is disconnected")
+        } else {
+            parts.append("system default")
         }
-        if pinnedDeviceMissing {
-            return "\(dev.name) · \(rate) · \(channels) (system default — pinned mic disconnected)"
-        }
-        return "\(dev.name) · \(rate) · \(channels) (system default)"
+        return parts.joined(separator: " · ")
     }
 
     /// `true` when a pin is stored but its device isn't in the current roster —
@@ -427,13 +646,24 @@ private struct MicrophoneCard: View {
         return !inputDevices.contains { $0.uid == uid }
     }
 
-    /// Refreshes both the roster and the EFFECTIVE device (pinned-or-default)
-    /// shown in the Current Input row — the honest "what's feeding you" answer.
-    private func refreshDevices() {
-        inputDevices = CoreAudioDeviceMonitor.shared.listInputDevices()
-        currentDevice = CoreAudioDeviceMonitor.shared.resolvedInputDevice(
+    /// Refreshes the roster, the raw system default (for the picker's
+    /// "Currently …" line), and the EFFECTIVE device (pinned-or-default)
+    /// shown in the Current Input row — the honest "what's feeding you"
+    /// answer. `flashOnResolvedChange` marks the row only when the effective
+    /// input truly changed, so a default-device shuffle that a pin absorbs
+    /// stays quiet.
+    private func refreshDevices(flashOnResolvedChange: Bool = false) {
+        let monitor = CoreAudioDeviceMonitor.shared
+        inputDevices = monitor.listInputDevices()
+        systemDefaultDevice = monitor.currentDefaultInputDevice()
+        let resolved = monitor.resolvedInputDevice(
             preferredUID: context.settingsStore.preferredInputDeviceUID
         )
+        let resolvedChanged = resolved?.uid != currentDevice?.uid
+        currentDevice = resolved
+        if flashOnResolvedChange, resolvedChanged, resolved != nil {
+            flashRouteChange()
+        }
     }
 
     // MARK: - Level monitor
@@ -453,22 +683,11 @@ private struct MicrophoneCard: View {
             monitoring = true
             monitorError = nil
         } catch {
-            monitorError = "Meter unavailable: \(error.localizedDescription)"
+            monitorError = error.localizedDescription
         }
     }
 
-    private var dbLabel: String {
-        guard monitoring, rawRMS > 0 else { return monitoring ? "−∞ dB" : "—" }
-        let db = max(20.0 * log10(rawRMS), -60)
-        return String(format: "%.0f dB", db)
-    }
-
-    private func updateStatus() {
-        micStatus = context.permissionManager?.status(.microphone) ?? .notDetermined
-    }
-
     private func flashRouteChange() {
-        guard monitoring || currentDevice != nil else { return }
         withAnimation(.spring(duration: 0.15)) { routeFlash = true }
         Task {
             try? await Task.sleep(for: .milliseconds(1600))

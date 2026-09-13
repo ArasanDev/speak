@@ -68,17 +68,21 @@ final class CleanupEngineKeyViewModel {
     }
 
     /// Saves `keyText` to Keychain, replacing any existing value, then clears
-    /// the field from memory.
-    func save() {
+    /// the field from memory. Returns whether the save succeeded so the sheet
+    /// stays open (showing `errorMessage`) when the Keychain write fails.
+    @discardableResult
+    func save() -> Bool {
         let trimmed = keyText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return false }
         errorMessage = nil
         do {
             try keychainStore.save(key: trimmed, forAccount: preset.id)
             keyText = ""
             hasStoredKey = true
+            return true
         } catch {
             errorMessage = "Could not save key: \(error.localizedDescription)"
+            return false
         }
     }
 
@@ -104,6 +108,9 @@ struct CleanupEngineSheet: View {
     @Binding var isPresented: Bool
     @State private var viewModel: CleanupEngineKeyViewModel
 
+    /// Removing a stored key is destructive — confirmed before it happens.
+    @State private var confirmRemove = false
+
     init(isPresented: Binding<Bool>, preset: ProviderPreset, keychainStore: LLMKeychainStore = LLMKeychainStore()) {
         self._isPresented = isPresented
         self._viewModel = State(
@@ -120,6 +127,7 @@ struct CleanupEngineSheet: View {
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     Text("\(viewModel.preset.displayName) API Key")
                         .font(.speakDisplay(.title))
+                        .foregroundStyle(Color.speakBone)
                     Text("Stored in Keychain \u{2014} never sent anywhere except \(viewModel.preset.displayName).")
                         .font(.speakBody(.caption))
                         .foregroundStyle(Color.speakMica)
@@ -127,7 +135,7 @@ struct CleanupEngineSheet: View {
             }
             .padding(.bottom, SpeakSpacing.sm)
 
-            Divider()
+            Divider().overlay(Color.speakCardBorder.opacity(0.6))
 
             statusRow
 
@@ -137,43 +145,63 @@ struct CleanupEngineSheet: View {
                 .font(.speakBody(.base))
 
             if let errorMessage = viewModel.errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(Color.speakError)
+                HStack(alignment: .top, spacing: SpeakSpacing.xs) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Color.speakError)
+                    Text(errorMessage)
+                        .foregroundStyle(Color.speakError)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .font(.speakBody(.caption))
             }
 
             Spacer()
 
             HStack {
                 if viewModel.hasStoredKey {
-                    Button("Remove Key", role: .destructive) {
-                        viewModel.clear()
+                    Button("Remove Key…", role: .destructive) {
+                        confirmRemove = true
                     }
                 }
                 Spacer()
                 Button("Cancel") { isPresented = false }
+                    .keyboardShortcut(.cancelAction)
                 Button("Save") {
-                    viewModel.save()
-                    isPresented = false
+                    // A failed Keychain write keeps the sheet open so the
+                    // error message is actually seen.
+                    if viewModel.save() { isPresented = false }
                 }
-                .keyboardShortcut(.return, modifiers: [])
+                .keyboardShortcut(.defaultAction)
                 .disabled(!viewModel.canSave)
             }
         }
         .padding(SpeakSpacing.lg)
         // [decision: 420×280 fits the header + field + actions without slack]
         .frame(minWidth: 420, minHeight: 280)
+        .background(Color.speakWindowCanvas)
         .onAppear { viewModel.refresh() }
+        .confirmationDialog(
+            "Remove the \(viewModel.preset.displayName) API key?",
+            isPresented: $confirmRemove,
+            titleVisibility: .visible
+        ) {
+            Button("Remove Key", role: .destructive) {
+                viewModel.clear()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Cleanup falls back to raw transcript until a new key is entered.")
+        }
     }
 
     @ViewBuilder
     private var statusRow: some View {
         HStack(spacing: SpeakSpacing.xs) {
             Image(systemName: viewModel.hasStoredKey ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(viewModel.hasStoredKey ? Color.speakDelivered : .secondary)
+                .foregroundStyle(viewModel.hasStoredKey ? Color.speakDelivered : Color.speakMica)
             Text(viewModel.hasStoredKey ? "A key is currently set for \(viewModel.preset.displayName)." :
                  "No key set \u{2014} cleanup falls back to raw transcript until one is entered.")
-                .font(.caption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(Color.speakMica)
         }
     }

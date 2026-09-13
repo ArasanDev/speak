@@ -4,6 +4,10 @@
 // on-device using local language models. This provides a catalog of built-in and custom rewrite presets.
 //
 // Lists built-in transforms so the interface is discoverable and ready for custom authoring.
+//
+// Layout contract: the section header sits on the canvas (16pt semibold, the
+// dashboard's one header rhythm); rows live inside a single `speakCard` with
+// hairlines between them rather than a card per row.
 
 import SpeakCore
 import SwiftUI
@@ -14,36 +18,86 @@ struct TransformsPaneView: View {
     let context: DashboardContext
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        ScrollView {
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-                ForEach(BuiltInTransform.all) { transform in
-                    transformRow(transform)
+                Text("Built-in Transforms")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.speakBone)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(BuiltInTransform.all.enumerated()), id: \.offset) { index, transform in
+                        TransformRow(transform: transform)
+                        if index < BuiltInTransform.all.count - 1 {
+                            TransformHairline(indented: true)
+                        }
+                    }
+
+                    TransformHairline(indented: false)
+
+                    // Where custom transforms go — AI Studio's profiles are the
+                    // authoring surface; this catalog is the discovery surface.
+                    Text("Custom transforms are authored as profiles in AI Studio.")
+                        .font(.speakBody(.caption))
+                        .foregroundStyle(Color.speakMica)
+                        .padding(.horizontal, SpeakSpacing.md)
+                        .padding(.vertical, SpeakSpacing.sm + 2)
                 }
-                Spacer(minLength: 0)
+                .speakCard()
             }
             .padding(.top, SpeakSpacing.sm)
             .padding(.horizontal, SpeakSpacing.lg)
+            .padding(.bottom, SpeakSpacing.lg)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
+}
 
-    private func transformRow(_ transform: BuiltInTransform) -> some View {
+// MARK: - TransformRow
+
+private struct TransformRow: View {
+    let transform: BuiltInTransform
+
+    var body: some View {
         HStack(alignment: .top, spacing: SpeakSpacing.md) {
+            // Transforms are agent work done on your text — the violet channel.
             Image(systemName: transform.systemImage)
-                .font(.system(size: 18))
-                .foregroundStyle(Color.speakUIAccent)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.speakAgentViolet)
                 .frame(width: 24)
-            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 2) {
                 Text(transform.name)
-                    .font(.speakBody(.base))
+                    .font(.speakBody(.base, semibold: true))
+                    .foregroundStyle(Color.speakBone)
                 Text(transform.blurb)
                     .font(.speakBody(.caption))
                     .foregroundStyle(Color.speakMica)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
-        .padding(SpeakSpacing.md)
+        .padding(.horizontal, SpeakSpacing.md)
+        .padding(.vertical, SpeakSpacing.sm + 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.speakSurface))
+    }
+}
+
+// MARK: - TransformHairline
+
+/// The themed hairline between rows — `Divider()` picks up a system gray that
+/// fights the two-temperature palette.
+private struct TransformHairline: View {
+    /// Row separators indent past the icon column so they align with the text
+    /// block; the footer's separator runs the full card width.
+    var indented = true
+
+    var body: some View {
+        Rectangle()
+            .fill(Color.speakCardBorder)
+            .frame(height: 1)
+            .opacity(0.5)
+            .padding(.leading, indented ? SpeakSpacing.md + 24 + SpeakSpacing.md : 0)
     }
 }
 

@@ -1552,3 +1552,42 @@ for a full wipe.
 
 Gates: build clean · `make test` 985 tests / 0 failures · lint 0 serious ·
 moat 7/7.
+
+### Screen-owner fleet pass — every settings pane + dashboard pane to production-ready
+
+Eight parallel owner agents rewrote ~35 files (one owner per screen, disjoint
+file sets, shared design contract). Functional fixes surfaced by the pass:
+
+- **STT pane**: dead "Grant Access" button when mic permission is *denied*
+  (`requestMicrophone()` no-ops on `.denied`) — now deep-links to
+  Privacy_Microphone; TCC polling repaints on grant; stale pinned devices
+  visible in the source list with explicit fallback copy; mic card reordered
+  to the diagnostic flow (permission → current input → level → source);
+  VU meter no longer freezes at last value after dictation.
+- **TTS pane**: saved-voice-not-installed state (was silent fallback) +
+  one-tap "Use Automatic"; formatted slider units; live preview state.
+- **Pipeline pane**: left-to-right stage map, consistent pill semantics
+  (ok/warning/error/agentViolet), stale speech can't leak into retried tests.
+- **Hotkeys**: binding hero (keycaps + gesture copy), recorder states +
+  Fn↔macOS-Dictation conflict surfaced at capture time, `onAir` misuse fixed
+  (keypress capture → humanAmber), HoldToTalkPill release-race fix
+  (quick tap no longer orphans a 60s recording).
+- **History**: Clear History behind destructive confirmation (was one-click
+  wipe); real empty states; copy-on-click rows.
+- **Home**: permission card tri-state (missing/ready/unknown); 1s heartbeat
+  so hero reflects hotkey-started dictation; dead "View All" removed.
+- **MCP pane**: real bug — built a fresh empty AgentSessionRegistry every
+  refresh so sessions could NEVER appear; now reads `context.agentSessionRegistry`;
+  install-state check is real (`FileManager.isExecutableFile`), corrected
+  install path + JSON snippet to match README verbatim.
+- **ThemeEditorSheet**: dual light/dark wells per role (t3code pattern),
+  inheritance ghosting, live hex validation, delete confirmation.
+- **CleanupEngineSheet**: Save no longer dismisses on Keychain failure.
+- **Dead code removed**: HUDStyleSection, BorderStyleSection, dead
+  ExtraBindingsSection struct; AIStudioPaneView split (ProfileEditorPanel →
+  AIStudioProfileEditor.swift, file_length); OnboardingSteps.swift split.
+
+Gates: build clean (xcodegen regen picked up new/deleted files) · `make test`
+985 tests / 0 failures (wrapper still reports "2 errors" — pretty-output.sh
+misparsing simulated-failure logs; suite itself: "Test Suite Passed Cleanly") ·
+lint 0 serious (428 non-serious) · moat 7/7.

@@ -1,8 +1,10 @@
 // App/Settings/PrivacyHealthSettingsView.swift
 //
-// "Privacy & System Health" — the seventh Settings category. Three cards:
+// "Privacy" — the operational privacy category in the dedicated Settings
+// experience. Three cards:
 //   - System Health: microphone + accessibility permission status and the
-//     "fix it" paths (onboarding flow / System Settings).
+//     "fix it" paths (guided onboarding re-run, per-pane System Settings
+//     deep links for denied grants).
 //   - On-Device Moat: the four structural guarantees + the live audit button.
 //   - Data Management: reset settings, clear history, export history.
 //
@@ -25,6 +27,9 @@ struct PrivacyHealthSettingsView: View {
     @State private var micStatus: PermissionState = .notDetermined
     @State private var axStatus: PermissionState = .notDetermined
     @State private var showResetConfirmation = false
+    @State private var showClearHistoryConfirmation = false
+    @State private var showClearedNotice = false
+    @State private var showExportedNotice = false
     @State private var actionError: String?
     @State private var showActionError = false
 
@@ -39,16 +44,33 @@ struct PrivacyHealthSettingsView: View {
             MoatResultsSheet(results: moatResults)
         }
         .alert(
-            "Reset Settings?",
+            "Reset all settings to defaults?",
             isPresented: $showResetConfirmation,
             actions: {
                 Button("Cancel", role: .cancel) { }
-                Button("Reset", role: .destructive) {
-                    context.settingsStore.resetToDefaults()
+                Button("Reset Settings", role: .destructive) {
+                    resetAllSettings()
                 }
             },
             message: {
-                Text("This will reset all settings to their defaults. History is not affected.")
+                Text(
+                    "Engines, language, hotkeys, microphone selection, voice, and appearance "
+                        + "return to defaults — including custom vocabulary and corrections. "
+                        + "Dictation history, snippets, and your custom themes are kept."
+                )
+            }
+        )
+        .alert(
+            "Clear all dictation history?",
+            isPresented: $showClearHistoryConfirmation,
+            actions: {
+                Button("Cancel", role: .cancel) { }
+                Button("Clear History", role: .destructive) {
+                    clearHistory()
+                }
+            },
+            message: {
+                Text("Every saved dictation on this Mac is permanently deleted. This can't be undone.")
             }
         )
         .alert(
@@ -73,7 +95,7 @@ struct PrivacyHealthSettingsView: View {
                 "Microphone",
                 description: "Needed to capture dictation audio."
             ) {
-                permissionPill(for: micStatus)
+                permissionControl(for: micStatus, kind: .microphone)
             }
 
             SettingsRowSeparator()
@@ -82,7 +104,7 @@ struct PrivacyHealthSettingsView: View {
                 "Accessibility",
                 description: "Powers the global hotkey tap and Cmd+V paste simulation."
             ) {
-                permissionPill(for: axStatus)
+                permissionControl(for: axStatus, kind: .accessibility)
             }
 
             SettingsRowSeparator()
@@ -92,17 +114,55 @@ struct PrivacyHealthSettingsView: View {
                 description: "Re-runs the guided onboarding steps for anything missing."
             ) {
                 Button("Fix via Onboarding…") { context.showOnboarding?() }
+                    .controlSize(.small)
                     .disabled(context.showOnboarding == nil)
             }
         }
     }
 
-    private func permissionPill(for state: PermissionState) -> some View {
-        let granted = state == .granted
-        return SettingsStatusPill(
-            text: granted ? "Granted" : "Missing",
-            tint: granted ? .speakDelivered : .speakWarning
-        )
+    /// Trailing control for a permission row: the status pill, plus a direct
+    /// System Settings deep link when TCC has *denied* the grant — a denied
+    /// permission can't be re-prompted in-app, so onboarding's request path
+    /// alone can't fix it; the user must flip the switch themselves.
+    @ViewBuilder
+    private func permissionControl(for state: PermissionState, kind: PermissionKind) -> some View {
+        HStack(spacing: SpeakSpacing.sm) {
+            if state == .denied {
+                Button("Open Settings…") { openSystemSettings(for: kind) }
+                    .controlSize(.small)
+            }
+            permissionPill(for: state)
+        }
+    }
+
+    private func permissionPill(for state: PermissionState) -> SettingsStatusPill {
+        switch state {
+        case .granted:
+            return SettingsStatusPill(text: "Granted", tint: .speakOK)
+
+        case .denied:
+            return SettingsStatusPill(text: "Denied", tint: .speakError)
+
+        case .restricted:
+            return SettingsStatusPill(text: "Restricted", tint: .speakWarning)
+
+        case .notDetermined, .requesting:
+            return SettingsStatusPill(text: "Needed", tint: .speakWarning)
+        }
+    }
+
+    private func openSystemSettings(for kind: PermissionKind) {
+        let urlString: String
+        switch kind {
+        case .microphone:
+            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+
+        case .accessibility:
+            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        }
+        if let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     /// Refresh the permission pills every 1.5 s while visible — TCC grants can
@@ -168,7 +228,7 @@ struct PrivacyHealthSettingsView: View {
                         Image(systemName: passed == moatResults.count
                               ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                             .foregroundStyle(passed == moatResults.count
-                                             ? Color.speakDelivered : Color.speakWarning)
+                                             ? Color.speakOK : Color.speakWarning)
                         Text("\(passed)/\(moatResults.count) guarantees verified · \(lastAuditAt.formatted(date: .omitted, time: .standard))")
                             .font(.speakBody(.caption))
                             .foregroundStyle(Color.speakMica)
@@ -191,9 +251,12 @@ struct PrivacyHealthSettingsView: View {
         SettingsSectionCard(title: "Data Management") {
             SettingsRow(
                 "Reset all settings",
-                description: "Restores every preference to its default. History is not affected."
+                description: "Returns every preference — hotkeys, microphone, theme included — to its default. History is not affected."
             ) {
-                Button("Reset…") { showResetConfirmation = true }
+                Button("Reset…", role: .destructive) { showResetConfirmation = true }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(Color.speakError)
+                    .controlSize(.small)
             }
 
             SettingsRowSeparator()
@@ -202,7 +265,17 @@ struct PrivacyHealthSettingsView: View {
                 "Clear all history",
                 description: "Deletes the local dictation archive stored on this Mac."
             ) {
-                Button("Clear…") { clearHistory() }
+                HStack(spacing: SpeakSpacing.sm) {
+                    if showClearedNotice {
+                        SettingsStatusPill(text: "Cleared", tint: .speakOK)
+                            .transition(.opacity)
+                    }
+                    Button("Clear…", role: .destructive) { showClearHistoryConfirmation = true }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(Color.speakError)
+                        .controlSize(.small)
+                }
+                .animation(.easeInOut(duration: 0.2), value: showClearedNotice)
             }
 
             SettingsRowSeparator()
@@ -211,9 +284,27 @@ struct PrivacyHealthSettingsView: View {
                 "Export history",
                 description: "Writes a JSON backup of your history onto the clipboard."
             ) {
-                Button("Export…") { exportHistory() }
+                HStack(spacing: SpeakSpacing.sm) {
+                    if showExportedNotice {
+                        SettingsStatusPill(text: "Copied", tint: .speakDelivered)
+                            .transition(.opacity)
+                    }
+                    Button("Export…") { exportHistory() }
+                        .controlSize(.small)
+                }
+                .animation(.easeInOut(duration: 0.2), value: showExportedNotice)
             }
         }
+    }
+
+    /// Mirrors the General category's reset: `resetToDefaults` covers every
+    /// `SettingsStore.Keys` preference (incl. mic pin + theme), while the
+    /// hotkey bindings live in `UserDefaultsBindingStore` — restore them too
+    /// and re-arm the live tap via the controller's rebind entry points.
+    private func resetAllSettings() {
+        context.settingsStore.resetToDefaults()
+        context.rebindHotkey?(.defaultBinding)
+        context.rebindExtraBindings?(.empty)
     }
 
     private func clearHistory() {
@@ -221,6 +312,7 @@ struct PrivacyHealthSettingsView: View {
             do {
                 try await context.historyStore.clear()
                 SpeakLog.app.info("History cleared via Settings")
+                flashClearedNotice()
             } catch {
                 actionError = error.localizedDescription
                 showActionError = true
@@ -237,10 +329,29 @@ struct PrivacyHealthSettingsView: View {
                 pasteboard.clearContents()
                 pasteboard.setString(exported, forType: .string)
                 SpeakLog.app.info("History exported via Settings")
+                flashExportedNotice()
             } catch {
                 actionError = error.localizedDescription
                 showActionError = true
             }
+        }
+    }
+
+    /// Transient status pills for ~2.5 s after a successful data action —
+    /// silent success leaves the user guessing whether anything happened.
+    private func flashClearedNotice() {
+        showClearedNotice = true
+        Task {
+            try? await Task.sleep(for: .milliseconds(2500))
+            showClearedNotice = false
+        }
+    }
+
+    private func flashExportedNotice() {
+        showExportedNotice = true
+        Task {
+            try? await Task.sleep(for: .milliseconds(2500))
+            showExportedNotice = false
         }
     }
 }

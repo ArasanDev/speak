@@ -2,12 +2,18 @@
 //
 // "Agent Bridge & MCP" — the fifth Settings category. The speak-mcp stdio
 // server status + install command, the agent prompt tag that marks pasted
-// text as voice-dictated, and a jump to the full MCP & Agents / Agent Inbox
-// desk panes for live session management.
+// text as voice-dictated, and a compact live-session list with a jump to the
+// full MCP & Agents / Agent Inbox desk panes for session management.
 //
-// The heavy lifting (session list, tool registry, @tag adapters) stays in
+// The heavy lifting (tool registry, @tag adapters) stays in
 // `MCPAgentPaneView` — this category is the configuration surface, not a
 // duplicate monitor. [decision: settings owns knobs, desk owns live state]
+//
+// STATUS SEMANTICS: `speak-mcp` is a stdio server — spawned per agent client,
+// not a daemon — so "live" is derived from the session registry's heartbeat,
+// not a process check: agentViolet while an agent is attached, ok while
+// sessions are connected-but-quiet, warning when only stale sessions remain,
+// mica when the registry is unavailable (preview contexts).
 
 import AppKit
 import SpeakCore
@@ -20,6 +26,7 @@ struct AgentBridgeSettingsView: View {
     let context: DashboardContext
     let onOpenSection: (DashboardSection) -> Void
 
+    /// The code block whose Copy button currently shows "Copied".
     @State private var copiedItemName: String?
     @State private var sessions: [AgentSession] = []
 
@@ -37,6 +44,21 @@ struct AgentBridgeSettingsView: View {
     private var heartbeatLive: Bool {
         guard let lastActivity else { return false }
         return Date().timeIntervalSince(lastActivity) < Self.heartbeatWindow
+    }
+
+    private var activeSessions: [AgentSession] {
+        sessions.filter { $0.state == .active }
+    }
+
+    /// Pill for the server row — see STATUS SEMANTICS in the file header.
+    private var serverStatus: (text: String, tint: Color) {
+        guard context.agentSessionRegistry != nil else {
+            return ("Unavailable", .speakMica)
+        }
+        if heartbeatLive { return ("Agent attached", .speakAgentViolet) }
+        if sessions.isEmpty { return ("Ready", .speakOK) }
+        if activeSessions.isEmpty { return ("Stale", .speakWarning) }
+        return ("Listening", .speakOK)
     }
 
     private let installCommand = "make install-mcp-user"
@@ -64,69 +86,50 @@ struct AgentBridgeSettingsView: View {
 
     private var serverCard: some View {
         SettingsSectionCard(title: "speak-mcp Stdio Server") {
+            SettingsRow(
+                "Model Context Protocol server",
+                description: "Bridges coding agents (Claude Code, Cursor, Codex) to speak's local voice interface over JSON-RPC 2.0 stdio."
+            ) {
+                SettingsStatusPill(text: serverStatus.text, tint: serverStatus.tint)
+            }
+
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-                SettingsRow(
-                    "Model Context Protocol server",
-                    description: "Bridges LLM agents (Claude Code, Cursor, Codex) to speak's local voice interface over JSON-RPC 2.0 stdio."
-                ) {
-                    HStack(spacing: SpeakSpacing.xs) {
-                        Circle()
-                            .fill(heartbeatLive ? Color.speakAgentViolet : Color.speakOK)
-                            .frame(width: 7, height: 7)
-                        SettingsStatusPill(
-                            text: heartbeatLive ? "Agent attached" : "Listening",
-                            tint: heartbeatLive ? .speakAgentViolet : .speakOK
-                        )
-                    }
-                }
+                codeBlock(
+                    title: "Install",
+                    code: installCommand,
+                    copyName: "command"
+                )
 
-                SettingsRowSeparator()
-
-                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                    HStack {
-                        Text("Install")
-                            .font(.speakBody(.caption, semibold: true))
-                            .foregroundStyle(Color.speakBone)
-                        Spacer()
-                        copyButton("Copy Command", text: installCommand, name: "Install command")
-                    }
-                    Text(installCommand)
-                        .font(.speakMonoFace(.caption))
-                        .textSelection(.enabled)
-                        .padding(SpeakSpacing.sm)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .speakInset(cornerRadius: 6)
-                }
-
-                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                    HStack {
-                        Text("Client config (Claude / Cursor / Codex)")
-                            .font(.speakBody(.caption, semibold: true))
-                            .foregroundStyle(Color.speakBone)
-                        Spacer()
-                        copyButton("Copy JSON", text: jsonSnippet, name: "JSON config")
-                    }
-                    Text(jsonSnippet)
-                        .font(.speakMonoFace(.caption))
-                        .textSelection(.enabled)
-                        .padding(SpeakSpacing.sm)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .speakInset(cornerRadius: 6)
-                }
-
-                if let copiedItemName {
-                    HStack(spacing: SpeakSpacing.xs) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(Color.speakDelivered)
-                        Text("\(copiedItemName) copied to clipboard.")
-                            .font(.speakBody(.caption))
-                            .foregroundStyle(Color.speakDelivered)
-                    }
-                    .transition(.opacity)
-                }
+                codeBlock(
+                    title: "Client config — Claude Code, Cursor, Codex",
+                    code: jsonSnippet,
+                    copyName: "JSON"
+                )
             }
             .padding(.horizontal, SpeakSpacing.md)
-            .padding(.vertical, SpeakSpacing.sm + 4)
+            .padding(.bottom, SpeakSpacing.sm + 4)
+        }
+    }
+
+    /// A labeled `speakInset` code well with a trailing copy button that
+    /// flips to a "Copied" check for 2.5 s. The pasteboard is write-only —
+    /// speak never reads it back (hard rule).
+    private func codeBlock(title: String, code: String, copyName: String) -> some View {
+        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+            HStack {
+                Text(title)
+                    .font(.speakBody(.caption, semibold: true))
+                    .foregroundStyle(Color.speakBone)
+                Spacer()
+                copyButton(text: code, name: copyName)
+            }
+            Text(code)
+                .font(.speakMonoFace(.caption))
+                .foregroundStyle(Color.speakBone)
+                .textSelection(.enabled)
+                .padding(SpeakSpacing.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .speakInset()
         }
     }
 
@@ -136,7 +139,7 @@ struct AgentBridgeSettingsView: View {
         SettingsSectionCard(title: "Agent Integration") {
             SettingsRow(
                 "Prompt tag",
-                description: "Prepends an STT origin tag to pasted text so coding agents know the prompt was voice-dictated."
+                description: "Prepends an origin tag to pasted text so coding agents know the prompt was voice-dictated."
             ) {
                 Picker("", selection: Binding(
                     get: { store.agentPrefixStyle },
@@ -147,7 +150,7 @@ struct AgentBridgeSettingsView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .foregroundStyle(Color.speakBone)
+                .labelsHidden()
                 .fixedSize()
             }
 
@@ -163,55 +166,101 @@ struct AgentBridgeSettingsView: View {
                     ))
                     .toggleStyle(.switch)
                     .controlSize(.small)
+                    .tint(.speakUIAccent)
                 }
             }
         }
     }
 
-    // MARK: - Live state
+    // MARK: - Live sessions
 
     /// Heartbeat + session list, refreshed from the app's real
     /// `AgentSessionRegistry` (the instance `CLIPortServer` touches on every
     /// `speak-mcp` call) every 2 s while this category is visible.
     private var sessionsCard: some View {
         SettingsSectionCard(title: "Live Sessions") {
-            VStack(alignment: .leading, spacing: 0) {
-                SettingsRow(
-                    "Connected agent sessions",
-                    description: lastActivity.map { "Last bridge activity \(Self.relative($0))." }
-                        ?? "No agent has called in yet — register via speak_register_session."
-                ) {
-                    Text("\(sessions.filter { $0.state == .active }.count)")
-                        .font(.speakBody(.base))
-                        .foregroundStyle(Color.speakMica)
-                }
-
-                ForEach(sessions, id: \.sessionId) { session in
-                    SettingsRowSeparator()
-                    SettingsRow(
-                        session.label.isEmpty ? session.provider : session.label,
-                        description: "\(session.provider) · seen \(Self.relative(session.lastSeen))"
-                    ) {
-                        SettingsStatusPill(
-                            text: session.state == .active ? "Active" : "Stale",
-                            tint: session.state == .active ? .speakAgentViolet : .speakWarning
-                        )
+            SettingsRow(
+                "Connected agent sessions",
+                description: sessionSummary
+            ) {
+                HStack(spacing: SpeakSpacing.xs) {
+                    if activeSessions.isEmpty == false {
+                        SettingsStatusPill(text: "\(activeSessions.count) active", tint: .speakOK)
                     }
-                }
-
-                SettingsRowSeparator()
-
-                SettingsRow(
-                    "Manage agents & calls",
-                    description: "Tool capabilities, @tag adapters, and the Agent Inbox live on the dashboard."
-                ) {
-                    HStack(spacing: SpeakSpacing.sm) {
-                        Button("MCP & Agents") { onOpenSection(.mcpAgents) }
-                        Button("Agent Inbox") { onOpenSection(.agentInbox) }
+                    let staleCount = sessions.count - activeSessions.count
+                    if staleCount > 0 {
+                        SettingsStatusPill(text: "\(staleCount) stale", tint: .speakWarning)
+                    }
+                    if sessions.isEmpty {
+                        Text("—")
+                            .font(.speakBody(.base))
+                            .foregroundStyle(Color.speakMica)
                     }
                 }
             }
+
+            ForEach(sessions, id: \.sessionId) { session in
+                SettingsRowSeparator()
+                sessionRow(session)
+            }
+
+            SettingsRowSeparator()
+
+            SettingsRow(
+                "Manage agents & calls",
+                description: "Tool capabilities, @tag adapters, and the Agent Inbox live on the dashboard."
+            ) {
+                HStack(spacing: SpeakSpacing.sm) {
+                    Button("MCP & Agents") { onOpenSection(.mcpAgents) }
+                        .controlSize(.small)
+                    Button("Agent Inbox") { onOpenSection(.agentInbox) }
+                        .controlSize(.small)
+                }
+            }
         }
+    }
+
+    private var sessionSummary: String {
+        if context.agentSessionRegistry == nil {
+            return "Session registry unavailable."
+        }
+        if sessions.isEmpty {
+            return "No agent has called in yet — agents register themselves via the speak_register_session tool."
+        }
+        if let lastActivity {
+            return "Last bridge activity \(Self.relative(lastActivity))."
+        }
+        return ""
+    }
+
+    /// One session, scannable: label (or provider) + provider · short id ·
+    /// last-seen on the left, state pill on the right.
+    private func sessionRow(_ session: AgentSession) -> some View {
+        HStack(spacing: SpeakSpacing.md) {
+            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                Text(session.label.isEmpty ? session.provider : session.label)
+                    .font(.speakBody(.base, semibold: true))
+                    .foregroundStyle(Color.speakBone)
+
+                HStack(spacing: SpeakSpacing.xs) {
+                    Text(session.provider)
+                    Text("·")
+                    Text(Self.shortId(session.sessionId))
+                        .font(.speakMonoFace(.caption))
+                    Text("·")
+                    Text("seen \(Self.relative(session.lastSeen))")
+                }
+                .font(.speakBody(.caption))
+                .foregroundStyle(Color.speakMica)
+            }
+            Spacer(minLength: SpeakSpacing.lg)
+            SettingsStatusPill(
+                text: session.state == .active ? "Active" : "Stale",
+                tint: session.state == .active ? .speakAgentViolet : .speakWarning
+            )
+        }
+        .padding(.horizontal, SpeakSpacing.md)
+        .padding(.vertical, SpeakSpacing.sm + 4)
     }
 
     // MARK: - Helpers
@@ -226,6 +275,12 @@ struct AgentBridgeSettingsView: View {
         }
     }
 
+    /// First 8 chars of the session id — enough to tell sessions apart without
+    /// flooding the row with a full UUID.
+    private static func shortId(_ sessionId: String) -> String {
+        sessionId.count > 8 ? String(sessionId.prefix(8)) : sessionId
+    }
+
     private static func relative(_ date: Date) -> String {
         let seconds = Int(Date().timeIntervalSince(date))
         if seconds < 5 { return "just now" }
@@ -235,18 +290,24 @@ struct AgentBridgeSettingsView: View {
         return "\(minutes / 60)h ago"
     }
 
-    private func copyButton(_ label: String, text: String, name: String) -> some View {
-        Button(label) {
+    private func copyButton(text: String, name: String) -> some View {
+        let copied = copiedItemName == name
+        return Button {
             // Write-only pasteboard — speak never reads it back.
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
             withAnimation { copiedItemName = name }
             Task {
-                try? await Task.sleep(nanoseconds: 2_500_000_000)
-                withAnimation { copiedItemName = nil }
+                try? await Task.sleep(for: .seconds(2.5))
+                if copiedItemName == name {
+                    withAnimation { copiedItemName = nil }
+                }
             }
+        } label: {
+            Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                .font(.speakBody(.caption))
         }
-        .font(.speakBody(.caption))
         .buttonStyle(.borderless)
+        .tint(copied ? Color.speakDelivered : Color.speakUIAccent)
     }
 }

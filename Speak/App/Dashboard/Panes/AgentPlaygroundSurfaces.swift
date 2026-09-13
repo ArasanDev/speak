@@ -68,24 +68,20 @@ struct PlaygroundHairline: View {
 
 // MARK: - Masthead
 
-/// Title, subtitle and the engine room, on one baseline. The engine chips double
-/// as the model selector — the health readout and the choice are the same object,
+/// The engine room, bound to the document measure. The desk header already
+/// owns the pane title ("Playground" renders there once), so the masthead is a
+/// slim provenance strip — the tagline plus the backend chips, which double as
+/// the model selector: the health readout and the choice are the same object,
 /// which is what an engine room is.
 struct PlaygroundMasthead: View {
     @ObservedObject var viewModel: PlaygroundViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline, spacing: SpeakSpacing.md) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Playground")
-                        .font(.speakDisplay(.title))
-                        .foregroundStyle(Color.speakBone)
-
-                    Text("Local inference · streaming · nothing leaves this Mac")
-                        .font(.speakBody(.caption))
-                        .foregroundStyle(Color.speakMica)
-                }
+            HStack(alignment: .center, spacing: SpeakSpacing.md) {
+                Text("Local inference · streaming · nothing leaves this Mac")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakMica)
 
                 Spacer(minLength: SpeakSpacing.md)
 
@@ -94,8 +90,7 @@ struct PlaygroundMasthead: View {
             .frame(maxWidth: PlaygroundMetrics.measure, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.horizontal, SpeakSpacing.lg)
-            .padding(.top, SpeakSpacing.lg)
-            .padding(.bottom, SpeakSpacing.md)
+            .padding(.vertical, SpeakSpacing.sm)
 
             PlaygroundHairline()
         }

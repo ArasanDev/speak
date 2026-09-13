@@ -2,11 +2,18 @@
 //
 // The Insights pane — aggregated usage statistics derived from the dictation
 // history: total words, total dictations, average words per session, daily
-// streak, and a 7-day activity bar chart (acceleration-plan.md Wave A.2).
+// streak, stop→paste latency, and a 7-day activity bar chart
+// (acceleration-plan.md Wave A.2).
 //
-// Stats are computed by the pure `InsightsStats` value type (SpeakCore/Insights/).
-// Fetching is done via `.task` (off-main, idiomatic SwiftUI async), matching the
-// approach used in `HistoryViewModel` but without the debounce/search overhead.
+// This is a DATA surface: numerals are system-rounded speakBone at display
+// scale, unit labels are speakMica, and color is reserved for semantics —
+// `ok` for within-budget latency, `warning` for degraded. Stat numerals are
+// never tinted.
+//
+// Stats are computed by the pure `InsightsStats`/`LatencyStats` value types
+// (SpeakCore/Insights/). Fetching is done via `.task` (off-main, idiomatic
+// SwiftUI async), matching the approach used in `HistoryViewModel` but without
+// the debounce/search overhead.
 
 import SpeakCore
 import SwiftUI
@@ -27,24 +34,16 @@ struct InsightsPaneView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if isLoading {
-                loadingView
-            } else if let stats {
-                if stats.totalDictations == 0 {
-                    PanePlaceholder(
-                        systemImage: "chart.bar",
-                        message: "Dictate something first — your stats will appear here."
-                    )
-                } else {
-                    statsBody(stats)
-                }
+            if let stats, stats.totalDictations > 0 {
+                statsBody(stats)
+            } else if stats != nil, !isLoading {
+                // Loaded successfully but the store is empty — real empty state.
+                emptyState
             } else {
-                PanePlaceholder(
-                    systemImage: "chart.bar",
-                    message: "Loading your insights…"
-                )
+                loadingView
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
             await loadStats()
         }
@@ -56,7 +55,10 @@ struct InsightsPaneView: View {
     private func statsBody(_ stats: InsightsStats) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
-                statCardRow(stats)
+                VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+                    sectionHeader("Overview")
+                    statCardGrid(stats)
+                }
                 if let latency {
                     latencySection(latency)
                 }
@@ -68,23 +70,35 @@ struct InsightsPaneView: View {
         }
     }
 
-    // MARK: - Stat card row
+    // MARK: - Section header chrome
 
-    private func statCardRow(_ stats: InsightsStats) -> some View {
-        // [decision: 2×2 grid of stat cards, fits the 360pt pane width without overflow]
-        VStack(spacing: SpeakSpacing.sm) {
-            HStack(spacing: SpeakSpacing.sm) {
-                StatCard(value: "\(stats.totalDictations)", label: "dictations")
-                StatCard(value: "\(stats.totalWords)", label: "total words")
-            }
-            HStack(spacing: SpeakSpacing.sm) {
-                StatCard(value: "\(stats.wordsPerMinute)", label: "words / min")
-                StatCard(value: "\(stats.averageWordsPerDictation)", label: "avg words / session")
-            }
-            HStack(spacing: SpeakSpacing.sm) {
-                StatCard(value: "\(stats.currentStreakDays)", label: "day streak")
-                Color.clear.frame(maxWidth: .infinity)   // keep the 2-column grid aligned
-            }
+    /// Dashboard chrome per the design contract: 16pt semibold bone on canvas.
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(Color.speakBone)
+    }
+
+    // MARK: - Stat card grid
+
+    private func statCardGrid(_ stats: InsightsStats) -> some View {
+        // [decision: 2-column grid, fits the 360pt pane width without overflow;
+        //  the streak card spans both columns so the grid never dead-ends.]
+        let columns = [
+            GridItem(.flexible(), spacing: SpeakSpacing.sm),
+            GridItem(.flexible(), spacing: SpeakSpacing.sm)
+        ]
+        return LazyVGrid(columns: columns, spacing: SpeakSpacing.sm) {
+            StatCard(value: "\(stats.totalDictations)", label: "dictations", systemImage: "waveform")
+            StatCard(value: "\(stats.totalWords)", label: "total words", systemImage: "text.word.spacing")
+            StatCard(value: "\(stats.wordsPerMinute)", label: "words / min", systemImage: "speedometer")
+            StatCard(value: "\(stats.averageWordsPerDictation)", label: "avg words / session", systemImage: "chart.line.uptrend.xyaxis")
+            StatCard(
+                value: "\(stats.currentStreakDays)",
+                label: "day streak",
+                systemImage: "flame"
+            )
+            .gridCellColumns(2)
         }
     }
 
@@ -93,9 +107,10 @@ struct InsightsPaneView: View {
     /// Stop→paste latency cards. Thresholds come from benchmark.md §7 — no bare literals.
     private func latencySection(_ latency: LatencyStats) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-            Text("Stop → paste latency")
-                .font(.speakBody(.base))
-                .foregroundStyle(Color.speakBone)
+            sectionHeader("Stop → Paste Latency")
+            Text("Median time from stopping dictation to text landing at the cursor.")
+                .font(.speakBody(.caption))
+                .foregroundStyle(Color.speakMica)
 
             HStack(spacing: SpeakSpacing.sm) {
                 LatencyCard(
@@ -143,14 +158,12 @@ struct InsightsPaneView: View {
 
     private func activityChart(_ stats: InsightsStats) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-            Text("Last 7 days")
-                .font(.speakBody(.base))
-                .foregroundStyle(Color.speakBone)
+            sectionHeader("Last 7 Days")
 
             ActivityBarChart(dataPoints: stats.dictationsPerDay)
         }
         .padding(SpeakSpacing.md)
-        .speakCard(cornerRadius: 10)
+        .speakCard()
     }
 
     // MARK: - Loading view
@@ -162,6 +175,27 @@ struct InsightsPaneView: View {
             Text("Loading insights…")
                 .font(.speakBody(.caption))
                 .foregroundStyle(Color.speakMica)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(SpeakSpacing.xl)
+    }
+
+    // MARK: - Empty state
+
+    /// Nothing recorded yet — icon + line + an honest hint, not a blank pane.
+    private var emptyState: some View {
+        VStack(spacing: SpeakSpacing.md) {
+            Image(systemName: "chart.bar")
+                .font(.system(size: 34))
+                .foregroundStyle(Color.speakMica.opacity(0.6))
+                .accessibilityHidden(true)
+            Text("No insights yet")
+                .font(.speakBody(.body, semibold: true))
+                .foregroundStyle(Color.speakBone)
+            Text("Dictate once — words, pace, streaks, and latency appear here.")
+                .font(.speakBody(.caption))
+                .foregroundStyle(Color.speakMica)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(SpeakSpacing.xl)
@@ -180,7 +214,7 @@ struct InsightsPaneView: View {
             stats = InsightsStats(entries: entries, now: Date(), calendar: .current)
             latency = LatencyStats(entries: entries)
         } catch {
-            // Store errors surface as an empty state (stats stays nil → placeholder shown).
+            // Store errors surface as the empty state — honest, not a crash.
             stats = InsightsStats(entries: [], now: Date(), calendar: .current)
             latency = LatencyStats(entries: [])
         }
@@ -189,34 +223,46 @@ struct InsightsPaneView: View {
 
 // MARK: - StatCard
 
-/// A compact card displaying a large numeric value and a caption label.
+/// A compact card displaying a large numeric value, a mica icon, and a
+/// caption label. Same visual recipe as Home's Activity Overview cards so the
+/// desk reads as one system.
 private struct StatCard: View {
     let value: String
     let label: String
+    let systemImage: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text(value)
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(Color.speakBone)
-            Text(label)
-                .font(.speakBody(.caption))
+        VStack(alignment: .leading, spacing: SpeakSpacing.sm + SpeakSpacing.xs) {
+            Image(systemName: systemImage)
+                .font(.speakBody(.base, semibold: true))
                 .foregroundStyle(Color.speakMica)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                Text(value)
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color.speakBone)
+                Text(label)
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakMica)
+            }
         }
         .padding(SpeakSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .speakCard(cornerRadius: 10)
+        .speakCard()
     }
 }
 
 // MARK: - LatencyCard
 
-/// A compact latency metric card showing a value in milliseconds with a budget indicator.
+/// A compact latency metric card showing a value in milliseconds with a
+/// budget indicator.
 ///
 /// Color semantics (no magic numbers — thresholds from benchmark.md §7 via `budgetSeconds`):
-///   • Green (speakOK):           value ≤ budget — within target (standing health).
-///   • Red (speakError):            value > budget — over target.
-///   • Secondary (neutral):       no data yet (value is nil).
+///   • `speakOK` (healthy):     value ≤ budget — within target.
+///   • `speakWarning` (degraded): value > budget — over target, actionable but
+///     not a failure (dictation still landed).
+///   • `speakMica` (neutral):   no data yet (value is nil).
 private struct LatencyCard: View {
     let label: String
     /// The measured value in seconds. `nil` when no samples exist yet.
@@ -232,11 +278,11 @@ private struct LatencyCard: View {
                 let withinBudget = valueSeconds <= budgetSeconds
                 Text(formattedMs(valueSeconds))
                     .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(withinBudget ? Color.speakOK : Color.speakError)
+                    .foregroundStyle(withinBudget ? Color.speakOK : Color.speakWarning)
                 Text(label)
                     .font(.speakBody(.caption))
                     .foregroundStyle(Color.speakMica)
-                Text("n=\(sampleCount)")
+                Text("n=\(sampleCount) · target ≤ \(formattedBudget)")
                     .font(.speakMonoFace(.caption))
                     .foregroundStyle(Color.speakMica)
             } else {
@@ -253,12 +299,17 @@ private struct LatencyCard: View {
         }
         .padding(SpeakSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .speakCard(cornerRadius: 10)
+        .speakCard()
     }
 
-    /// Format seconds as milliseconds with one decimal, e.g. "342.1ms".
+    /// Format seconds as whole milliseconds, e.g. "342ms".
     private func formattedMs(_ seconds: Double) -> String {
         String(format: "%.0fms", seconds * 1000)
+    }
+
+    /// The budget rendered in its native unit, e.g. "1.0s" / "4.0s".
+    private var formattedBudget: String {
+        String(format: "%.1fs", budgetSeconds)
     }
 }
 
@@ -281,7 +332,15 @@ private struct ActivityBarChart: View {
         HStack(alignment: .bottom, spacing: SpeakSpacing.xs) {
             ForEach(Array(zip(dataPoints, dictationCounts).enumerated()), id: \.offset) { _, pair in
                 let (point, dictations) = pair
+                let isToday = Calendar.current.isDateInToday(point.day)
                 VStack(spacing: SpeakSpacing.xs) {
+                    // Count above the bar — data, so mono. Always rendered at
+                    // zero opacity when empty so every column stays aligned.
+                    Text("\(dictations)")
+                        .font(.speakMonoFace(.caption))
+                        .foregroundStyle(Color.speakMica)
+                        .opacity(dictations > 0 ? 1 : 0)
+
                     GeometryReader { geo in
                         VStack(spacing: 0) {
                             Spacer(minLength: 0)
@@ -297,10 +356,12 @@ private struct ActivityBarChart: View {
                     .frame(height: Self.barAreaHeight)
 
                     Text(dayLabel(point.day))
-                        .font(.speakBody(.caption))
-                        .foregroundStyle(Color.speakMica)
+                        .font(.speakBody(.caption, semibold: isToday))
+                        .foregroundStyle(isToday ? Color.speakBone : Color.speakMica)
                 }
                 .frame(maxWidth: .infinity)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(dayLabel(point.day)): \(dictations) dictations")
             }
         }
     }

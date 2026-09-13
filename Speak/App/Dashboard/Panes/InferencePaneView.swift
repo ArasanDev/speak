@@ -49,6 +49,7 @@ struct InferencePaneView: View {
                     ModelRegistryCard(viewModel: viewModel)
                     QuickTestConsole(viewModel: viewModel, context: context)
                     ConnectToolsCard(viewModel: viewModel)
+                    settingsHint
                 }
                 .padding(.top, SpeakSpacing.sm)
                 .padding(.horizontal, SpeakSpacing.lg)
@@ -63,6 +64,22 @@ struct InferencePaneView: View {
         .onDisappear {
             viewModel.stopPolling()
         }
+    }
+
+    /// This pane CONSUMES what Settings › Intelligence configures — the pane
+    /// can't deep-link into a Settings category (the navigation channel only
+    /// carries `DashboardSection`), so the pointer is a caption, not a button
+    /// that would lie about where it lands.
+    private var settingsHint: some View {
+        HStack(spacing: SpeakSpacing.xs) {
+            Image(systemName: "gearshape")
+                .font(.system(size: 10))
+            Text("Engines, providers, and neat-writing are configured in Settings › Intelligence.")
+                .font(.speakBody(.caption))
+        }
+        .foregroundStyle(Color.speakMica)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, SpeakSpacing.xs)
     }
 }
 
@@ -221,10 +238,12 @@ private struct ServerStatusCard: View {
 
     // MARK: - Derived values
 
-    /// [decision: `speakOnAir` is reserved by hard rule for the mic tally, so a
-    ///  stopped server uses the themed `error` role.]
+    /// [decision: `speakOnAir` is reserved by hard rule for the mic tally.
+    ///  Stopped is the pane's *default* state, not a failure — the dot and the
+    ///  "Stopped" word stay `mica` (off), and `error` red is spent only on the
+    ///  error strip, where it means something actually went wrong.]
     private var statusTint: Color {
-        viewModel.isServerRunning ? Color.speakOK : Color.speakError
+        viewModel.isServerRunning ? Color.speakOK : Color.speakMica
     }
 
     private func formatUptime(_ seconds: TimeInterval) -> String {

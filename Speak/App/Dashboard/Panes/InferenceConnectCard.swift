@@ -204,7 +204,7 @@ struct InferenceChip: View {
                 Capsule().fill(
                     isSelected
                         ? Color.speakUIAccent.opacity(0.16)
-                        : Color.primary.opacity(isHovering ? 0.06 : 0.02)
+                        : Color.speakBone.opacity(isHovering ? 0.06 : 0.02)
                 )
             )
             .overlay(
@@ -240,7 +240,7 @@ struct InferenceCodeBlock: View {
             }
             .padding(.horizontal, SpeakSpacing.sm + 2)
             .padding(.vertical, SpeakSpacing.xs + 2)
-            .background(Color.primary.opacity(0.03))
+            .background(Color.speakBone.opacity(0.03))
 
             Rectangle()
                 .fill(Color.speakCardBorder)
@@ -250,6 +250,7 @@ struct InferenceCodeBlock: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
                     .font(.speakMonoFace(.caption))
+                    .foregroundStyle(Color.speakBone)
                     .textSelection(.enabled)
                     .padding(SpeakSpacing.sm + 2)
             }

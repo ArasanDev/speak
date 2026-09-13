@@ -82,9 +82,7 @@ struct AIStudioPaneView: View {
     private var promptTransformsContent: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
             AICleanupToggle(settingsStore: context.settingsStore)
-            Divider()
             DefaultProfileSection(context: context)
-            Divider()
 
             HStack(alignment: .top, spacing: SpeakSpacing.lg) {
                 ProfileListPanel(
@@ -112,16 +110,12 @@ struct AIStudioPaneView: View {
     }
 
     private var emptyEditorPlaceholder: some View {
-        VStack(spacing: SpeakSpacing.md) {
-            Image(systemName: "brain.head.profile")
-                .font(.system(size: 34))
-                .foregroundStyle(.speakMica)
-            Text("Select a profile to edit")
-                .font(.speakBody(.caption))
-                .foregroundStyle(.speakMica)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(SpeakSpacing.md)
+        InferenceEmptyState(
+            systemImage: "brain.head.profile",
+            headline: "No profile selected",
+            message: "Pick a profile on the left to edit it,\nor create a new one."
+        )
+        .frame(maxHeight: .infinity)
         .speakCard()
     }
 }
@@ -218,20 +212,20 @@ private struct VoiceTTSConfigSection: View {
                     ), in: 0.0...1.0, step: 0.05)
                 }
 
-                Divider()
+                StudioHairline()
 
                 // Live Audio Readback Test
                 VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                     Text("Live Audio Readback Test").font(.speakBody(.caption)).foregroundStyle(.speakAgentViolet)
 
                     TextField("Test utterance text", text: $testText)
-                        .font(.speakMonoFace(.base))
+                        .font(.speakBody(.base))
                         .textFieldStyle(.roundedBorder)
                         .foregroundStyle(.speakBone)
 
                     HStack(spacing: SpeakSpacing.sm) {
                         Button(action: testReadback) {
-                            Label(isSpeaking ? "Speaking..." : "Test Voice Readback", systemImage: "speaker.wave.2.fill")
+                            Label(isSpeaking ? "Speaking…" : "Test Voice Readback", systemImage: "speaker.wave.2.fill")
                                 .font(.speakBody(.caption))
                                 .foregroundStyle(.speakBone)
                         }
@@ -249,10 +243,15 @@ private struct VoiceTTSConfigSection: View {
                         Spacer()
 
                         if isSpeaking {
-                            HStack(spacing: 4) {
-                                Circle().fill(Color.speakAgentViolet).frame(width: 8, height: 8)
-                                Text("AUDIO PLAYING").font(.system(size: 9)).bold().foregroundStyle(Color.speakAgentViolet)
+                            // TTS readback is the AGENT channel — violet, never
+                            // amber (amber is the mic) and never onAir.
+                            HStack(spacing: 5) {
+                                Circle().fill(Color.speakAgentViolet).frame(width: 6, height: 6)
+                                Text("Speaking")
+                                    .font(.speakBody(.caption, semibold: true))
+                                    .foregroundStyle(Color.speakAgentViolet)
                             }
+                            .accessibilityLabel("Audio playing")
                         }
                     }
                 }
@@ -320,6 +319,8 @@ private struct STTAudioWaveformInspectorSection: View {
     let context: DashboardContext
 
     @State private var isSimulating: Bool = false
+    /// `nil` = no PermissionManager injected (previews) → no banner is shown.
+    @State private var micPermission: PermissionState?
     @State private var levels: [CGFloat] = [
         0.12, 0.25, 0.45, 0.68, 0.85, 0.92, 0.74, 0.52,
         0.38, 0.60, 0.82, 0.96, 0.88, 0.64, 0.42, 0.28,
@@ -336,7 +337,7 @@ private struct STTAudioWaveformInspectorSection: View {
                     Text("STT Audio Waveform Inspector")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.speakBone)
-                    Text("Inspect real-time audio signal dynamics, peak RMS levels, and PCM stream metrics.")
+                    Text("Inspect audio signal dynamics, peak RMS levels, and PCM stream metrics.")
                         .font(.speakBody(.caption))
                         .foregroundStyle(.speakMica)
                 }
@@ -349,6 +350,16 @@ private struct STTAudioWaveformInspectorSection: View {
             }
 
             VStack(alignment: .leading, spacing: SpeakSpacing.md) {
+                if let micPermission, micPermission != .granted {
+                    StudioNoticeStrip(
+                        systemImage: "mic.slash.fill",
+                        tint: .speakWarning,
+                        message: "Microphone access is \(micPermission == .denied ? "denied" : "not granted") — live capture and voice answers cannot run until it is resolved.",
+                        actionTitle: context.showOnboarding != nil ? "Resolve" : nil,
+                        action: { context.showOnboarding?() }
+                    )
+                }
+
                 // Waveform Display Box
                 VStack(spacing: SpeakSpacing.sm) {
                     HStack(alignment: .bottom, spacing: 4) {
@@ -364,9 +375,15 @@ private struct STTAudioWaveformInspectorSection: View {
                     .speakInset(cornerRadius: 8)
 
                     HStack {
-                        Label("16 kHz Mono Float32 PCM Input", systemImage: "waveform")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.speakHumanAmber)
+                        // The amber mic color is earned only while the meter is
+                        // actually running — idle, the legend admits the levels
+                        // below are a stored sample, not live capture.
+                        Label(
+                            isSimulating ? "Simulated 16 kHz mono PCM — running" : "Sample levels · 16 kHz mono PCM",
+                            systemImage: "waveform"
+                        )
+                            .font(.speakBody(.caption))
+                            .foregroundStyle(isSimulating ? Color.speakHumanAmber : Color.speakMica)
                         Spacer()
                         Text(String(format: "RMS Peak: %.2f (%.1f dBFS)", peakLevel, 20 * log10(max(0.0001, peakLevel))))
                             .font(.speakMonoFace(.caption))
@@ -374,40 +391,43 @@ private struct STTAudioWaveformInspectorSection: View {
                     }
                 }
 
-                Divider()
+                StudioHairline()
 
                 // Metadata Details
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     Text("PCM Buffer & Transcriber Pipeline Metrics")
-                        .font(.speakBody(.caption))
-                        .foregroundStyle(.speakHumanAmber)
+                        .font(.speakBody(.caption, semibold: true))
+                        .foregroundStyle(.speakBone)
 
                     Grid(alignment: .leading, horizontalSpacing: SpeakSpacing.lg, verticalSpacing: SpeakSpacing.xs) {
                         GridRow {
-                            Text("Target Rate:").font(.speakBody(.caption)).foregroundStyle(.speakMica)
-                            Text("16,000 Hz (Standard ASR)").font(.speakMonoFace(.caption)).foregroundStyle(.speakBone)
+                            Text("Target Rate").font(.speakBody(.caption)).foregroundStyle(.speakMica)
+                            Text("16,000 Hz (standard ASR)").font(.speakMonoFace(.caption)).foregroundStyle(.speakBone)
                         }
                         GridRow {
-                            Text("Channels:").font(.speakBody(.caption)).foregroundStyle(.speakMica)
-                            Text("1 Channel (Mono)").font(.speakMonoFace(.caption)).foregroundStyle(.speakBone)
+                            Text("Channels").font(.speakBody(.caption)).foregroundStyle(.speakMica)
+                            Text("1 channel (mono)").font(.speakMonoFace(.caption)).foregroundStyle(.speakBone)
                         }
                         GridRow {
-                            Text("Tap Buffer Size:").font(.speakBody(.caption)).foregroundStyle(.speakMica)
+                            Text("Tap Buffer Size").font(.speakBody(.caption)).foregroundStyle(.speakMica)
                             Text("4,096 frames (~256 ms)").font(.speakMonoFace(.caption)).foregroundStyle(.speakBone)
                         }
                         GridRow {
-                            Text("PCM Format:").font(.speakBody(.caption)).foregroundStyle(.speakMica)
-                            Text("Float32 Non-interleaved").font(.speakMonoFace(.caption)).foregroundStyle(.speakBone)
+                            Text("PCM Format").font(.speakBody(.caption)).foregroundStyle(.speakMica)
+                            Text("Float32 non-interleaved").font(.speakMonoFace(.caption)).foregroundStyle(.speakBone)
                         }
                         GridRow {
-                            Text("Signal Quality:").font(.speakBody(.caption)).foregroundStyle(.speakMica)
-                            Text("SNR: ~38 dB (Clean)").font(.speakMonoFace(.caption)).foregroundStyle(Color.speakOK)
+                            Text("Signal Quality").font(.speakBody(.caption)).foregroundStyle(.speakMica)
+                            Text("SNR ~38 dB (clean sample)").font(.speakMonoFace(.caption)).foregroundStyle(Color.speakOK)
                         }
                     }
                 }
             }
             .padding(SpeakSpacing.md)
             .speakCard()
+            .onAppear {
+                micPermission = context.permissionManager?.status(.microphone)
+            }
             .onDisappear {
                 stopSimulation()
             }
@@ -506,8 +526,8 @@ private struct DefaultProfileSection: View {
                 .pickerStyle(.menu)
 
                 Text("Sets which profile governs the default path. Today the everyday writing "
-                     + "style is still set in the Style pane — full default-profile wiring is the "
-                     + "next step. App-specific profiles (below) are active now.")
+                     + "style is set in Settings › Intelligence — full default-profile wiring is "
+                     + "the next step. App-specific profiles (below) are active now.")
                     .font(.speakBody(.caption))
                     .foregroundStyle(.speakMica)
                     .fixedSize(horizontal: false, vertical: true)
@@ -554,7 +574,7 @@ private struct ProfileListPanel: View {
             Button(action: { selectProfile(profile) }) {
                 HStack(spacing: SpeakSpacing.sm) {
                     Image(systemName: profile.icon).font(.system(size: 12))
-                    Text(profile.name).font(.speakMonoFace(.caption))
+                    Text(profile.name).font(.speakBody(.caption))
                     Spacer(minLength: 0)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -568,14 +588,14 @@ private struct ProfileListPanel: View {
 
             if !profile.targetApps.isEmpty {
                 Text("Active in: " + profile.targetApps.joined(separator: ", "))
-                    .font(.system(size: 9))
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.speakMica)
                     .lineLimit(2)
                     .padding(.leading, SpeakSpacing.xs)
                     .padding(.top, SpeakSpacing.xs)
             } else if profile.isBuiltIn {
                 Text("Foundational")
-                    .font(.system(size: 9))
+                    .font(.speakBody(.caption))
                     .foregroundStyle(.speakMica)
                     .padding(.leading, SpeakSpacing.xs)
                     .padding(.top, SpeakSpacing.xs)
@@ -610,359 +630,49 @@ private struct ProfileListPanel: View {
     }
 }
 
-// MARK: - ProfileEditorPanel
 
-private struct ProfileEditorPanel: View {
-    let context: DashboardContext
-    @Binding var profile: Profile?
-    @Binding var previewSample: String
-    @Binding var previewResult: SpeakEngine.ProfilePreviewResult?
-    @Binding var isPreviewing: Bool
+// MARK: - Shared chrome (pane-local)
+
+/// The themed hairline — `Divider()` picks up a system gray that fights the
+/// two-temperature palette.
+struct StudioHairline: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.speakCardBorder)
+            .frame(height: 1)
+            .opacity(0.5)
+    }
+}
+
+/// A one-line tinted notice strip — caution (warning) or failure (error)
+/// callouts inside a card, with an optional trailing action.
+struct StudioNoticeStrip: View {
+    let systemImage: String
+    let tint: Color
+    let message: String
+    var actionTitle: String? = nil
+    var action: (() -> Void)? = nil
 
     var body: some View {
-        guard let p = profile else { return AnyView(EmptyView()) }
-
-        return AnyView(
-            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-                Text(p.name)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.speakBone)
-
-                VStack(alignment: .leading, spacing: SpeakSpacing.md) {
-                    profileNameField(p)
-                    profileIconField(p)
-                    profilePromptField(p)
-                    profileExamplesField(p)
-                    profileFormatOptions(p)
-                    profileToneOptions(p)
-                    profileLengthOptions(p)
-                    profileTargetApps(p)
-                    profileAutoSubmit(p)
-
-                    Divider()
-
-                    previewBox(p)
-                    actionButtons(p)
-                }
-                .padding(SpeakSpacing.md)
-                .speakCard()
-            }
-        )
-    }
-
-    private func profileNameField(_ p: Profile) -> some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Name").font(.speakBody(.caption)).foregroundStyle(.speakMica)
-            TextField("Profile name", text: Binding(
-                get: { p.name },
-                set: { newValue in updateProfile { $0.name = newValue } }
-            ))
-            .font(.speakMonoFace(.base))
-            .textFieldStyle(.roundedBorder)
-            .foregroundStyle(.speakBone)
-        }
-    }
-
-    private func profileIconField(_ p: Profile) -> some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Icon (SF Symbol)").font(.speakBody(.caption)).foregroundStyle(.speakMica)
-            TextField("SF Symbol name", text: Binding(
-                get: { p.icon },
-                set: { newValue in updateProfile { $0.icon = newValue } }
-            ))
-            .font(.speakMonoFace(.base))
-            .textFieldStyle(.roundedBorder)
-            .foregroundStyle(.speakBone)
-        }
-    }
-
-    private func profilePromptField(_ p: Profile) -> some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("System prompt").font(.speakBody(.caption)).foregroundStyle(.speakMica)
-            TextEditor(text: Binding(
-                get: { p.systemPrompt },
-                set: { newValue in updateProfile { $0.systemPrompt = newValue } }
-            ))
-            .font(.speakMonoFace(.base))
-            .foregroundStyle(.speakBone)
-            .frame(minHeight: 100)
-            .border(Color.speakCardBorder, width: 1)
-            .cornerRadius(4)
-        }
-    }
-
-    private func profileExamplesField(_ p: Profile) -> some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Few-shot examples").font(.speakBody(.caption)).foregroundStyle(.speakMica)
-            Text("Spoken → written pairs that steer the model. Strongest lever for small on-device models.")
-                .font(.system(size: 10))
-                .foregroundStyle(.speakMica)
-
-            if !p.examples.isEmpty {
-                VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-                    ForEach(Array(p.examples.enumerated()), id: \.offset) { idx, example in
-                        exampleRow(idx, example)
-                    }
-                }
-            }
-
-            Button(action: { addExample() }) {
-                Label("Add example", systemImage: "plus")
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(.speakBone)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, SpeakSpacing.xs)
-        }
-    }
-
-    private func exampleRow(_ idx: Int, _ example: Example) -> some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            HStack {
-                Text("Example \(idx + 1)")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.speakMica)
-                Spacer(minLength: 0)
-                Button(action: { removeExample(idx) }) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.speakMica)
-                }
-                .buttonStyle(.borderless)
-                .help("Remove example \(idx + 1)")
-            }
-            HStack(spacing: SpeakSpacing.sm) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Spoken").font(.system(size: 9)).foregroundStyle(.speakMica)
-                    TextField("Spoken input", text: Binding(
-                        get: { example.spoken },
-                        set: { v in updateProfile { $0.examples[idx].spoken = v } }
-                    ))
-                    .font(.speakMonoFace(.caption))
-                    .textFieldStyle(.roundedBorder)
-                    .foregroundStyle(.speakBone)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Written").font(.system(size: 9)).foregroundStyle(.speakMica)
-                    TextField("Written output", text: Binding(
-                        get: { example.written },
-                        set: { v in updateProfile { $0.examples[idx].written = v } }
-                    ))
-                    .font(.speakMonoFace(.caption))
-                    .textFieldStyle(.roundedBorder)
-                    .foregroundStyle(.speakBone)
-                }
-            }
-        }
-        .padding(SpeakSpacing.xs)
-        .speakInset(cornerRadius: 8)
-    }
-
-    private func addExample() {
-        updateProfile { $0.examples.append(Example(spoken: "", written: "")) }
-    }
-
-    private func removeExample(_ idx: Int) {
-        updateProfile { $0.examples.remove(at: idx) }
-    }
-
-    private func profileFormatOptions(_ p: Profile) -> some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Output format").font(.speakBody(.caption)).foregroundStyle(.speakMica)
-            Picker("Format", selection: Binding(
-                get: { p.format },
-                set: { newValue in updateProfile { $0.format = newValue } }
-            )) {
-                ForEach(OutputFormat.allCases, id: \.self) { fmt in
-                    Text(fmt.rawValue)
-                        .foregroundStyle(.speakBone)
-                        .tag(fmt)
-                }
-            }
-            .pickerStyle(.segmented)
-        }
-    }
-
-    private func profileToneOptions(_ p: Profile) -> some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Tone").font(.speakBody(.caption)).foregroundStyle(.speakMica)
-            Picker("Tone", selection: Binding(
-                get: { p.tone },
-                set: { newValue in updateProfile { $0.tone = newValue } }
-            )) {
-                ForEach(Tone.allCases, id: \.self) { tone in
-                    Text(tone.rawValue)
-                        .foregroundStyle(.speakBone)
-                        .tag(tone)
-                }
-            }
-            .pickerStyle(.segmented)
-        }
-    }
-
-    private func profileLengthOptions(_ p: Profile) -> some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Length bias").font(.speakBody(.caption)).foregroundStyle(.speakMica)
-            Picker("Length", selection: Binding(
-                get: { p.length },
-                set: { newValue in updateProfile { $0.length = newValue } }
-            )) {
-                ForEach(LengthBias.allCases, id: \.self) { len in
-                    Text(len.rawValue)
-                        .foregroundStyle(.speakBone)
-                        .tag(len)
-                }
-            }
-            .pickerStyle(.segmented)
-        }
-    }
-
-    private func profileTargetApps(_ p: Profile) -> some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text("Target apps (bundle IDs or names)").font(.speakBody(.caption)).foregroundStyle(.speakMica)
-            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                ForEach(Array(p.targetApps.enumerated()), id: \.offset) { idx, app in
-                    HStack(spacing: SpeakSpacing.xs) {
-                        TextField("App", text: Binding(
-                            get: { app },
-                            set: { newValue in updateProfile { $0.targetApps[idx] = newValue } }
-                        ))
-                        .font(.speakMonoFace(.caption))
-                        .textFieldStyle(.roundedBorder)
-                        .foregroundStyle(.speakBone)
-
-                        Button(action: { removeTargetApp(idx) }) {
-                            Image(systemName: "xmark").foregroundStyle(.speakMica)
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                }
-
-                Button(action: { addTargetApp() }) {
-                    Label("Add app", systemImage: "plus")
-                        .font(.speakBody(.caption))
-                        .foregroundStyle(.speakBone)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(SpeakSpacing.sm)
-            .speakInset(cornerRadius: 8)
-        }
-    }
-
-    private func profileAutoSubmit(_ p: Profile) -> some View {
-        Toggle(isOn: Binding(
-            get: { p.autoSubmit },
-            set: { newValue in updateProfile { $0.autoSubmit = newValue } }
-        )) {
-            Text("Auto-submit (paste immediately after cleanup)")
+        HStack(alignment: .top, spacing: SpeakSpacing.sm) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11))
+            Text(message)
                 .font(.speakBody(.caption))
-                .foregroundStyle(.speakBone)
-        }
-    }
-
-    private func previewBox(_ p: Profile) -> some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-            Text("Live preview").font(.speakBody(.caption)).foregroundStyle(.speakMica)
-            TextField("Enter sample text", text: $previewSample)
-                .font(.speakMonoFace(.base))
-                .textFieldStyle(.roundedBorder)
-                .foregroundStyle(.speakBone)
-
-            Button(action: { runPreview(p) }) {
-                Label("Preview", systemImage: "play.fill")
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(.speakBone)
-            }
-            .disabled(previewSample.isEmpty || isPreviewing)
-
-            if let result = previewResult {
-                previewResultBox(result)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: SpeakSpacing.sm)
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .font(.speakBody(.caption, semibold: true))
+                    .buttonStyle(.plain)
             }
         }
-    }
-
-    private func previewResultBox(_ result: SpeakEngine.ProfilePreviewResult) -> some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            switch result {
-            case .unavailable:
-                Text("Foundation Models unavailable — enable Apple Intelligence.")
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(.speakMica)
-            case .raw:
-                Text("Raw profile: output equals input (passthrough).")
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(.speakMica)
-            case .transformed(let output):
-                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                    Text("Transformed output:").font(.speakBody(.caption)).foregroundStyle(.speakMica)
-                    Text(output)
-                        .font(.speakMonoFace(.base))
-                        .foregroundStyle(.speakBone)
-                        .textSelection(.enabled)
-                        .padding(SpeakSpacing.sm)
-                        .speakInset(cornerRadius: 8)
-                    Text("[unverified on this Mac]").font(.system(size: 9)).foregroundStyle(.speakMica)
-                }
-            case .failed:
-                Text("Preview failed. Check the system log for details.")
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(.speakMica)
-            }
-        }
+        .foregroundStyle(tint)
         .padding(SpeakSpacing.sm)
-        .speakInset(cornerRadius: 8)
-    }
-
-    private func actionButtons(_ p: Profile) -> some View {
-        HStack(spacing: SpeakSpacing.md) {
-            if p.isBuiltIn && context.profileStore.isCustomized(id: p.id) {
-                Button("Reset to default") {
-                    context.profileStore.resetToDefault(id: p.id)
-                    if let reset = context.profileStore.profile(id: p.id) {
-                        profile = reset
-                    }
-                }
-                .font(.speakBody(.caption))
-            }
-
-            if !p.isBuiltIn {
-                Button(role: .destructive, action: {
-                    context.profileStore.delete(id: p.id)
-                    profile = nil
-                }) {
-                    Label("Delete", systemImage: "trash")
-                }
-                .font(.speakBody(.caption))
-            }
-
-            Spacer(minLength: 0)
-        }
-    }
-
-    private func updateProfile(_ mutation: (inout Profile) -> Void) {
-        guard var p = profile else { return }
-        mutation(&p)
-        profile = p
-        context.profileStore.save(p)
-    }
-
-    private func removeTargetApp(_ idx: Int) {
-        updateProfile { $0.targetApps.remove(at: idx) }
-    }
-
-    private func addTargetApp() {
-        updateProfile { $0.targetApps.append("") }
-    }
-
-    private func runPreview(_ p: Profile) {
-        guard let engine = context.speakEngine else { return }
-        isPreviewing = true
-        Task {
-            let result = await engine.preview(profile: p, sample: previewSample)
-            previewResult = result
-            isPreviewing = false
-        }
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(tint.opacity(0.08))
+        )
     }
 }
 
