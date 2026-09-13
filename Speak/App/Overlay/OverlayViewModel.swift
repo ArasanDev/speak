@@ -141,7 +141,18 @@ final class OverlayViewModel {
     var isCategoryMoreExpanded: Bool = false
 
     /// Elapsed seconds since the current dictation started listening.
+    /// Ticks through `.listening` AND `.processing` (the right-circle readout
+    /// shows capture + cleanup elapsed); frozen when `.done`/`stop()`/
+    /// `showError` cancel the duration task.
     var elapsedSeconds: Int = 0
+
+    /// The bound stop-gesture label shown as the lane's bottom-trailing hint
+    /// while `.listening`, e.g. "Fn ×2" or "⌘⌘ Right Command" — rendered as
+    /// "<hint> to finish". Set by `OverlayController.start()` from the persisted
+    /// `HotkeyBinding` reconciled with `SettingsStore.triggerMode` (the same
+    /// resolve `DictationController.init` performs). Empty ⇒ the hint is
+    /// skipped (tests / unwired callers).
+    var stopHint: String = ""
 
     /// Microphone level (0…1), smoothed RMS from `AudioCapture` (W2.1).
     /// 0.0 when idle; driven live during `.listening`.

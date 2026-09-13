@@ -1591,3 +1591,31 @@ Gates: build clean (xcodegen regen picked up new/deleted files) · `make test`
 985 tests / 0 failures (wrapper still reports "2 errors" — pretty-output.sh
 misparsing simulated-failure logs; suite itself: "Test Suite Passed Cleanly") ·
 lint 0 serious (428 non-serious) · moat 7/7.
+
+### HUD overlay — capsule with inscribed circles (user-dictated design)
+
+The dictation HUD was rebuilt twice to the user's dictated spec. Final locked
+design: a **capsule panel** (fully rounded ends) with a **circle inscribed in
+each end** — the circles are the boundary elements, not dividers.
+
+```
+( orb/wave ) ( text lane — proper rectangle ) ( live s / ✓ )
+```
+
+- Left circle = the voice animation (AmbientOrb for Aurora, WaveformView for
+  classic); ring tints onAir only while the mic is capturing.
+- Right circle = the response: live elapsed seconds while listening, spinner
+  while processing, ✓ tick on done, ✕ on error.
+- Center = bounded text lane (`windowText` FIFO, 11pt mono, ~5 lines at
+  600×112pt panel) — "a lot of words" streams between the circles; the
+  raw→clean diff reveals inside the lane ("polish inside the line itself").
+- Timer now ticks through `.processing` (was cancelled at stop) and freezes
+  at `.done`; `stopHint` (bound key displayString) shows while listening.
+- `windowText` was previously gated on `hudStyle == .classic` — Aurora never
+  received the FIFO window; gate removed, both styles share the lane.
+- Aurora gained the missing close ✕ + readback/reclean controls.
+- Disc fill refined: `speakBone.opacity(0.06)` whisper wash + cardBorder ring
+  (a pale plate read as milky on light glass).
+
+Gates: build clean · 985 tests / 0 failures · lint 0 serious · moat 7/7 ·
+screenshot-verified across listening/processing/done on the Aurora style.
