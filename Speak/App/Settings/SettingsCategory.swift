@@ -35,6 +35,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
     case vocabulary
     case agentBridge
     case appearance
+    case overlay
     case privacy
     case general
     case about
@@ -51,6 +52,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .vocabulary:   return "Vocabulary"
         case .agentBridge:  return "Agent Bridge"
         case .appearance:   return "Appearance"
+        case .overlay:      return "Overlay"
         case .privacy:      return "Privacy"
         case .general:      return "General"
         case .about:        return "About"
@@ -82,7 +84,10 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
             return "speak-mcp stdio server, agent sessions, and prompt tags."
 
         case .appearance:
-            return "Theme, recording HUD, and border animations."
+            return "Appearance mode and runtime color themes."
+
+        case .overlay:
+            return "Recording HUD panel — style, voice animation, and border effects."
 
         case .privacy:
             return "On-device moat, OS permissions, and data controls."
@@ -105,6 +110,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .vocabulary:   return "character.book.closed"
         case .agentBridge:  return "server.rack"
         case .appearance:   return "paintpalette"
+        case .overlay:      return "record.circle"
         case .privacy:      return "lock.shield"
         case .general:      return "gearshape"
         case .about:        return "info.circle"
@@ -126,7 +132,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .hotkeys, .vocabulary, .agentBridge:
             return .control
 
-        case .appearance, .privacy, .general, .about:
+        case .appearance, .overlay, .privacy, .general, .about:
             return .app
         }
     }
