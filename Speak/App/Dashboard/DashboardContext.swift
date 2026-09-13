@@ -75,6 +75,12 @@ struct DashboardContext {
     /// `DictationController.rebindExtraBindings(_:)`. Nil in preview contexts.
     var rebindExtraBindings: ((ExtraBindingSet) -> Void)?
 
+    /// The text-to-speech engine (`SpeechSynthesizing`) — the app's single
+    /// `AppleSpeechSynthesizer` instance, shared so Settings ▸ Text to Speech
+    /// previews and the Pipeline "read it aloud" affordance use the same voice
+    /// the overlay readback does. Nil only in preview contexts.
+    var voiceOut: (any SpeechSynthesizing)?
+
     /// AVB-6: the app's live agent-session registry — the SAME instance
     /// `CLIPortServer`/`AgentBridgeServer` touches on every `speak-mcp` call,
     /// so the Settings ▸ Agent Bridge heartbeat reflects real `lastSeen`
@@ -129,6 +135,7 @@ struct DashboardContext {
         rebindHotkey: ((HotkeyBinding) -> Void)? = nil,
         activeExtraBindings: ExtraBindingSet = .empty,
         rebindExtraBindings: ((ExtraBindingSet) -> Void)? = nil,
+        voiceOut: (any SpeechSynthesizing)? = nil,
         agentSessionRegistry: AgentSessionRegistry? = nil,
         agentCallStore: (any AgentCallStoring)? = nil,
         conversationStore: (any ConversationStoring)? = nil,
@@ -154,6 +161,7 @@ struct DashboardContext {
         self.rebindHotkey = rebindHotkey
         self.activeExtraBindings = activeExtraBindings
         self.rebindExtraBindings = rebindExtraBindings
+        self.voiceOut = voiceOut
         self.agentSessionRegistry = agentSessionRegistry
         self.agentCallStore = agentCallStore
         self.conversationStore = conversationStore

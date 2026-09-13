@@ -15,16 +15,13 @@ struct TransformsPaneView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PaneHeader(
-                title: "Transforms",
-                subtitle: "Highlight text anywhere, press your shortcut, and speak — speak rewrites it on-device."
-            )
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 ForEach(BuiltInTransform.all) { transform in
                     transformRow(transform)
                 }
                 Spacer(minLength: 0)
             }
+            .padding(.top, SpeakSpacing.sm)
             .padding(.horizontal, SpeakSpacing.lg)
         }
     }

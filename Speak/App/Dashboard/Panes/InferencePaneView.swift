@@ -42,11 +42,6 @@ struct InferencePaneView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PaneHeader(
-                title: "Inference",
-                subtitle: "Local AI inference server — OpenAI & Anthropic compatible, loopback only."
-            )
-
             ScrollView {
                 VStack(alignment: .leading, spacing: SpeakSpacing.md) {
                     ServerStatusCard(viewModel: viewModel)
@@ -55,6 +50,7 @@ struct InferencePaneView: View {
                     QuickTestConsole(viewModel: viewModel, context: context)
                     ConnectToolsCard(viewModel: viewModel)
                 }
+                .padding(.top, SpeakSpacing.sm)
                 .padding(.horizontal, SpeakSpacing.lg)
                 .padding(.bottom, SpeakSpacing.lg)
             }

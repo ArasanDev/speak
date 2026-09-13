@@ -21,12 +21,11 @@ struct AgentInboxPaneView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PaneHeader(title: "Agent Inbox", subtitle: "Questions submitted by AI agents, waiting for your approval.")
-
             if let errorMessage {
                 Text(errorMessage)
                     .font(.speakBody(.caption))
                     .foregroundColor(.speakOnAir)
+                    .padding(.top, SpeakSpacing.sm)
                     .padding(.horizontal)
             }
 
@@ -46,6 +45,7 @@ struct AgentInboxPaneView: View {
                     )
                 }
                 .listStyle(.plain)
+                .padding(.top, SpeakSpacing.sm)
             }
         }
         .task { await refresh() }

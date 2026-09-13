@@ -22,11 +22,6 @@ struct ScratchpadPaneView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PaneHeader(
-                title: "Scratchpad",
-                subtitle: "A local note to jot or dictate into. Also where a failed paste lands, so text is never lost."
-            )
-
             TextEditor(text: $text)
                 .font(.speakMonoFace(.base))
                 .scrollContentBackground(.hidden)

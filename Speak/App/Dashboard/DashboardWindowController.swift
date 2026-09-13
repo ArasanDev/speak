@@ -50,7 +50,7 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
     init(
         context: DashboardContext,
         initialSection: DashboardSection = .home,
-        initialSettingsCategory: SettingsCategory = .generalAudio
+        initialSettingsCategory: SettingsCategory = .pipeline
     ) {
         var ctx = context
         ctx.navigateToSectionPublisher = navigationSubject.eraseToAnyPublisher()

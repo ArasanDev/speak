@@ -1407,3 +1407,49 @@ text/timers → speakMonoFace; HUD labels → speakBody).
 · lint 0 errors · moat 7/7 · screenshot-verified Insights (numerals now
 system-rounded primary), MCP & Agents (serif hero, SF Pro labels, mono
 data wells), AI Studio (sliders/labels in SF Pro).
+
+---
+
+## 2026-09-13 — Settings restructured around the pipeline; dashboard = runtime only
+
+User direction: "three layers separately, then put together as a final
+layer" + "real principle for distributing Home vs Settings." Adopted
+principle: **Dashboard = what the pipeline does. Settings = what the
+pipeline is.** One home per capability.
+
+**New Settings IA** (`SettingsCategory.swift`, T3-code-inspired grouped
+rail + System-Settings colored icon tiles):
+
+- **Pipeline** — `Voice Pipeline`: the assembled final layer. Live
+  `STT → Intelligence → Voice Out` status map with per-layer jump links.
+- **Layers** — `Speech to Text` (engine, language, mic + level,
+  insertion, hold-to-test), `Text to Speech` (voice, rate/pitch/volume,
+  preview, readback — first real pane for the existing VoiceOut engine),
+  `Intelligence` (cleanup engine/providers, intensity, style, per-app
+  profiles — what the Inference pane consumes).
+- **Control** — Hotkeys · Vocabulary (corrections + custom vocab +
+  snippets, single home) · Agent Bridge.
+- **App** — Appearance · Privacy · General (launch-at-login, reset —
+  moved out of the STT pane) · About.
+
+**Dashboard slimmed to runtime surfaces**: `Dictionary`, `Snippets`,
+`Style` panes deleted (pure config already in Settings›Vocabulary /
+Intelligence). Rail grouped: Activity / Agent Cockpit / Studios; pane
+headers gained subtitles.
+
+**Duplicated pane titles fixed**: `PaneHeader` calls removed from all
+desk panes + the struct deleted from `PaneScaffold.swift` — the desk
+card header is the single title owner.
+
+**Reused, not rebuilt**: TTS rides the existing
+`SpeechSynthesizing`/`AppleSpeechSynthesizer` actor + `SettingsStore`
+keys; `DashboardContext` gained `voiceOut` injection.
+
+**Deep-link:** `--debug-open dashboard:settings:<category>` verified
+live for `textToSpeech`, `intelligence`, `general` (earlier Home capture
+was a stale-instance race, not a plumbing bug).
+
+**Verification:** build clean · `make test` 985 tests / 0 failures
+(reported "2 errors" = simulated-failure log lines misparsed by
+pretty-output.sh, suite itself passed cleanly) · lint 0 errors ·
+moat 7/7.

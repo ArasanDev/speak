@@ -1,48 +1,60 @@
-// App/Settings/GeneralAudioSettingsView.swift
+// App/Settings/SpeechToTextSettingsView.swift
 //
-// "General & Audio" — the first category of the dedicated Settings experience.
-// Startup, speech language, live microphone status, text insertion, and
-// voice-out readback. Rows use the SettingsChrome card/row primitives
-// (title + description left, control right).
+// "Speech to Text" — the first pipeline layer of the dedicated Settings
+// experience. Recognition engine, speech language, live microphone status,
+// and text delivery (insertion + streaming). Rows use the SettingsChrome
+// card/row primitives (title + description left, control right).
 
 import SpeakCore
 import SwiftUI
 
-// MARK: - GeneralAudioSettingsView
+// MARK: - SpeechToTextSettingsView
 
 @MainActor
-struct GeneralAudioSettingsView: View {
+struct SpeechToTextSettingsView: View {
     let context: DashboardContext
-
-    @ObservedObject private var launchAtLogin = LaunchAtLoginManager.shared
 
     private var store: SettingsStore { context.settingsStore }
 
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
-            startupCard
+            engineCard
             LanguageCard(store: store)
             MicrophoneCard(context: context)
             insertionCard
-            voiceOutCard
         }
     }
 
-    // MARK: - Startup
+    // MARK: - Recognition engine
 
-    private var startupCard: some View {
-        SettingsSectionCard(title: "Startup") {
+    private var engineCard: some View {
+        SettingsSectionCard(title: "Recognition") {
             SettingsRow(
-                "Launch at Login",
-                description: "Start speak in the background when you log in."
+                "Engine",
+                description: engineNote
             ) {
-                Toggle("", isOn: Binding(
-                    get: { launchAtLogin.isEnabled },
-                    set: { launchAtLogin.setEnabled($0) }
-                ))
-                .toggleStyle(.switch)
-                .controlSize(.small)
+                Picker("", selection: Binding(
+                    get: { store.sttEngine },
+                    set: { store.sttEngine = $0 }
+                )) {
+                    Text("Apple Speech").tag(STTEngine.appleSpeech)
+                    Text("WhisperKit (v0.1+)").tag(STTEngine.whisperKit)
+                    Text("whisper.cpp (v1+)").tag(STTEngine.whisperCpp)
+                }
+                .pickerStyle(.menu)
+                .fixedSize()
             }
+        }
+    }
+
+    private var engineNote: String {
+        switch store.sttEngine {
+        case .appleSpeech:
+            return "On-device SpeechAnalyzer — the shipping engine."
+        case .whisperKit:
+            return "WhisperKit lands in v0.1 — falls back to Apple Speech until then."
+        case .whisperCpp:
+            return "whisper.cpp is a v1 option for Intel-era compatibility."
         }
     }
 
@@ -98,23 +110,6 @@ struct GeneralAudioSettingsView: View {
         }
     }
 
-    // MARK: - Voice out
-
-    private var voiceOutCard: some View {
-        SettingsSectionCard(title: "Voice Out") {
-            SettingsRow(
-                "Read back finished transcripts",
-                description: "Adds a speaker button after each dictation to hear it read aloud on-device."
-            ) {
-                Toggle("", isOn: Binding(
-                    get: { store.readbackEnabled },
-                    set: { store.readbackEnabled = $0 }
-                ))
-                .toggleStyle(.switch)
-                .controlSize(.small)
-            }
-        }
-    }
 }
 
 // MARK: - LanguageCard

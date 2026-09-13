@@ -35,11 +35,6 @@ struct MCPAgentPaneView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PaneHeader(
-                title: "MCP & Agent Integration",
-                subtitle: "Register local stdio MCP servers, inspect active connected agent sessions, and configure dynamic @tag agent adapters."
-            )
-
             VStack(alignment: .leading, spacing: SpeakSpacing.md) {
                 Picker("MCP View", selection: $selectedTab) {
                     ForEach(MCPAgentTab.allCases) { tab in

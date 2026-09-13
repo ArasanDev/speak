@@ -260,7 +260,10 @@ final class DebugLaunchDispatcher {
             settingsStore: settings,
             historyStore: DebugSeededHistoryStore(),
             hotkeyCombo: ["Fn", "Fn"],
-            snippetStore: snippets
+            snippetStore: snippets,
+            // A real synthesizer so Settings ▸ Text to Speech previews and the
+            // Pipeline "Read it aloud" affordance actually speak in debug runs.
+            voiceOut: AppleSpeechSynthesizer()
         )
         let vc = DashboardWindowController(
             context: context,
@@ -273,20 +276,20 @@ final class DebugLaunchDispatcher {
     }
 
     /// Parse `--debug-open dashboard:<section>[:<settingsCategory>]`
-    /// (defaults to Home / General). The third component deep-links a Settings
-    /// category so every Mode B screen can be screenshot-verified directly:
-    /// `dashboard:settings:hotkeys`, `dashboard:settings:vocabulary`, …
+    /// (defaults to Home / Voice Pipeline). The third component deep-links a
+    /// Settings category so every Mode B screen can be screenshot-verified
+    /// directly: `dashboard:settings:hotkeys`, `dashboard:settings:textToSpeech`, …
     private static func parseDashboardSection() -> (DashboardSection, SettingsCategory) {
         let args = CommandLine.arguments
         guard let idx = args.firstIndex(of: "--debug-open"), args.indices.contains(idx + 1) else {
-            return (.home, .generalAudio)
+            return (.home, .pipeline)
         }
         let parts = args[idx + 1].split(separator: ":").map(String.init)
-        guard parts.count > 1 else { return (.home, .generalAudio) }
+        guard parts.count > 1 else { return (.home, .pipeline) }
         let section = DashboardSection(rawValue: parts[1]) ?? .home
         let category = parts.count > 2
-            ? (SettingsCategory(rawValue: parts[2]) ?? .generalAudio)
-            : .generalAudio
+            ? (SettingsCategory(rawValue: parts[2]) ?? .pipeline)
+            : .pipeline
         return (section, category)
     }
 

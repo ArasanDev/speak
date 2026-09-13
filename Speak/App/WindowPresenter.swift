@@ -130,6 +130,7 @@ final class WindowPresenter {
             rebindExtraBindings: { [weak self] set in
                 self?.dictationController?.rebindExtraBindings(set)
             },
+            voiceOut: dictationController?.voiceOut,
             agentSessionRegistry: dictationController?.agentSessionRegistry,
             agentCallStore: dictationController?.agentCallStore,
             answerAgentCallByVoice: { [weak self] call in

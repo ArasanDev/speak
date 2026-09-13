@@ -1,14 +1,13 @@
 // App/Settings/VocabularySettingsView.swift
 //
-// "Vocabulary & Jargon" — the fourth Settings category. Two cards:
-//   - Custom Vocabulary: terms fed to SpeechAnalyzer as contextual hints
-//     (same `SettingsStore.customVocabulary` seam as the Dictionary pane).
-//   - Snippets: trigger → expansion pairs applied before AI cleanup
-//     (same `SnippetStore` seam as the Snippets pane).
+// "Vocabulary" — a CONTROL category of the dedicated Settings experience.
+// Three cards: acoustic corrections (heard → typed), custom vocabulary (terms
+// fed to SpeechAnalyzer as contextual hints), and snippets (trigger →
+// expansion pairs applied before AI cleanup).
 //
-// The dashboard Dictionary/Snippets panes remain the roomy editors; this
-// category keeps the same data editable from Settings without duplicating
-// storage logic.
+// This is the single home for vocabulary config — the desk's old Dictionary/
+// Snippets panes were removed (one home per capability: config lives in
+// Settings, workspaces live on the dashboard).
 
 import SpeakCore
 import SwiftUI

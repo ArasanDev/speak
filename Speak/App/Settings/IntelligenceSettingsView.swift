@@ -1,21 +1,23 @@
-// App/Settings/AIModelsSettingsView.swift
+// App/Settings/IntelligenceSettingsView.swift
 //
-// "AI Models & Neat-Writing" — the third Settings category. Cleanup intensity
-// (unified `effectiveCleanupLevel` picker), a live diff preview of what each
-// level changes, voice/style, the cleanup engine picker (Foundation Models /
-// Ollama / OpenAI-compatible presets / MLX stub), and per-app context.
+// "Intelligence" — the second pipeline layer of the dedicated Settings
+// experience. What happens to the words between ears and voice: neat-writing
+// intensity (unified `effectiveCleanupLevel` picker), voice/style, the cleanup
+// engine picker (Foundation Models / Ollama / OpenAI-compatible presets / MLX
+// stub), and per-app context. The end-to-end "Test My Voice" loop lives on the
+// Pipeline page — this pane is the layer's configuration.
 //
 // Ported from the legacy `AICleanupSettingsTab` into SettingsChrome cards —
-// same bindings, same guided-setup sheets, same canned diff preview.
+// same bindings, same guided-setup sheets.
 // [decision W4.1: canned sample in Settings preview; live diffs are in History]
 
 import SpeakCore
 import SwiftUI
 
-// MARK: - AIModelsSettingsView
+// MARK: - IntelligenceSettingsView
 
 @MainActor
-struct AIModelsSettingsView: View {
+struct IntelligenceSettingsView: View {
     let context: DashboardContext
 
     private var store: SettingsStore { context.settingsStore }
@@ -25,12 +27,10 @@ struct AIModelsSettingsView: View {
 
     @State private var showOllamaSetup = false
     @State private var showKeyEntry = false
-    @State private var sandbox = VoiceSandboxModel()
 
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
             intensityCard
-            sandboxCard
             voiceCard
             engineCard
             contextCard
@@ -42,9 +42,6 @@ struct AIModelsSettingsView: View {
             if case .openAICompatible(let preset, _) = store.cleanupEngine {
                 CleanupEngineSheet(isPresented: $showKeyEntry, preset: preset)
             }
-        }
-        .onDisappear {
-            Task { await sandbox.cancel() }
         }
     }
 
@@ -70,114 +67,6 @@ struct AIModelsSettingsView: View {
             }
             .padding(.horizontal, SpeakSpacing.md)
             .padding(.vertical, SpeakSpacing.sm + 4)
-        }
-    }
-
-    // MARK: - Test My Voice sandbox
-
-    /// Live sandbox: a real `CaptureSession` (settings-derived locale, vocab +
-    /// corrections, snippets, cleanup mode) with `inserter: nil` — nothing is
-    /// pasted; the diff shows exactly what the current engine/level does.
-    private var sandboxCard: some View {
-        SettingsSectionCard(title: "Test My Voice") {
-            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-                HStack(spacing: SpeakSpacing.md) {
-                    HoldToTalkPill(
-                        model: sandbox,
-                        isEnabled: context.permissionManager?.status(.microphone) == .granted
-                    ) {
-                        await sandbox.begin(settings: store, snippetStore: context.snippetStore)
-                    } onEnd: {
-                        await sandbox.end()
-                    }
-
-                    VUMeterView(level: sandbox.level)
-                        .opacity(sandbox.phase == .listening ? 1 : 0.35)
-
-                    Spacer()
-
-                    if sandbox.phase == .listening {
-                        Text(String(format: "%.1fs", sandbox.elapsed))
-                            .font(.speakMonoFace(.caption))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                sandboxContent
-            }
-            .padding(.horizontal, SpeakSpacing.md)
-            .padding(.vertical, SpeakSpacing.sm + 4)
-        }
-    }
-
-    @ViewBuilder
-    private var sandboxContent: some View {
-        switch sandbox.phase {
-        case .idle:
-            if context.permissionManager?.status(.microphone) != .granted {
-                Label("Microphone permission is required to test your voice.", systemImage: "mic.slash")
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("Hold the pill (or tap once) and say a sentence — e.g. “um open the rippo and run cubectl get pods”. The on-device model cleans it; nothing is pasted.")
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
-            }
-
-        case .listening, .processing:
-            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                ScrollView {
-                    Text(sandbox.transcriptText.isEmpty ? "Listening…" : sandbox.transcriptText)
-                        .font(.speakMonoFace(.base))
-                        .foregroundStyle(sandbox.transcriptText.isEmpty ? .tertiary : .primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(minHeight: 44, maxHeight: 96)
-
-                if sandbox.phase == .processing {
-                    HStack(spacing: SpeakSpacing.xs) {
-                        ProgressView().controlSize(.small)
-                        Text("Cleaning on-device…")
-                            .font(.speakBody(.caption))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-        case .done:
-            if let result = sandbox.result {
-                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                    CleanupDiffView(rawText: result.rawText, cleanedText: result.cleanedText)
-                        .frame(minHeight: 120)
-
-                    HStack(spacing: SpeakSpacing.xs) {
-                        if let ms = sandbox.processingMilliseconds {
-                            Text(result.cleanedText == nil
-                                 ? "delivered raw — cleanup off or engine unavailable"
-                                 : "cleaned in \(ms) ms by \(result.engineId)")
-                                .font(.speakMonoFace(.caption))
-                                .foregroundStyle(.tertiary)
-                        }
-                        Spacer()
-                        Button("Test again") { sandbox.reset() }
-                            .font(.speakBody(.caption))
-                            .buttonStyle(.borderless)
-                    }
-                }
-            }
-
-        case .failed(let message):
-            HStack(spacing: SpeakSpacing.xs) {
-                Image(systemName: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
-                Text(message)
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("Try again") { sandbox.reset() }
-                    .font(.speakBody(.caption))
-                    .buttonStyle(.borderless)
-            }
         }
     }
 

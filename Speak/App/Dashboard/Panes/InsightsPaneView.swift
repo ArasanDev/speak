@@ -27,11 +27,6 @@ struct InsightsPaneView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PaneHeader(
-                title: "Insights",
-                subtitle: "Your dictation at a glance — words, speed, and streak."
-            )
-
             if isLoading {
                 loadingView
             } else if let stats {
@@ -67,6 +62,7 @@ struct InsightsPaneView: View {
                 }
                 activityChart(stats)
             }
+            .padding(.top, SpeakSpacing.sm)
             .padding(.horizontal, SpeakSpacing.lg)
             .padding(.bottom, SpeakSpacing.lg)
         }
