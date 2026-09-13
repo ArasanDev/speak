@@ -122,13 +122,17 @@ public extension Color {
     // HARD RULE (mirrors speakOnAir): onAir spectrum shows only while the
     // microphone is capturing.
 
-    /// On-Air / dictation-active border — humanAmber → onAir → deep red.
+    /// On-Air / dictation-active border — humanAmber-anchored with `onAir` as
+    /// a single accent stop. The capture spectrum shows only while the mic is
+    /// capturing (hard rule preserved), but the dominant hue is the human
+    /// channel's warm amber — the deep-red-heavy spectrum was fatiguing
+    /// (owner feedback 2026-09-13).
     static var speakFlowOnAir: [Color] {
         [
             speakHumanAmber,
-            speakOnAir,
-            Color(red: 1.0, green: 0.2,   blue: 0.1  ),   // deep red pivot
-            speakOnAir,
+            Color(red: 1.0, green: 0.62, blue: 0.12),   // warm amber pivot
+            speakOnAir,                                  // tally accent — single stop
+            Color(red: 1.0, green: 0.62, blue: 0.12),   // warm amber mirror
             speakHumanAmber,
         ]
     }
