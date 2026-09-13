@@ -86,7 +86,6 @@ struct AuroraOverlayView: View {
     ///  scaled waveform block with ring clearance.]
     private static let outerRingSize: CGFloat = 60
     private static let innerCircleSize: CGFloat = 48
-    private static let waveformScale: CGFloat = 0.75
 
     /// Lane text line budget — one value for every state now that the stop hint
     /// rides inline in the header row instead of claiming its own strip.
@@ -189,10 +188,12 @@ struct AuroraOverlayView: View {
     @State private var ringAngle: Double = 0
 
     /// "Waveform inside one circle, then another circle — a colorful
-    /// animation thing": the live mic-level waveform (the app's signature
-    /// asset) sits inside a quiet inner ring; around it, a rotating
-    /// conic-gradient spectrum ring carries the motion. `isActive` is pinned
-    /// to `.listening` — bars lit `speakVoiceBlue` iff the mic is capturing.
+    /// animation thing": the live mic-level voice animation (the app's
+    /// signature asset, runtime-configurable via
+    /// `SettingsStore.voiceAnimationStyle` — sonar / ring gauge / spectrum)
+    /// sits inside a quiet inner ring; around it, a rotating conic-gradient
+    /// spectrum ring carries the motion. `isActive` is pinned to
+    /// `.listening` — lit `speakVoiceBlue` iff the mic is capturing.
     private var leftZone: some View {
         ZStack {
             // Outer colorful ring — the animated circle. Rotates slowly;
@@ -216,8 +217,11 @@ struct AuroraOverlayView: View {
                 .strokeBorder(Color.speakBone.opacity(0.25), lineWidth: 1)
                 .frame(width: Self.innerCircleSize, height: Self.innerCircleSize)
 
-            WaveformView(level: model.level, isActive: model.overlayState == .listening)
-                .scaleEffect(Self.waveformScale)
+            VoiceAnimationView(
+                style: settingsStore.voiceAnimationStyle,
+                level: model.level,
+                isActive: model.overlayState == .listening
+            )
         }
         .frame(width: Self.endZoneWidth)
         .frame(maxHeight: .infinity)

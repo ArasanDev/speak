@@ -243,6 +243,32 @@ final class SettingsStoreTests: XCTestCase {
             ".classic must round-trip after being explicitly re-set.")
     }
 
+    // MARK: - voiceAnimationStyle (HUD left-zone voice visual)
+
+    func testVoiceAnimationStyleDefaultIsSonar() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertEqual(store.voiceAnimationStyle, .sonar,
+            "voiceAnimationStyle default must be .sonar — the owner's design-menu pick.")
+    }
+
+    func testVoiceAnimationStyleRingGaugeRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.voiceAnimationStyle = .ringGauge
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.voiceAnimationStyle, .ringGauge,
+            ".ringGauge must round-trip across a fresh SettingsStore over the same defaults.")
+    }
+
+    func testVoiceAnimationStyleUnknownRawFallsBackToSonar() throws {
+        let defaults = try makeIsolatedDefaults()
+        defaults.set("not-a-style", forKey: "speak.settings.voiceAnimationStyle")
+        let store = freshStore(on: defaults)
+        XCTAssertEqual(store.voiceAnimationStyle, .sonar,
+            "An unreadable rawValue must fall back to the .sonar default, never crash.")
+    }
+
     // resetToDefaults() coverage moved to SettingsStoreResetAndMiscTests.swift
     // (split out to keep this class under SwiftLint's type_body_length cap).
 
