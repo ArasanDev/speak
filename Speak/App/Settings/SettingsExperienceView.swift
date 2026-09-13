@@ -45,7 +45,7 @@ struct SettingsExperienceView: View {
     init(
         context: DashboardContext,
         presentation: Presentation = .embedded,
-        initialCategory: SettingsCategory = .generalAudio,
+        initialCategory: SettingsCategory = .pipeline,
         onBack: @escaping () -> Void = {},
         onOpenSection: @escaping (DashboardSection) -> Void = { _ in }
     ) {
@@ -178,13 +178,19 @@ struct SettingsExperienceView: View {
     @ViewBuilder
     private func detail(for category: SettingsCategory) -> some View {
         switch category {
-        case .generalAudio: GeneralAudioSettingsView(context: context)
+        case .pipeline:
+            PipelineSettingsView(context: context) { target in
+                withAnimation(.easeInOut(duration: 0.15)) { self.category = target }
+            }
+        case .speechToText: SpeechToTextSettingsView(context: context)
+        case .textToSpeech: TextToSpeechSettingsView(context: context)
+        case .intelligence: IntelligenceSettingsView(context: context)
         case .hotkeys:      HotkeysSettingsView(context: context)
-        case .aiModels:     AIModelsSettingsView(context: context)
         case .vocabulary:   VocabularySettingsView(context: context)
         case .agentBridge:  AgentBridgeSettingsView(context: context, onOpenSection: onOpenSection)
         case .appearance:   AppearanceHUDSettingsView(context: context)
         case .privacy:      PrivacyHealthSettingsView(context: context)
+        case .general:      GeneralSettingsView(context: context)
         case .about:        AboutSettingsTab().frame(minHeight: 420)
         }
     }
@@ -216,8 +222,10 @@ private struct BackToDashboardButton: View {
 
 // MARK: - SettingsRailRow
 
-/// One rail destination: SF Symbol + label in a selection pill. Sits flush with
-/// the group header above it — the t3code `SidebarMenuButton` analogue.
+/// One rail destination: a System-Settings-style colored icon tile + label in a
+/// selection pill. Selection uses the same neutral `speakSidebarSelection` pill
+/// the desk sidebar renders (the tile keeps its hue, like System Settings), so
+/// both surfaces share one selection language.
 private struct SettingsRailRow: View {
     let category: SettingsCategory
     let isSelected: Bool
@@ -229,12 +237,16 @@ private struct SettingsRailRow: View {
         Button(action: action) {
             HStack(spacing: SpeakSpacing.sm) {
                 Image(systemName: category.systemImage)
-                    .font(.system(size: 13))
-                    .foregroundStyle(isSelected ? Color.white : .secondary)
-                    .frame(width: 18)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 20, height: 20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                            .fill(category.tileColor.gradient)
+                    )
                 Text(category.title)
                     .font(.speakBody(.base, semibold: isSelected))
-                    .foregroundStyle(isSelected ? Color.white : .secondary)
+                    .foregroundStyle(isSelected ? Color.primary : .secondary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
@@ -244,7 +256,7 @@ private struct SettingsRailRow: View {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(
                         isSelected
-                            ? Color.accentColor
+                            ? Color.speakSidebarSelection
                             : (isHovering ? Color.primary.opacity(0.05) : Color.clear)
                     )
             )

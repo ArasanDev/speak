@@ -1,40 +1,17 @@
 // App/Dashboard/PaneScaffold.swift
 //
-// Shared chrome for dashboard panes so every pane shares one header rhythm and the
+// Shared chrome for dashboard panes so every pane shares one rhythm and the
 // not-yet-built panes read as intentional placeholders (not broken screens).
 //
-// `PaneHeader` — a serif display title + optional subtitle, the standard top of each pane.
 // `PanePlaceholder` — the "this lands in this wave" empty state used by scaffolded panes
-//   until their specialist fills the body. Replace the placeholder, keep the header.
+//   until their specialist fills the body. Pane titles are owned by the desk
+//   header (`DashboardSection.title`/`.subtitle`) — panes render no hero title
+//   of their own, so there is exactly one title per screen.
 
 import SwiftUI
 #if DEBUG
 import SpeakCore
 #endif
-
-// MARK: - PaneHeader
-
-/// Standard pane header: a Monaco title row with an optional subtitle line.
-struct PaneHeader: View {
-    let title: String
-    var subtitle: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            Text(title)
-                .font(.speakDisplay())
-            if let subtitle {
-                Text(subtitle)
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, SpeakSpacing.lg)
-        .padding(.top, SpeakSpacing.lg)
-        .padding(.bottom, SpeakSpacing.md)
-    }
-}
 
 // MARK: - PanePlaceholder
 

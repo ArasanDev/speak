@@ -55,13 +55,13 @@ struct DashboardView: View {
 
     /// Which Settings category Mode B opens on — seeded by the debug
     /// deep-link (`--debug-open dashboard:settings:<category>`); the normal
-    /// gear path leaves it at .generalAudio.
+    /// gear path leaves it at .pipeline.
     private let initialSettingsCategory: SettingsCategory
 
     init(
         context: DashboardContext,
         initialSection: DashboardSection = .home,
-        initialSettingsCategory: SettingsCategory = .generalAudio
+        initialSettingsCategory: SettingsCategory = .pipeline
     ) {
         self.context = context
         self.initialSettingsCategory = initialSettingsCategory
@@ -164,16 +164,30 @@ struct DashboardView: View {
                     .frame(height: 28)
 
                     List(selection: $selection) {
-                        ForEach(DashboardSection.mainSections) { section in
-                            if isRail {
+                        if isRail {
+                            // Icon-only rail: no group headers, flat list.
+                            ForEach(DashboardSection.mainSections) { section in
                                 Image(systemName: section.systemImage)
                                     .font(.system(size: 16))
                                     .frame(maxWidth: .infinity, alignment: .center)
                                     .help(section.title)
                                     .tag(section)
-                            } else {
-                                Label(section.title, systemImage: section.systemImage)
-                                    .tag(section)
+                            }
+                        } else {
+                            // Grouped like the Settings rail — ACTIVITY is what
+                            // the pipeline did, AGENT COCKPIT is the bridge,
+                            // STUDIOS is where work gets shaped.
+                            ForEach(DashboardGroup.allCases) { group in
+                                Section {
+                                    ForEach(group.sections) { section in
+                                        Label(section.title, systemImage: section.systemImage)
+                                            .tag(section)
+                                    }
+                                } header: {
+                                    if let title = group.title {
+                                        Text(title)
+                                    }
+                                }
                             }
                         }
                     }
@@ -206,6 +220,13 @@ struct DashboardView: View {
                         Text(selection.title)
                             .font(.headline)
                             .foregroundColor(.primary)
+
+                        // The pane's "why am I here" line — carried by the
+                        // section, not a duplicate in-pane hero title.
+                        Text(selection.subtitle)
+                            .font(.speakBody(.caption))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
 
                         Spacer()
                     }
@@ -379,9 +400,6 @@ struct DashboardView: View {
         case .home:       HomePaneView(context: context)
         case .aiStudio:   AIStudioPaneView(context: context)
         case .insights:   InsightsPaneView(context: context)
-        case .dictionary: DictionaryPaneView(context: context)
-        case .snippets:   SnippetsPaneView(context: context)
-        case .style:      StylePaneView(context: context)
         case .transforms: TransformsPaneView(context: context)
         case .scratchpad: ScratchpadPaneView(context: context)
         case .inference:  InferencePaneView(context: context)

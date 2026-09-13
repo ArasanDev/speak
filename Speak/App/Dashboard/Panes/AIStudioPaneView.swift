@@ -47,11 +47,6 @@ struct AIStudioPaneView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PaneHeader(
-                title: "Voice AI Studio",
-                subtitle: "Test system prompt transforms, inspect STT audio waveforms, and configure local TTS voices."
-            )
-
             VStack(alignment: .leading, spacing: SpeakSpacing.md) {
                 Picker("Studio View", selection: $selectedTab) {
                     ForEach(StudioTab.allCases) { tab in
