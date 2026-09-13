@@ -1688,3 +1688,26 @@ circle with the colorful animated ring "previously available."
 
 Gates: build clean · 985 tests / 0 failures · lint 0 serious · moat 7/7 ·
 screenshot-verified (listening state, light capsule).
+
+### HUD left-zone voice animation — runtime-configurable (owner picks 04+10)
+
+Owner picked Sonar Ping + Ring Gauge from `img/overlay-anim-options.html`
+(10-option design menu, each rendered inside the real 640×76 capsule).
+Both ported to SwiftUI + the original spectrum kept — all three selectable
+at runtime, same pattern as color themes.
+
+- `VoiceAnimationStyle` (SpeakCore): `.sonar` default / `.ringGauge` /
+  `.spectrum`. New `speak.settings.voiceAnimationStyle` key, registered
+  default, reset coverage, 4 new SettingsStore tests.
+- New `OverlayVoiceAnimation.swift`: `VoiceAnimationView` switcher +
+  `SonarPingView` (Canvas + TimelineView, 3 expanding rings + level-swelling
+  dot, 0.55 rev/s ported from the HTML reference) + `RingGaugeView`
+  (trim-arc fill + needle dot at tip + 9-step center micro-bars). Idle
+  dims; reduce-motion freezes rings but level response always shows.
+- Both HUD styles swap `WaveformView` → `VoiceAnimationView` inside the
+  same inner-circle + rotating-spectrum-ring chamber.
+- Settings → Appearance & HUD → Recording HUD gets a "Voice animation"
+  picker; stale "Classic is the 15-bar waveform" caption corrected.
+
+Gates: build clean · 989 tests / 0 failures · lint 0 serious · moat 7/7 ·
+screenshot-verified listening state for sonar + ringGauge.

@@ -42,6 +42,14 @@ final class SettingsStoreResetAndMiscTests: XCTestCase {
             "resetToDefaults() must restore hudStyle to .classic.")
     }
 
+    func testResetToDefaultsRestoresVoiceAnimationStyleToSonar() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        store.voiceAnimationStyle = .ringGauge
+        store.resetToDefaults()
+        XCTAssertEqual(store.voiceAnimationStyle, .sonar,
+            "resetToDefaults() must restore voiceAnimationStyle to .sonar.")
+    }
+
     func testResetToDefaultsRestoresCleanupEngineToFoundationModels() throws {
         // cleanupEngine must revert to default on reset.
         let store = freshStore(on: try makeIsolatedDefaults())

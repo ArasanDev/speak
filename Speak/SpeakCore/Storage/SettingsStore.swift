@@ -116,6 +116,18 @@ public enum HUDStyle: String, Codable, Sendable, Equatable {
     case aurora
 }
 
+/// Which left-zone voice animation the recording HUD shows while listening —
+/// the app's signature asset, runtime-configurable like the color theme.
+/// Default: `.sonar` (owner pick — design-menu options 04 and 10).
+public enum VoiceAnimationStyle: String, Codable, Sendable, Equatable, CaseIterable {
+    /// The original 15-bar spectrum analyser.
+    case spectrum
+    /// A live dot emitting expanding rings as you speak (option 04).
+    case sonar
+    /// A ring that fills with voice level, needle dot + micro-bars (option 10).
+    case ringGauge
+}
+
 /// Which border animation style to show on the recording HUD overlay.
 /// Default = `.none` — zero regression risk for existing users.
 public enum BorderAnimationStyle: String, Codable, Sendable, Equatable, CaseIterable {
@@ -172,6 +184,7 @@ public final class SettingsStore: @unchecked Sendable {
         static let perAppContextEnabled  = "speak.settings.perAppContextEnabled"
         static let extraBindings         = "speak.settings.extraHotkeyBindings"
         static let hudStyle              = "speak.settings.hudStyle"
+        static let voiceAnimationStyle   = "speak.settings.voiceAnimationStyle"
         static let borderAnimationStyle  = "speak.settings.borderAnimationStyle"
         static let borderFlowSpeed       = "speak.settings.borderFlowSpeed"
         static let borderFlowCount       = "speak.settings.borderFlowCount"
@@ -223,6 +236,7 @@ public final class SettingsStore: @unchecked Sendable {
             Keys.themeID: "speak",
             Keys.perAppContextEnabled: true,
             Keys.hudStyle: HUDStyle.classic.rawValue,
+            Keys.voiceAnimationStyle: VoiceAnimationStyle.sonar.rawValue,
             Keys.borderAnimationStyle: BorderAnimationStyle.none.rawValue,
             Keys.borderFlowSpeed: BorderFlowSpeed.medium.rawValue,
             Keys.borderFlowCount: 1,
@@ -699,6 +713,21 @@ extension SettingsStore {
         set {
             withMutation(keyPath: \.hudStyle) {
                 defaults.set(newValue.rawValue, forKey: Keys.hudStyle)
+            }
+        }
+    }
+
+    /// Left-zone voice animation for the recording HUD. Default: `.sonar`.
+    public var voiceAnimationStyle: VoiceAnimationStyle {
+        get {
+            access(keyPath: \.voiceAnimationStyle)
+            let raw = defaults.string(forKey: Keys.voiceAnimationStyle)
+                ?? VoiceAnimationStyle.sonar.rawValue
+            return VoiceAnimationStyle(rawValue: raw) ?? .sonar
+        }
+        set {
+            withMutation(keyPath: \.voiceAnimationStyle) {
+                defaults.set(newValue.rawValue, forKey: Keys.voiceAnimationStyle)
             }
         }
     }

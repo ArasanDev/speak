@@ -80,7 +80,7 @@ struct AppearanceHUDSettingsView: View {
         SettingsSectionCard(title: "Recording HUD") {
             SettingsRow(
                 "HUD style",
-                description: "Aurora is an ambient orb with live materializing transcript words; Classic is the 15-bar waveform."
+                description: "Both styles share the capsule frame; Aurora adds an ambient animated border."
             ) {
                 Picker("", selection: Binding(
                     get: { store.hudStyle },
@@ -88,6 +88,24 @@ struct AppearanceHUDSettingsView: View {
                 )) {
                     Text("Classic").tag(HUDStyle.classic)
                     Text("Aurora").tag(HUDStyle.aurora)
+                }
+                .pickerStyle(.menu)
+                .fixedSize()
+            }
+
+            SettingsRowSeparator()
+
+            SettingsRow(
+                "Voice animation",
+                description: "The left-side voice visual while dictating — live mic level drives it."
+            ) {
+                Picker("", selection: Binding(
+                    get: { store.voiceAnimationStyle },
+                    set: { store.voiceAnimationStyle = $0 }
+                )) {
+                    Text("Sonar Ping").tag(VoiceAnimationStyle.sonar)
+                    Text("Ring Gauge").tag(VoiceAnimationStyle.ringGauge)
+                    Text("Spectrum Bars").tag(VoiceAnimationStyle.spectrum)
                 }
                 .pickerStyle(.menu)
                 .fixedSize()
