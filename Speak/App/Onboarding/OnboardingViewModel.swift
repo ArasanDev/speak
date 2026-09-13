@@ -41,6 +41,15 @@ final class OnboardingViewModel {
     /// waiting for the user to toggle the switch in System Settings.
     private(set) var isWaitingForAccessibility: Bool = false
 
+    /// Live TCC state for a permission. The step views read this to render the
+    /// *denied* state: a refused Microphone grant can't be re-prompted in-app
+    /// (TCC returns `.denied` immediately), so the step swaps its primary CTA
+    /// to a System Settings deep link. Refreshed indirectly — the 1 s poll
+    /// rewrites `evaluation`, which re-renders the view and re-reads this.
+    func permissionState(_ kind: PermissionKind) -> PermissionState {
+        permissionManager.status(kind)
+    }
+
     // MARK: - Live hotkey display string
 
     private(set) var currentHotkeyDisplayString: String = ""
@@ -258,9 +267,20 @@ final class OnboardingViewModel {
 
     private func advanceStepIfGranted(kind: PermissionKind) {
         guard permissionManager.status(kind) == .granted else { return }
+        // Only auto-advance while the user is still sitting on that
+        // permission's step — a late Task resuming after the user already
+        // tapped "Continue" must not skip the step they landed on.
+        guard displayedStep == stepFor(kind) else { return }
         let next = stepAfter(displayedStep)
         if next != .done {
             displayedStep = next
+        }
+    }
+
+    private func stepFor(_ kind: PermissionKind) -> OnboardingStep {
+        switch kind {
+        case .microphone:    return .microphone
+        case .accessibility: return .accessibility
         }
     }
 

@@ -1,9 +1,9 @@
 // App/Settings/AppearanceHUDSettingsView.swift
 //
 // "Appearance & HUD" — the sixth Settings category. App theme, recording-HUD
-// style (Classic vs Aurora), and the HUD border animation. Same SettingsStore
-// bindings as the legacy General tab's HUDStyleSection/BorderStyleSection,
-// restyled into SettingsChrome cards.
+// style (Classic vs Aurora), and the HUD border animation. The legacy General
+// tab's HUDStyleSection/BorderStyleSection were superseded by these
+// SettingsChrome cards and removed.
 
 import SpeakCore
 import SwiftUI
@@ -48,6 +48,7 @@ struct AppearanceHUDSettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .tint(.speakUIAccent)
 
                 Text("Applies to the dashboard, settings, and HUD.")
                     .font(.speakBody(.caption))
@@ -167,13 +168,17 @@ struct AppearanceHUDSettingsView: View {
 
 /// The theme list inside the "Color Theme" card: one row per theme —
 /// preview dots (canvas · accent · agent channel), name, active check.
-/// Custom themes get Edit (live draft editor) and Delete. Trailing "+"
-/// creates a new custom theme seeded from the active one — the same
-/// seed-from-active gesture as t3code's theme editor.
+/// Custom themes get Edit (live draft editor) and Delete (confirmed — a
+/// deleted theme can't be recovered). The trailing row creates a new custom
+/// theme seeded from the active one — the same seed-from-active gesture as
+/// t3code's theme editor.
 @MainActor
 private struct ThemeRows: View {
     @ObservedObject var engine: ThemeEngine
     let onEdit: () -> Void
+
+    /// The custom theme awaiting a confirmed deletion — nil clears the dialog.
+    @State private var pendingDelete: SpeakTheme?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -184,67 +189,125 @@ private struct ThemeRows: View {
                 themeRow(theme)
             }
             SettingsRowSeparator()
-            SettingsRow("New Theme", description: "Seeded from the active theme — edit it live.") {
-                Button {
-                    engine.beginDraft()
-                    onEdit()
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .semibold))
+            newThemeRow
+        }
+        .confirmationDialog(
+            "Delete “\(pendingDelete?.name ?? "")”?",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Theme", role: .destructive) {
+                if let theme = pendingDelete {
+                    engine.deleteCustomTheme(id: theme.id)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.speakMica)
+                pendingDelete = nil
             }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: {
+            Text("Custom themes can't be recovered once deleted.")
         }
     }
 
     private func themeRow(_ theme: SpeakTheme) -> some View {
         let isActive = theme.id == engine.activeTheme.id
-        return Button {
-            engine.select(theme.id)
+        return HStack(spacing: 0) {
+            // Selection occupies the row's leading stretch; Edit/Delete sit
+            // beside it as siblings — nested Buttons inside a Button label
+            // have unreliable hit-testing on macOS.
+            Button {
+                engine.select(theme.id)
+            } label: {
+                HStack(spacing: SpeakSpacing.md) {
+                    previewDots(for: theme)
+                    Text(theme.name)
+                        .font(.speakBody(.base, semibold: isActive))
+                        .foregroundStyle(Color.speakBone)
+                    if theme.isBuiltIn {
+                        SettingsStatusPill(text: "Built-in")
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, SpeakSpacing.md)
+                .padding(.trailing, SpeakSpacing.sm)
+                .padding(.vertical, SpeakSpacing.sm + 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(isActive ? .isSelected : [])
+            .accessibilityHint("Activate to use this theme")
+
+            if !theme.isBuiltIn {
+                customActions(for: theme)
+            }
+
+            // The active check always lands at the row's trailing edge —
+            // same slot whether or not the row carries Edit/Delete buttons.
+            if isActive {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.speakUIAccent)
+            }
+        }
+        .padding(.trailing, SpeakSpacing.md)
+        .background(isActive ? Color.speakSidebarSelection : Color.clear)
+    }
+
+    /// Edit + Delete for a custom theme — 22pt hit targets, quiet glyphs.
+    private func customActions(for theme: SpeakTheme) -> some View {
+        HStack(spacing: SpeakSpacing.xs) {
+            Button {
+                engine.editTheme(theme)
+                onEdit()
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.speakMica)
+            .help("Edit theme")
+
+            Button(role: .destructive) {
+                pendingDelete = theme
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.speakMica)
+            .help("Delete theme")
+        }
+    }
+
+    /// Full-row creation affordance — the row itself is the button, so the
+    /// gesture isn't confined to a small glyph.
+    private var newThemeRow: some View {
+        Button {
+            engine.beginDraft()
+            onEdit()
         } label: {
             HStack(spacing: SpeakSpacing.md) {
-                previewDots(for: theme)
-                Text(theme.name)
-                    .font(.speakBody(.base, semibold: isActive))
-                    .foregroundStyle(Color.speakBone)
-                if theme.isBuiltIn {
-                    Text("BUILT-IN")
-                        .font(.system(size: 9, weight: .bold))
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color.speakUIAccent)
+                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                    Text("New Theme")
+                        .font(.speakBody(.base))
+                        .foregroundStyle(Color.speakBone)
+                    Text("Seeded from the active theme — edit it live.")
+                        .font(.speakBody(.caption))
                         .foregroundStyle(Color.speakMica)
                 }
                 Spacer(minLength: 0)
-                if !theme.isBuiltIn {
-                    Button {
-                        engine.editTheme(theme)
-                        onEdit()
-                    } label: {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 11))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.speakMica)
-                    .help("Edit theme")
-
-                    Button(role: .destructive) {
-                        engine.deleteCustomTheme(id: theme.id)
-                    } label: {
-                        Image(systemName: "trash")
-                            .font(.system(size: 11))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.speakMica)
-                    .help("Delete theme")
-                }
-                if isActive {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Color.speakUIAccent)
-                }
             }
             .padding(.horizontal, SpeakSpacing.md)
             .padding(.vertical, SpeakSpacing.sm + 4)
-            .background(isActive ? Color.speakSidebarSelection : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -252,6 +315,7 @@ private struct ThemeRows: View {
 
     /// Three dots: window canvas · accent · agent channel — the fastest
     /// possible read of a palette's character (t3code's ThemePreviewCircles).
+    /// These read the THEME's own hex pairs — palette data, not chrome.
     private func previewDots(for theme: SpeakTheme) -> some View {
         HStack(spacing: -4) {
             dot(theme.color(.windowCanvas))

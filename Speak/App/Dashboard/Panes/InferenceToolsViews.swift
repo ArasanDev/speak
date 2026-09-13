@@ -142,7 +142,7 @@ struct BackendRow: View {
         .padding(.vertical, SpeakSpacing.sm + 2)
         .background(
             RoundedRectangle(cornerRadius: InferenceMetrics.controlRadius, style: .continuous)
-                .fill(Color.primary.opacity(isHovering ? 0.04 : 0))
+                .fill(Color.speakBone.opacity(isHovering ? 0.04 : 0))
         )
         .contentShape(Rectangle())
         .onHover { hovering in
@@ -246,7 +246,7 @@ struct QuickTestConsole: View {
             .padding(.vertical, SpeakSpacing.sm)
             .background(
                 RoundedRectangle(cornerRadius: InferenceMetrics.codeRadius, style: .continuous)
-                    .fill(Color.primary.opacity(0.04))
+                    .fill(Color.speakBone.opacity(0.04))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: InferenceMetrics.codeRadius, style: .continuous)

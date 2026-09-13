@@ -14,8 +14,9 @@
 //   System version and architecture detection are O(1) at view init time.
 //
 // DESIGN LANGUAGE:
-//   Monaco for headlines, data, and credits. System font for labels.
-//   SpeakTheme colors (accent, surface) and SpeakSpacing grid.
+//   speakDisplay for the app name, speakBody for chrome, speakMonoFace for
+//   version/build data. `Color.speak*` roles and the SpeakSpacing grid
+//   throughout; cards use `.speakCard()`.
 //   No force-unwrap, no magic strings. [decision: W3.1]
 
 import SpeakCore
@@ -27,10 +28,10 @@ struct AboutView: View {
 
     // MARK: - URL constants (compile-time literals, mapped at call site)
 
-    fileprivate static let githubURL = URL(string: "https://github.com/tamilarasanraja/speak")
-    fileprivate static let issuesURL = URL(string: "https://github.com/tamilarasanraja/speak/issues")
-    fileprivate static let contributingURL = URL(string: "https://github.com/tamilarasanraja/speak/blob/main/CONTRIBUTING.md")
-    fileprivate static let changelogURL = URL(string: "https://github.com/tamilarasanraja/speak/blob/main/CHANGELOG.md")
+    fileprivate static let githubURL = URL(string: "https://github.com/ArasanDev/speak")
+    fileprivate static let issuesURL = URL(string: "https://github.com/ArasanDev/speak/issues")
+    fileprivate static let contributingURL = URL(string: "https://github.com/ArasanDev/speak/blob/main/CONTRIBUTING.md")
+    fileprivate static let changelogURL = URL(string: "https://github.com/ArasanDev/speak/blob/main/CHANGELOG.md")
 
     // MARK: - Version & build detection
 
@@ -77,6 +78,12 @@ struct AboutView: View {
         #endif
     }
 
+    /// Theme-aware hairline — the same tint `SettingsRowSeparator` uses.
+    private var hairline: some View {
+        Divider()
+            .overlay(Color.speakCardBorder.opacity(0.6))
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
@@ -84,10 +91,11 @@ struct AboutView: View {
                 // MARK: - Headline block
 
                 VStack(alignment: .center, spacing: SpeakSpacing.md) {
-                    // Icon
+                    // Brand mark: the amber waveform — the human channel is the
+                    // brand (intentional brand color, kept across themes).
                     Image(systemName: "waveform")
                         .font(.system(size: 48))
-                        .foregroundStyle(Color.speakUIAccent)
+                        .foregroundStyle(Color.speakHumanAmber)
 
                     // Headline: "speak v0.0.1"
                     HStack(spacing: SpeakSpacing.xs) {
@@ -106,27 +114,21 @@ struct AboutView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(SpeakSpacing.md)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.speakSurface)
-                )
+                .speakCard(cornerRadius: 12)
 
                 // MARK: - System info
 
                 VStack(alignment: .leading, spacing: SpeakSpacing.md) {
                     SystemInfoRow(label: "Version", value: appVersion)
-                    Divider()
+                    hairline
                     SystemInfoRow(label: "Build", value: "\(buildNumber) (\(buildConfiguration))")
-                    Divider()
+                    hairline
                     SystemInfoRow(label: "macOS", value: macOSVersion)
-                    Divider()
+                    hairline
                     SystemInfoRow(label: "Architecture", value: architecture)
                 }
                 .padding(SpeakSpacing.lg)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.speakSurface)
-                )
+                .speakCard(cornerRadius: 12)
 
                 // MARK: - Quick links
 
@@ -209,10 +211,7 @@ struct AboutView: View {
                     }
                 }
                 .padding(SpeakSpacing.lg)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.speakSurface)
-                )
+                .speakCard(cornerRadius: 12)
 
                 // MARK: - Credits
 
@@ -242,10 +241,7 @@ struct AboutView: View {
                     }
                 }
                 .padding(SpeakSpacing.lg)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.speakSurface)
-                )
+                .speakCard(cornerRadius: 12)
 
                 Spacer()
                     .frame(height: SpeakSpacing.md)
@@ -266,7 +262,7 @@ private struct SystemInfoRow: View {
     var body: some View {
         HStack {
             Text(label)
-                .font(.caption)
+                .font(.speakBody(.caption))
                 .foregroundStyle(Color.speakMica)
                 .frame(width: 80, alignment: .leading)
             Spacer()
@@ -298,7 +294,7 @@ private struct CreditRow: View {
                     .font(.speakBody(.caption))
                     .foregroundStyle(Color.speakBone)
                 Text(detail)
-                    .font(.caption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(Color.speakMica)
             }
         }

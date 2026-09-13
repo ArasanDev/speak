@@ -3,7 +3,7 @@
 // HotkeyRecorderView — a sheet that lets the user record a new hotkey binding.
 //
 // DESIGN (W1.1 hotkey recorder):
-//   Opens as a sheet from ShortcutsSettingsTab when the user taps "Record Shortcut…".
+//   Opens as a sheet from Settings → Hotkeys when the user taps "Record…".
 //   While recording, a local NSEvent monitor (in-window, no permission needed) captures
 //   .keyDown and .flagsChanged events. The user presses the desired key combo once;
 //   the view detects the press-edge and shows a live preview via HotkeyBinding.displayString.
@@ -42,9 +42,10 @@
 //   FE-1 type tokens / SpeakSpacing / speakSurface per SpeakTheme (SettingsView.swift contract).
 //
 // NO MAGIC NUMBERS:
-//   - cornerRadius 8: [decision: matches macOS control radius — aligns with RoundedRectangle
-//     used in ShortcutsSettingsTab keycap display, W3.1]
-//   - sheet min width 400/height 260: [decision: fits the preview label + two-button row
+//   - capture well cornerRadius 12: [decision: inset-well radius inside a sheet —
+//     between the r16 card and r8 code well on the pane]
+//   - warning well cornerRadius 8: [decision: matches `speakInset` well radius]
+//   - sheet min 460×300: [decision: fits the keycap preview + three-button row
 //     comfortably at default Dynamic Type size, W1.1]
 
 import AppKit
@@ -76,6 +77,10 @@ public enum HotkeyRecorderWarning: Equatable, Sendable {
     case ambiguousModifier
     /// The captured key code is unrecognised (keyCode 0 with no modifiers).
     case unrecognised
+    /// Fn doubles as the macOS Dictation key — the system may consume presses
+    /// (and emits a spurious flagsChanged burst, see HotkeyMonitor's Fn
+    /// debouncer) before the tap sees them. Warn, don't reject.
+    case systemDictationKey
 }
 
 // MARK: - Pure capture helpers (pure value logic; no test file added in W1.1 — candidates for a future HotkeyRecorderTests.swift)
@@ -114,7 +119,7 @@ public func captureFromKeyDown(
     cgFlags: CGEventFlags
 ) -> HotkeyCapture? {
     let usefulModifiers: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
-    guard nsModifiers.intersection(usefulModifiers).isEmpty == false else { return nil }
+    guard !nsModifiers.isDisjoint(with: usefulModifiers) else { return nil }
     return HotkeyCapture(keyCode: keyCode, modifiers: cgFlags, isModifierOnly: false)
 }
 
@@ -163,6 +168,12 @@ public func validateCapture(_ capture: HotkeyCapture) -> HotkeyRecorderWarning? 
     if capture.isModifierOnly && ambiguousModifierKeys.contains(capture.keyCode) {
         return .ambiguousModifier
     }
+    // Fn/Globe is also the macOS Dictation key — a genuine system conflict, not
+    // a collision risk, so it gets its own warning. [decision: surface at
+    // capture time; the pane repeats the guidance persistently while Fn is bound]
+    if capture.isModifierOnly && capture.keyCode == Int(kVK_Function) {
+        return .systemDictationKey
+    }
     return nil
 }
 
@@ -180,11 +191,13 @@ private enum RecorderState: Equatable {
 /// A sheet that records a new hotkey binding.
 ///
 /// Presents:
-///   - A trigger-mode picker (double-tap vs hold)
-///   - A "Start Recording" button that arms the local NSEvent monitor
-///   - A live "Press your shortcut…" prompt while recording
-///   - A preview of the captured binding via `HotkeyBinding.displayString`
-///   - A warning label when the captured combo might false-trigger
+///   - A trigger-style picker (double-tap vs hold)
+///   - A shared capture well that shifts tint per state — idle shows the
+///     current binding + "Start Recording"; recording shows a listening prompt;
+///     captured shows the new binding as keycaps + the gesture it performs;
+///     invalid shows the rejection reason + "Try Again"
+///   - A warning well when the captured combo might false-trigger or clash
+///     with macOS Dictation (advisory — Save stays enabled)
 ///   - Save and Cancel buttons
 ///
 /// On save, calls `onSave(_:)` with the constructed `HotkeyBinding`.
@@ -226,35 +239,31 @@ struct HotkeyRecorderView: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.md) {
 
             // Header
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Shortcuts")
+            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                Text("Record Shortcut")
                     .font(.speak2Title)
                     .foregroundStyle(Color.speakBone)
-                Text("Choose your preferred shortcut for activating speak.")
+                Text("Press a key+modifier combo, or a modifier-only key like Right ⌘ or Fn.")
                     .font(.speak2Caption)
                     .foregroundStyle(Color.speakMica)
             }
-            .padding(.bottom, SpeakSpacing.xs)
 
             // Trigger mode picker
-            Picker("Activation Mode", selection: $selectedTrigger) {
-                Text("Double-tap (toggle)").tag(HotkeyBinding.Trigger.doubleTap)
+            Picker("Trigger style", selection: $selectedTrigger) {
+                Text("Double-tap").tag(HotkeyBinding.Trigger.doubleTap)
                 Text("Hold (push-to-talk)").tag(HotkeyBinding.Trigger.hold)
             }
             .pickerStyle(.segmented)
             .foregroundStyle(Color.speakBone)
-            .padding(.bottom, SpeakSpacing.xs)
 
-            Divider()
+            // Capture well — one recessed surface whose fill/border shift with
+            // the recorder state so idle/listening/captured/invalid each read
+            // distinctly at a glance.
+            captureWell
 
-            // Recording area
-            recordingArea
-
-            Divider()
-
-            // Warning label (shown only when there is a warning)
+            // Warning well (shown only when the capture has a warning)
             if case .captured(_, let warning?) = recorderState {
-                warningLabel(for: warning)
+                warningWell(for: warning)
             }
 
             // Action row
@@ -263,153 +272,220 @@ struct HotkeyRecorderView: View {
                     stopMonitor()
                     onCancel()
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.speakMica)
                 .keyboardShortcut(.cancelAction)
 
                 Spacer()
 
-                if case .captured = recorderState {
+                if showsRerecord {
                     Button("Re-record") {
-                        recorderState = .idle
-                        stopMonitor()
+                        startMonitor()
                     }
-                    .buttonStyle(.bordered)
                 }
 
                 Button("Save Shortcut") {
                     commitSave()
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Color.speakUIAccent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(!canSave)
             }
+            .controlSize(.regular)
         }
         .padding(SpeakSpacing.lg)
-        .frame(minWidth: 440, minHeight: 280)
+        .frame(minWidth: 460, minHeight: 300)
         .background(Color.speakWindowCanvas)
         .onDisappear {
             stopMonitor()
         }
     }
 
-    // MARK: - Recording area
+    // MARK: - Capture well
+
+    /// The recessed surface all four recorder states share. Tint semantics:
+    /// `humanAmber` while listening for keys (the human is acting — `onAir` is
+    /// reserved for actual mic capture), `speakUIAccent` on a clean capture,
+    /// `warning` on a rejected combo, neutral inset when idle.
+    private var captureWell: some View {
+        captureContent
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 120) // [decision: keeps the well stable across states — no layout jump]
+            .padding(SpeakSpacing.md)
+            .background(wellFill)
+            .background(Color.speakWindowCanvas)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(wellBorder, lineWidth: 1)
+            )
+            .animation(.easeInOut(duration: 0.15), value: recorderState)
+    }
+
+    /// The accent color per state (idle = neutral — no tint wash, plain hairline).
+    private var wellTint: Color {
+        switch recorderState {
+        case .idle:      return Color.speakMica
+
+        case .recording: return Color.speakHumanAmber
+
+        case .captured(_, let warning):
+            return warning == nil ? Color.speakUIAccent : Color.speakWarning
+
+        case .invalid:   return Color.speakWarning
+        }
+    }
+
+    private var wellFill: Color {
+        switch recorderState {
+        case .idle: return Color.clear
+
+        default:    return wellTint.opacity(0.08)
+        }
+    }
+
+    private var wellBorder: Color {
+        switch recorderState {
+        case .idle: return Color.speakCardBorder
+
+        default:    return wellTint.opacity(0.35)
+        }
+    }
 
     @ViewBuilder
-    private var recordingArea: some View {
+    private var captureContent: some View {
         switch recorderState {
 
         case .idle:
             VStack(spacing: SpeakSpacing.sm) {
-                Button("Click to Record Shortcut") {
+                Text("Current shortcut")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakMica)
+                keycaps(for: initialBinding)
+                Button("Start Recording") {
                     startMonitor()
                 }
                 .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                Text("Supports Right-Command, Fn double-tap, or modifier combinations.")
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(Color.speakMica)
+                .tint(Color.speakUIAccent)
+                .padding(.top, SpeakSpacing.xs)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, SpeakSpacing.md)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.speakSurface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.speakCardBorder, lineWidth: 1)
-            )
 
         case .recording:
             VStack(spacing: SpeakSpacing.sm) {
-                HStack(spacing: SpeakSpacing.xs) {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(Color.speakOnAir)
-                    Text("Press your shortcut key combination\u{2026}")
-                        .font(.speakBody(.base, semibold: true))
-                        .foregroundStyle(Color.speakBone)
-                }
-
-                Image(systemName: "record.circle.fill")
-                    .foregroundStyle(Color.speakOnAir)
-                    .imageScale(.large)
+                Image(systemName: "keyboard")
+                    .font(.system(size: 22))
+                    .foregroundStyle(Color.speakHumanAmber)
+                Text("Listening for your shortcut…")
+                    .font(.speakBody(.base, semibold: true))
+                    .foregroundStyle(Color.speakBone)
+                Text("Press it once — Esc cancels.")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakMica)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, SpeakSpacing.lg)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.speakOnAir.opacity(0.06))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.speakOnAir.opacity(0.2), lineWidth: 1)
-            )
 
         case .captured(let capture, _):
             let preview = bindingFromCapture(capture, trigger: selectedTrigger)
             VStack(spacing: SpeakSpacing.sm) {
-                Text("Captured:")
+                Text("New shortcut")
                     .font(.speakBody(.caption))
                     .foregroundStyle(Color.speakMica)
-                Text(preview.displayString)
-                    .font(.speakBody(.base))
-                    .foregroundStyle(Color.speakBone)
-                    .padding(.horizontal, SpeakSpacing.sm)
-                    .padding(.vertical, SpeakSpacing.xs)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8) // [decision: keycap radius, W1.1]
-                            .fill(Color.speakSurface)
-                    )
+                keycaps(for: preview)
+                Text(actionLine(for: selectedTrigger))
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakMica)
             }
-            .frame(maxWidth: .infinity)
 
         case .invalid(let reason):
             VStack(spacing: SpeakSpacing.sm) {
                 Image(systemName: "exclamationmark.triangle")
+                    .font(.speakBody(.body))
                     .foregroundStyle(Color.speakWarning)
                 Text(reason)
                     .font(.speakBody(.caption))
-                    .foregroundStyle(Color.speakWarning)
+                    .foregroundStyle(Color.speakBone)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                 Button("Try Again") {
-                    recorderState = .idle
-                    stopMonitor()
+                    startMonitor()
                 }
+                .controlSize(.small)
             }
-            .frame(maxWidth: .infinity)
         }
     }
 
-    // MARK: - Warning label
-
+    /// Keycaps for a binding: a single cap + "× 2" for modifier-only
+    /// double-taps (a "+" joiner would misread as a chord), "+ "-joined caps
+    /// for real combos.
     @ViewBuilder
-    private func warningLabel(for warning: HotkeyRecorderWarning) -> some View {
+    private func keycaps(for binding: HotkeyBinding) -> some View {
+        if binding.isModifierOnly {
+            HStack(spacing: SpeakSpacing.xs) {
+                KeyCapView(label: binding.keySymbol, isAccented: true)
+                if binding.trigger == .doubleTap {
+                    Text("× 2")
+                        .font(.speakBody(.base, semibold: true))
+                        .foregroundStyle(Color.speakMica)
+                }
+            }
+        } else {
+            KeyComboView(keys: binding.keycapLabels)
+        }
+    }
+
+    private func actionLine(for trigger: HotkeyBinding.Trigger) -> String {
+        switch trigger {
+        case .doubleTap: return "Tap twice to start · tap once to stop"
+        case .hold:      return "Hold to talk · release to stop and paste"
+        }
+    }
+
+    // MARK: - Warning well
+
+    /// Advisory, not blocking — warning tint + actionable text, Save stays
+    /// enabled (user autonomy).
+    private func warningWell(for warning: HotkeyRecorderWarning) -> some View {
         HStack(alignment: .top, spacing: SpeakSpacing.sm) {
-            Image(systemName: "exclamationmark.triangle")
-                .foregroundStyle(Color.speakWarning)
-                .imageScale(.small)
-            Text(warningMessage(for: warning))
+            Image(systemName: "exclamationmark.triangle.fill")
                 .font(.speakBody(.caption))
                 .foregroundStyle(Color.speakWarning)
+                .padding(.top, 1)
+            Text(warningMessage(for: warning))
+                .font(.speakBody(.caption))
+                .foregroundStyle(Color.speakBone)
                 .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, SpeakSpacing.xs)
+        .padding(SpeakSpacing.sm)
+        .background(Color.speakWarning.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.speakWarning.opacity(0.25), lineWidth: 1)
+        )
     }
 
     private func warningMessage(for warning: HotkeyRecorderWarning) -> String {
         switch warning {
         case .ambiguousModifier:
-            return "This key is used in many common shortcuts and may trigger accidentally. Consider using Right-Command or Fn instead."
+            return "This key is part of almost every shortcut chord and may trigger accidentally. Right ⌘, Right ⌥, or Fn is safer."
 
         case .unrecognised:
-            return "The captured combo was not recognised. Try a different key."
+            return "That key can't be used as a shortcut. Try a different one."
+
+        case .systemDictationKey:
+            return "Fn also triggers macOS Dictation. If presses don't reach speak, turn off the Dictation shortcut in System Settings → Keyboard."
         }
     }
 
     // MARK: - Helpers
 
     private var canSave: Bool {
+        if case .captured = recorderState { return true }
+        return false
+    }
+
+    /// Re-record is offered only on a captured combo — it re-arms the monitor
+    /// in one click. The `.invalid` state has its own in-well "Try Again".
+    private var showsRerecord: Bool {
         if case .captured = recorderState { return true }
         return false
     }
@@ -485,7 +561,7 @@ struct HotkeyRecorderView: View {
 
             guard let capture = captureFromFlagsChanged(keyCode: kc, cgFlags: cgFlags) else {
                 // Unsupported modifier key
-                recorderState = .invalid("That modifier key is not supported as a standalone hotkey. Try Right-Command or Fn.")
+                recorderState = .invalid("That modifier key can't be a standalone hotkey. Try Right ⌘, Right ⌥, or Fn.")
                 stopMonitor()
                 return
             }

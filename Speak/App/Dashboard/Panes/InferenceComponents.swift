@@ -7,14 +7,13 @@
 //
 // [decision: the pane's old look failed for two structural reasons, not a
 //  shortage of effects — (1) every string was Monaco at one of two sizes, so
-//  nothing was a heading and nothing was data; (2) cards were filled with
-//  `Color.speakSurface` (= `.underPageBackgroundColor`, a *recessed* system
-//  color) and had no border, so they read as holes punched in the pane.
+//  nothing was a heading and nothing was data; (2) cards had no border and
+//  filled with a *recessed* tone, so they read as holes punched in the pane.
 //  The fix is the type system already in the repo: SF Pro (`Font.speakBody`)
-//  for chrome/labels/controls, Monaco (`Font.speakMono*`) reserved for DATA
-//  ONLY — URLs, keys, IDs, endpoints, numerals, code. Elevation comes from a
-//  `speakCardCanvas` fill + a `speakCardBorder` hairline + a whisper of
-//  shadow, the additive FE-1 tokens that SpeakTheme has no equivalent for.]
+//  for chrome/labels/controls, SF Mono (`Font.speakMonoFace`) reserved for
+//  DATA ONLY — URLs, keys, IDs, endpoints, numerals, code. Elevation matches
+//  the shared `speakCard()` contract exactly: `speakSurface` fill +
+//  `speakCardBorder` hairline at r16, no shadow.]
 //
 // Naming: every symbol here is prefixed `Inference*` because `private` does not
 // cross files — these are internal to the App target and must not collide.
@@ -26,11 +25,12 @@ import SwiftUI
 
 // MARK: - Metrics
 
-/// The pane's local geometry constants. [decision: a 14pt card radius sits
-/// between the dashboard's 12pt cards and Home's 16pt glass cards; controls use
-/// 7pt so nested corners stay concentric rather than parallel.]
+/// The pane's local geometry constants. [decision: the card radius is the
+/// shared `speakCard()` 16pt so every dashboard card shares one silhouette;
+/// controls use 7pt and wells 9pt so nested corners stay concentric rather
+/// than parallel.]
 enum InferenceMetrics {
-    static let cardRadius: CGFloat = 14
+    static let cardRadius: CGFloat = 16
     static let controlRadius: CGFloat = 7
     static let codeRadius: CGFloat = 9
     static let glyphSide: CGFloat = 26
@@ -86,7 +86,9 @@ struct InferenceCard<Content: View, Accessory: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: InferenceMetrics.cardRadius, style: .continuous)
-                .fill(Color.speakCardCanvas)
+                // `speakSurface`, matching `speakCard()` — the detail column is
+                // `speakCardCanvas`, so the card must sit a tone above it.
+                .fill(Color.speakSurface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: InferenceMetrics.cardRadius, style: .continuous)
@@ -95,9 +97,9 @@ struct InferenceCard<Content: View, Accessory: View>: View {
                     lineWidth: InferenceMetrics.hairline
                 )
         )
-        // [decision: a 1pt-offset, 10pt shadow at 6% — enough to lift the card
-        //  off the pane without the drop-shadow look of a 2010s dashboard.]
-        .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 1)
+        // [decision: no shadow — `speakCard()` carries none, and every card in
+        //  the dashboard shares one elevation language. The hairline does the
+        //  lifting.]
     }
 }
 
@@ -245,7 +247,7 @@ struct InferenceButton: View {
         switch emphasis {
         case .filled: return tint.opacity(isHovering ? 1 : 0.9)
         case .tinted: return tint.opacity(isHovering ? 0.22 : 0.13)
-        case .quiet: return Color.primary.opacity(isHovering ? 0.07 : 0.03)
+        case .quiet: return Color.speakBone.opacity(isHovering ? 0.07 : 0.03)
         }
     }
 
@@ -296,7 +298,7 @@ struct InferenceCopyButton: View {
             .padding(.vertical, 4)
             .background(
                 RoundedRectangle(cornerRadius: InferenceMetrics.controlRadius - 1, style: .continuous)
-                    .fill(Color.primary.opacity(isHovering ? 0.07 : 0))
+                    .fill(Color.speakBone.opacity(isHovering ? 0.07 : 0))
             )
             .contentShape(Rectangle())
         }
@@ -354,10 +356,9 @@ struct InferenceEmptyState<Action: View>: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, SpeakSpacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: InferenceMetrics.codeRadius, style: .continuous)
-                .fill(Color.primary.opacity(0.02))
-        )
+        // The empty state is a recessed well inside its card — same canvas-tone
+        // + hairline treatment `speakInset` gives code and data.
+        .speakInset(cornerRadius: InferenceMetrics.codeRadius)
     }
 }
 

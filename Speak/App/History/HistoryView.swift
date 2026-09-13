@@ -6,15 +6,15 @@
 //
 // DESIGN (from specs/speak-ui-design-final-2026-06-28.md §History Pane):
 //   - **Search bar** + date/engine filters (top, persistent)
-//   - **Grouped list**: TODAY / THIS WEEK / EARLIER (collapsible)
-//   - **Collapsed entry**: time | raw preview (40 chars) | cleaned preview | engine badge
+//   - **Grouped list**: Today / This Week / Earlier
+//   - **Collapsed entry**: time | raw preview | cleaned preview | engine badge
 //   - **Expanded view** (click to toggle):
-//       - Full raw transcript (Monaco 11pt, top)
-//       - Full cleaned transcript (Monaco 11pt, bottom)
-//       - Side-by-side diff via CleanupDiffView
+//       - Side-by-side / inline diff via CleanupDiffView
+//       - Metadata: duration, stop→paste latency, cleanup time
 //       - Actions: [Copy Raw] [Copy Cleaned] [Export] [Retry] [Delete]
-//   - **Batch actions** (footer): [Export All] [Clear Before Date] [Clear All]
-//   - All text: Monaco theme, semantic colors, 4pt spacing grid
+//   - **Batch actions** (footer): [Export All] [Clear All — confirmed destructive]
+//   - Text uses the FE-1 faces: speakBody chrome, speakMonoFace for data
+//     (timestamps, transcripts, stats), Color.speak* tokens only.
 //
 // CRASH WORKAROUND (same as P9 HistoryView):
 //   macOS 26 XOJIT crashes on variable-height List rows in `OutlineListCoordinator.diffRows`.
@@ -45,6 +45,7 @@ struct HistoryView: View {
     @State private var selectedDateFilter: DateFilter = .allTime
     @State private var selectedEngineFilter: String = "all"
     @State private var availableEngines: [String] = ["all"]
+    @State private var showClearConfirmation = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -62,56 +63,101 @@ struct HistoryView: View {
         .onChange(of: viewModel.entries) {
             updateAvailableEngines()
         }
+        .confirmationDialog(
+            "Clear all dictation history?",
+            isPresented: $showClearConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Clear History", role: .destructive) {
+                viewModel.clearAll()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes every stored dictation. This can't be undone.")
+        }
     }
 
     // MARK: - Search bar and filters
 
     private var searchBarAndFilters: some View {
         VStack(spacing: SpeakSpacing.sm) {
-            // Search bar
+            // Search bar — a recessed well so the field reads as a control.
             HStack(spacing: SpeakSpacing.sm) {
                 Image(systemName: "magnifyingglass")
+                    .font(.speakBody(.base))
                     .foregroundStyle(Color.speakMica)
+                    .accessibilityHidden(true)
+
                 TextField("Search dictations", text: $viewModel.searchText)
                     .textFieldStyle(.plain)
+                    .font(.speakBody(.base))
                     .foregroundStyle(Color.speakBone)
+
                 if viewModel.isLoading {
                     ProgressView()
                         .controlSize(.small)
+                } else if !viewModel.searchText.isEmpty {
+                    Button(
+                        action: { viewModel.searchText = "" },
+                        label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.speakBody(.base))
+                                .foregroundStyle(Color.speakMica)
+                        }
+                    )
+                    .buttonStyle(.plain)
+                    .help("Clear search")
                 }
             }
-            .padding(SpeakSpacing.md)
+            .padding(.horizontal, SpeakSpacing.sm + SpeakSpacing.xs)
+            .padding(.vertical, SpeakSpacing.sm)
+            .speakInset(cornerRadius: 10)
+            .padding(.horizontal, SpeakSpacing.md)
+            .padding(.top, SpeakSpacing.md)
 
-            // Filters row
-            HStack(spacing: SpeakSpacing.md) {
-                // Date filter
+            // Filters row — labeled menus + a live result count.
+            HStack(spacing: SpeakSpacing.sm) {
+                Text("Date")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakMica)
                 Picker("Date", selection: $selectedDateFilter) {
                     ForEach(DateFilter.allCases, id: \.self) { filter in
-                        Text(filter.label)
-                            .foregroundStyle(Color.speakBone)
-                            .tag(filter)
+                        Text(filter.label).tag(filter)
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(maxWidth: 120)
+                .labelsHidden()
+                .fixedSize()
 
-                // Engine filter
+                Text("Engine")
+                    .font(.speakBody(.caption))
+                    .foregroundStyle(Color.speakMica)
+                    .padding(.leading, SpeakSpacing.xs)
                 Picker("Engine", selection: $selectedEngineFilter) {
                     ForEach(availableEngines, id: \.self) { engine in
-                        Text(engine == "all" ? "All engines" : engine)
-                            .foregroundStyle(Color.speakBone)
-                            .tag(engine)
+                        Text(engine == "all" ? "All engines" : engine).tag(engine)
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(maxWidth: 150)
+                .labelsHidden()
+                .fixedSize()
 
                 Spacer()
+
+                Text(resultCountLabel)
+                    .font(.speakMonoFace(.caption))
+                    .foregroundStyle(Color.speakMica)
             }
             .padding(.horizontal, SpeakSpacing.md)
             .padding(.bottom, SpeakSpacing.sm)
-            .font(.caption)
         }
+    }
+
+    /// Live count of what the list is showing after filters — keeps the
+    /// result set legible when a search or filter narrows it.
+    private var resultCountLabel: String {
+        let count = groupedAndFilteredEntries.reduce(0) { $0 + $1.entries.count }
+        return count == 1 ? "1 dictation" : "\(count) dictations"
     }
 
     // MARK: - Content (grouped list)
@@ -121,7 +167,7 @@ struct HistoryView: View {
     private var content: some View {
         List {
             ForEach(groupedAndFilteredEntries, id: \.id) { group in
-                Section(header: sectionHeader(for: group.period)) {
+                Section(header: sectionHeader(for: group)) {
                     ForEach(group.entries, id: \.id) { entry in
                         historyRowWithExpand(entry: entry)
                     }
@@ -129,6 +175,7 @@ struct HistoryView: View {
             }
         }
         .listStyle(.inset)
+        .scrollContentBackground(.hidden)
         .overlay {
             if groupedAndFilteredEntries.isEmpty {
                 emptyState
@@ -195,10 +242,16 @@ struct HistoryView: View {
         return groups
     }
 
-    private func sectionHeader(for period: DatePeriod) -> some View {
-        Text(period.label)
-            .font(.caption)
-            .foregroundStyle(Color.speakMica)
+    private func sectionHeader(for group: HistoryGroup) -> some View {
+        HStack {
+            Text(group.period.label)
+                .font(.speakBody(.caption, semibold: true))
+                .foregroundStyle(Color.speakMica)
+            Spacer()
+            Text("\(group.entries.count)")
+                .font(.speakMonoFace(.caption))
+                .foregroundStyle(Color.speakMica)
+        }
     }
 
     // MARK: - History row with expand
@@ -221,53 +274,106 @@ struct HistoryView: View {
     // MARK: - Footer
 
     private var footer: some View {
-        HStack {
-            Button(action: { viewModel.exportToFile() }) {
-                Text("Export\u{2026}")
-                    .foregroundStyle(Color.speakBone)
-            }
-            .disabled(groupedAndFilteredEntries.isEmpty)
+        HStack(spacing: SpeakSpacing.md) {
+            Button(
+                action: { viewModel.exportToFile() },
+                label: {
+                    Text("Export\u{2026}")
+                        .font(.speakBody(.caption))
+                        .foregroundStyle(Color.speakBone)
+                }
+            )
+            .disabled(viewModel.entries.isEmpty)
+            .help("Export all dictations to a JSON file")
+
             Spacer()
-            Button(role: .destructive, action: { viewModel.clearAll() }) {
-                Text("Clear History")
-                    .foregroundStyle(Color.speakError)
-            }
-            .disabled(groupedAndFilteredEntries.isEmpty)
+
+            Text(historySummaryLabel)
+                .font(.speakMonoFace(.caption))
+                .foregroundStyle(Color.speakMica)
+
+            Button(
+                role: .destructive,
+                action: { showClearConfirmation = true },
+                label: {
+                    Text("Clear History")
+                        .font(.speakBody(.caption))
+                        .foregroundStyle(Color.speakError)
+                }
+            )
+            .disabled(viewModel.entries.isEmpty)
+            .help("Permanently delete all stored dictations")
         }
         .padding(SpeakSpacing.md)
     }
 
+    private var historySummaryLabel: String {
+        let count = viewModel.entries.count
+        return count == 1 ? "1 stored" : "\(count) stored"
+    }
+
     // MARK: - Empty state
+
+    /// Two honest variants: nothing recorded yet, or the current
+    /// search/filters match nothing (with a one-tap way out).
+    private var isFiltering: Bool {
+        !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || selectedDateFilter != .allTime
+            || selectedEngineFilter != "all"
+    }
 
     private var emptyState: some View {
         VStack(spacing: SpeakSpacing.md) {
-            Image(systemName: "text.bubble")
-                .font(.largeTitle)
+            Image(systemName: isFiltering ? "magnifyingglass" : "waveform")
+                .font(.system(size: 34))
+                .foregroundStyle(Color.speakMica.opacity(0.6))
+                .accessibilityHidden(true)
+
+            Text(isFiltering ? "No matches" : "No dictations yet")
+                .font(.speakBody(.body, semibold: true))
+                .foregroundStyle(Color.speakBone)
+
+            Text(isFiltering
+                 ? "Try a different search, or widen the date and engine filters."
+                 : "Everything you dictate lands here — searchable, expandable, exportable.")
+                .font(.speakBody(.caption))
                 .foregroundStyle(Color.speakMica)
-            Text(viewModel.searchText.isEmpty && selectedDateFilter == .allTime
-                 ? "No dictations yet"
-                 : "No matches")
-                .foregroundStyle(Color.speakMica)
+                .multilineTextAlignment(.center)
+
+            if isFiltering {
+                Button(action: resetFilters) {
+                    Text("Clear Search & Filters")
+                        .font(.speakBody(.caption, semibold: true))
+                }
+                .buttonStyle(.bordered)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.speakWindowCanvas)
+        .padding(SpeakSpacing.xl)
+    }
+
+    private func resetFilters() {
+        viewModel.searchText = ""
+        selectedDateFilter = .allTime
+        selectedEngineFilter = "all"
     }
 
     // MARK: - Helpers
 
     private func openExpanded(_ id: UUID) {
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(.easeInOut(duration: SpeakMotion.microDuration)) {
             expandedEntryId = id
         }
     }
 
     private func closeExpanded() {
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(.easeInOut(duration: SpeakMotion.microDuration)) {
             expandedEntryId = nil
         }
     }
 
     private func copyToClipboard(_ text: String) {
+        guard !text.isEmpty else { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
@@ -349,16 +455,18 @@ enum DatePeriod {
     case thisWeek
     case earlier
 
+    /// Title-case labels — the FE-1 type charter allows no ALL-CAPS labels
+    /// except two-letter status tags (spec §3).
     var label: String {
         switch self {
         case .today:
-            return "TODAY"
+            return "Today"
 
         case .thisWeek:
-            return "THIS WEEK"
+            return "This Week"
 
         case .earlier:
-            return "EARLIER"
+            return "Earlier"
         }
     }
 }
@@ -373,62 +481,95 @@ private struct HistoryGroup: Identifiable {
 
 // MARK: - Collapsed entry view
 
+/// One collapsed history row: timestamp + engine badge on the meta line, the
+/// raw transcript as the headline, and the AI-cleaned text as a secondary line.
+/// The whole row is the expand affordance; hover gives a soft highlight.
 private struct CollapsedHistoryEntryView: View {
     let entry: HistoryEntry
     let onTap: () -> Void
 
+    @State private var isHovered = false
+
     var body: some View {
-        HStack(spacing: SpeakSpacing.sm) {
+        HStack(alignment: .top, spacing: SpeakSpacing.sm) {
             Image(systemName: "chevron.right")
-                .font(.caption)
+                .font(.speakBody(.caption, semibold: true))
                 .foregroundStyle(Color.speakMica)
                 .frame(width: 12)
+                // Optical alignment with the first line of text.
+                .padding(.top, SpeakSpacing.xs)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 HStack(spacing: SpeakSpacing.sm) {
                     Text(entry.createdAt, style: .time)
                         .font(.speakMonoFace(.caption))
                         .foregroundStyle(Color.speakMica)
-                    Text("·")
-                        .foregroundStyle(Color.speakMica)
-                    Text(entry.rawText.prefix(40))
-                        .lineLimit(1)
-                        .font(.speakMonoFace(.caption))
-                        .foregroundStyle(Color.speakBone)
-                        .truncationMode(.tail)
-                    if let cleaned = entry.cleanedText {
-                        Text("|")
-                            .foregroundStyle(Color.speakMica)
-                        Text(cleaned.prefix(40))
+                    Spacer(minLength: 0)
+                    if !entry.engineId.isEmpty {
+                        engineBadge(entry.engineId)
+                    }
+                }
+
+                Text(primaryText)
+                    .font(.speakBody(.base))
+                    .foregroundStyle(primaryIsPlaceholder ? Color.speakMica : Color.speakBone)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                if let cleaned = entry.cleanedText, cleaned != entry.rawText, !cleaned.isEmpty {
+                    HStack(spacing: SpeakSpacing.xs) {
+                        Image(systemName: "wand.and.stars")
+                            .font(.speakBody(.caption))
+                        Text(cleaned)
+                            .font(.speakBody(.caption))
                             .lineLimit(1)
-                            .font(.speakMonoFace(.caption))
-                            .foregroundStyle(Color.speakBone)
                             .truncationMode(.tail)
                     }
-                    Spacer()
-                    engineBadge(entry.engineId)
-                        .font(.caption2)
+                    .foregroundStyle(Color.speakMica)
                 }
             }
         }
-        .padding(.vertical, SpeakSpacing.xs)
+        .padding(.horizontal, SpeakSpacing.sm)
+        .padding(.vertical, SpeakSpacing.sm)
+        .background(Color.speakMica.opacity(isHovered ? 0.08 : 0.0))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: SpeakMotion.microDuration)) {
+                isHovered = hovering
+            }
+        }
+        .help("Click to expand")
+    }
+
+    /// Headline text: raw transcript, cleaned fallback, or an honest
+    /// placeholder when the row carries neither.
+    private var primaryText: String {
+        if !entry.rawText.isEmpty { return entry.rawText }
+        if let cleaned = entry.cleanedText, !cleaned.isEmpty { return cleaned }
+        return "Empty transcription"
+    }
+
+    private var primaryIsPlaceholder: Bool {
+        entry.rawText.isEmpty && (entry.cleanedText?.isEmpty ?? true)
     }
 
     private func engineBadge(_ engineId: String) -> some View {
         Text(engineId)
-            .font(.caption2)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Color.speakSurface)
-            .cornerRadius(4)
+            .font(.speakMonoFace(.caption))
             .foregroundStyle(Color.speakMica)
+            .padding(.horizontal, SpeakSpacing.sm)
+            .padding(.vertical, SpeakSpacing.xs)
+            .speakInset(cornerRadius: 6)
     }
 }
 
 // MARK: - Expanded entry view
 
+/// The expanded row: collapse header, the raw→cleaned diff, mono metadata,
+/// and the action row. Delete/Retry stay visible but disabled — the store
+/// has no per-entry delete seam and no retry pipeline yet (see file header).
 private struct ExpandedHistoryEntryView: View {
     let entry: HistoryEntry
     let onClose: () -> Void
@@ -440,90 +581,88 @@ private struct ExpandedHistoryEntryView: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.md) {
             expandedHeader
             CleanupDiffView(rawText: entry.rawText, cleanedText: entry.cleanedText)
+                // Hairline so the diff's own surface reads on the card.
+                .overlay(
+                    RoundedRectangle(cornerRadius: SpeakSpacing.sm, style: .continuous)
+                        .stroke(Color.speakCardBorder, lineWidth: 1)
+                )
                 .frame(maxHeight: 300)
             expandedMetadata
             expandedActions
         }
         .padding(SpeakSpacing.md)
-        .speakCard(cornerRadius: 10)
+        .speakCard()
     }
 
     private var expandedHeader: some View {
-        HStack {
-            Image(systemName: "chevron.down")
-                .font(.caption)
-                .foregroundStyle(Color.speakMica)
-                .frame(width: 12)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.createdAt, style: .date)
-                    .font(.speakMonoFace(.caption))
-                    .foregroundStyle(Color.speakMica)
+        HStack(spacing: SpeakSpacing.sm) {
+            Button(action: onClose) {
                 HStack(spacing: SpeakSpacing.sm) {
-                    Text(entry.createdAt, style: .time)
-                        .font(.caption)
+                    Image(systemName: "chevron.down")
+                        .font(.speakBody(.caption, semibold: true))
                         .foregroundStyle(Color.speakMica)
-                    Text("·")
+                        .frame(width: 12)
+                    Text(entry.createdAt, format: .dateTime.month(.abbreviated).day().hour().minute())
+                        .font(.speakMonoFace(.caption))
                         .foregroundStyle(Color.speakMica)
-                    engineBadge
                 }
-                .font(.caption2)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .help("Collapse")
+
+            if !entry.engineId.isEmpty {
+                engineBadge
+            }
+
             Spacer()
 
             Button(action: onClose) {
                 Image(systemName: "xmark.circle.fill")
+                    .font(.speakBody(.body))
                     .foregroundStyle(Color.speakMica)
             }
             .buttonStyle(.plain)
+            .help("Close")
         }
-        .padding(.bottom, SpeakSpacing.sm)
     }
 
     private var engineBadge: some View {
         Text(entry.engineId)
-            .font(.caption2)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Color.speakSurface)
-            .cornerRadius(4)
+            .font(.speakMonoFace(.caption))
             .foregroundStyle(Color.speakMica)
+            .padding(.horizontal, SpeakSpacing.sm)
+            .padding(.vertical, SpeakSpacing.xs)
+            .speakInset(cornerRadius: 6)
     }
 
+    @ViewBuilder
     private var expandedMetadata: some View {
+        let hasMetrics = entry.duration > 0 || entry.stopToPasteSeconds > 0 || entry.cleanupSeconds > 0
+        if hasMetrics {
+            HStack(spacing: SpeakSpacing.lg) {
+                if entry.duration > 0 {
+                    metadataMetric(label: "Duration", value: formatDuration(entry.duration))
+                }
+                if entry.stopToPasteSeconds > 0 {
+                    metadataMetric(label: "Stop→Paste", value: String(format: "%.2fs", entry.stopToPasteSeconds))
+                }
+                if entry.cleanupSeconds > 0 {
+                    metadataMetric(label: "Cleanup", value: String(format: "%.2fs", entry.cleanupSeconds))
+                }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private func metadataMetric(label: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-            if entry.duration > 0 {
-                HStack {
-                    Text("Duration:")
-                        .font(.caption)
-                        .foregroundStyle(Color.speakMica)
-                    Text(formatDuration(entry.duration))
-                        .font(.speakMonoFace(.caption))
-                        .foregroundStyle(Color.speakBone)
-                }
-            }
-
-            if entry.stopToPasteSeconds > 0 {
-                HStack {
-                    Text("Latency:")
-                        .font(.caption)
-                        .foregroundStyle(Color.speakMica)
-                    Text(String(format: "%.2fs", entry.stopToPasteSeconds))
-                        .font(.speakMonoFace(.caption))
-                        .foregroundStyle(Color.speakBone)
-                }
-            }
-
-            if entry.cleanupSeconds > 0 {
-                HStack {
-                    Text("Cleanup time:")
-                        .font(.caption)
-                        .foregroundStyle(Color.speakMica)
-                    Text(String(format: "%.2fs", entry.cleanupSeconds))
-                        .font(.speakMonoFace(.caption))
-                        .foregroundStyle(Color.speakBone)
-                }
-            }
+            Text(label)
+                .font(.speakBody(.caption))
+                .foregroundStyle(Color.speakMica)
+            Text(value)
+                .font(.speakMonoFace(.base))
+                .foregroundStyle(Color.speakBone)
         }
     }
 
@@ -531,24 +670,22 @@ private struct ExpandedHistoryEntryView: View {
         HStack(spacing: SpeakSpacing.sm) {
             Button(action: onCopyRaw) {
                 Label("Copy Raw", systemImage: "doc.on.doc")
-                    .font(.caption)
-                    .foregroundStyle(Color.speakBone)
+                    .font(.speakBody(.caption))
             }
             .buttonStyle(.bordered)
+            .disabled(entry.rawText.isEmpty)
 
             if entry.cleanedText != nil {
                 Button(action: onCopyClean) {
                     Label("Copy Cleaned", systemImage: "doc.on.doc")
-                        .font(.caption)
-                        .foregroundStyle(Color.speakBone)
+                        .font(.speakBody(.caption))
                 }
                 .buttonStyle(.bordered)
             }
 
             Button(action: onExport) {
                 Label("Export", systemImage: "arrow.up.doc")
-                    .font(.caption)
-                    .foregroundStyle(Color.speakBone)
+                    .font(.speakBody(.caption))
             }
             .buttonStyle(.bordered)
 
@@ -558,8 +695,7 @@ private struct ExpandedHistoryEntryView: View {
                 action: {},
                 label: {
                     Label("Delete", systemImage: "trash")
-                        .font(.caption)
-                        .foregroundStyle(Color.speakBone)
+                        .font(.speakBody(.caption))
                 }
             )
             .buttonStyle(.bordered)
@@ -570,8 +706,7 @@ private struct ExpandedHistoryEntryView: View {
                 action: {},
                 label: {
                     Label("Retry", systemImage: "arrow.clockwise")
-                        .font(.caption)
-                        .foregroundStyle(Color.speakBone)
+                        .font(.speakBody(.caption))
                 }
             )
             .buttonStyle(.bordered)

@@ -67,6 +67,7 @@ struct OllamaSetupSheet: View {
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     Text("Set up Ollama")
                         .font(.speakDisplay(.title))
+                        .foregroundStyle(Color.speakBone)
                     Text("Run a local LLM on your Mac \u{2014} no cloud, no account.")
                         .font(.speakBody(.caption))
                         .foregroundStyle(Color.speakMica)
@@ -74,7 +75,7 @@ struct OllamaSetupSheet: View {
             }
             .padding(.bottom, SpeakSpacing.sm)
 
-            Divider()
+            Divider().overlay(Color.speakCardBorder.opacity(0.6))
 
             // Step 1: install
             SetupStepRow(
@@ -108,14 +109,12 @@ struct OllamaSetupSheet: View {
                 Image(systemName: "info.circle")
                     .foregroundStyle(Color.speakMica)
                 Text("Ollama support lands in v0.1. In v0, speak falls back to raw transcript when Ollama is selected.")
-                    .font(.caption)
+                    .font(.speakBody(.caption))
                     .foregroundStyle(Color.speakMica)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(SpeakSpacing.md)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.speakSurface)
-            )
+            .speakInset()
 
             Spacer()
 
@@ -123,12 +122,16 @@ struct OllamaSetupSheet: View {
             HStack {
                 Spacer()
                 Button("Done") { isPresented = false }
-                    .keyboardShortcut(.return, modifiers: [])
+                    .keyboardShortcut(.defaultAction)
             }
         }
         .padding(SpeakSpacing.lg)
         // [decision Wave 2.1: 480×520 fits three model rows + three steps comfortably]
         .frame(minWidth: 480, minHeight: 520)
+        .background(Color.speakWindowCanvas)
+        // A single-action sheet still needs Esc to dismiss — .defaultAction
+        // only covers Return.
+        .onExitCommand { isPresented = false }
     }
 
     // MARK: - Model command block
@@ -139,42 +142,42 @@ struct OllamaSetupSheet: View {
             ForEach(recommendedModels) { entry in
                 VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                     Text(entry.label)
-                        .font(.caption)
+                        .font(.speakBody(.caption))
                         .foregroundStyle(Color.speakMica)
                     HStack(spacing: SpeakSpacing.sm) {
                         Text("ollama pull \(entry.tag)")
                             .font(.speakMonoFace(.base))
+                            .foregroundStyle(Color.speakBone)
                             .textSelection(.enabled)
                             .padding(.horizontal, SpeakSpacing.sm)
                             .padding(.vertical, SpeakSpacing.xs)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color.speakSurface)
-                            )
+                            .speakInset(cornerRadius: 6)
+                        // Quiet copy affordance — write-only pasteboard use
+                        // (AGENTS.md §2.6), same control the panes use.
+                        InferenceCopyButton(text: "ollama pull \(entry.tag)")
                         Spacer()
                         if entry.recommended {
+                            // `ok` (nominal positive), not `delivered` — that
+                            // token is reserved for completion states.
                             Text("Recommended")
-                                .font(.caption)
-                                .foregroundStyle(Color.speakDelivered)
+                                .font(.speakBody(.caption, semibold: true))
+                                .foregroundStyle(Color.speakOK)
                                 .padding(.horizontal, SpeakSpacing.xs)
                                 .padding(.vertical, 2)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 4)
-                                        .fill(Color.speakDelivered.opacity(0.12))
+                                    Capsule()
+                                        .fill(Color.speakOK.opacity(0.12))
                                 )
                         }
                     }
                     Text(entry.detail)
-                        .font(.caption)
+                        .font(.speakBody(.caption))
                         .foregroundStyle(Color.speakMica)
                 }
             }
         }
         .padding(SpeakSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.speakSurface)
-        )
+        .speakCard(cornerRadius: 12)
     }
 }
 

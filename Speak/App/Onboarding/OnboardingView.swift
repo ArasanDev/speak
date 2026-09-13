@@ -2,11 +2,17 @@
 //
 // The first-run onboarding window content.
 //
-// DESIGN (product.md §7.3 + 3 states per screen):
-//   Each step has three states:
-//     - loading/in-progress: permission request in-flight (spinner + disabled button)
-//     - active/empty: permission not yet granted (Why text + action button)
-//     - granted/done: permission granted (checkmark + Continue button)
+// DESIGN (product.md §7.3 + explicit states per screen):
+//   Every step shares one skeleton — centered icon well (semantic tint), a
+//   speakDisplay-scale title, a one-line value prop, and exactly one primary
+//   action. Skip is a quiet footer affordance. Permission steps have five
+//   states (see OnboardingSteps.swift / `PermissionStepView`):
+//     needed · loading · waiting · denied · granted
+//   Grants are also picked up by the view model's 1 s poll, which
+//   auto-advances the step without a tap.
+//
+//   The permission + hotkey step views live in OnboardingSteps.swift (split
+//   for the file_length cap); the Welcome/Done bookends stay here.
 //
 // HOTKEY LABEL (W2.5):
 //   Onboarding reads the live binding from `OnboardingViewModel.currentHotkeyDisplayString`
@@ -35,11 +41,16 @@ struct OnboardingView: View {
     var body: some View {
         VStack(spacing: 0) {
             stepContent
+                // Identity per step → a soft cross-fade between steps instead
+                // of a hard cut.
+                .id(viewModel.displayedStep)
+                .transition(.opacity)
             Spacer(minLength: 0)
             footer
         }
         .frame(width: 480, height: 460) // [decision: 460pt height to accommodate hotkey step conflict card + try pill, W1.2]
-        .background(.background)
+        .background(Color.speakWindowCanvas)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.displayedStep)
         .onAppear { viewModel.onAppear() }
         .onDisappear { viewModel.onDisappear() }
     }
@@ -55,8 +66,7 @@ struct OnboardingView: View {
         case .microphone:
             PermissionStepView(
                 kind: .microphone,
-                status: viewModel.evaluation.blockingPermissions.contains(.microphone)
-                    ? .needed : .granted,
+                status: micStatus,
                 isLoading: viewModel.isRequestingMic,
                 isWaiting: false,
                 onAction: { viewModel.requestMicrophone() },
@@ -88,21 +98,42 @@ struct OnboardingView: View {
         }
     }
 
+    /// Microphone maps its full TCC state onto the step: `.denied` gets its
+    /// own UI because a refused grant can't be re-prompted — the only fix is
+    /// the System Settings toggle. (Accessibility reports `.denied` for the
+    /// normal untrusted state, so only the mic uses this mapping.)
+    private var micStatus: PermissionStatus {
+        switch viewModel.permissionState(.microphone) {
+        case .granted:
+            return .granted
+
+        case .denied, .restricted:
+            return .denied
+
+        case .notDetermined, .requesting:
+            return .needed
+        }
+    }
+
     // MARK: - Footer
 
     private var footer: some View {
         HStack {
-            Button("Skip for now") {
-                viewModel.skip()
+            // Skip is a quiet affordance — and meaningless on the done step,
+            // which is already completing on its own.
+            if viewModel.displayedStep != .done {
+                Button("Skip for now") {
+                    viewModel.skip()
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.speakMica)
+                .font(.speakBody(.caption))
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color.speakMica)
-            .font(.caption)
             Spacer()
             progressDots
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
+        .padding(.horizontal, SpeakSpacing.lg)
+        .padding(.vertical, SpeakSpacing.md)
     }
 
     /// Step-position dots (visual only — pure decoration).
@@ -126,21 +157,23 @@ struct OnboardingView: View {
 
 // MARK: - WelcomeStepView
 
+/// The opening bookend — brand mark, display title, one-line value prop, one
+/// primary action.
 private struct WelcomeStepView: View {
     let onContinue: () -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "waveform.circle.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(.tint)
-                .padding(.top, 40)
+        VStack(spacing: SpeakSpacing.lg) {
+            // Brand mark: the amber waveform — the human channel IS the brand.
+            OnboardingStepIcon(symbol: "waveform", tint: .speakHumanAmber)
+                .padding(.top, SpeakSpacing.xl + SpeakSpacing.sm)
 
-            VStack(spacing: 8) {
+            VStack(spacing: SpeakSpacing.sm) {
                 Text("Welcome to speak")
-                    .font(.title.bold())
-                Text("speak turns your voice into polished text, entirely on your Mac. Nothing leaves your device.")
-                    .font(.body)
+                    .font(.speakDisplay())
+                    .foregroundStyle(Color.speakBone)
+                Text("Your voice becomes polished text — entirely on your Mac. Nothing leaves your device.")
+                    .font(.speakBody(.body))
                     .foregroundStyle(Color.speakMica)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 340)
@@ -151,311 +184,33 @@ private struct WelcomeStepView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .tint(.speakUIAccent)
         }
         .padding(.horizontal, 40)
-    }
-}
-
-// MARK: - PermissionStepView
-
-private enum PermissionStatus {
-    case needed
-    case granted
-}
-
-private struct PermissionStepView: View {
-    let kind: PermissionKind
-    let status: PermissionStatus
-    let isLoading: Bool
-    /// `true` for Accessibility after the first tap while waiting for the user to
-    /// toggle the permission in System Settings. Disables the primary button and
-    /// relabels it "Waiting for permission…" so re-taps cannot spawn a second TCC
-    /// dialog. The "Open System Settings" link remains enabled.
-    let isWaiting: Bool
-    let onAction: () -> Void
-    let onContinue: () -> Void
-    let onOpenSettings: () -> Void
-
-    var body: some View {
-        VStack(spacing: 24) {
-            // Icon
-            ZStack {
-                Circle()
-                    .fill(iconBackground)
-                    .frame(width: 72, height: 72)
-                Image(systemName: iconName)
-                    .font(.system(size: 32))
-                    .foregroundStyle(iconForeground)
-            }
-            .padding(.top, 36)
-
-            // Title + description
-            VStack(spacing: 8) {
-                Text(title)
-                    .font(.title2.bold())
-                Text(description)
-                    .font(.body)
-                    .foregroundStyle(Color.speakMica)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 360)
-            }
-
-            // Action area
-            switch status {
-            case .needed:
-                if isLoading {
-                    // Loading state: in-progress spinner (microphone request in-flight)
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Requesting access\u{2026}")
-                            .foregroundStyle(Color.speakMica)
-                    }
-                } else {
-                    VStack(spacing: 10) {
-                        Button(actionLabel) {
-                            onAction()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-
-                        // Open System Settings link — always enabled for
-                        // Accessibility and Input Monitoring steps, so the user
-                        // can navigate back to the pane if they missed the prompt's
-                        // own button, or if TCC already had a record (no prompt shown).
-                        // For mic, shown only as a fallback when denied.
-                        if kind == .microphone {
-                            Button("Open System Settings instead") {
-                                onOpenSettings()
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(Color.speakMica)
-                            .font(.caption)
-                        } else {
-                            Button(isWaiting ? "Re-check Accessibility / Open Settings →" : "Open System Settings") {
-                                onOpenSettings()
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(isWaiting ? Color.speakUIAccent : Color.speakMica)
-                            .font(isWaiting ? .caption.bold() : .caption)
-                        }
-                    }
-                }
-
-            case .granted:
-                // Success state: green checkmark + Continue
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.speakOK)
-                    Text("Permission granted")
-                        .foregroundStyle(Color.speakMica)
-                }
-                Button("Continue") {
-                    onContinue()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-            }
-        }
-        .padding(.horizontal, 40)
-    }
-
-    // MARK: - Per-kind content
-
-    private var title: String {
-        switch kind {
-        case .microphone:     return "Microphone Access"
-        case .accessibility:  return "Accessibility Access"
-        }
-    }
-
-    private var description: String {
-        switch kind {
-        case .microphone:
-            return "speak captures your voice to transcribe it. Audio is processed on-device and never sent anywhere."
-
-        case .accessibility:
-            // swiftlint:disable:next line_length
-            return "speak needs Accessibility access to simulate the Cmd+V keystroke that pastes your transcribed text at the cursor."
-        }
-    }
-
-    private var actionLabel: String {
-        switch kind {
-        case .microphone:
-            return "Grant Microphone Access"
-
-        case .accessibility:
-            return "Open System Settings"
-        }
-    }
-
-    private var iconName: String {
-        switch status {
-        case .granted:
-            return "checkmark.circle.fill"
-
-        case .needed:
-            switch kind {
-            case .microphone:    return "mic.fill"
-            case .accessibility: return "hand.point.up.left.fill"
-            }
-        }
-    }
-
-    private var iconBackground: Color {
-        status == .granted ? Color.speakOK.opacity(0.15) : Color.speakUIAccent.opacity(0.12)
-    }
-
-    private var iconForeground: Color {
-        status == .granted ? Color.speakOK : Color.speakUIAccent
-    }
-}
-
-// MARK: - HotkeyStepView
-
-private struct HotkeyStepView: View {
-    /// The live hotkey gesture label (e.g. "⌘⌘ Right Command", "Fn ×2").
-    /// Sourced from `OnboardingViewModel.currentHotkeyDisplayString`.
-    let hotkeyLabel: String
-    /// `true` once the user has fired the hotkey at least once during this step.
-    let hotkeyTriggered: Bool
-    let onContinue: () -> Void
-
-    var body: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "command.circle.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(.tint)
-                .padding(.top, 36)
-
-            VStack(spacing: 8) {
-                // `hotkeyLabel` already encodes the full gesture (e.g. "⌘⌘ Right Command")
-                // so we show it as-is — never prepend "Double-tap" which would
-                // double-encode the trigger and be wrong for hold mode.
-                Text("Your Hotkey: \(hotkeyLabel)")
-                    .font(.title2.bold())
-
-                // swiftlint:disable:next line_length
-                Text("Trigger the hotkey to start dictating; trigger it again to stop. speak listens while you work in any app.")
-                    .font(.body)
-                    .foregroundStyle(Color.speakMica)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 360)
-
-                // Conflict guidance card [W1.2 decision: proactive, not detection-based]
-                // macOS has no public API to read the system-dictation shortcut state.
-                HotkeyConflictNoteView()
-                    .padding(.top, 4)
-            }
-
-            // "Try it now" live test pill
-            HotkeyTryPillView(hotkeyLabel: hotkeyLabel, triggered: hotkeyTriggered)
-
-            Button("Finish Setup") {
-                onContinue()
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .padding(.bottom, 4)
-        }
-        .padding(.horizontal, 40)
-    }
-}
-
-// MARK: - HotkeyConflictNoteView
-
-/// Proactive conflict guidance card for the hotkey step.
-///
-/// macOS exposes no public API to read the system-dictation shortcut state
-/// [decision: detect nothing — guide proactively instead, W1.2]. The card is
-/// shown unconditionally and explains the safe default + what to do if the user
-/// switches to Fn.
-private struct HotkeyConflictNoteView: View {
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "info.circle")
-                .foregroundStyle(Color.speakMica)
-                .font(.body)
-                .padding(.top, 1)
-
-            // swiftlint:disable:next line_length
-            Text("speak uses double-tap Right-Command so it won't clash with macOS dictation. If you switch to Fn in Settings, disable **System Settings \u{2192} Keyboard \u{2192} Dictation** shortcut first.")
-                .font(.speakBody(.caption))
-                .foregroundStyle(Color.speakMica)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.horizontal, SpeakSpacing.md)
-        .padding(.vertical, SpeakSpacing.sm)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.speakSurface)
-        )
-        .frame(maxWidth: 360)
-    }
-}
-
-// MARK: - HotkeyTryPillView
-
-/// A pill that starts neutral and turns green once the user fires the hotkey.
-///
-/// Two visual states:
-///   - Waiting: grey, "Try it now — \(hotkeyLabel)"
-///   - Triggered (green): "Nice — that worked." with checkmark
-///
-/// The pill is a delighter, NOT a gate — advancing past this step
-/// does not require the pill to be green.
-private struct HotkeyTryPillView: View {
-    /// The live hotkey gesture label (e.g. "⌘⌘ Right Command", "Fn ×2").
-    let hotkeyLabel: String
-    let triggered: Bool
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: triggered ? "checkmark.circle.fill" : "hand.tap")
-                .foregroundStyle(triggered ? Color.speakOK : Color.speakMica)
-                .font(.body)
-            Text(triggered ? "Nice \u{2014} that worked." : "Try it now \u{2014} \(hotkeyLabel)")
-                .font(.speakBody(.caption))
-                .foregroundStyle(triggered ? Color.speakBone : Color.speakMica)
-        }
-        .padding(.horizontal, SpeakSpacing.md)
-        .padding(.vertical, SpeakSpacing.sm)
-        .background(
-            Capsule()
-                .fill(triggered ? Color.speakOK.opacity(0.12) : Color.speakMica.opacity(0.1))
-        )
-        .overlay(
-            Capsule()
-                .strokeBorder(
-                    triggered ? Color.speakOK.opacity(0.4) : Color.speakMica.opacity(0.2),
-                    lineWidth: 1
-                )
-        )
-        .animation(.easeInOut(duration: 0.25), value: triggered)
     }
 }
 
 // MARK: - DoneStepView
 
+/// The closing bookend — terminal completion, so the icon takes the
+/// `delivered` role rather than a generic green. The window auto-closes
+/// (OnboardingWindowController watches for `.done`); no button needed.
 private struct DoneStepView: View {
     /// The live hotkey gesture label (e.g. "⌘⌘ Right Command", "Fn ×2").
     let hotkeyLabel: String
 
     var body: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(Color.speakOK)
-                .padding(.top, 40)
+        VStack(spacing: SpeakSpacing.lg) {
+            OnboardingStepIcon(symbol: "checkmark.seal.fill", tint: .speakDelivered)
+                .padding(.top, SpeakSpacing.xl + SpeakSpacing.sm)
 
-            VStack(spacing: 8) {
-                Text("You\u{2019}re all set.")
-                    .font(.title.bold())
+            VStack(spacing: SpeakSpacing.sm) {
+                Text("You're all set.")
+                    .font(.speakDisplay())
+                    .foregroundStyle(Color.speakBone)
                 // `hotkeyLabel` encodes the full gesture — shown directly, no prefix.
-                Text("Use \(hotkeyLabel) to start dictating. speak will paste polished text wherever your cursor is.")
-                    .font(.body)
+                Text("Use \(hotkeyLabel) to start dictating — speak pastes polished text wherever your cursor is.")
+                    .font(.speakBody(.body))
                     .foregroundStyle(Color.speakMica)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 340)

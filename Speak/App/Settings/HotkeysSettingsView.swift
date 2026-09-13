@@ -1,14 +1,26 @@
 // App/Settings/HotkeysSettingsView.swift
 //
-// "Hotkeys & Activation" — the second Settings category. Activation mode,
-// the primary hotkey recorder, extra (additive) bindings, and the
-// Accessibility permission that powers the CGEventTap.
+// "Hotkeys & Activation" — the second Settings category. The activation hero
+// (current binding + trigger style), the recorder sheet, extra (additive)
+// bindings, engage/release feedback, and the Accessibility permission that
+// powers the CGEventTap.
 //
-// Rebinding routes through `DashboardContext.rebindHotkey` /
-// `rebindExtraBindings` → `DictationController` — the single point of truth
-// that swaps the live tap binding, persists, and republishes.
+// DATA FLOW:
+//   Rebinding routes through `DashboardContext.rebindHotkey` /
+//   `rebindExtraBindings` → `DictationController` — the single point of truth
+//   that swaps the live tap binding, persists, and republishes.
+//   `DashboardContext` is a value-type snapshot refreshed at window-show, so
+//   the hero reads `triggerMode` from the observable `SettingsStore` mirror and
+//   tracks the just-saved binding locally — a rebind repaints in place instead
+//   of waiting for the next dashboard open.
+//
+//   The Accessibility pill re-reads `AXIsProcessTrusted()` on every render;
+//   `permissionRefresh` bumps when the app re-activates (e.g. returning from
+//   System Settings) so a grant mid-session is reflected without relaunch.
 
+import AppKit
 import Carbon.HIToolbox
+import Combine
 import SpeakCore
 import SwiftUI
 
@@ -19,34 +31,104 @@ struct HotkeysSettingsView: View {
     let context: DashboardContext
 
     @State private var showingRecorder = false
+    /// The binding saved via the recorder while this pane is open — the
+    /// context snapshot (`activeBinding`) doesn't refresh until next show.
+    @State private var savedBinding: HotkeyBinding?
+    /// Re-render trigger: bumped on app activation so the permission pill
+    /// reflects a grant made in System Settings while the pane was open.
+    @State private var permissionRefresh = 0
 
     private var store: SettingsStore { context.settingsStore }
+
+    /// The binding as it fires today: key + modifiers from the live binding,
+    /// trigger from the observable user-facing setting (`SettingsStore
+    /// .triggerMode` is the reconcile source — `DictationController` applies
+    /// it to the monitor, so this stays true even after the picker flips).
+    private var activeBinding: HotkeyBinding {
+        (savedBinding ?? context.activeBinding).with(trigger: store.triggerMode)
+    }
+
+    private var accessibilityState: PermissionState? {
+        _ = permissionRefresh // dependency: repaint when the app re-activates
+        return context.permissionManager?.status(.accessibility)
+    }
+
+    /// Fn doubles as the macOS Dictation key — worth a callout whenever the
+    /// primary binding or any extra binding uses it.
+    private var usesFunctionKey: Bool {
+        if activeBinding.keyCode == Int(kVK_Function) { return true }
+        return store.extraBindings.bindings.contains {
+            $0.source == .modifierKey(Int(kVK_Function))
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
             activationCard
-            primaryHotkeyCard
             feedbackCard
             ExtraBindingsCard(context: context)
             permissionsCard
         }
         .sheet(isPresented: $showingRecorder) {
             HotkeyRecorderView(
-                initialBinding: context.activeBinding,
+                initialBinding: activeBinding,
                 onSave: { newBinding in
+                    savedBinding = newBinding
                     context.rebindHotkey?(newBinding)
                     showingRecorder = false
                 },
                 onCancel: { showingRecorder = false }
             )
         }
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            permissionRefresh += 1
+        }
     }
 
-    // MARK: - Activation mode
+    // MARK: - Activation
 
+    /// One card for the whole gesture: the binding hero on top (unmissable —
+    /// keycaps + what it does), then the trigger-style picker and the recorder
+    /// entry point as regular rows.
     private var activationCard: some View {
         SettingsSectionCard(title: "Activation") {
-            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
+            bindingHero
+                .padding(.horizontal, SpeakSpacing.md)
+                .padding(.top, SpeakSpacing.sm + 4)
+                .padding(.bottom, SpeakSpacing.sm)
+
+            if let state = accessibilityState, state != .granted {
+                warningCallout(
+                    icon: "exclamationmark.triangle",
+                    message: "Hotkeys can't fire — speak needs Accessibility permission to see your keystrokes in other apps.",
+                    buttonTitle: "Grant Access…"
+                ) {
+                    _ = context.permissionManager?.requestAccessibility()
+                }
+                .padding(.horizontal, SpeakSpacing.md)
+                .padding(.bottom, SpeakSpacing.sm)
+            }
+
+            if usesFunctionKey {
+                warningCallout(
+                    icon: "exclamationmark.triangle",
+                    message: "Fn also triggers macOS Dictation. If presses don't reach speak, turn off the Dictation shortcut in System Settings → Keyboard.",
+                    buttonTitle: "Open Keyboard Settings…"
+                ) {
+                    openKeyboardSettings()
+                }
+                .padding(.horizontal, SpeakSpacing.md)
+                .padding(.bottom, SpeakSpacing.sm)
+            }
+
+            SettingsRowSeparator()
+
+            SettingsRow(
+                "Trigger style",
+                description: triggerExplainer
+            ) {
                 Picker("", selection: Binding(
                     get: { store.triggerMode },
                     set: { store.triggerMode = $0 }
@@ -56,14 +138,60 @@ struct HotkeysSettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .foregroundStyle(Color.speakBone)
-
-                Text(triggerExplainer)
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(Color.speakMica)
+                .fixedSize()
             }
-            .padding(.horizontal, SpeakSpacing.md)
-            .padding(.vertical, SpeakSpacing.sm + 4)
+
+            SettingsRowSeparator()
+
+            SettingsRow(
+                "Record a new shortcut",
+                description: "Any key+modifier combo, or a modifier-only key like Right ⌘ or Fn."
+            ) {
+                Button("Record…") { showingRecorder = true }
+                    .controlSize(.small)
+                    .disabled(context.rebindHotkey == nil)
+            }
+        }
+    }
+
+    /// The hero: the bound keys rendered as keycaps inside a recessed well,
+    /// with a one-line description of the gesture. Modifier-only double-taps
+    /// render as one cap + "× 2" (a chord joiner would misread as a combo).
+    private var bindingHero: some View {
+        VStack(spacing: SpeakSpacing.sm) {
+            bindingKeycaps
+            Text(heroActionLine)
+                .font(.speakBody(.caption))
+                .foregroundStyle(Color.speakMica)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, SpeakSpacing.md)
+        .speakInset(cornerRadius: 12)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Current hotkey: \(activeBinding.displayString). \(heroActionLine)")
+    }
+
+    @ViewBuilder
+    private var bindingKeycaps: some View {
+        if activeBinding.isModifierOnly {
+            HStack(spacing: SpeakSpacing.xs) {
+                KeyCapView(label: activeBinding.keySymbol, isAccented: true)
+                if activeBinding.trigger == .doubleTap {
+                    Text("× 2")
+                        .font(.speakBody(.base, semibold: true))
+                        .foregroundStyle(Color.speakMica)
+                }
+            }
+        } else {
+            KeyComboView(keys: activeBinding.keycapLabels)
+        }
+    }
+
+    private var heroActionLine: String {
+        switch activeBinding.trigger {
+        case .doubleTap: return "Tap twice to start · tap once to stop"
+
+        case .hold:      return "Hold to talk · release to stop and paste"
         }
     }
 
@@ -77,23 +205,41 @@ struct HotkeysSettingsView: View {
         }
     }
 
-    // MARK: - Primary hotkey
+    /// A caution well inside a card — warning-tinted hairline + icon, readable
+    /// body text, and an optional trailing action so the fix is one click away.
+    private func warningCallout(
+        icon: String,
+        message: String,
+        buttonTitle: String? = nil,
+        action: (() -> Void)? = nil
+    ) -> some View {
+        HStack(alignment: .top, spacing: SpeakSpacing.sm) {
+            Image(systemName: icon)
+                .font(.speakBody(.base))
+                .foregroundStyle(Color.speakWarning)
+                .padding(.top, 1)
 
-    private var primaryHotkeyCard: some View {
-        SettingsSectionCard(title: "Primary Hotkey") {
-            SettingsRow(
-                "Current binding",
-                description: "Record any key+modifier combo or a modifier-only key (Right ⌘, Fn)."
-            ) {
-                HStack(spacing: SpeakSpacing.xs) {
-                    ForEach(context.hotkeyCombo, id: \.self) { key in
-                        KeyCapView(label: key)
-                    }
-                    Button("Change…") { showingRecorder = true }
-                        .disabled(context.rebindHotkey == nil)
+            Text(message)
+                .font(.speakBody(.caption))
+                .foregroundStyle(Color.speakBone)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: SpeakSpacing.sm)
+
+            if let buttonTitle, let action {
+                Button(action: action) {
+                    Text(buttonTitle)
                 }
+                .controlSize(.small)
             }
         }
+        .padding(SpeakSpacing.sm)
+        .background(Color.speakWarning.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.speakWarning.opacity(0.25), lineWidth: 1)
+        )
     }
 
     // MARK: - Feedback
@@ -112,6 +258,7 @@ struct HotkeysSettingsView: View {
                 ))
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                .tint(.speakUIAccent)
             }
 
             SettingsRowSeparator()
@@ -126,6 +273,7 @@ struct HotkeysSettingsView: View {
                 ))
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                .tint(.speakUIAccent)
             }
         }
     }
@@ -136,29 +284,57 @@ struct HotkeysSettingsView: View {
         SettingsSectionCard(title: "System Permissions") {
             SettingsRow(
                 "Accessibility",
-                description: "Required for the global hotkey tap (CGEventTap). macOS gates it in Privacy & Security."
+                description: "Required — the global hotkey tap can't see keystrokes without it. macOS gates it in Privacy & Security."
             ) {
-                if context.permissionManager?.status(.accessibility) == .granted {
-                    SettingsStatusPill(text: "Granted", tint: .speakOK)
-                } else {
-                    SettingsStatusPill(text: "Missing", tint: .speakWarning)
+                HStack(spacing: SpeakSpacing.sm) {
+                    accessibilityPill
+                    if let state = accessibilityState, state != .granted {
+                        Button("Grant Access…") {
+                            _ = context.permissionManager?.requestAccessibility()
+                        }
+                        .controlSize(.small)
+                    }
                 }
             }
 
             SettingsRowSeparator()
 
             SettingsRow(
-                "Re-check & re-arm",
-                description: "If speak is toggled ON in System Settings but not responding, re-arm the tap or toggle it off/on there."
+                "Not responding?",
+                description: "If speak is toggled on in System Settings but the hotkey doesn't fire, re-arm the tap or toggle the permission off/on there."
             ) {
                 HStack(spacing: SpeakSpacing.sm) {
                     Button("Re-arm Tap") { context.onSelfHeal?() }
+                        .controlSize(.small)
                         .disabled(context.onSelfHeal == nil)
                     Button("Open System Settings…") { openAccessibilitySettings() }
+                        .controlSize(.small)
                 }
             }
         }
     }
+
+    @ViewBuilder
+    private var accessibilityPill: some View {
+        switch accessibilityState {
+        case .granted:
+            SettingsStatusPill(text: "Granted", tint: .speakOK)
+
+        case .denied:
+            SettingsStatusPill(text: "Not granted", tint: .speakWarning)
+
+        case .restricted:
+            SettingsStatusPill(text: "Restricted", tint: .speakError)
+
+        case .notDetermined, .requesting:
+            SettingsStatusPill(text: "Pending", tint: .speakMica)
+
+        case nil:
+            SettingsStatusPill(text: "Unavailable", tint: .speakMica)
+        }
+    }
+
+    // MARK: - System Settings deep links
 
     private func openAccessibilitySettings() {
         let urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
@@ -166,134 +342,13 @@ struct HotkeysSettingsView: View {
             NSWorkspace.shared.open(url)
         }
     }
-}
 
-// MARK: - ExtraBindingsCard
-
-/// Editor for the additive bindings set (V01-5): up to `maxPerAction`
-/// direct-fire shortcuts per action, including mouse buttons 4–10.
-/// Same model as `ExtraBindingsSection` in the legacy tabbed Settings, routed
-/// through `DashboardContext` instead of the controller directly.
-private struct ExtraBindingsCard: View {
-    let context: DashboardContext
-
-    /// The modifier-key set the primary recorder supports — only these keys are
-    /// observed via `flagsChanged` (see `HotkeyRecorderView.captureFromFlagsChanged`).
-    private static let modifierKeyOptions: [(label: String, keyCode: Int)] = [
-        ("Fn", Int(kVK_Function)),
-        ("Right ⌘", Int(kVK_RightCommand)),
-        ("⌘", Int(kVK_Command)),
-        ("Right ⌥", Int(kVK_RightOption)),
-        ("⌥", Int(kVK_Option))
-    ]
-
-    @State private var newSourceIsMouse = false
-    @State private var newModifierKeyCode = Int(kVK_Function)
-    @State private var newMouseButton = ExtraBindingSet.mouseButtonRange.lowerBound
-    @State private var newAction: HotkeyAction = .activate
-    @State private var addErrorMessage: String?
-
-    private var bindings: ExtraBindingSet { context.activeExtraBindings }
-
-    var body: some View {
-        SettingsSectionCard(title: "Additional Shortcuts") {
-            VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-                if bindings.bindings.isEmpty {
-                    Text("No additional shortcuts. These fire immediately on press — no double-tap.")
-                        .font(.speakBody(.caption))
-                        .foregroundStyle(Color.speakMica)
-                } else {
-                    ForEach(bindings.bindings) { binding in
-                        HStack {
-                            Text(binding.source.displayString)
-                                .font(.speakBody(.base))
-                                .foregroundStyle(Color.speakBone)
-                            Spacer()
-                            Text(binding.action.displayString)
-                                .font(.speakBody(.caption))
-                                .foregroundStyle(Color.speakMica)
-                            Button(role: .destructive) {
-                                remove(binding)
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                    }
-                }
-
-                Divider()
-
-                HStack(spacing: SpeakSpacing.sm) {
-                    Picker("", selection: $newSourceIsMouse) {
-                        Text("Keyboard").tag(false)
-                        Text("Mouse").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .foregroundStyle(Color.speakBone)
-                    .frame(width: 150)
-
-                    if newSourceIsMouse {
-                        Picker("", selection: $newMouseButton) {
-                            ForEach(Array(ExtraBindingSet.mouseButtonRange), id: \.self) { number in
-                                Text("Button \(number)").tag(number)
-                            }
-                        }
-                        .labelsHidden()
-                        .foregroundStyle(Color.speakBone)
-                        .fixedSize()
-                    } else {
-                        Picker("", selection: $newModifierKeyCode) {
-                            ForEach(Self.modifierKeyOptions, id: \.keyCode) { option in
-                                Text(option.label).tag(option.keyCode)
-                            }
-                        }
-                        .labelsHidden()
-                        .foregroundStyle(Color.speakBone)
-                        .fixedSize()
-                    }
-
-                    Picker("", selection: $newAction) {
-                        ForEach(HotkeyAction.allCases, id: \.self) { action in
-                            Text(action.displayString).tag(action)
-                        }
-                    }
-                    .labelsHidden()
-                    .foregroundStyle(Color.speakBone)
-                    .fixedSize()
-
-                    Spacer()
-
-                    Button("Add") { addBinding() }
-                        .disabled(context.rebindExtraBindings == nil)
-                }
-
-                if let addErrorMessage {
-                    Text(addErrorMessage)
-                        .font(.speakBody(.caption))
-                        .foregroundStyle(Color.speakError)
-                }
-            }
-            .padding(.horizontal, SpeakSpacing.md)
-            .padding(.vertical, SpeakSpacing.sm + 4)
+    /// The Dictation shortcut lives in the Keyboard pane.
+    /// [inferred: com.apple.preference.keyboard still resolves on macOS 26 —
+    ///  the pane hosts the Dictation row]
+    private func openKeyboardSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.keyboard") {
+            NSWorkspace.shared.open(url)
         }
-    }
-
-    private func addBinding() {
-        let source: ExtraBindingSource = newSourceIsMouse
-            ? .mouseButton(newMouseButton)
-            : .modifierKey(newModifierKeyCode)
-        let candidate = ExtraBinding(source: source, action: newAction)
-        guard let updated = bindings.adding(candidate) else {
-            addErrorMessage = "That shortcut can't be added — it may already be bound, or this action already has \(ExtraBindingSet.maxPerAction) shortcuts."
-            return
-        }
-        addErrorMessage = nil
-        context.rebindExtraBindings?(updated)
-    }
-
-    private func remove(_ binding: ExtraBinding) {
-        context.rebindExtraBindings?(bindings.removing(id: binding.id))
     }
 }
