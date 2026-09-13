@@ -28,6 +28,11 @@ struct GeneralSettingsView: View {
         ) {
             Button("Reset Settings", role: .destructive) {
                 context.settingsStore.resetToDefaults()
+                // The primary hotkey binding lives in `UserDefaultsBindingStore`
+                // (outside `SettingsStore.Keys`) — restore it too so Reset really
+                // returns the trigger to double-tap Right-Command. Routes through
+                // `rebindHotkey` so the live tap re-arms without a relaunch.
+                context.rebindHotkey?(.defaultBinding)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
