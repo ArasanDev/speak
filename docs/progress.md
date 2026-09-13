@@ -1453,3 +1453,24 @@ was a stale-instance race, not a plumbing bug).
 (reported "2 errors" = simulated-failure log lines misparsed by
 pretty-output.sh, suite itself passed cleanly) · lint 0 errors ·
 moat 7/7.
+
+### Follow-up — rail icons corrected to monochrome (t3code analysis)
+
+User flagged the colored icon tiles as wrong: "shape and size matter,
+not the color." Deep-read of `ai_tmp/t3code` confirmed: t3code's
+`SettingsSidebarNav` uses plain muted 14px Lucide glyphs — no tiles, no
+hue — with an accent selection pill. Removed `SettingsCategory.tileColor`
+entirely; `SettingsRailRow` now renders a plain 14pt glyph
+(`.secondary` / white-on-accent when selected) and the selection fill is
+`Color.accentColor` — the identical blue pill the desk sidebar's
+`.listStyle(.sidebar)` produces. Pipeline stage nodes keep a bordered
+neutral tile (speakSurface + hairline) — shape carries the flow, not hue.
+Semantic status pills (NEEDS MIC / ON / READBACK) retained.
+
+Verified: build clean · lint 0 errors · moat 7/7 · live screenshot of
+`dashboard:settings:pipeline` shows the corrected rail + diagram.
+
+t3code findings banked for later: sidebar **settings search** (`/` to
+focus, arrow-key results, scroll-to-row pulse) and muted `text-sm`
+section headings with optional `headerAction` — candidates if the rail
+grows.

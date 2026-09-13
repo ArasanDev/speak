@@ -71,8 +71,10 @@ struct PipelineSettingsView: View {
         }
     }
 
-    /// One pipeline stage: colored tile + layer name + live config summary on
-    /// the left; status pill + chevron on the right. The whole row navigates.
+    /// One pipeline stage: bordered neutral tile + layer name + live config
+    /// summary on the left; status pill + chevron on the right. The tile is a
+    /// flow node — shape carries it, not hue (same icon language as the rail).
+    /// The whole row navigates.
     private func layerRow(
         category: SettingsCategory,
         summary: String,
@@ -84,11 +86,15 @@ struct PipelineSettingsView: View {
             HStack(spacing: SpeakSpacing.sm + 2) {
                 Image(systemName: category.systemImage)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.secondary)
                     .frame(width: 26, height: 26)
                     .background(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(category.tileColor.gradient)
+                            .fill(Color.speakSurface)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .stroke(Color.speakCardBorder, lineWidth: 1)
+                            )
                     )
 
                 VStack(alignment: .leading, spacing: 2) {
