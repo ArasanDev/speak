@@ -152,14 +152,15 @@ struct TranscriptOverlayView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// One boundary hairline — a 1 pt `speakCardBorder` rule inset from the
-    /// capsule's top and bottom edges (the sketch's two lines; interior
-    /// contrast stays low, so it is a hairline, not a wall).
+    /// One boundary rule — a straight 1 pt line, top-to-bottom, no inset
+    /// (the sketch's two lines: "a straight line that is black, dark, and
+    /// completely from top to bottom, not in the middle"). `speakBone` at
+    /// 45% reads dark in light themes and light in dark themes — visible
+    /// against the glass either way.
     private var laneDivider: some View {
         Rectangle()
-            .fill(Color.speakCardBorder)
+            .fill(Color.speakBone.opacity(0.45))
             .frame(width: 1)
-            .padding(.vertical, SpeakSpacing.md)
     }
 
     // MARK: Left zone — the voice waveform
@@ -192,10 +193,10 @@ struct TranscriptOverlayView: View {
         switch model.overlayState {
         case .listening:
             // Live seconds — the "response" while capturing. m:ss at
-            // body-scale mono: "10:00" is ~5 glyphs ≈ 45 pt inside the 72 pt
-            // end zone.
+            // base-scale mono semibold: smaller than title, darker through
+            // weight ("make the timer darker and reduce the font size").
             Text(Self.durationLabel(model.elapsedSeconds))
-                .font(.speakMonoFace(.body))
+                .font(.speakMonoFace(.base, semibold: true))
                 .monospacedDigit()
                 .foregroundStyle(Color.speakBone)
                 .accessibilityLabel("Elapsed \(Self.durationLabel(model.elapsedSeconds))")
@@ -246,6 +247,15 @@ struct TranscriptOverlayView: View {
     /// … on the top, a header kind of"), stop hint inline, controls trailing.
     private var headerRow: some View {
         HStack(alignment: .center, spacing: SpeakSpacing.xs) {
+            // The `speakOnAir` tally lamp — a small light iff the mic is
+            // capturing (the frozen rule survives: tally light, not a red wall).
+            if model.overlayState == .listening {
+                Circle()
+                    .fill(Color.speakOnAir)
+                    .frame(width: 5, height: 5)
+                    .accessibilityHidden(true)
+            }
+
             Text(phaseWord)
                 .font(.speakMonoFace(.caption, semibold: true))
                 .tracking(1.2)
@@ -273,12 +283,12 @@ struct TranscriptOverlayView: View {
         }
     }
 
-    /// Header tint — `speakOnAir` iff capturing (listening is capture, so the
-    /// tally rule holds), `speakAgentViolet` while the LLM polishes,
-    /// `speakDelivered` on done, `speakError` on error.
+    /// Header tint — `speakHumanAmber` while capturing (the human channel:
+    /// LISTENING is your voice, warm amber not red), `speakAgentViolet` while
+    /// the LLM polishes, `speakDelivered` on done, `speakError` on error.
     private var phaseTint: Color {
         switch model.overlayState {
-        case .listening:  return .speakOnAir
+        case .listening:  return .speakHumanAmber
         case .processing: return .speakAgentViolet
         case .done:       return .speakDelivered
         case .error:      return .speakError

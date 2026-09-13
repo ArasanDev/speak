@@ -1647,29 +1647,21 @@ screenshot-verified across listening/processing/done/error.
 Dev-loop note: `pkill -x speak` does NOT kill the app — the process is named
 `Speak` (capital). Stale instances silently eat `open` relaunches.
 
-### HUD overlay — flat capsule bar per owner sketch (`img/speak-overlay-ui.png`)
+### HUD overlay — color pass per owner dictation (2026-09-13)
 
-The capsule-with-circles build was re-read against the owner's sketch: the drawn
-circles were positional marks, not furniture — "inside there is nothing."
-Rebuilt as a flat capsule bar:
+Shape unchanged ("don't do anything on the shape"); the complaint was color
+and the divider geometry:
 
-- Panel 640×76 (was 600×112) — "vertical length has to be very minimal."
-- No interior discs or rings. Two 1 pt `speakCardBorder` hairlines (inset
-  16 pt from the capsule edges) bound the text box — "I exactly drew two
-  lines, in between that line area is the text box."
-- Left end zone: the live `WaveformView` directly on the glass — "the
-  application's real asset." Aurora now uses the real waveform too; the
-  `AmbientOrbView` was removed (Aurora's identity is the animated border,
-  the "thicker outside" edge).
-- Right end zone: live `m:ss` while listening → spinner while processing →
-  tick + frozen final time on done → error mark on error.
-- Text box: phase header row (LISTENING / POLISHING / DONE / ERROR, tinted
-  per state) + inline `Cmd-Cmd to finish` hint while listening + quiet
-  controls trailing; FIFO `windowText` at 11 pt mono, 3-line budget, clipped.
-- `SettlingProcessingContent` line budget aligned to 3.
-
-Gates: build clean · 985 tests / 0 failures · lint 0 serious · moat 7/7 ·
-screenshot-verified across listening/processing/done/error.
-
-Dev-loop note: `pkill -x speak` does NOT kill the app — the process is named
-`Speak` (capital). Stale instances silently eat `open` relaunches.
+- Dividers: now straight 1 pt lines, top-to-bottom, NO inset (was 16 pt
+  vertical padding — "a straight line that is black, dark, and completely
+  from top to bottom, not in the middle"), colored `speakBone.opacity(0.45)`
+  (dark in light themes, light in dark).
+- Timer: 15 pt → 13 pt semibold mono ("darker and reduce the font size").
+- Listening color language de-redded ("eyes getting stressed"): waveform
+  bars and the LISTENING header moved from `speakOnAir` to `speakHumanAmber`
+  (the human/mic channel — semantically the right color for your voice);
+  `speakFlowOnAir` border spectrum re-anchored on humanAmber with `onAir`
+  as a single accent stop (deep-red pivots removed).
+- `speakOnAir` survives as a 5 pt tally lamp beside the phase word — shows
+  iff the mic is capturing, preserving the frontend-identity hard rule
+  (tally light, not a red wall).
