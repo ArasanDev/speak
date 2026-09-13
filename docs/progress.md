@@ -1619,3 +1619,57 @@ each end** — the circles are the boundary elements, not dividers.
 
 Gates: build clean · 985 tests / 0 failures · lint 0 serious · moat 7/7 ·
 screenshot-verified across listening/processing/done on the Aurora style.
+
+### HUD overlay — flat capsule bar per owner sketch (`img/speak-overlay-ui.png`)
+
+The capsule-with-circles build was re-read against the owner's sketch: the drawn
+circles were positional marks, not furniture — "inside there is nothing."
+Rebuilt as a flat capsule bar:
+
+- Panel 640×76 (was 600×112) — "vertical length has to be very minimal."
+- No interior discs or rings. Two 1 pt `speakCardBorder` hairlines (inset
+  16 pt from the capsule edges) bound the text box — "I exactly drew two
+  lines, in between that line area is the text box."
+- Left end zone: the live `WaveformView` directly on the glass — "the
+  application's real asset." Aurora now uses the real waveform too; the
+  `AmbientOrbView` was removed (Aurora's identity is the animated border,
+  the "thicker outside" edge).
+- Right end zone: live `m:ss` while listening → spinner while processing →
+  ✓ + frozen final time on done → ✕ on error.
+- Text box: phase header row (LISTENING / POLISHING / DONE / ERROR, tinted
+  per state) + inline `⌘⌘ to finish` hint while listening + quiet controls
+  trailing; FIFO `windowText` at 11 pt mono, 3-line budget, clipped.
+- `SettlingProcessingContent` line budget aligned to 3.
+
+Gates: build clean · 985 tests / 0 failures · lint 0 serious · moat 7/7 ·
+screenshot-verified across listening/processing/done/error.
+
+Dev-loop note: `pkill -x speak` does NOT kill the app — the process is named
+`Speak` (capital). Stale instances silently eat `open` relaunches.
+
+### HUD overlay — flat capsule bar per owner sketch (`img/speak-overlay-ui.png`)
+
+The capsule-with-circles build was re-read against the owner's sketch: the drawn
+circles were positional marks, not furniture — "inside there is nothing."
+Rebuilt as a flat capsule bar:
+
+- Panel 640×76 (was 600×112) — "vertical length has to be very minimal."
+- No interior discs or rings. Two 1 pt `speakCardBorder` hairlines (inset
+  16 pt from the capsule edges) bound the text box — "I exactly drew two
+  lines, in between that line area is the text box."
+- Left end zone: the live `WaveformView` directly on the glass — "the
+  application's real asset." Aurora now uses the real waveform too; the
+  `AmbientOrbView` was removed (Aurora's identity is the animated border,
+  the "thicker outside" edge).
+- Right end zone: live `m:ss` while listening → spinner while processing →
+  tick + frozen final time on done → error mark on error.
+- Text box: phase header row (LISTENING / POLISHING / DONE / ERROR, tinted
+  per state) + inline `Cmd-Cmd to finish` hint while listening + quiet
+  controls trailing; FIFO `windowText` at 11 pt mono, 3-line budget, clipped.
+- `SettlingProcessingContent` line budget aligned to 3.
+
+Gates: build clean · 985 tests / 0 failures · lint 0 serious · moat 7/7 ·
+screenshot-verified across listening/processing/done/error.
+
+Dev-loop note: `pkill -x speak` does NOT kill the app — the process is named
+`Speak` (capital). Stale instances silently eat `open` relaunches.

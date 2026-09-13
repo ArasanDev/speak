@@ -287,9 +287,9 @@ final class OverlayController {
         overlayModel.onCancel = { [weak self] in
             self?.cancelImmediate()
         }
-        // Stop-gesture hint for the lane's bottom-trailing strip — resolved
-        // next to onCancel so the "how do I get out of this" affordance lives
-        // beside the cancel wiring.
+        // Stop-gesture hint — rendered inline in the text box's header row.
+        // Resolved next to onCancel so the "how do I get out of this"
+        // affordance lives beside the cancel wiring.
         overlayModel.stopHint = resolvedStopHint()
         overlayModel.onReclean = nil
         overlayModel.onReadback = nil              // [H-2] reset alongside onReclean — same lifetime
@@ -342,7 +342,7 @@ final class OverlayController {
                     // discarded (no floating panel, no filmstrip chips).
                     // [decision: 2026-08-06] Fed for BOTH hud styles — the
                     // classic and Aurora capture lanes both render
-                    // `windowText` inside the shared capsule-with-circles frame.
+                    // `windowText` inside the shared capsule-bar frame.
                     self.ingestWindowPartial(displayed)
                 }
             }
@@ -384,7 +384,7 @@ final class OverlayController {
             // Reset level to 0 — bars should be at rest during processing.
             overlayModel.level = 0.0
             // Keep the duration counter RUNNING through .processing — the
-            // right-circle readout shows capture + cleanup elapsed (locked
+            // right-zone readout shows capture + cleanup elapsed (locked
             // capsule HUD: "process and time in seconds running on the right").
             // It is frozen when `.done` arrives (showTransformation) and torn
             // down by `stop()` / `showError` / `cancelImmediate` as before.

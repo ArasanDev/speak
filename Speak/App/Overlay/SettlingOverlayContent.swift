@@ -102,23 +102,23 @@ private struct FilmstripBlockView: View {
 
 // MARK: - Settling processing content
 
-/// The `.processing` CENTER LANE inside the shared capsule-with-circles frame.
+/// The `.processing` CENTER LANE inside the shared capsule-bar frame.
 /// Felt-speed (input-felt-speed.md §3.3): when the raw transcript is available
 /// (`settlingText` non-empty) we show it marked provisional — dimmed + italic,
 /// with a small spinner — instead of a blank "Cleaning up…" spinner. The user
 /// sees their words the moment they stop speaking. This is NOT capture, so it
 /// never lights `onAir` (frontend-identity.md, frozen).
 ///
-/// Owns only the lane content: the right circle carries the spinner, and the
-/// lane's quiet strip carries the close button. The lane is bounded — the text
-/// is line-limited and the parent clips it, so it can never touch the circles.
+/// Owns only the lane content: the right zone carries the spinner, and the
+/// header row carries the close button. The lane is bounded — the text is
+/// line-limited and the parent clips it, so it can never cross a hairline.
 struct SettlingProcessingContent: View {
     let model: OverlayViewModel
     let revealTextWhileProcessing: Bool
 
     /// Same line budget as the listening lane — the provisional text occupies
     /// the identical bounded column it was captured in.
-    private static let lineBudget = 5
+    private static let lineBudget = 3
 
     var body: some View {
         Group {
@@ -159,8 +159,8 @@ struct SettlingProcessingContent: View {
 
 // MARK: - Polished diff content
 
-/// The `.done` reveal — CENTER LANE inside the shared capsule-with-circles
-/// frame. Felt-speed (input-felt-speed.md §3.3): the AI's transformation, made
+/// The `.done` reveal — CENTER LANE inside the shared capsule-bar frame.
+/// Felt-speed (input-felt-speed.md §3.3): the AI's transformation, made
 /// visible — raw → clean word diff. Canceled words get the animated
 /// strikethrough, inserted words fade in, kept words stay. The user WATCHES
 /// the edit happen inside the same bounded column the raw words were captured
@@ -169,7 +169,7 @@ struct SettlingProcessingContent: View {
 ///
 /// `AnimatedTranscriptView` owns an internal ScrollView, so a long diff stays
 /// bounded inside the lane height instead of pushing past the lane. The right
-/// circle carries the delivered ✓; the lane's quiet strip carries the controls.
+/// zone carries the delivered ✓; the header row carries the controls.
 struct PolishedDiffContent: View {
     let model: OverlayViewModel
     let cleaned: String
