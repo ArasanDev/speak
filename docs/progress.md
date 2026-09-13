@@ -1735,3 +1735,35 @@ COMPLETE look; no shared chamber wraps them.
 
 Gates: build clean · 991 tests / 0 failures · lint 0 serious · moat 7/7 ·
 screenshot-verified sonar/blue + ringGauge/violet listening states.
+
+### 2026-09-14 — Launch crash fix + edge-case hardening (post `06844e4`)
+
+**Root cause of the "app got stuck / won't open" report** — `EdgeFlowBorder.
+interpolateColor` called `NSColor(swiftUIColor).getHue(...)` directly. After
+the `speakFlowOnAir` re-anchor, every state palette contains theme-resolved
+dynamic `NSColor`s (`speakOnAir`, `agentViolet`, `humanAmber`, `delivered`,
+`speakError`); `getHue` throws `NSInvalidArgumentException` on catalog/
+dynamic colors → uncatchable ObjC exception inside `NSHostingView.layout` →
+SIGTRAP at launch whenever the overlay panel rendered. Persisted
+`borderAnimationStyle=edgeFlow` + `themeID=ember` reproduced it on every
+launch — the app died before any window appeared ("settings shows nothing"
+was this, not a Settings bug).
+
+**Fix** — `hsbComponents(of:)` converts via `usingColorSpace(.sRGB)` first
+(the same pattern `SpeakThemeSystem.swift` uses); nil (pattern/image or
+unresolvable dynamic colors) → caller holds the "from" color instead of
+throwing. `HSBComponents` named type replaces the 4-tuple (large_tuple).
+`paused:` now passes plain `reduceMotion` — under reduce-motion the border
+timeline no longer re-renders 60fps of identical frames for the panel's
+lifetime (live level still updates via `.animation(value:)`).
+
+**Edge cases covered** — all 4 overlay-state palettes carry themed endpoints
+(one fix covers all); `customPalette` entries from theme tokens same path;
+theme switching while border animating (dynamic colors resolve per-layout);
+launch with persisted edgeFlow+ember+ringGauge+violet verified alive.
+
+**Gates** — build clean · 994 tests / 0 failures (3 new
+`EdgeFlowBorderColorTests` pin the sRGB conversion for every state palette +
+app-agnostic colors) · lint 0 serious · moat 7/7 · screenshot-verified
+overlay (sonar + edgeFlow border live) and Settings → Appearance pane
+(Recording HUD card: HUD style, Voice animation, Animation color swatches).

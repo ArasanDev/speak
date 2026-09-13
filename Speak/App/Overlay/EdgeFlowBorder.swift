@@ -69,7 +69,11 @@ struct EdgeFlowBorder<S: InsettableShape & Shape>: View {
     // MARK: - Body
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: EdgeFlowBorderC.frameInterval, paused: reduceMotion && level < 0.001)) { timeline in
+        // `paused: reduceMotion` — under reduce-motion every blob renders a
+        // static phase, so ticking 60fps would redraw identical frames for
+        // the panel's entire life. Level changes still re-render via the
+        // `.animation(value: level)` below.
+        TimelineView(.animation(minimumInterval: EdgeFlowBorderC.frameInterval, paused: reduceMotion)) { timeline in
             let t = reduceMotion ? 0.0 : timeline.date.timeIntervalSinceReferenceDate
             let blobCount = min(max(count, 1), 3)
             let cycleDuration = speed.cycleDuration
@@ -150,26 +154,53 @@ struct EdgeFlowBorder<S: InsettableShape & Shape>: View {
         return interpolateColor(from: colors[index], to: colors[nextIndex], fraction: fraction)
     }
 
+    /// HSB components of a SwiftUI `Color`, converted through sRGB first.
+    ///
+    /// Theme-resolved tokens (`speakOnAir`, `speakAgentViolet`, …) arrive as
+    /// dynamic/catalog `NSColor`s (`Color(nsColor: NSColor(name:nil){…})`) —
+    /// calling `getHue` on one throws `NSInvalidArgumentException`, an
+    /// uncatchable ObjC exception that took the whole app down at launch
+    /// inside `NSHostingView.layout` (Speak-2026-09-14-*.ips). `usingColorSpace`
+    /// resolves dynamics against the current appearance; a nil result
+    /// (pattern/image colors) lets the caller fall back instead of crashing.
+    /// Internal (not private) so SpeakTests can pin the conversion.
+    func hsbComponents(of color: Color) -> HSBComponents? {
+        guard let srgb = NSColor(color).usingColorSpace(.sRGB) else { return nil }
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        srgb.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        return HSBComponents(h: h, s: s, b: b, a: a)
+    }
+
+    /// Resolved HSB+alpha of one palette endpoint (named type — a 4-member
+    /// tuple would trip SwiftLint's `large_tuple` rule).
+    struct HSBComponents {
+        let h: CGFloat, s: CGFloat, b: CGFloat, a: CGFloat
+    }
+
     private func interpolateColor(from c1: Color, to c2: Color, fraction: Double) -> Color {
         // Use SwiftUI Color interpolation via HSB / opacity
         let f = CGFloat(max(0.0, min(fraction, 1.0)))
-        var h1: CGFloat = 0, s1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
-        var h2: CGFloat = 0, s2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
-
-        NSColor(c1).getHue(&h1, saturation: &s1, brightness: &b1, alpha: &a1)
-        NSColor(c2).getHue(&h2, saturation: &s2, brightness: &b2, alpha: &a2)
+        guard
+            let c1hsb = hsbComponents(of: c1),
+            let c2hsb = hsbComponents(of: c2)
+        else {
+            // Unconvertible endpoint (pattern/image NSColor, or a dynamic
+            // color the conversion can't resolve) — hold the "from" color
+            // rather than crash the overlay's layout pass.
+            return c1
+        }
 
         // Handle shortest hue path around circle
-        var dh = h2 - h1
+        var dh = c2hsb.h - c1hsb.h
         if dh > 0.5 { dh -= 1.0 } else if dh < -0.5 { dh += 1.0 }
-        let h = (h1 + dh * f).truncatingRemainder(dividingBy: 1.0)
+        let h = (c1hsb.h + dh * f).truncatingRemainder(dividingBy: 1.0)
         let finalH = h < 0 ? h + 1.0 : h
 
         return Color(
             hue: Double(finalH),
-            saturation: Double(s1 + (s2 - s1) * f),
-            brightness: Double(b1 + (b2 - b1) * f),
-            opacity: Double(a1 + (a2 - a1) * f)
+            saturation: Double(c1hsb.s + (c2hsb.s - c1hsb.s) * f),
+            brightness: Double(c1hsb.b + (c2hsb.b - c1hsb.b) * f),
+            opacity: Double(c1hsb.a + (c2hsb.a - c1hsb.a) * f)
         )
     }
 
@@ -186,6 +217,10 @@ struct EdgeFlowBorder<S: InsettableShape & Shape>: View {
         case .error:      return Color.speakFlowError
         }
     }
+
+    /// Test seam — lets SpeakTests verify every state palette's colors
+    /// survive the sRGB conversion (the 2026-09-14 dynamic-color crash).
+    var paletteForTesting: [Color] { palette }
 
     private var glowOpacity: Double {
         switch state {
