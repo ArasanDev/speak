@@ -29,6 +29,20 @@ struct VisualEffectView: NSViewRepresentable {
     }
 }
 
+// MARK: - VRule
+
+/// A vertical rule shape — the capsule-bar HUD's lane divider. Stroked with
+/// a dash pattern by callers ("a dotted line, a little thicker" per the
+/// owner's sketch). Shared by `TranscriptOverlayView` and `AuroraOverlayView`.
+struct VRule: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        return p
+    }
+}
+
 // MARK: - WaveformView
 
 /// A 15-bar waveform driven by `level` (0…1) with per-bar phase offset.
@@ -97,11 +111,12 @@ struct WaveformView: View {
     }
 
     private var barColor: Color {
-        // Active = `speakHumanAmber`: the HUMAN channel — the bars are your
-        // voice level, so they take the human channel color (frontend-identity
-        // §2). The `speakOnAir` tally lamp lives in the header row instead —
-        // a small light, not a red wall. Idle = resting mica bars.
-        isActive ? Color.speakHumanAmber : Color.speakMica.opacity(0.35)
+        // Active = `speakVoiceBlue`: the fixed voice-capture blue — owner
+        // direction: blue, not orange/red, and it must not follow the system
+        // accent. The `speakOnAir` tally lamp lives in the header row
+        // instead. Idle = resting bone bars, dark enough to read on the
+        // light glass (mica washed out).
+        isActive ? Color.speakVoiceBlue : Color.speakBone.opacity(0.3)
     }
 
     private var barHeights: [Double] {

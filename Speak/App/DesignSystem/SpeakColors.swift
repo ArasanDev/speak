@@ -115,6 +115,14 @@ public extension Color {
     /// (ember dark), white on the system accent. Role: `onAccent`.
     static var speakOnAccent: Color { SpeakThemeRuntime.color(.onAccent) }
 
+    /// Voice-capture blue — the waveform + LISTENING header. A fixed cool
+    /// blue, theme-independent: it is a functional voice signal (like the
+    /// onAir tally), not a chrome color — and it must NOT follow the system
+    /// accent, which can be orange. Reads dark on the light capsule glass and
+    /// still reads on dark glass. [decision: owner direction 2026-09-13 —
+    ///  "blue or some other colors," orange/red rejected.]
+    static let speakVoiceBlue = Color(red: 0.16, green: 0.45, blue: 0.95)
+
     // MARK: - Flow Border Spectra (AnimatedFlowBorderModifier)
     //
     // Spectra keep their pivot hues but take endpoints from the themed
@@ -122,18 +130,17 @@ public extension Color {
     // HARD RULE (mirrors speakOnAir): onAir spectrum shows only while the
     // microphone is capturing.
 
-    /// On-Air / dictation-active border — humanAmber-anchored with `onAir` as
-    /// a single accent stop. The capture spectrum shows only while the mic is
-    /// capturing (hard rule preserved), but the dominant hue is the human
-    /// channel's warm amber — the deep-red-heavy spectrum was fatiguing
-    /// (owner feedback 2026-09-13).
+    /// On-Air / dictation-active border — voice-blue anchored with `onAir`
+    /// accent stops. The capture spectrum shows only while the mic is
+    /// capturing (hard rule preserved); the deep-red-heavy spectrum was
+    /// fatiguing (owner feedback 2026-09-13).
     static var speakFlowOnAir: [Color] {
         [
-            speakHumanAmber,
-            Color(red: 1.0, green: 0.62, blue: 0.12),   // warm amber pivot
-            speakOnAir,                                  // tally accent — single stop
-            Color(red: 1.0, green: 0.62, blue: 0.12),   // warm amber mirror
-            speakHumanAmber,
+            speakVoiceBlue,
+            speakOnAir,                                  // tally accent
+            Color(red: 0.0, green: 0.75, blue: 1.0),    // cyan pivot
+            speakOnAir,                                  // tally accent mirror
+            speakVoiceBlue,
         ]
     }
 
