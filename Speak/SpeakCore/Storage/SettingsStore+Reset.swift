@@ -104,6 +104,12 @@ extension SettingsStore {
         access(keyPath: \.borderAnimationStyle)
         access(keyPath: \.borderFlowSpeed)
         access(keyPath: \.borderFlowCount)
+        access(keyPath: \.overlaySize)
+        access(keyPath: \.overlayPosition)
+        access(keyPath: \.overlayShowTimer)
+        access(keyPath: \.overlayShowPhaseHeader)
+        access(keyPath: \.overlayIdleDim)
+        access(keyPath: \.overlayBorderTint)
 
         withMutation(keyPath: \.appTheme) {
             defaults.set(AppTheme.system.rawValue, forKey: Keys.appTheme)
@@ -134,6 +140,24 @@ extension SettingsStore {
         }
         withMutation(keyPath: \.borderFlowCount) {
             defaults.set(1, forKey: Keys.borderFlowCount)
+        }
+        withMutation(keyPath: \.overlaySize) {
+            defaults.set(OverlayPanelSize.standard.rawValue, forKey: Keys.overlaySize)
+        }
+        withMutation(keyPath: \.overlayPosition) {
+            defaults.set(OverlayPanelPosition.bottom.rawValue, forKey: Keys.overlayPosition)
+        }
+        withMutation(keyPath: \.overlayShowTimer) {
+            defaults.set(true, forKey: Keys.overlayShowTimer)
+        }
+        withMutation(keyPath: \.overlayShowPhaseHeader) {
+            defaults.set(true, forKey: Keys.overlayShowPhaseHeader)
+        }
+        withMutation(keyPath: \.overlayIdleDim) {
+            defaults.set(true, forKey: Keys.overlayIdleDim)
+        }
+        withMutation(keyPath: \.overlayBorderTint) {
+            defaults.set(OverlayBorderTint.adaptive.rawValue, forKey: Keys.overlayBorderTint)
         }
     }
 

@@ -74,20 +74,10 @@ final class TranscriptOverlayPanel: NSPanel {
 
     // MARK: - Constants
 
-    /// Width of the overlay card. [decision: 640 pt — flat capsule-bar HUD:
-    ///  two 72 pt end zones (waveform left, response right) + a ~490 pt text
-    ///  box between two hairlines — ~64 mono chars/line at 11 pt caption.]
-    private static let panelWidth: CGFloat = 640
-
-    /// Height of the overlay card. [decision: 76 pt — deliberately minimal
-    ///  vertical footprint per the owner's sketch: a straight horizontal bar.
-    ///  Interior ~72 pt holds the ~14 pt phase header + 3 lines of 11 pt mono
-    ///  (~45 pt) + vertical padding.]
-    private static let panelHeight: CGFloat = 76
-
-    /// Distance from the bottom of the visible frame to the bottom edge of the panel.
-    /// [decision: spec §4 specifies "~24pt from minY"; clears Dock + standard margin.]
-    private static let yFromBottom: CGFloat = 24
+    /// Gap between the panel and the screen edge it anchors to (bottom above
+    /// the Dock, top below the menu bar). [decision: spec §4 specifies
+    ///  "~24pt"; clears Dock + standard margin.]
+    private static let edgeGap: CGFloat = 24
 
     // MARK: - Screen change observer
 
@@ -97,18 +87,21 @@ final class TranscriptOverlayPanel: NSPanel {
     nonisolated(unsafe) private var screenChangeObserver: (any NSObjectProtocol)?
 
     private let model: OverlayViewModel
+    private let settingsStore: SettingsStore
 
     // MARK: - Init
 
     /// - Parameter settingsStore: Drives `OverlayRootView`'s HUD-style switch
-    ///   (H-UI). Defaults to a fresh `SettingsStore()` (same default as
-    ///   `SettingsStore.init` itself) so existing call sites/tests that only
-    ///   pass `overlayModel:` keep compiling unchanged.
+    ///   (H-UI) and the panel's size/position (Settings → Overlay). Defaults
+    ///   to a fresh `SettingsStore()` (same default as `SettingsStore.init`
+    ///   itself) so existing call sites/tests that only pass `overlayModel:`
+    ///   keep compiling unchanged.
     init(
         overlayModel: OverlayViewModel,
         settingsStore: SettingsStore = SettingsStore()
     ) {
         self.model = overlayModel
+        self.settingsStore = settingsStore
         // Step 1: style mask — .nonactivatingPanel is the primary focus-steal guard.
         let mask: NSWindow.StyleMask = [
             .nonactivatingPanel,
@@ -117,7 +110,8 @@ final class TranscriptOverlayPanel: NSPanel {
 
         // Use the active screen (screen containing the mouse cursor); falls back to
         // NSScreen.main then a safe unit rect if no screen is available.
-        let frame = Self.frameForActiveScreen()
+        let frame = Self.frameForActiveScreen(size: settingsStore.overlaySize,
+                                              position: settingsStore.overlayPosition)
 
         super.init(
             contentRect: frame,
@@ -191,8 +185,13 @@ final class TranscriptOverlayPanel: NSPanel {
 
     /// Show the panel (non-activating — does NOT steal focus).
     func show() {
-        // Re-center on the active screen at show-time so the HUD follows the cursor.
-        reposition()
+        // Re-frame on the active screen at show-time so the HUD follows the
+        // cursor AND picks up any size/position changes made in Settings →
+        // Overlay since the last dictation. `setFrame` (not just origin)
+        // applies a new size preset too.
+        setFrame(Self.frameForActiveScreen(size: settingsStore.overlaySize,
+                                           position: settingsStore.overlayPosition),
+                 display: false)
         // `orderFrontRegardless()` brings the panel to front from an LSUIElement
         // app without activating it. `makeKeyAndOrderFront` must NOT be used here.
         orderFrontRegardless()
@@ -233,7 +232,10 @@ final class TranscriptOverlayPanel: NSPanel {
     ///
     /// [decision: mouse-location-with-fallback; see §POSITION comment above.]
     /// [unverified — live multi-display mouse-tracking requires human dogfood.]
-    private static func frameForActiveScreen() -> CGRect {
+    private static func frameForActiveScreen(
+        size: OverlayPanelSize,
+        position: OverlayPanelPosition
+    ) -> CGRect {
         let mousePoint = NSEvent.mouseLocation  // [verified: macOS 26 SDK]
         let allScreens = NSScreen.screens       // [verified: macOS 26 SDK]
 
@@ -247,15 +249,21 @@ final class TranscriptOverlayPanel: NSPanel {
 
         // Use visibleFrame for placement so we respect the Dock and menu-bar insets.
         let sf = activeScreen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
-        let xCenter = sf.midX - panelWidth / 2
-        // Bottom-center: `minY` is the screen's lowest visible point (above Dock).
-        // [decision: +24 pt gap per spec §4 — ~24pt from minY.]
-        let yPosition = sf.minY + yFromBottom
-        return CGRect(x: xCenter, y: yPosition, width: panelWidth, height: panelHeight)
+        // Clamp so a preset wider than a narrow display (rotated/external)
+        // stays fully on screen instead of clipping off the left edge.
+        let xCenter = min(max(sf.midX - size.width / 2, sf.minX),
+                          max(sf.minX, sf.maxX - size.width))
+        // Bottom: `minY` is the screen's lowest visible point (above Dock).
+        // Top: `maxY` is below the menu bar — visibleFrame already excludes it.
+        // [decision: +24 pt gap per spec §4.]
+        let yPosition = position == .top
+            ? sf.maxY - size.height - edgeGap
+            : sf.minY + edgeGap
+        return CGRect(x: xCenter, y: yPosition, width: size.width, height: size.height)
     }
 
     private func reposition() {
-        let newOrigin = Self.frameForActiveScreen().origin
-        setFrameOrigin(newOrigin)
+        setFrameOrigin(Self.frameForActiveScreen(size: settingsStore.overlaySize,
+                                                 position: settingsStore.overlayPosition).origin)
     }
 }

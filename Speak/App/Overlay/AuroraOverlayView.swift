@@ -73,11 +73,10 @@ struct AuroraOverlayView: View {
 
     // MARK: Locked geometry constants (mirrors the classic HUD's frame)
 
-    /// Width of each end zone (waveform left, response right). [decision: 72 pt —
-    ///  the panel is 76 pt tall, so the card interior is ~72 pt: a square end
-    ///  zone centers its content on the capsule endcap's center (cap radius
-    ///  ≈ 34, center at x ≈ 34). COUPLED to `TranscriptOverlayPanel.panelHeight`.]
-    private static let endZoneWidth: CGFloat = 72
+    /// Width of each end zone (waveform left, response right) — driven by
+    /// `settingsStore.overlaySize` (76 pt panel → 72 pt end zone). COUPLED to
+    /// `OverlayPanelSize.endZoneWidth`.
+    private var endZoneWidth: CGFloat { settingsStore.overlaySize.endZoneWidth }
 
     /// Lane text line budget — one value for every state now that the stop hint
     /// rides inline in the header row instead of claiming its own strip.
@@ -121,7 +120,8 @@ struct AuroraOverlayView: View {
                 shape: Capsule(style: .continuous),
                 state: model.overlayState,
                 level: model.level,
-                reduceMotion: reduceMotion
+                reduceMotion: reduceMotion,
+                customPalette: borderTintPalette
             )
 
         case .edgeFlow:
@@ -131,9 +131,16 @@ struct AuroraOverlayView: View {
                 level: model.level,
                 speed: settingsStore.borderFlowSpeed,
                 count: settingsStore.borderFlowCount,
-                reduceMotion: reduceMotion
+                reduceMotion: reduceMotion,
+                customPalette: borderTintPalette
             )
         }
+    }
+
+    /// Fixed border tint → a single-color palette both border views accept;
+    /// `.adaptive` (nil) keeps the state-aware `speakFlow*` spectra.
+    private var borderTintPalette: [Color]? {
+        settingsStore.overlayBorderTint.fixedVoiceColor.map { [$0.color] }
     }
 
     /// All four states render inside the shared capsule-bar frame —
@@ -154,8 +161,10 @@ struct AuroraOverlayView: View {
             leftZone
             laneDivider
             centerLane
-            laneDivider
-            rightZone
+            if settingsStore.overlayShowTimer {
+                laneDivider
+                rightZone
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -186,9 +195,9 @@ struct AuroraOverlayView: View {
             style: settingsStore.voiceAnimationStyle,
             tint: settingsStore.voiceAnimationColor.color,
             level: model.level,
-            isActive: model.overlayState == .listening
+            isActive: model.overlayState == .listening || !settingsStore.overlayIdleDim
         )
-        .frame(width: Self.endZoneWidth)
+        .frame(width: endZoneWidth)
         .frame(maxHeight: .infinity)
         .accessibilityHidden(true)
     }
@@ -200,7 +209,7 @@ struct AuroraOverlayView: View {
     /// final elapsed time on `.done`, error mark on `.error`.
     private var rightZone: some View {
         rightZoneContent
-            .frame(width: Self.endZoneWidth)
+            .frame(width: endZoneWidth)
             .frame(maxHeight: .infinity)
     }
 
@@ -249,7 +258,7 @@ struct AuroraOverlayView: View {
     /// guarantee that no glyph ever crosses a hairline.
     private var centerLane: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs / 2) {
-            headerRow
+            if settingsStore.overlayShowPhaseHeader { headerRow }
             centerContent
         }
         .padding(.leading, SpeakSpacing.sm)

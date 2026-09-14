@@ -75,7 +75,7 @@ struct EdgeFlowBorder<S: InsettableShape & Shape>: View {
         // `.animation(value: level)` below.
         TimelineView(.animation(minimumInterval: EdgeFlowBorderC.frameInterval, paused: reduceMotion)) { timeline in
             let t = reduceMotion ? 0.0 : timeline.date.timeIntervalSinceReferenceDate
-            let blobCount = min(max(count, 1), 3)
+            let blobCount = min(max(count, 1), 6)
             let cycleDuration = speed.cycleDuration
 
             ZStack {

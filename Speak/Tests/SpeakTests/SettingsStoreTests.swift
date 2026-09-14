@@ -285,6 +285,132 @@ final class SettingsStoreTests: XCTestCase {
             ".violet must round-trip across a fresh SettingsStore.")
     }
 
+    // MARK: - Overlay panel (size / position / elements / border tint)
+
+    func testOverlaySizeDefaultIsStandard() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertEqual(store.overlaySize, .standard,
+            "overlaySize default must be .standard — matches the shipped 640×76 panel.")
+    }
+
+    func testOverlaySizeRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.overlaySize = .wide
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.overlaySize, .wide,
+            ".wide must round-trip across a fresh SettingsStore.")
+    }
+
+    func testOverlaySizeUnknownRawFallsBackToStandard() throws {
+        let defaults = try makeIsolatedDefaults()
+        defaults.set("huge", forKey: "speak.settings.overlaySize")
+        let store = freshStore(on: defaults)
+        XCTAssertEqual(store.overlaySize, .standard,
+            "An unreadable rawValue must fall back to .standard, never crash.")
+    }
+
+    func testOverlayPositionDefaultIsBottom() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertEqual(store.overlayPosition, .bottom,
+            "overlayPosition default must be .bottom — the shipped anchor.")
+    }
+
+    func testOverlayPositionRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.overlayPosition = .top
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.overlayPosition, .top,
+            ".top must round-trip across a fresh SettingsStore.")
+    }
+
+    func testOverlayPositionUnknownRawFallsBackToBottom() throws {
+        let defaults = try makeIsolatedDefaults()
+        defaults.set("left", forKey: "speak.settings.overlayPosition")
+        let store = freshStore(on: defaults)
+        XCTAssertEqual(store.overlayPosition, .bottom,
+            "An unreadable rawValue must fall back to .bottom, never crash.")
+    }
+
+    func testOverlayElementDefaultsAreAllOn() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertTrue(store.overlayShowTimer,
+            "overlayShowTimer default must be true — the response zone ships on.")
+        XCTAssertTrue(store.overlayShowPhaseHeader,
+            "overlayShowPhaseHeader default must be true — the phase word ships on.")
+        XCTAssertTrue(store.overlayIdleDim,
+            "overlayIdleDim default must be true — the animation rests when idle.")
+    }
+
+    func testOverlayElementTogglesRoundTrip() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.overlayShowTimer = false
+        store.overlayShowPhaseHeader = false
+        store.overlayIdleDim = false
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertFalse(reloaded.overlayShowTimer)
+        XCTAssertFalse(reloaded.overlayShowPhaseHeader)
+        XCTAssertFalse(reloaded.overlayIdleDim)
+    }
+
+    func testOverlayBorderTintDefaultIsAdaptive() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        XCTAssertEqual(store.overlayBorderTint, .adaptive,
+            "overlayBorderTint default must be .adaptive — state colors are the shipped look.")
+    }
+
+    func testOverlayBorderTintRoundTrips() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.overlayBorderTint = .cyan
+
+        let reloaded = freshStore(on: defaults)
+        XCTAssertEqual(reloaded.overlayBorderTint, .cyan,
+            ".cyan must round-trip across a fresh SettingsStore.")
+    }
+
+    func testOverlayBorderTintUnknownRawFallsBackToAdaptive() throws {
+        let defaults = try makeIsolatedDefaults()
+        defaults.set("chartreuse", forKey: "speak.settings.overlayBorderTint")
+        let store = freshStore(on: defaults)
+        XCTAssertEqual(store.overlayBorderTint, .adaptive,
+            "An unreadable rawValue must fall back to .adaptive, never crash.")
+    }
+
+    func testOverlayBorderTintFixedVoiceColorMapping() throws {
+        XCTAssertNil(OverlayBorderTint.adaptive.fixedVoiceColor,
+            ".adaptive must not pin a hue — it follows state colors.")
+        XCTAssertEqual(OverlayBorderTint.violet.fixedVoiceColor, .violet)
+    }
+
+    func testBorderFlowCountClampsToOneThroughSix() throws {
+        let defaults = try makeIsolatedDefaults()
+        let store = freshStore(on: defaults)
+        store.borderFlowCount = 0
+        XCTAssertEqual(store.borderFlowCount, 1, "count below range must clamp to 1.")
+        store.borderFlowCount = 9
+        XCTAssertEqual(store.borderFlowCount, 6, "count above range must clamp to 6.")
+    }
+
+    func testOverlayPanelSizeGeometry() throws {
+        // The panel and both HUD views derive geometry from these values —
+        // pin the shipped presets so an accidental edit trips the suite.
+        XCTAssertEqual(OverlayPanelSize.compact.width, 560)
+        XCTAssertEqual(OverlayPanelSize.compact.height, 64)
+        XCTAssertEqual(OverlayPanelSize.compact.endZoneWidth, 60)
+        XCTAssertEqual(OverlayPanelSize.standard.width, 640)
+        XCTAssertEqual(OverlayPanelSize.standard.height, 76)
+        XCTAssertEqual(OverlayPanelSize.standard.endZoneWidth, 72)
+        XCTAssertEqual(OverlayPanelSize.wide.width, 760)
+        XCTAssertEqual(OverlayPanelSize.wide.height, 88)
+        XCTAssertEqual(OverlayPanelSize.wide.endZoneWidth, 84)
+    }
+
     // resetToDefaults() coverage moved to SettingsStoreResetAndMiscTests.swift
     // (split out to keep this class under SwiftLint's type_body_length cap).
 

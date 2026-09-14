@@ -139,6 +139,64 @@ public enum VoiceAnimationColor: String, Codable, Sendable, Equatable, CaseItera
     case amber
 }
 
+/// Size preset for the recording HUD overlay panel. Width/height/end-zone
+/// stay coupled per preset — the capsule's end zones must remain square
+/// against the interior height for the inscribed-circle geometry to hold.
+/// [decision: presets not freeform — the sketch's proportions are the
+///  design; a slider would break the zone ratios.]
+public enum OverlayPanelSize: String, Codable, Sendable, Equatable, CaseIterable {
+    case compact
+    case standard
+    case wide
+
+    /// Panel width in points.
+    public var width: CGFloat {
+        switch self {
+        case .compact:  return 560
+        case .standard: return 640
+        case .wide:     return 760
+        }
+    }
+
+    /// Panel height in points.
+    public var height: CGFloat {
+        switch self {
+        case .compact:  return 64
+        case .standard: return 76
+        case .wide:     return 88
+        }
+    }
+
+    /// Width of each end zone — interior height minus the capsule's vertical
+    /// inset, so the end cap stays square-centered on the capsule endcap.
+    /// [decision: height − 4 mirrors the shipped 76→72 coupling.]
+    public var endZoneWidth: CGFloat { height - 4 }
+}
+
+/// Vertical anchor for the recording HUD overlay panel.
+public enum OverlayPanelPosition: String, Codable, Sendable, Equatable, CaseIterable {
+    case bottom
+    case top
+}
+
+/// Border color mode for the animated HUD border. `.adaptive` (default)
+/// follows the state palettes (onAir/processing/done/error spectra); a fixed
+/// hue pins the border to one color in every state.
+public enum OverlayBorderTint: String, Codable, Sendable, Equatable, CaseIterable {
+    case adaptive
+    case blue
+    case cyan
+    case violet
+    case green
+    case amber
+
+    /// The matching fixed `VoiceAnimationColor`, or nil for `.adaptive` —
+    /// rawValue lookup gives this for free (adaptive isn't a color case).
+    public var fixedVoiceColor: VoiceAnimationColor? {
+        VoiceAnimationColor(rawValue: rawValue)
+    }
+}
+
 /// Which border animation style to show on the recording HUD overlay.
 /// Default = `.none` — zero regression risk for existing users.
 public enum BorderAnimationStyle: String, Codable, Sendable, Equatable, CaseIterable {
@@ -200,6 +258,12 @@ public final class SettingsStore: @unchecked Sendable {
         static let borderAnimationStyle  = "speak.settings.borderAnimationStyle"
         static let borderFlowSpeed       = "speak.settings.borderFlowSpeed"
         static let borderFlowCount       = "speak.settings.borderFlowCount"
+        static let overlaySize           = "speak.settings.overlaySize"
+        static let overlayPosition       = "speak.settings.overlayPosition"
+        static let overlayShowTimer      = "speak.settings.overlayShowTimer"
+        static let overlayShowPhaseHeader = "speak.settings.overlayShowPhaseHeader"
+        static let overlayIdleDim        = "speak.settings.overlayIdleDim"
+        static let overlayBorderTint     = "speak.settings.overlayBorderTint"
         static let voiceActionsEnabled   = "speak.settings.voiceActionsEnabled"
         static let voiceActionsPrefix    = "speak.settings.voiceActionsPrefix"
         static let readbackEnabled       = "speak.settings.readbackEnabled"
@@ -253,6 +317,12 @@ public final class SettingsStore: @unchecked Sendable {
             Keys.borderAnimationStyle: BorderAnimationStyle.none.rawValue,
             Keys.borderFlowSpeed: BorderFlowSpeed.medium.rawValue,
             Keys.borderFlowCount: 1,
+            Keys.overlaySize: OverlayPanelSize.standard.rawValue,
+            Keys.overlayPosition: OverlayPanelPosition.bottom.rawValue,
+            Keys.overlayShowTimer: true,
+            Keys.overlayShowPhaseHeader: true,
+            Keys.overlayIdleDim: true,
+            Keys.overlayBorderTint: OverlayBorderTint.adaptive.rawValue,
             Keys.voiceActionsPrefix: "hey speak",
             // [decision H-2] Default true: the readback affordance is inert until the
             // user presses it (no audio plays unprompted), so there is no privacy/
@@ -714,96 +784,6 @@ extension SettingsStore {
         }
     }
 
-    // MARK: - HUD style (overlay visual style, H-UI)
-
-    /// Visual style for the floating recording HUD. Default: `.classic`.
-    public var hudStyle: HUDStyle {
-        get {
-            access(keyPath: \.hudStyle)
-            let raw = defaults.string(forKey: Keys.hudStyle) ?? HUDStyle.classic.rawValue
-            return HUDStyle(rawValue: raw) ?? .classic
-        }
-        set {
-            withMutation(keyPath: \.hudStyle) {
-                defaults.set(newValue.rawValue, forKey: Keys.hudStyle)
-            }
-        }
-    }
-
-    /// Left-zone voice animation for the recording HUD. Default: `.sonar`.
-    public var voiceAnimationStyle: VoiceAnimationStyle {
-        get {
-            access(keyPath: \.voiceAnimationStyle)
-            let raw = defaults.string(forKey: Keys.voiceAnimationStyle)
-                ?? VoiceAnimationStyle.sonar.rawValue
-            return VoiceAnimationStyle(rawValue: raw) ?? .sonar
-        }
-        set {
-            withMutation(keyPath: \.voiceAnimationStyle) {
-                defaults.set(newValue.rawValue, forKey: Keys.voiceAnimationStyle)
-            }
-        }
-    }
-
-    /// Color the left-zone voice animation draws with. Default: `.blue`.
-    public var voiceAnimationColor: VoiceAnimationColor {
-        get {
-            access(keyPath: \.voiceAnimationColor)
-            let raw = defaults.string(forKey: Keys.voiceAnimationColor)
-                ?? VoiceAnimationColor.blue.rawValue
-            return VoiceAnimationColor(rawValue: raw) ?? .blue
-        }
-        set {
-            withMutation(keyPath: \.voiceAnimationColor) {
-                defaults.set(newValue.rawValue, forKey: Keys.voiceAnimationColor)
-            }
-        }
-    }
-
-    // MARK: - Border animation settings
-
-    /// Border animation style for the overlay panel. Default: `.none`.
-    public var borderAnimationStyle: BorderAnimationStyle {
-        get {
-            access(keyPath: \.borderAnimationStyle)
-            let raw = defaults.string(forKey: Keys.borderAnimationStyle) ?? BorderAnimationStyle.none.rawValue
-            return BorderAnimationStyle(rawValue: raw) ?? .none
-        }
-        set {
-            withMutation(keyPath: \.borderAnimationStyle) {
-                defaults.set(newValue.rawValue, forKey: Keys.borderAnimationStyle)
-            }
-        }
-    }
-
-    /// Speed of the EdgeFlow border animation. Default: `.medium`.
-    public var borderFlowSpeed: BorderFlowSpeed {
-        get {
-            access(keyPath: \.borderFlowSpeed)
-            let raw = defaults.string(forKey: Keys.borderFlowSpeed) ?? BorderFlowSpeed.medium.rawValue
-            return BorderFlowSpeed(rawValue: raw) ?? .medium
-        }
-        set {
-            withMutation(keyPath: \.borderFlowSpeed) {
-                defaults.set(newValue.rawValue, forKey: Keys.borderFlowSpeed)
-            }
-        }
-    }
-
-    /// Number of flowing light blobs in EdgeFlow animation (1...3). Default: `1`.
-    public var borderFlowCount: Int {
-        get {
-            access(keyPath: \.borderFlowCount)
-            let val = defaults.integer(forKey: Keys.borderFlowCount)
-            return (1...3).contains(val) ? val : 1
-        }
-        set {
-            withMutation(keyPath: \.borderFlowCount) {
-                let clamped = min(max(newValue, 1), 3)
-                defaults.set(clamped, forKey: Keys.borderFlowCount)
-            }
-        }
-    }
 
     // MARK: - Per-app context awareness (V01-3, profile-native)
 
