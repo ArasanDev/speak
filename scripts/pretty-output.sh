@@ -42,6 +42,13 @@ format_stream() {
     
     local errors=0
     local warnings=0
+    # Positional verdict: the LAST result banner wins. xcodebuild retries a
+    # failed test-host launch (e.g. a running Speak instance blocks the first
+    # SpeakTests spawn → LaunchServices error → `** TEST FAILED **` → retry →
+    # `** TEST SUCCEEDED **`); counting that mid-run banner manufactures red.
+    # A truly red run still ends on FAILED, so last-banner-wins stays honest.
+    # No banner at all (stream died early) → error count decides.
+    local last_banner=""
     
     while IFS= read -r line || [ -n "$line" ]; do
         # Filter benign system logging noise
@@ -68,12 +75,17 @@ format_stream() {
         elif echo "$line" | grep -qE "(^|[[:space:]:])error:|TEST FAILED|BUILD FAILED|Test Case '-\[[^]]+\]' failed"; then
             errors=$((errors + 1))
             printf "${RED}│ ✖ %s${RESET}\n" "$line"
+            if echo "$line" | grep -qE "TEST FAILED|BUILD FAILED"; then
+                last_banner="fail"
+            fi
         elif echo "$line" | grep -qE "\.swift:[0-9]+:[0-9]+: warning:"; then
             warnings=$((warnings + 1))
             printf "${YELLOW}│ ⚠️  %s${RESET}\n" "$line"
         elif echo "$line" | grep -q "BUILD SUCCEEDED"; then
+            last_banner="success"
             draw_step "Status" "${GREEN}Build Succeeded Cleanly${RESET}"
         elif echo "$line" | grep -q "TEST SUCCEEDED"; then
+            last_banner="success"
             draw_step "Status" "${GREEN}Test Suite Passed Cleanly${RESET}"
         # Pass the XCTest summary line through (dimmed) so `make gates` and
         # humans can see the "Executed N tests, with M failures" verdict the
@@ -100,12 +112,20 @@ format_stream() {
         fi
     done
 
-    if [ "$errors" -eq 0 ]; then
+    # Verdict: the final banner is authoritative — it is xcodebuild's own
+    # last word on the run. A retried launch failure (`TEST FAILED` then
+    # `TEST SUCCEEDED`) resolves green; a real failure ends on FAILED.
+    # With no banner in the stream, fall back to the error count — a run
+    # that died before its verdict stays red, never manufactured green.
+    if [ "$last_banner" = "success" ]; then
         draw_footer "SUCCESS"
         exit 0
-    else
+    elif [ "$last_banner" = "fail" ] || [ "$errors" -gt 0 ]; then
         draw_footer "FAILED ($errors errors)"
         exit 1
+    else
+        draw_footer "SUCCESS"
+        exit 0
     fi
 }
 

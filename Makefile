@@ -120,12 +120,17 @@ reset-permissions:
 	-tccutil reset Microphone $(BUNDLE_ID)
 	@echo "reset-permissions: cleared Accessibility / Input-Monitoring / Microphone for $(BUNDLE_ID)."
 
-## test: run the full unit test suite (SpeakTests, all ~80 test suites)
-test: generate
+## test: run the full unit test suite (SpeakTests, all ~80 test suites).
+##       Kills any running Speak first: the suite's TEST_HOST launches
+##       Speak.app and a live instance's single-instance guard fights the
+##       test-host spawn — the first launch fails (LaunchServices error,
+##       `** TEST FAILED **`) and xcodebuild has to retry. Deterministic
+##       beats retry-lucky.
+test: generate kill
 	@$(XCB) test 2>&1 | bash scripts/pretty-output.sh test
 
 ## test-fast: run only prompt & cleanup unit tests (~3s iteration loop)
-test-fast: generate
+test-fast: generate kill
 	@$(XCB) test -only-testing:SpeakTests/DeveloperAcronymBiasingTests -only-testing:SpeakTests/FoundationModelPromptBuilderTests -only-testing:SpeakTests/FoundationModelsCleanerTests 2>&1 | bash scripts/pretty-output.sh test
 
 ## eval: run the small-models eval harness (live Foundation Models scoring)
