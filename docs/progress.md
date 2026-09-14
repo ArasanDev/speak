@@ -1841,3 +1841,33 @@ reset test covering all six keys.
 (357 files) · moat 7/7 · screenshot-verified via `dashboard:settings:overlay`
 (note: window landed on a non-active Space because a full-screen video was
 frontmost — captured by window ID, not a defect).
+
+### 2026-09-14 — Overlay scenario audit (fullscreen / minimized / IDE-terminal)
+
+Verified live: user's own settings (aurora + ringGauge + amber, timer off,
+header off, idle-dim off, border none, standard, bottom) all honored by the
+production overlay — screenshot-verified against `overlay-demo`.
+
+**Scenario matrix — current implementation:**
+
+| Scenario | Behavior | Evidence |
+|---|---|---|
+| Dictating into IDE (VS Code/Xcode) | Non-activating panel; Cmd+V into focused editor | `.nonactivatingPanel` + paste path — shipped |
+| Dictating into Terminal/iTerm | Same; Cmd+V = paste at shell cursor | Standard pasteboard paste |
+| **Full-screen app active** | Panel joins every Space incl. fullscreen app Spaces | `.canJoinAllSpaces` + `.fullScreenAuxiliary` — [unverified live, needs dogfood: earlier window-invisibility was a full-screen video Space hiding a NORMAL window, which is correct OS behavior] |
+| Target window minimized/hidden | Cmd+V lands on whatever has focus (often nothing); **text still lands on clipboard** — user can Cmd+V manually | `PasteboardWriter` clipboard floor runs before the AX gate — pasteboard is the recovery path |
+| Password field focused | Paste refused, error state on HUD; text stays on clipboard | `SecureFieldDetector` → `.pasteIntoSecureField` |
+| AX permission revoked | Paste refused; text on clipboard; HUD error | `pasteRequiresAccessibility` gate |
+| Mouse between displays | Panel falls back to `NSScreen.main` | `indexOfScreen` fallback |
+| Display hot-plug / resolution change | Panel reframes via `didChangeScreenParametersNotification` | `reposition()` observer |
+| Settings changed mid-session | Element toggles apply live; size/position apply next `show()` | panel `setFrame` at show-time |
+| Mission Control / Exposé | Panel stays put, excluded from window cycling | `.stationary` + `.ignoresCycle` |
+| Screen lock | Hotkey/paste inert; panel below lock screen | standard window level |
+
+**Verdict on a dedicated top horizontal strip:** not needed for these
+scenarios. The capsule already carries the correct Space/full-screen
+flags, and top-anchoring shipped today via `overlayPosition`. A
+persistent top bar would solve a different problem (always-visible
+status when NOT dictating) — that's a v-next surface, not a fix for an
+existing gap. Recommendation: dogfood the capsule over a real
+full-screen app once; if it ever fails to surface there, revisit.
