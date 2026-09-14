@@ -90,6 +90,23 @@ final class SettingsStoreResetAndMiscTests: XCTestCase {
             "resetToDefaults() must restore agentPrefixIncludeState to false.")
     }
 
+    func testResetToDefaultsRestoresOverlaySettings() throws {
+        let store = freshStore(on: try makeIsolatedDefaults())
+        store.overlaySize = .wide
+        store.overlayPosition = .top
+        store.overlayShowTimer = false
+        store.overlayShowPhaseHeader = false
+        store.overlayIdleDim = false
+        store.overlayBorderTint = .amber
+        store.resetToDefaults()
+        XCTAssertEqual(store.overlaySize, .standard)
+        XCTAssertEqual(store.overlayPosition, .bottom)
+        XCTAssertTrue(store.overlayShowTimer)
+        XCTAssertTrue(store.overlayShowPhaseHeader)
+        XCTAssertTrue(store.overlayIdleDim)
+        XCTAssertEqual(store.overlayBorderTint, .adaptive)
+    }
+
     // MARK: - defaultTranscriber(for:) factory
 
     func testDefaultTranscriberReturnsAppleSpeechForAppleSpeech() throws {

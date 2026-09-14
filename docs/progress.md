@@ -1798,3 +1798,46 @@ re-runs xcodegen when project.yml is newer than the project; new files under
 globbed source dirs otherwise silently miss the target) · 994 tests /
 0 failures · lint 0 serious · moat 7/7 · screenshot-verified: rail shows
 Overlay selected, live preview animating, all controls present.
+
+### 2026-09-14 — Overlay pane: max control (size, position, elements, border tint)
+
+Follow-up to the dedicated Overlay rail — the pane now owns every overlay
+knob, not just style/color:
+
+- **`Panel Layout` card** — `overlaySize` (Compact 560×64 / Standard 640×76 /
+  Wide 760×88) + `overlayPosition` (Bottom/Top). `TranscriptOverlayPanel`
+  reframes at show-time via `frameForActiveScreen(size:position:)`; top
+  anchors below the menu bar (`sf.maxY - height - edgeGap`), x is clamped to
+  the visible frame so Wide can't clip off a narrow display.
+- **`Elements` card** — `overlayShowTimer` (right zone + divider collapse),
+  `overlayShowPhaseHeader` (LISTENING/POLISHING word), `overlayIdleDim`
+  (animation rests vs full-strength when not listening). Both
+  `TranscriptOverlayView` and `AuroraOverlayView` honor all three; end-zone
+  width derives from `overlaySize.endZoneWidth` (72 pt at Standard).
+- **Border card extended** — `overlayBorderTint` row (Adaptive + 5 fixed
+  hues via existing `customPalette` seam on both border views; `.adaptive`
+  draws a 4-hue AngularGradient swatch) + flowing-light count widened 1→6
+  (store clamps `(1...6)`, `EdgeFlowBorder` clamps `blobCount` the same).
+- **Preview honors everything** — capsule scales with `overlaySize`
+  (0.72×), timer/header rows appear/disappear with the toggles, the real
+  `EdgeFlowBorder`/`AnimatedGradientBorder` paint with `customPalette`
+  when a fixed tint is picked.
+
+**New settings** (`SettingsStore`): `OverlayPanelSize`,
+`OverlayPanelPosition`, `OverlayBorderTint` enums; keys
+`overlaySize/overlayPosition/overlayShowTimer/overlayShowPhaseHeader/
+overlayIdleDim/overlayBorderTint`; all in `resetToDefaults()`; invalid
+rawValues fall back to shipped defaults.
+
+**File split** — `SettingsStore.swift` crossed the 1000-line `file_length`
+cap; all HUD/overlay accessors moved to `SettingsStore+Overlay.swift`
+(same pattern as `+Reset`/`+InputDevice`).
+
+**Tests** — 15 new: defaults, round-trips, invalid-raw fallbacks, the
+fixedVoiceColor mapping, count clamp 1...6, preset geometry pins, and a
+reset test covering all six keys.
+
+**Gates** — build clean · 1009 tests / 0 failures · lint 0 serious
+(357 files) · moat 7/7 · screenshot-verified via `dashboard:settings:overlay`
+(note: window landed on a non-active Space because a full-screen video was
+frontmost — captured by window ID, not a defect).
