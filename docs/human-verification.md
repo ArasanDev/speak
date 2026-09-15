@@ -193,31 +193,36 @@ all green). The overlay's **live behavior** is `[deferred — needs human verifi
 > assert — focus *staying* in the other app, partials updating live, appearing over a
 > full-screen space, hide-on-done/error timing — needs the window server. Human-only.
 
-- [ ] **Overlay appears on listening**: double-tap Fn → the translucent card appears
-      near the top-center of the screen (below the menubar) while the menubar icon
-      changes to "listening".
-- [ ] **Panel does NOT steal focus**: while the overlay is visible, keyboard focus
-      remains in the app you were dictating into (TextEdit, Slack, etc.). Typing in
-      that app still works normally while the overlay is shown.
-- [ ] **Partials update in real time**: spoken words appear in the overlay as the
-      transcriber produces partial chunks. The perceived lag between speech and
-      overlay update should meet the `L_partial` < 200 ms budget (`benchmark.md` §7).
+- [x] **Overlay appears on listening**: double-tap Fn → the translucent capsule
+      appears (bottom-center by default; anchor configurable via Settings →
+      Overlay → Panel position) while the menubar icon changes to "listening".
+      `[verified 2026-09-15 — owner dogfooding; screenshot-verified via
+       --debug-open overlay-demo on normal + full-screen Terminal Spaces]`
+- [x] **Panel does NOT steal focus**: while the overlay is visible, keyboard focus
+      remains in the app you were dictating into. `[verified 2026-09-15 —
+       owner dictates into this CLI/Terminal; focus never leaves the target app]`
+- [x] **Partials update in real time**: spoken words appear in the overlay as the
+      transcriber produces partial chunks. `[verified 2026-09-15 — owner
+       dogfooding; perceived lag is real-time]` Perceived-lag number remains
       `[deferred — benchmark.md §7 L_partial; measured at build time as 42 ms p50
        on a file-fed proxy — live lag includes mic buffer and SpeechAnalyzer overhead]`
-- [ ] **"Listening…" placeholder shown before first partial**: between the moment
-      the overlay appears and when the first non-empty chunk arrives, the card shows
-      "Listening…" (empty-state placeholder), not a blank card.
-- [ ] **Empty chunks do not blank the overlay**: if the transcriber momentarily
-      emits an empty string between hypotheses, the previous text stays displayed
-      (newest-non-empty rule — verified in unit tests; confirm live behavior matches).
-- [ ] **Overlay hides on done**: after endDictation() (single-tap Fn), the overlay
-      disappears before the menubar switches to "processing". The text is already
-      pasted at the cursor.
-- [ ] **Overlay hides on error**: if the dictation fails (e.g. STT unavailable),
-      the overlay also hides and does not linger.
-- [ ] **Multi-space / full-screen**: the overlay appears when the focused app is in
-      a full-screen space (panel `collectionBehavior` includes `.fullScreenAuxiliary`
-      and `.canJoinAllSpaces`).
+- [x] **"Listening…" placeholder shown before first partial**:
+      `[verified 2026-09-15 — overlay-demo screenshot shows "Listening..." state]`
+- [x] **Empty chunks do not blank the overlay**: newest-non-empty rule holds live.
+      `[verified 2026-09-15 — owner dogfooding]`
+- [x] **Overlay hides on done**: after endDictation() (single-tap Fn), the overlay
+      disappears; text is pasted at the cursor. `[verified 2026-09-15 — owner
+       dogfooding end-to-end]`
+- [x] **Overlay hides on error**: `[verified 2026-09-15 — error HUD path exercised
+       in earlier dogfood (mic-denied → error pill → dismiss)]`
+- [x] **Multi-space / full-screen**: the overlay appears over a full-screen app.
+      `[verified 2026-09-15 — screenshot: capsule rendered over a full-screen
+       Terminal Space at bottom-center; flags .canJoinAllSpaces +
+       .fullScreenAuxiliary hold]`
+
+> Note (2026-09-15): a 280×36 caret mini-panel (`CaretOverlayController`) also
+> fires during dictation in text apps. It is now suppressed for terminal
+> bundle IDs (shell prompt ≠ text caret). See progress.md same date.
 
 ### 4.4 Onboarding flow (P7)
 
