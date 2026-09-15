@@ -33,6 +33,8 @@ One test: `xcodebuild test -project Speak.xcodeproj -scheme Speak -derivedDataPa
 **Dev-loop gotchas:**
 - A clean clone has no `.xcodeproj` — `make build` generates it from `project.yml`. `project.yml` is the source of truth, never hand-edit the project.
 - `speak` is a menubar `LSUIElement` app: `open` does **not** relaunch a running instance — a plain `open` after a rebuild silently keeps the stale binary. Use `make run` (kills first, then launches fresh) or `make relaunch`. Run `make doctor` if a rebuild seems ignored — it compares built-binary mtime against the running PID.
+- `make generate` only re-runs xcodegen when `project.yml` or the project is missing — **new `.swift` files under globbed source dirs silently miss the target** ("cannot find X in scope" at build). Run `xcodegen generate` (or `make generate-force`) after adding files.
+- `make test`/`test-fast` depend on `kill` — they stop a running Speak first (a live instance blocks the `TEST_HOST` launch; without the kill the suite "fails" at launch then self-heals on retry).
 - `make gates` runs build → test → lint → verify-moat in order (the merge gate).
 - Ground truth for Apple-API claims is `swiftc -typecheck` against the local **macOS 26** SDK (AGENTS.md §3) — `FoundationModels` / `SpeechAnalyzer` only resolve there.
 - Live logs: `make logs` (streams `os.Logger`; `.info`/`.debug` are **not** persisted, so `log show` won't see the dictation flow — stream it live). Inspect dictations: `make history`.

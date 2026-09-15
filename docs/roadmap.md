@@ -163,14 +163,16 @@ surface; the native attention and voice experience is the product.
 
 ---
 
-## P4 — Partial overlay [~IN PROGRESS]
+## P4 — Partial overlay [DONE]
 
-**Sub-tasks**: Floating `NSPanel`/SwiftUI overlay streaming partial transcript; auto-position near cursor or top-right, always-on-top. Live appearance is `[deferred — visual]` (§4.3).
+**Sub-tasks**: Floating `NSPanel`/SwiftUI overlay streaming partial transcript; auto-position near cursor or top-right, always-on-top.
 
 **Done when**:
-- [~] Overlay appears when session enters `listening` state — `[verified]` the wiring (`DictationController` shows the panel on `.listening`, hides on `.done`/`.error`); **live appearance** `[deferred — visual]` (§4.3)
-- [~] Partial transcript text updates live (≤200ms lag — `benchmark.md §7` `L_partial`) — `[verified]` accumulation logic (`OverlayTextAccumulator`, 11 tests) + drains `currentPartials()`; **live lag** `[deferred — visual]`
-- [~] Overlay hides on `done` / `error` — `[verified]` the hide wiring; **live** `[deferred — visual]`
+- [x] Overlay appears when session enters `listening` state — `[verified 2026-09-15]` wiring + live appearance (screenshot-verified on normal + full-screen Terminal Spaces; owner dogfooding)
+- [x] Partial transcript text updates live — `[verified]` accumulation logic (`OverlayTextAccumulator`, 11 tests) + drains `currentPartials()`; live perceived-lag real-time per owner dogfood. The `L_partial` number itself remains build-time-measured (42 ms p50 file-fed proxy).
+- [x] Overlay hides on `done` / `error` — `[verified 2026-09-15]` wiring + owner dogfooding
+
+**2026-09-15 additions**: dedicated Settings → Overlay pane (live preview, panel size/position, timer/header/idle-dim toggles, border style/speed/count/tint); caret mini-panel suppressed for terminal emulators.
 
 ---
 

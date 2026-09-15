@@ -1899,3 +1899,23 @@ correctly — the stray panel was the only anomaly.
 non-terminal/nil bundle IDs still reach CaretLocator. 7/7 suite green.
 
 **Gates:** build clean · targeted suite green · lint 0 serious · moat 7/7.
+
+### 2026-09-15 — Session wrap: docs synced to shipped state
+
+- `docs/roadmap.md` — **P4 marked DONE** (all three done-when rows verified:
+  live appearance screenshot-confirmed on normal + full-screen Terminal
+  Spaces, partials live, hide-on-done/error owner-verified).
+- `docs/human-verification.md` §4.3 — all 8 overlay rows checked off with
+  dated evidence; caret-suppression note added.
+- `docs/architecture.md` — App-tree `Settings/` + `Overlay/` entries
+  rewritten to match the real files (category list, both HUD impls,
+  VoiceAnimationView styles, border views, caret overlay gate).
+- `CLAUDE.md` — two dev-loop gotchas persisted: `make generate` skips new
+  files under globs (use `xcodegen generate`), and `make test` kills a
+  running Speak (test-host conflict) so the app must be relaunched after.
+- Caret-overlay terminal fix landed (`a8543c0`).
+
+**State at session close:** build clean · 1009+ tests / 0 failures ·
+lint 0 serious · moat 7/7 · overlay fully configurable from Settings →
+Overlay and owner-verified live · P4 done. No pushes performed yet beyond
+this commit chain — local verification is the gate.

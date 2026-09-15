@@ -158,8 +158,20 @@ speak/
 │   ├── SpeakApp.swift            # @main, MenuBarExtra, state injection
 │   ├── MenuBar/                  # icon, status, quick toggles
 │   ├── Onboarding/               # Microphone + Accessibility flow, hotkey picker
-│   ├── Settings/                 # hotkey, language, LLM, history, paste mode
-│   └── Overlay/                  # floating capture dot + partial transcript
+│   ├── Settings/                 # category-driven SettingsExperienceView:
+│   │                             #   Voice Pipeline · STT · TTS · Intelligence ·
+│   │                             #   Hotkeys · Vocabulary · Agent Bridge ·
+│   │                             #   Appearance (themes) · Overlay · Privacy ·
+│   │                             #   General · About
+│   └── Overlay/                  # TranscriptOverlayPanel (non-activating capsule
+│                                 #   NSPanel: .canJoinAllSpaces + .fullScreenAuxiliary,
+│                                 #   never steals focus, active-screen mouse-follow)
+│                                 # · TranscriptOverlayView (Classic HUD)
+│                                 # · AuroraOverlayView (ambient variant)
+│                                 # · VoiceAnimationView (Sonar/RingGauge/Spectrum)
+│                                 # · AnimatedGradientBorder / EdgeFlowBorder
+│                                 # · CaretOverlayController (280×36 caret preview;
+│                                 #   suppressed for terminal bundle IDs)
 ├── SpeakCore/                    # Framework: headless dictation engine
 │   ├── Engine/
 │   │   ├── SpeakEngine.swift     # owns the session lifecycle (actor)
