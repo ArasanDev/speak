@@ -89,6 +89,22 @@ final class CaretOverlayController {
     // [decision P2.2: 8 pt gap from caret to panel edge. benchmark.md §7]
     private static let caretGap: CGFloat    = 8
 
+    /// Terminal emulators report a caret position via AX (the shell cursor),
+    /// so `CaretLocator` returns a point even though the feature was designed
+    /// to skip them — the mini panel then lands on the prompt and reads as a
+    /// stray square (the main capsule already carries the full HUD). Gate on
+    /// the frontmost bundle ID instead. [decision: suppress-in-terminal —
+    ///  caret preview is designed for text editors, not shells.]
+    private static let terminalBundleIDs: Set<String> = [
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+        "dev.warp.Warp-Stable",
+        "com.mitchellh.ghostty",
+        "org.alacritty",
+        "net.kovidgoyal.kitty",
+        "com.github.wez.wezterm",
+    ]
+
     // MARK: - Internals
 
     private var panel: NSPanel?
@@ -100,8 +116,17 @@ final class CaretOverlayController {
     /// Show the caret overlay near the cursor in `frontmostPID`.
     ///
     /// Falls back silently to a no-op when CaretLocator returns nil (non-AX
-    /// context). Safe to call when a panel already exists — re-positions it.
-    func show(partialText: String, frontmostPID: pid_t) {
+    /// context) or when the frontmost app is a terminal emulator (see
+    /// `terminalBundleIDs`). Safe to call when a panel already exists —
+    /// re-positions it.
+    func show(partialText: String, frontmostPID: pid_t, bundleID: String? = nil) {
+        if let bundleID, Self.terminalBundleIDs.contains(bundleID) {
+            SpeakLog.input.debug(
+                "CaretOverlayController: frontmost is a terminal (\(bundleID, privacy: .public)) — skipping overlay."
+            )
+            return
+        }
+
         model.partialText = partialText
 
         guard let caretPoint = CaretLocator.caretScreenPosition(pid: frontmostPID) else {

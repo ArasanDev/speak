@@ -33,6 +33,42 @@ struct CaretOverlayControllerTests {
         controller.hide()
     }
 
+    /// Terminal-emulator frontmost apps must never get the caret mini-panel:
+    /// the shell cursor is not a text-field caret — the panel lands on the
+    /// prompt and reads as a stray square while the main capsule HUD is the
+    /// intended surface. Gate happens before `model.partialText` is written,
+    /// so an empty model proves suppression.
+    @Test("show() suppresses the overlay for terminal bundle IDs")
+    func showSuppressesForTerminals() {
+        let controller = CaretOverlayController()
+        controller.show(partialText: "hello", frontmostPID: 0,
+                        bundleID: "com.apple.Terminal")
+        #expect(controller.model.partialText == "",
+                "Terminal frontmost must suppress the caret overlay entirely.")
+
+        controller.show(partialText: "hello", frontmostPID: 0,
+                        bundleID: "dev.warp.Warp-Stable")
+        #expect(controller.model.partialText == "",
+                "Warp must also be suppressed.")
+        controller.hide()
+    }
+
+    /// A non-terminal bundle ID must not be suppressed — the feature still
+    /// reaches CaretLocator (nil-safe path here since pid=0 has no AX context).
+    @Test("show() does not suppress for non-terminal bundle IDs")
+    func showAllowsNonTerminalApps() {
+        let controller = CaretOverlayController()
+        controller.show(partialText: "hello", frontmostPID: 0,
+                        bundleID: "com.microsoft.VSCode")
+        #expect(controller.model.partialText == "hello",
+                "VS Code is a text editor — the caret overlay must not be gated.")
+
+        controller.show(partialText: "hi", frontmostPID: 0, bundleID: nil)
+        #expect(controller.model.partialText == "hi",
+                "nil bundleID (unresolvable app) must fall through to CaretLocator.")
+        controller.hide()
+    }
+
     /// update() when the panel was never shown must be a silent no-op
     /// (model update is safe even when no panel exists).
     @Test("update() when no panel is showing is a no-op")

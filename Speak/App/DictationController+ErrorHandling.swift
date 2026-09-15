@@ -110,7 +110,8 @@ extension DictationController {
             )
             // P2.2: show the caret overlay near the text insertion point.
             // Gracefully no-ops when CaretLocator returns nil (browser, Electron, etc.).
-            caretOverlay.show(partialText: "", frontmostPID: frontmostPID)
+            caretOverlay.show(partialText: "", frontmostPID: frontmostPID,
+                              bundleID: frontmostApp?.bundleIdentifier)
             // [PE-3] Configure the live-panel destination strip: the three AI destinations,
             // highlighting the resolved one. Shown only when cleanup will run (a chip does
             // nothing when AI is off / level=.none). Tapping reshapes THIS dictation only.

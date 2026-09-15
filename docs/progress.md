@@ -1871,3 +1871,31 @@ persistent top bar would solve a different problem (always-visible
 status when NOT dictating) — that's a v-next surface, not a fix for an
 existing gap. Recommendation: dogfood the capsule over a real
 full-screen app once; if it ever fails to surface there, revisit.
+
+### 2026-09-15 — Fix: stray caret square in Terminal dictation
+
+**Report:** dictating with Terminal frontmost showed a small square at
+top-left instead of the overlay capsule.
+
+**Diagnosis:** `CaretOverlayController` (280×36 mini preview anchored at
+the text caret) fires on every dictation. Terminal.app/iTerm2 DO report
+a caret position via AX (the shell cursor) — the design assumed they
+return nil — so the mini panel landed on the prompt at top-left while
+the capsule (correctly) rendered bottom-center; user's eye went to the
+stray square. Reproduced the capsule over full-screen Terminal working
+correctly — the stray panel was the only anomaly.
+
+**Fix (two parts):**
+- `CaretOverlayController.show` now takes `bundleID:` and early-returns
+  for known terminal emulators (Terminal.app, iTerm2, Warp, Ghostty,
+  Alacritty, kitty, WezTerm) — restores the documented "skip terminals"
+  intent. IDEs/editors unaffected (caret preview still lands near the
+  code cursor).
+- `OverlayController.start` calls `createPanel()` before `panel?.show()`
+  — the panel can never be nil at show-time, closing the "no HUD at all"
+  edge that would leave ONLY the caret square visible.
+
+**Tests:** 2 new — terminal bundle IDs suppress (model untouched),
+non-terminal/nil bundle IDs still reach CaretLocator. 7/7 suite green.
+
+**Gates:** build clean · targeted suite green · lint 0 serious · moat 7/7.

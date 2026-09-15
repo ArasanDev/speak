@@ -297,6 +297,12 @@ final class OverlayController {
         resetFeltSpeedState()
         resetCodingPanel()                         // P-Code: always start with the panel closed
         partialText = ""
+        // Ensure the panel exists before showing — `createPanel()` is a
+        // `guard panel == nil` no-op when already created. Without this a
+        // `panel == nil` edge (dictation before startMonitoring completed)
+        // would silently show nothing — the caret mini-panel lazily creates
+        // its own window, so the user would see a stray square and no HUD.
+        createPanel()
         panel?.show()
 
         // Drive the HUD duration counter at 1 Hz while listening.
