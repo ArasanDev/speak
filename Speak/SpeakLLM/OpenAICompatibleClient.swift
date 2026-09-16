@@ -16,20 +16,16 @@
 //   [decision V01-2 — this is the `SpeakLLM` module previously sketched in
 //   `SpeakCore/Cleanup/OllamaCleaner.swift`'s v0.1 stub comment.]
 //
-// SpeakCore reaches this module only via `SpeakCore/Cleanup/OpenAICompatibleCleaner.swift`,
-// which holds the `ProviderPreset` data and delegates the actual HTTP call here.
+// The App target reaches this module via `App/Cleanup/OpenAICompatibleCleaner.swift`,
+// which maps the persisted `ProviderPreset`/`LLMAuthStyle` data (SpeakCore — pure
+// settings data, persisted by `SettingsStore`) onto calls into this client.
+// `LLMAuthStyle` itself moved to `SpeakCore/Cleanup/ProviderPreset.swift` because
+// it is the Codable payload of `ProviderPreset.custom` — hence the
+// `import SpeakCore` below and the `SpeakLLM → SpeakCore` edge in project.yml
+// (the reverse of the old violating `SpeakCore → SpeakLLM` link).
 
 import Foundation
-
-/// How the API key (if any) is attached to the request.
-public enum LLMAuthStyle: String, Codable, Sendable, Equatable {
-    /// No credential sent (Ollama — loopback, no account).
-    case none
-    /// `Authorization: Bearer <key>` — OpenAI, Groq, OpenRouter.
-    case bearer
-    /// `api-subscription-key: <key>` — Sarvam AI.
-    case subscriptionKey
-}
+import SpeakCore
 
 /// Errors surfaced by `OpenAICompatibleClient`. Callers (`OpenAICompatibleCleaner`)
 /// map these to `SpeakError.llmCleanupFailed` with a user-facing detail string;

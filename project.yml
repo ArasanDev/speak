@@ -42,12 +42,19 @@ targets:
   # audited directories — keeps the audit's assertion honest (SpeakCore itself
   # has zero networking/Keychain symbols) while still allowing a real,
   # explicitly user-configured local-server/cloud cleanup engine to exist.
-  # [decision V01-2 — see SpeakCore/Cleanup/OpenAICompatibleCleaner.swift]
+  # [decision V01-2 — see App/Cleanup/OpenAICompatibleCleaner.swift]
   SpeakLLM:
     type: framework
     platform: macOS
     sources:
       - Speak/SpeakLLM
+    dependencies:
+      # `LLMAuthStyle` lives in SpeakCore (it is the Codable payload of the
+      # persisted `ProviderPreset.custom` settings data), so the wire client
+      # links SpeakCore for it. Pure-data dependency only — SpeakCore is the
+      # audited, networking-free module; the edge direction is impl → data.
+      - target: SpeakCore
+        embed: false   # the app embeds SpeakCore directly; SpeakLLM only links it.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.speak.SpeakLLM
@@ -59,9 +66,10 @@ targets:
     platform: macOS
     sources:
       - Speak/SpeakCore
-    dependencies:
-      - target: SpeakLLM
-        embed: false   # Speak (the app) embeds SpeakLLM directly; SpeakCore only links it.
+    # No target dependencies — SpeakCore is the portable/headless engine and
+    # links zero SpeakLLM code. The SpeakLLM-backed `OpenAICompatibleCleaner`
+    # and the `defaultCleaner(for:)` factory live in the App target, above the
+    # `LLMCleaning` protocol seam.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.speak.SpeakCore

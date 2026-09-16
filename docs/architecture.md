@@ -124,11 +124,17 @@ universal fallback.
 
 ## 4. Containers (C4 L2)
 
-Three deployable units in the current tree:
+The deployable units in the current tree:
 - **`speak.app`** — the SwiftUI menubar app the user runs.
 - **`SpeakCore.framework`** — the headless dictation engine, embedded in the
   app. (Separated so a future CLI shim / iOS app / extracted portable engine
-  can reuse it — the §1.1 seam.)
+  can reuse it — the §1.1 seam.) Links **zero** `SpeakLLM` code — the
+  OpenAI-compatible cleaner and its factory sit above the `LLMCleaning`
+  protocol seam in the App target.
+- **`SpeakLLM.framework`** — the opt-in networking module (OpenAI-compatible
+  cleanup client, Keychain API-key store, local inference server), embedded
+  in the app. The one audited-moat exception; links `SpeakCore` only for the
+  shared `LLMAuthStyle` settings type.
 - **`speak-mcp`** — a thin stdio MCP process. It translates JSON-RPC tool calls
   into the app's existing local CFMessagePort IPC; it never owns audio or UI.
 
@@ -188,8 +194,11 @@ speak/
 │   │   # WhisperCppTranscriber.swift      (v1, Intel)
 │   ├── Cleanup/                  # AI neat-writing (v0 CORE — not optional)
 │   │   ├── Cleaner.swift         # protocol `LLMCleaning` + CleanupMode enum
-│   │   └── FoundationModelsCleaner.swift  # Apple Foundation Models impl (v0 default)
-│   │   # (OllamaCleaner.swift lives in SpeakLLM/ as v0.1 alternative)
+│   │   ├── FoundationModelsCleaner.swift  # Apple Foundation Models impl (v0 default)
+│   │   └── ProviderPreset.swift  # pure-data provider settings (`ProviderPreset`,
+│   │                             #   `LLMAuthStyle`) persisted by SettingsStore
+│   │   # (OpenAICompatibleCleaner.swift lives in App/Cleanup/ — it constructs
+│   │   #  SpeakLLM types, and SpeakCore links zero SpeakLLM code)
 │   ├── Paste/
 │   │   └── PasteboardWriter.swift # NSPasteboard write + Cmd+V simulate
 │   ├── Permissions/
@@ -202,10 +211,13 @@ speak/
 │   ├── VoiceActions/              # separate human-invoked Shortcuts path
 │   └── Logging/
 │       └── SpeakLog.swift         # OSLog categories
-├── SpeakLLM/                     # (v0.1) Ollama alternative cleanup engine
-│   ├── OllamaClient.swift        # HTTP client for Ollama local server
-│   ├── OllamaCleaner.swift       # `LLMCleaning` impl via Ollama (v0.1 alt)
-│   └── CleanupPrompt.swift       # shared prompt templates
+├── SpeakLLM/                     # (v0.1) opt-in networking module: the ONE
+│   │                             #  audited-moat exception (URLSession, Keychain,
+│   │                             #  local NWListener inference server). Links
+│   │                             #  SpeakCore for `LLMAuthStyle` only.
+│   ├── OpenAICompatibleClient.swift  # HTTP client for OpenAI-compatible endpoints
+│   ├── LLMKeychainStore.swift    # API-key storage (Keychain)
+│   └── InferenceServer/          # local OpenAI/Anthropic-compatible HTTP server
 ├── SpeakCLI/                     # (v0.1, optional) `speak --start` shim
 │   └── SpeakCLI.swift
 ├── SpeakTests/                   # XCTest unit + XCUITest UI
@@ -280,16 +292,41 @@ public struct HistoryEntry: Sendable, Identifiable {
     public let cleanedText: String?
     public let createdAt: Date
     public let engineId: String
+    // `cleanupStatus` (TEXT column, "" for pre-migration legacy rows) records
+    // the CleanupStatus.storageKey — e.g. "cleaned", "skipped",
+    // "fallbackRaw.timedOut" — so LatencyStats can partition successful-cleanup
+    // from raw-fallback latency instead of inferring it from cleanupSeconds.
+    public let cleanupStatus: String
 }
 
-// SpeakCore/Engine/SpeakEngine.swift — the top-level facade
-public final class SpeakEngine: @unchecked Sendable {
+// SpeakCore/Engine/SpeakEngine.swift — the top-level facade (actor)
+public actor SpeakEngine {
     public init(transcriber: any Transcribing,
                 cleaner: (any LLMCleaning)? = nil,
                 history: HistoryStoring,
                 settings: SettingsStore) throws
-    public func newSession() -> CaptureSession
+
+    // Dictation verbs — the ONLY public capture entry points. Both enforce the
+    // mute gate, mic authorization (prompting on .notDetermined), and
+    // single-capture exclusion before any audio starts.
+    public func beginDictation(frontmostBundleID: String?) async throws -> Bool
+    public func endDictation() async throws -> TranscriptionResult
+    public func cancelDictation() async
+
+    // Auxiliary (non-dictation) capture — Command Mode, Voice Sandbox.
+    // Same gates as beginDictation; paste-free + history-free sessions.
+    // SpeakEngine+Auxiliary.swift.
+    public func beginAuxiliarySession(includeCleanup: Bool) async throws -> CaptureSession
+    public func endAuxiliarySession(_ session: CaptureSession) async throws -> TranscriptionResult
+    public func cancelAuxiliarySession(_ session: CaptureSession) async
+
+    public func setMuted(_ muted: Bool) async   // cancels ALL capture while muting
 }
+
+// `CaptureSession` construction is module-internal: production capture can
+// only be minted/started through `SpeakEngine`, which is what makes the mute
+// gate and single-capture exclusion bypass-proof. Tests still construct
+// sessions directly via @testable.
 
 // SpeakCore/Cleanup/Cleaner.swift (protocol — v0 CORE)
 public protocol LLMCleaning: Sendable {
@@ -478,14 +515,18 @@ and a fallback ladder. Cleanup is a **v0 CORE concern**, not an add-on.
 
 ### 10a.1 The `LLMCleaning` protocol
 
-Engines are selected at runtime from settings. The default factory:
+Engines are selected at runtime from settings. The default factory lives in
+the **App target** (`App/Cleanup/CleanupFactories.swift`) — the `.ollama` /
+`.openAICompatible` cases construct `SpeakLLM`-backed types, and `SpeakCore`
+links zero SpeakLLM code:
 
 ```swift
 func defaultCleaner(for settings: SettingsStore) -> (any LLMCleaning)? {
     guard settings.cleanupEnabled else { return nil }   // toggle: off → raw transcript
     switch settings.cleanupEngine {
-    case .foundationModels: return FoundationModelsCleaner()  // v0 default
-    case .ollama(let model): return OllamaCleaner(model: model) // v0.1
+    case .foundationModels: return FoundationModelsCleaner()          // v0 default
+    case .ollama(let model): return OpenAICompatibleCleaner(preset: .ollama, model: model) // v0.1
+    case .openAICompatible(let p, let m): return OpenAICompatibleCleaner(preset: p, model: m) // v0.1
     }
 }
 ```
@@ -509,7 +550,7 @@ returns `false` at runtime, `CaptureSession` falls back to raw transcript
 | Version | Engine | Notes |
 |---|---|---|
 | **v0** | `FoundationModelsCleaner` (Apple `Foundation Models`) | default; Apple framework; zero deps |
-| v0.1 | `OllamaCleaner` (Qwen 2.5 3B / Gemma 3 4B / Phi-4-mini via Ollama) | user-swappable; requires Ollama installed |
+| v0.1 | `OpenAICompatibleCleaner` (Ollama / Sarvam / OpenAI / Groq / OpenRouter / custom endpoint) | user-swappable, strictly opt-in; lives in the App target, backed by `SpeakLLM` |
 | v0.1 | MLX models | power-user local models via MLX |
 | v1 | richer modes (tone/style/per-app/custom vocabulary) | `CleanupMode` extensions |
 | fallback | raw transcript | always available; cleanup skippable via toggle |

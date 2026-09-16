@@ -1,7 +1,7 @@
 // SpeakCore/Engine/EngineFactories.swift
 //
-// Runtime factory functions for selecting transcriber + cleaner from settings
-// (architecture.md §10.1 and §10a.1).
+// Runtime factory functions for selecting transcriber + transcript expander
+// from settings (architecture.md §10.1).
 //
 // Pattern: switch on the settings enum; for unbuilt v0.1/v1 engines, log via
 // `SpeakLog` and fall back to the v0 default — never `fatalError`.
@@ -12,6 +12,12 @@
 //   Putting them in `SettingsStore` would create a layering inversion
 //   (Storage layer referencing Engine/STT/Cleanup types). Free functions in the
 //   Engine group are the right seam.
+//
+// NOTE — the cleanup-engine factory `defaultCleaner(for:)` moved to the App
+//   target (`App/Cleanup/CleanupFactories.swift`): its `.ollama` /
+//   `.openAICompatible` cases construct `SpeakLLM`-backed types, and SpeakCore
+//   links zero SpeakLLM code. `defaultTranscriber`/`defaultExpander` stay here
+//   because every engine they build is provider-neutral SpeakCore code.
 
 import Foundation
 
@@ -82,51 +88,5 @@ public func defaultExpander(
     case 0: return nil
     case 1: return stages[0]
     default: return CompositeExpander(stages)
-    }
-}
-
-// MARK: - Cleanup factory
-
-/// Select the cleanup engine dictated by `settings.cleanupEngine`, or return `nil`
-/// when cleanup is disabled.
-///
-/// - `cleanupEnabled == false` → `nil` (raw transcript; fast path — no LLM pass)
-/// - `cleanupEnabled == true` and `.foundationModels` → `FoundationModelsCleaner()`
-/// - `cleanupEnabled == true` and `.ollama` → `OpenAICompatibleCleaner(preset: .ollama)`
-///   (V01-2 — real implementation, backed by the `SpeakLLM` module)
-/// - `cleanupEnabled == true` and `.openAICompatible` → `OpenAICompatibleCleaner`
-///   for the chosen cloud/custom preset (V01-2)
-///
-/// If the returned cleaner's `isAvailable` is `false` at runtime, `CaptureSession`
-/// gracefully falls back to raw transcript (never `.error`) — see §10a.3. This is
-/// true for Ollama-not-running and for a cloud preset with no API key configured,
-/// exactly as it is for Foundation Models being unavailable.
-public func defaultCleaner(for settings: SettingsStore) -> (any LLMCleaning)? {
-    guard settings.cleanupEnabled else {
-        // Toggle is off — caller receives nil; CaptureSession delivers raw transcript.
-        return nil
-    }
-    switch settings.cleanupEngine {
-    case .foundationModels:
-        return FoundationModelsCleaner()
-
-    case .ollama(let model):
-        // V01-2: real implementation. Loopback-only base URL, no API key —
-        // `isAvailable` pings http://127.0.0.1:11434/api/tags (1s timeout).
-        return OpenAICompatibleCleaner(preset: .ollama, model: model)
-
-    case .openAICompatible(let preset, let model):
-        // V01-2: cloud/custom presets. Strictly opt-in — only reachable when the
-        // user has picked this case in Settings. `isAvailable` checks Keychain for
-        // a stored API key (no live network probe for cloud presets).
-        return OpenAICompatibleCleaner(preset: preset, model: model)
-
-    case .mlx(let model):
-        // MLX requires third-party Swift packages — forbidden in v0 (AGENTS.md §2.3).
-        // Returns nil; graceful fallback to raw transcript.
-        SpeakLog.cleanup.warning(
-            "defaultCleaner: .mlx(model: \(model, privacy: .public)) — using v0.1+ fallback."
-        )
-        return nil
     }
 }

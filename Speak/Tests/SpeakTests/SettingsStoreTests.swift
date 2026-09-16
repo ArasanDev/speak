@@ -20,6 +20,7 @@
 //   test suite. The Settings window UI rendering is [deferred — human verification].
 
 import CoreGraphics
+@testable import Speak
 @testable import SpeakCore
 import XCTest
 

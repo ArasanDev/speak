@@ -49,15 +49,16 @@ public enum STTEngine: Codable, Sendable, Equatable, Hashable {
 ///
 /// **Persistence:** encoded as JSON in `UserDefaults` (same pattern as `STTEngine`).
 /// **Default:** `.foundationModels` — the only production-ready engine in v0.
-/// **Fallback:** `EngineFactories.defaultCleaner(for:)` always falls back to
+/// **Fallback:** the App-side `defaultCleaner(for:)` factory always falls back to
 /// `FoundationModelsCleaner` when an opt-in engine's stub returns `isAvailable == false`.
 ///
 /// Wave 2.1 registered `.ollama`/`.mlx` as stub placeholders (`isAvailable == false`
-/// always). V01-2 makes `.ollama` real: `EngineFactories.defaultCleaner` now routes it
-/// to `OpenAICompatibleCleaner(preset: .ollama, model:)`, backed by the `SpeakLLM`
+/// always). V01-2 makes `.ollama` real: `defaultCleaner(for:)` (in
+/// `App/Cleanup/CleanupFactories.swift`) routes it to
+/// `OpenAICompatibleCleaner(preset: .ollama, model:)`, backed by the `SpeakLLM`
 /// module. `.openAICompatible` is the general form covering the remaining five
 /// presets (Sarvam/OpenAI/Groq/OpenRouter/custom) from `ProviderPreset`
-/// (`SpeakCore/Cleanup/OpenAICompatibleCleaner.swift`). `.mlx` remains a stub —
+/// (`SpeakCore/Cleanup/ProviderPreset.swift`). `.mlx` remains a stub —
 /// MLX is a third-party dep, forbidden until its own v0.1+ approval. [decision V01-2]
 public enum CleanupEngine: Codable, Sendable, Equatable, Hashable {
     /// Apple Foundation Models (macOS 26+, Apple Silicon + Neural Engine). **v0 default.**

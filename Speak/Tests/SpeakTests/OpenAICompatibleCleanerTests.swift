@@ -1,6 +1,6 @@
 // SpeakTests/OpenAICompatibleCleanerTests.swift
 //
-// Component tests for `OpenAICompatibleCleaner` (SpeakCore) and
+// Component tests for `OpenAICompatibleCleaner` (App target) and
 // `OpenAICompatibleClient` / `LLMKeychainStore` (SpeakLLM) — roadmap V01-2.
 //
 // NO REAL NETWORK: every HTTP-hitting test stubs `URLProtocol` so these run
@@ -18,6 +18,7 @@
 //   [x] isAvailable: false when Ollama unreachable; true when API key present
 //   [x] API keys never touch UserDefaults — Keychain round-trip only
 
+@testable import Speak
 @testable import SpeakCore
 import SpeakLLM
 import XCTest
