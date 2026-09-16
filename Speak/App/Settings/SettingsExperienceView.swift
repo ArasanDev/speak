@@ -209,13 +209,13 @@ private struct BackToDashboardButton: View {
         Button(action: action) {
             Image(systemName: "chevron.left")
                 .font(.system(size: 15))
-                .foregroundColor(Color.speakMica)
+                .foregroundStyle(Color.speakMica)
                 .frame(width: 26, height: 26)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(Color.primary.opacity(isHovering ? 0.08 : 0))
-        .cornerRadius(6)
+        .clipShape(.rect(cornerRadius: 6))
         .help("Back to Dashboard (Esc)")
         .onHover { isHovering = $0 }
     }

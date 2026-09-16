@@ -19,13 +19,13 @@ struct DashboardView: View {
             Button(action: action) {
                 Image(systemName: "sidebar.left")
                     .font(.system(size: 15))
-                    .foregroundColor(Color.speakMica)
+                    .foregroundStyle(Color.speakMica)
                     .frame(width: 26, height: 26)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .background(Color.primary.opacity(isHovering ? 0.08 : 0))
-            .cornerRadius(6)
+            .clipShape(.rect(cornerRadius: 6))
             .onHover { hovering in
                 isHovering = hovering
             }
@@ -219,13 +219,13 @@ struct DashboardView: View {
 
                         Text(selection.title)
                             .font(.headline)
-                            .foregroundColor(Color.speakBone)
+                            .foregroundStyle(Color.speakBone)
 
                         // The pane's "why am I here" line — carried by the
                         // section, not a duplicate in-pane hero title.
                         Text(selection.subtitle)
                             .font(.speakBody(.caption))
-                            .foregroundColor(Color.speakMica)
+                            .foregroundStyle(Color.speakMica)
                             .lineLimit(1)
 
                         Spacer()
@@ -258,7 +258,7 @@ struct DashboardView: View {
             Button(action: openSettings) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(selection == .settings ? Color.speakUIAccent : Color.speakMica)
+                    .foregroundStyle(selection == .settings ? Color.speakUIAccent : Color.speakMica)
                     .frame(width: 32, height: 32)
                     .background(
                         selection == .settings
@@ -281,7 +281,7 @@ struct DashboardView: View {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: "arrow.2.circlepath")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(isSelfHealed ? Color.speakDelivered : Color.speakMica)
+                        .foregroundStyle(isSelfHealed ? Color.speakDelivered : Color.speakMica)
                         .rotationEffect(.degrees(selfHealRotation))
                         .frame(width: 32, height: 32)
                         .background(
@@ -327,7 +327,7 @@ struct DashboardView: View {
             Button(action: openSettings) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(selection == .settings ? Color.speakUIAccent : Color.speakMica)
+                    .foregroundStyle(selection == .settings ? Color.speakUIAccent : Color.speakMica)
                     .frame(width: 32, height: 32)
                     .background(selection == .settings ? Color.speakSidebarSelection : Color.clear)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -341,7 +341,7 @@ struct DashboardView: View {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: "arrow.2.circlepath")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(isSelfHealed ? Color.speakDelivered : Color.speakMica)
+                        .foregroundStyle(isSelfHealed ? Color.speakDelivered : Color.speakMica)
                         .rotationEffect(.degrees(selfHealRotation))
                         .frame(width: 32, height: 32)
                         .background(isSelfHealed ? Color.speakDelivered.opacity(0.15) : Color.clear)

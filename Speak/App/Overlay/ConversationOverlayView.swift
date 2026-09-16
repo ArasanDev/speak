@@ -64,17 +64,15 @@ struct ConversationOverlayView: View {
     private var transcriptSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             // Main Transcript / Streaming Speech Text
-            ScrollViewReader { _ in
-                ScrollView(.vertical, showsIndicators: false) {
-                    Text(displayTranscriptText)
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundColor(displayTextColor)
-                        .lineSpacing(3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 2)
-                }
-                .frame(maxHeight: 72)
+            ScrollView(.vertical, showsIndicators: false) {
+                Text(displayTranscriptText)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(displayTextColor)
+                    .lineSpacing(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 2)
             }
+            .frame(maxHeight: 72)
 
             // Agent Speech Playback Progress Bar (active during .agentSpeaking)
             if case .agentSpeaking(_, let progress) = loopManager.state {
@@ -176,11 +174,11 @@ private struct ConversationHeaderRow: View {
         HStack(spacing: 6) {
             Image(systemName: stateIconName)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(stateIconColor)
+                .foregroundStyle(stateIconColor)
 
             Text(stateBadgeLabel)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.primary)
+                .foregroundStyle(.primary)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
@@ -214,7 +212,7 @@ private struct ConversationHeaderRow: View {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
             }
-            .foregroundColor(.secondary)
+            .foregroundStyle(.secondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(
@@ -319,7 +317,7 @@ private struct ConversationControlsSection: View {
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(typedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : Color.speakUIAccent)
+                        .foregroundStyle(typedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : Color.speakUIAccent)
                 }
                 .buttonStyle(.plain)
                 .disabled(typedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -346,7 +344,7 @@ private struct ConversationControlsSection: View {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .fill(loopManager.isMuted ? Color.speakMica.opacity(0.25) : Color.speakSurface.opacity(0.6))
                     )
-                    .foregroundColor(loopManager.isMuted ? Color.speakMica : .primary)
+                    .foregroundStyle(loopManager.isMuted ? Color.speakMica : .primary)
                 }
                 .buttonStyle(.plain)
 
@@ -368,7 +366,7 @@ private struct ConversationControlsSection: View {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .fill(isInterruptEnabled ? Color.speakError.opacity(0.2) : Color.speakSurface.opacity(0.3))
                     )
-                    .foregroundColor(isInterruptEnabled ? Color.speakError : .secondary)
+                    .foregroundStyle(isInterruptEnabled ? Color.speakError : .secondary)
                 }
                 .buttonStyle(.plain)
                 .disabled(!isInterruptEnabled)

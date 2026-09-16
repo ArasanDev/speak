@@ -96,8 +96,10 @@ struct ProfileEditorPanel: View {
 
             if !p.examples.isEmpty {
                 VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
-                    ForEach(Array(p.examples.enumerated()), id: \.offset) { idx, example in
-                        exampleRow(idx, example)
+                    ForEach(p.examples) { example in
+                        if let idx = p.examples.firstIndex(where: { $0.id == example.id }) {
+                            exampleRow(idx, example)
+                        }
                     }
                 }
             }
@@ -217,6 +219,10 @@ struct ProfileEditorPanel: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
             Text("Target apps (bundle IDs or names)").font(.speakBody(.caption)).foregroundStyle(.speakMica)
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                // Positional identity is safe here: rows are stateless and every
+                // write goes through `targetApps[idx]`, so content can't misbind.
+                // (String has no stable element id; `\.element` collides on the
+                // duplicate "" rows "Add" creates.)
                 ForEach(Array(p.targetApps.enumerated()), id: \.offset) { idx, app in
                     HStack(spacing: SpeakSpacing.xs) {
                         TextField("App", text: Binding(

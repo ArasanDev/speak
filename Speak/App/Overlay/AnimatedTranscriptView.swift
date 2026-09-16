@@ -31,15 +31,17 @@ struct AnimatedTranscriptView: View {
     }
 
     var body: some View {
-        ScrollViewReader { _ in
-            ScrollView(.vertical, showsIndicators: false) {
-                FlowLayout(spacing: 4) {
-                    ForEach(Array(diffTokens.enumerated()), id: \.offset) { _, token in
-                        TokenView(token: token)
-                    }
+        ScrollView(.vertical, showsIndicators: false) {
+            FlowLayout(spacing: 4) {
+                // Positional identity is the design: each update re-resolves the
+                // whole token list, and in-place identity is what lets the
+                // canceled→kept strikethrough/fade transitions animate at the
+                // same position.
+                ForEach(Array(diffTokens.enumerated()), id: \.offset) { _, token in
+                    TokenView(token: token)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .onAppear {
             // For the streaming form only: initialize from raw→text when no explicit

@@ -46,6 +46,14 @@ public extension Color {
     static var speakDiffDelete: Color { SpeakThemeRuntime.color(.error) }
 }
 
+// Same `ShapeStyle` shim as `SpeakColors` — lets `.speakDiffInsert` shorthand
+// resolve inside `.foregroundStyle(...)`, which looks members up on
+// `ShapeStyle`, not `Color`.
+public extension ShapeStyle where Self == Color {
+    static var speakDiffInsert: Color { SpeakThemeRuntime.color(.delivered) }
+    static var speakDiffDelete: Color { SpeakThemeRuntime.color(.error) }
+}
+
 // MARK: - CleanupDiffView
 
 /// A reusable SwiftUI component showing what the AI cleanup changed between
@@ -102,7 +110,7 @@ public struct CleanupDiffView: View {
         }
         .padding(SpeakSpacing.md)
         .background(Color.speakSurface)
-        .cornerRadius(SpeakSpacing.sm)   // [decision W4.1: 8pt corner radius, matches speakSurface cards]
+        .clipShape(.rect(cornerRadius: SpeakSpacing.sm))   // [decision W4.1: 8pt corner radius, matches speakSurface cards]
     }
 
     // MARK: - Subviews
@@ -112,7 +120,7 @@ public struct CleanupDiffView: View {
         HStack {
             Text("AI Changes")
                 .font(.speakBody(.base))
-                .foregroundColor(Color.speakMica)
+                .foregroundStyle(Color.speakMica)
 
             Spacer()
 
@@ -164,11 +172,11 @@ public struct CleanupDiffView: View {
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Text("Raw")
                     .font(.speakBody(.caption))
-                    .foregroundColor(Color.speakMica)
+                    .foregroundStyle(Color.speakMica)
                 ScrollView {
                     Text(raw)
                         .font(.speakMonoFace(.base))
-                        .foregroundColor(Color.speakBone)
+                        .foregroundStyle(Color.speakBone)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
                 }
@@ -180,11 +188,11 @@ public struct CleanupDiffView: View {
             VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
                 Text("Cleaned")
                     .font(.speakBody(.caption))
-                    .foregroundColor(Color.speakMica)
+                    .foregroundStyle(Color.speakMica)
                 ScrollView {
                     Text(cleaned)
                         .font(.speakMonoFace(.base))
-                        .foregroundColor(Color.speakBone)
+                        .foregroundStyle(Color.speakBone)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
                 }
@@ -199,7 +207,7 @@ public struct CleanupDiffView: View {
         ScrollView {
             Text(text)
                 .font(.speakMonoFace(.base))
-                .foregroundColor(Color.speakBone)
+                .foregroundStyle(Color.speakBone)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
         }
@@ -211,12 +219,12 @@ public struct CleanupDiffView: View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
             Label("No AI cleanup applied", systemImage: "wand.and.stars.inverse")
                 .font(.speakBody(.caption))
-                .foregroundColor(Color.speakMica)
+                .foregroundStyle(Color.speakMica)
 
             ScrollView {
                 Text(rawText)
                     .font(.speakMonoFace(.base))
-                    .foregroundColor(Color.speakBone)
+                    .foregroundStyle(Color.speakBone)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             }
@@ -230,7 +238,7 @@ public struct CleanupDiffView: View {
     /// styles — no `ForEach`, no `HStack` word-wrap issues. [decision W4.1]
     private func segmentedText(segments: [DiffSegment]) -> Text {
         guard !segments.isEmpty else {
-            return Text("(empty)").font(.speakMonoFace(.base)).foregroundColor(Color.speakMica)
+            return Text("(empty)").font(.speakMonoFace(.base)).foregroundStyle(Color.speakMica)
         }
 
         // Build from first segment so we can use + to accumulate.
@@ -253,7 +261,7 @@ public struct CleanupDiffView: View {
             // [decision W4.1: underline (not bold) to avoid weight mismatch with Monaco]
             return Text(segment.text)
                 .font(.speakMonoFace(.base))
-                .foregroundColor(.speakDiffInsert)
+                .foregroundStyle(.speakDiffInsert)
                 .underline(true, color: .speakDiffInsert)
 
         case .delete:
@@ -261,7 +269,7 @@ public struct CleanupDiffView: View {
             // [decision W4.1: strikethrough is the universal "crossed out" affordance]
             return Text(segment.text)
                 .font(.speakMonoFace(.base))
-                .foregroundColor(.speakDiffDelete)
+                .foregroundStyle(.speakDiffDelete)
                 .strikethrough(true, color: .speakDiffDelete)
         }
     }

@@ -74,8 +74,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                     SpeakLog.app.info("speak: terminating older instance (pid=\(other.processIdentifier, privacy: .public)) to hand off execution.")
                     other.terminate()
                 }
-                // Brief pause to allow the older instance to release its event tap and IPC ports.
-                usleep(150_000)
+                // Defer startup until the outgoing instance has released its
+                // event tap and IPC ports — a grace period, not a blocked
+                // main thread (hard rule §2.12). [decision: 150 ms covers
+                // CGEventTap teardown + CFMessagePort invalidation on the
+                // same runloop turn]
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.handoffGracePeriod) { [weak self] in
+                    self?.finishLaunching()
+                }
+                return
             } else if let existingInstance = others.first {
                 SpeakLog.hotkey.warning(
                     "speak: another instance is already running (pid=\(existingInstance.processIdentifier, privacy: .public)) — activating it and terminating."
@@ -89,6 +96,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             }
         }
 
+        finishLaunching()
+    }
+
+    /// Grace period before this instance arms its own event tap after terminating
+    /// an older instance (handoff path). [decision: see the call site]
+    private static let handoffGracePeriod: TimeInterval = 0.15
+
+    /// Everything after the single-instance guard: build the controller, arm
+    /// monitoring, create the status item, prewarm STT. Deferred by
+    /// `handoffGracePeriod` on the terminate-and-replace path.
+    private func finishLaunching() {
         // Build the controller now (after the guard — not wasted on secondary instance).
         let ctrl = DictationController()
         self.controller = ctrl

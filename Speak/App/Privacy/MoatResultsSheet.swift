@@ -67,7 +67,7 @@ struct MoatResultsSheet: View {
                         .padding(.horizontal, 12)
                         .background(Color.speakSurface)
                         .foregroundStyle(Color.speakBone)
-                        .cornerRadius(6)
+                        .clipShape(.rect(cornerRadius: 6))
                 }
             )
             .buttonStyle(.plain)

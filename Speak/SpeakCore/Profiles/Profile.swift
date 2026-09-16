@@ -100,13 +100,41 @@ public struct Profile: Codable, Identifiable, Sendable, Equatable {
 
 /// A few-shot pair: raw dictation → desired output. Doubles as the first golden
 /// fixture for the small-models eval harness (profile-system-prompts.md §Eval).
-public struct Example: Codable, Sendable, Equatable, Hashable {
+///
+/// `id` gives SwiftUI editor rows stable identity across list mutations
+/// (remove/reorder). It is deliberately excluded from `==`/`hash`: equality is
+/// content equality, so a persisted override still compares equal to its shipped
+/// default when the text matches. Profiles persisted before this field decode
+/// with a fresh `id`.
+public struct Example: Codable, Sendable, Equatable, Hashable, Identifiable {
+    public let id: UUID
     public var spoken: String
     public var written: String
 
-    public init(spoken: String, written: String) {
+    public init(id: UUID = UUID(), spoken: String, written: String) {
+        self.id = id
         self.spoken = spoken
         self.written = written
+    }
+
+    public static func == (lhs: Example, rhs: Example) -> Bool {
+        lhs.spoken == rhs.spoken && lhs.written == rhs.written
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(spoken)
+        hasher.combine(written)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, spoken, written
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        self.spoken = try container.decode(String.self, forKey: .spoken)
+        self.written = try container.decode(String.self, forKey: .written)
     }
 }
 

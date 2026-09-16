@@ -491,50 +491,55 @@ private struct CollapsedHistoryEntryView: View {
     @State private var isHovered = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: SpeakSpacing.sm) {
-            Image(systemName: "chevron.right")
-                .font(.speakBody(.caption, semibold: true))
-                .foregroundStyle(Color.speakMica)
-                .frame(width: 12)
-                // Optical alignment with the first line of text.
-                .padding(.top, SpeakSpacing.xs)
-
-            VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
-                HStack(spacing: SpeakSpacing.sm) {
-                    Text(entry.createdAt, style: .time)
-                        .font(.speakMonoFace(.caption))
-                        .foregroundStyle(Color.speakMica)
-                    Spacer(minLength: 0)
-                    if !entry.engineId.isEmpty {
-                        engineBadge(entry.engineId)
-                    }
-                }
-
-                Text(primaryText)
-                    .font(.speakBody(.base))
-                    .foregroundStyle(primaryIsPlaceholder ? Color.speakMica : Color.speakBone)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                if let cleaned = entry.cleanedText, cleaned != entry.rawText, !cleaned.isEmpty {
-                    HStack(spacing: SpeakSpacing.xs) {
-                        Image(systemName: "wand.and.stars")
-                            .font(.speakBody(.caption))
-                        Text(cleaned)
-                            .font(.speakBody(.caption))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
+        // The whole row is the expand affordance — a real Button so keyboard
+        // and VoiceOver can activate it, styled plain to keep the custom look.
+        Button(action: onTap) {
+            HStack(alignment: .top, spacing: SpeakSpacing.sm) {
+                Image(systemName: "chevron.right")
+                    .font(.speakBody(.caption, semibold: true))
                     .foregroundStyle(Color.speakMica)
+                    .frame(width: 12)
+                    // Optical alignment with the first line of text.
+                    .padding(.top, SpeakSpacing.xs)
+
+                VStack(alignment: .leading, spacing: SpeakSpacing.xs) {
+                    HStack(spacing: SpeakSpacing.sm) {
+                        Text(entry.createdAt, style: .time)
+                            .font(.speakMonoFace(.caption))
+                            .foregroundStyle(Color.speakMica)
+                        Spacer(minLength: 0)
+                        if !entry.engineId.isEmpty {
+                            engineBadge(entry.engineId)
+                        }
+                    }
+
+                    Text(primaryText)
+                        .font(.speakBody(.base))
+                        .foregroundStyle(primaryIsPlaceholder ? Color.speakMica : Color.speakBone)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    if let cleaned = entry.cleanedText, cleaned != entry.rawText, !cleaned.isEmpty {
+                        HStack(spacing: SpeakSpacing.xs) {
+                            Image(systemName: "wand.and.stars")
+                                .font(.speakBody(.caption))
+                            Text(cleaned)
+                                .font(.speakBody(.caption))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .foregroundStyle(Color.speakMica)
+                    }
                 }
             }
+            .padding(.horizontal, SpeakSpacing.sm)
+            .padding(.vertical, SpeakSpacing.sm)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.speakMica.opacity(isHovered ? 0.08 : 0.0))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, SpeakSpacing.sm)
-        .padding(.vertical, SpeakSpacing.sm)
-        .background(Color.speakMica.opacity(isHovered ? 0.08 : 0.0))
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
+        .buttonStyle(.plain)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: SpeakMotion.microDuration)) {
                 isHovered = hovering
