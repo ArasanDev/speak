@@ -1,7 +1,10 @@
 # SPEC.md — speak product specification
-> Consolidated product + competitive reference. Read for: positioning, why-speak, moat claims.
-> Authority: docs/product.md (vision) · docs/benchmark.md (done-condition) · specs/verification-ledger.md (verified claims)
-> Date: 2026-06-30.
+
+Consolidated product + competitive reference. Read for: positioning, why-speak, moat claims.
+
+Authority: docs/product.md (vision) · docs/benchmark.md (done-condition) · specs/verification-ledger.md (verified claims)
+
+Date: 2026-06-30.
 
 ---
 
@@ -13,7 +16,7 @@ Press a hotkey → speak → stop. A floating overlay streams your words live as
 
 Speech → transcript → on-device AI neat-writing → paste at cursor. That is the entire product.
 
-- Hotkey: double-tap Fn to start; single-tap to stop and paste. Fully customizable. `[verified]`
+- Hotkey: double-tap Fn or right command or any key that user to start; single-tap the same to stop and paste. Fully customizable. `[verified]`
 - STT: `SpeechAnalyzer` (Apple, on-device, macOS 26, Apple Silicon). `[verified]`
 - AI cleanup: `Foundation Models` (Apple, on-device LLM, macOS 26, Apple Silicon). `[verified]`
 - Paste: `NSPasteboard` write + simulated Cmd+V. Write-never-read. `[verified in headless]`; Terminal paste-provenance bypass `[unverified — P6 live gate]`
@@ -40,7 +43,7 @@ speak occupies the one position the incumbent structurally cannot: **fully local
 
 ## The moat (structural bundle)
 
-Five properties speak holds simultaneously. No competitor holds all five. Each is a BEAT row in `benchmark.md` §3.
+Five properties speak holds simultaneously. No competitor holds all five. Each is a BEAT row in `benchmark.md`.
 
 1. **100% local** — audio + AI cleanup never leave the device. `[verified]`
 2. **Fully offline** — all core flows work with networking disabled. Wispr requires cloud. `[verified]`
