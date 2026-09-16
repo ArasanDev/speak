@@ -169,11 +169,14 @@ speak/
 │   │                             #   Hotkeys · Vocabulary · Agent Bridge ·
 │   │                             #   Appearance (themes) · Overlay · Privacy ·
 │   │                             #   General · About
-│   └── Overlay/                  # TranscriptOverlayPanel (non-activating capsule
+│   └── Overlay/                  # TranscriptOverlayPanel (non-activating floating
 │                                 #   NSPanel: .canJoinAllSpaces + .fullScreenAuxiliary,
 │                                 #   never steals focus, active-screen mouse-follow)
-│                                 # · TranscriptOverlayView (Classic HUD)
-│                                 # · AuroraOverlayView (ambient variant)
+│                                 # · TranscriptOverlayView (unified minimal HUD —
+│                                 #   single rounded-rect panel, all four states)
+│                                 # · HUDLaneViews / HUDLaneContent (pill frame,
+│                                 #   leading slot, text lane, header, controls,
+│                                 #   opt-in border layer)
 │                                 # · VoiceAnimationView (Sonar/RingGauge/Spectrum)
 │                                 # · AnimatedGradientBorder / EdgeFlowBorder
 │                                 # · CaretOverlayController (280×36 caret preview;

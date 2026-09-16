@@ -2039,3 +2039,49 @@ non-terminal/nil bundle IDs still reach CaretLocator. 7/7 suite green.
 lint 0 serious · moat 7/7 · overlay fully configurable from Settings →
 Overlay and owner-verified live · P4 done. No pushes performed yet beyond
 this commit chain — local verification is the gate.
+
+### 2026-09-17 — Recording HUD redesign: unified minimal panel + SwiftUI correctness pass
+
+**Owner direction:** the divider-segmented capsule bar (and its traveling-light
+border) read as busy. Replaced with one calm surface, then re-shaped per
+follow-up: near-rectangle silhouette, not a circle-ended capsule.
+
+**HUD v2 (design):**
+- One shared frame for all four states — `HUDLaneViews.swift` (pill frame,
+  morphing leading slot, text lane) + `HUDLaneContent.swift` (header,
+  controls, per-state lane bodies, opt-in border layer). `TranscriptOverlayView`
+  is now a thin shell: frosted glass + faint phase-colored wash + 1 pt
+  `speakCardBorder` hairline. No dividers, no icon tiles, no timer endcap —
+  the timer rides inline in the header (`LISTENING · 0:12`).
+- Silhouette: `HUDLane.panelShape` = `RoundedRectangle(cornerRadius: 14,
+  style: .continuous)` — a square-ish panel with micro-curved edges (owner
+  request). One shape constant shared by clip, wash, hairline, and the
+  opt-in animated borders so layers can't disagree.
+- Classic/Aurora unified: `AuroraOverlayView.swift` deleted; `OverlayRootView`
+  always renders `TranscriptOverlayView`. `hudStyle` stays persisted for
+  schema compat but no longer forks the view tree; the Settings picker is
+  removed. The animated border survives as an orthogonal opt-in
+  (`borderAnimationStyle != .none`).
+- Spectrum Bars now renders the bare `WaveformView` (matching its settings
+  label); sonar/ring-gauge keep their chambers at 0.7 scale.
+- Settings → Overlay preview extracted to `OverlayPreviewPanel.swift` and
+  mirrors the real panel (real animation, real border layer, state wash,
+  hairline). Debug overlay demo seeds `windowText`/`stopHint`/
+  `elapsedSeconds`/`level` so it exercises the live path.
+
+**SwiftUI correctness (mechanical sweep, whole App target):**
+- `ThemeEngine` → `@Observable` — fixes a real tracking bug: `ThemedRoot`
+  held it as plain `let`, so `engine.activeTheme` reads never subscribed to
+  `@Published` changes. `LaunchAtLoginManager` likewise.
+- `AnimatedTranscriptView.diffTokens` → `@State private(set)`.
+- Removed `AnyView` from `ProfileEditorPanel`; `ActivityBarChart` caches its
+  `DateFormatter` statically (was allocating per row per body-eval).
+- History JSON export now uses `JSONSerialization` (old hand-rolled escaping
+  produced invalid JSON on control chars).
+- `DispatchQueue.main.async` restart paths → `Task { @MainActor }`.
+
+**Verification:** `xcodegen generate` clean · `make build` clean ·
+`make test` 1040 tests / 10 skipped / 0 failures · `make lint` 0 serious
+(all touched files clean; remaining warnings pre-existing) ·
+`make verify-moat` 7/7. Overlay screenshot-verified live in listening/done/
+error states via `--debug-open overlay-demo*`.

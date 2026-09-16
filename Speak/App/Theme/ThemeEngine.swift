@@ -17,26 +17,31 @@
 // Owned by `DictationController` (the app brain), shared into every window
 // root via `DashboardContext.themeEngine` / `ThemedRoot`.
 
-import Combine
 import Foundation
 import SpeakCore
 import SwiftUI
 
 // MARK: - ThemeEngine
 
+/// `@Observable` (not `ObservableObject`): `ThemedRoot` holds the engine as a
+/// plain `let` and reads `activeTheme` in `body` — under `@Published` that read
+/// was NOT tracked, so a hosted window only repainted if something else
+/// invalidated `ThemedRoot`. Per-property tracking makes the read itself the
+/// subscription, which is the mechanism the repaint contract actually needs.
+@Observable
 @MainActor
-final class ThemeEngine: ObservableObject {
+final class ThemeEngine {
 
-    /// The resolved active theme — published so `ThemedRoot` re-injects the
+    /// The resolved active theme — tracked so `ThemedRoot` re-injects the
     /// environment value and the whole subtree repaints.
-    @Published private(set) var activeTheme: SpeakTheme
+    private(set) var activeTheme: SpeakTheme
 
     /// All selectable themes: built-ins first, then user customs (save order).
-    @Published private(set) var themes: [SpeakTheme]
+    private(set) var themes: [SpeakTheme]
 
     /// The live-editing session, if the theme editor is open. Mutating it
     /// repaints the app immediately (draft paints the real app, t3code-style).
-    @Published private(set) var draft: SpeakTheme?
+    private(set) var draft: SpeakTheme?
 
     private let settingsStore: SettingsStore
 
@@ -168,7 +173,7 @@ final class ThemeEngine: ObservableObject {
     private func persistCustomThemes(_ customs: [SpeakTheme]) {
         do {
             let data = try JSONEncoder().encode(customs)
-            settingsStore.customThemesJSON = String(decoding: data, as: UTF8.self)
+            settingsStore.customThemesJSON = String(data: data, encoding: .utf8) ?? "[]"
         } catch {
             SpeakLog.app.error(
                 "ThemeEngine: failed to encode custom themes — \(error.localizedDescription, privacy: .public)"

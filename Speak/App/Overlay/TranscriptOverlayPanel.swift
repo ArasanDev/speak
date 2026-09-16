@@ -137,10 +137,10 @@ final class TranscriptOverlayPanel: NSPanel {
             .ignoresCycle      // [decision] spec §4 — Phase C addition
         ]
 
-        // Step 4: host the SwiftUI recording HUD view. `OverlayRootView` (H-UI)
-        // switches between the classic and Aurora HUD styles based on
-        // `settingsStore.hudStyle` — the panel/hosting view are created once
-        // regardless of style. FirstMouseHostingView (NOT plain NSHostingView) so
+        // Step 4: host the SwiftUI recording HUD view — `OverlayRootView` (H-UI)
+        // renders the unified minimal panel; the persisted `hudStyle` key no
+        // longer forks the view tree. FirstMouseHostingView (NOT plain
+        // NSHostingView) so
         // the PE-3 live-panel chips receive the first click without the panel
         // becoming key — required for both styles. [integration decision H-UI]
         let hostingView = FirstMouseHostingView(

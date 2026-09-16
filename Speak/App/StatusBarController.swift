@@ -445,7 +445,7 @@ final class StatusBarController: NSObject {
             if let error {
                 SpeakLog.app.error("handleRestart: failed to launch new instance: \(error.localizedDescription, privacy: .public)")
             } else {
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     NSApplication.shared.terminate(nil)
                 }
             }

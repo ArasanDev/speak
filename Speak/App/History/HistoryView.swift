@@ -401,29 +401,31 @@ struct HistoryView: View {
         do {
             try contents.write(to: url, atomically: true, encoding: .utf8)
         } catch {
-            // [unverified — error handling deferred]
+            SpeakLog.storage.error(
+                "HistoryView export write failed: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
 
+    /// Serialize one entry via `JSONSerialization` — the previous hand-rolled
+    /// string interpolation escaped `"` `\` `\n` `\r` but left tabs and other
+    /// control characters raw, emitting invalid JSON for transcripts that
+    /// contained them.
     private func formatEntryJSON(_ entry: HistoryEntry) -> String {
-        let formatter = ISO8601DateFormatter()
-        return """
-        {
-          "id": "\(entry.id.uuidString)",
-          "rawText": "\(escapeJSON(entry.rawText))",
-          "cleanedText": \(entry.cleanedText.map { "\"\(escapeJSON($0))\"" } ?? "null"),
-          "createdAt": "\(formatter.string(from: entry.createdAt))",
-          "engineId": "\(entry.engineId)"
+        let object: [String: Any] = [
+            "id": entry.id.uuidString,
+            "rawText": entry.rawText,
+            "cleanedText": entry.cleanedText as Any,
+            "createdAt": ISO8601DateFormatter().string(from: entry.createdAt),
+            "engineId": entry.engineId
+        ]
+        guard let data = try? JSONSerialization.data(
+            withJSONObject: object,
+            options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        ) else {
+            return "{}"
         }
-        """
-    }
-
-    private func escapeJSON(_ string: String) -> String {
-        string
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: "\\n")
-            .replacingOccurrences(of: "\r", with: "\\r")
+        return String(data: data, encoding: .utf8) ?? "{}"
     }
 }
 

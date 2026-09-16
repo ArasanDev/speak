@@ -15,9 +15,9 @@ struct ProfileEditorPanel: View {
     @Binding var isPreviewing: Bool
 
     var body: some View {
-        guard let p = profile else { return AnyView(EmptyView()) }
-
-        return AnyView(
+        // `if let` in body — no AnyView: type-erasure would erase the subtree's
+        // identity and defeat diffing on every parent pass.
+        if let p = profile {
             VStack(alignment: .leading, spacing: SpeakSpacing.sm) {
                 Text(p.name)
                     .font(.system(size: 16, weight: .semibold))
@@ -42,7 +42,7 @@ struct ProfileEditorPanel: View {
                 .padding(SpeakSpacing.md)
                 .speakCard()
             }
-        )
+        }
     }
 
     private func profileNameField(_ p: Profile) -> some View {

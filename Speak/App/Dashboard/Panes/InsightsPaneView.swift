@@ -367,10 +367,16 @@ private struct ActivityBarChart: View {
     }
 
     /// Single-character weekday label (Mon → "M", etc.) sourced from the locale.
-    private func dayLabel(_ date: Date) -> String {
+    /// The formatter is cached — allocating a `DateFormatter` per row per body
+    /// evaluation is the classic object-in-body cost.
+    private static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEEE"   // narrowest weekday symbol (locale-aware)
-        return formatter.string(from: date)
+        return formatter
+    }()
+
+    private func dayLabel(_ date: Date) -> String {
+        Self.dayFormatter.string(from: date)
     }
 }
 

@@ -9,10 +9,11 @@ import SwiftUI
 struct AnimatedTranscriptView: View {
     let text: String
     @State private var previousText: String = ""
-    /// Internal for `@testable` access in `AnimatedTranscriptViewTests` — the resolved
-    /// raw→clean diff tokens. The pure diff classification is unit-tested; the SwiftUI
-    /// rendering (strikethrough animation, flow layout) is a live-visual surface.
-    @State var diffTokens: [DiffToken] = []
+    /// Internal getter for `@testable` access in `AnimatedTranscriptViewTests` — the
+    /// resolved raw→clean diff tokens. The pure diff classification is unit-tested;
+    /// the SwiftUI rendering (strikethrough animation, flow layout) is a live-visual
+    /// surface. `private(set)` keeps the write view-owned.
+    @State private(set) var diffTokens: [DiffToken] = []
     @State private var cleanupTask: Task<Void, Never>?
 
     /// Felt-speed (input-felt-speed.md §3.3): initialize from a raw→clean pair so the

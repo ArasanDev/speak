@@ -24,8 +24,7 @@
 //
 // GENERIC SHAPE (S: InsettableShape & Shape):
 //   Uses shape.trim(from:to:).stroke(...) to draw traveling segments around perimeter.
-//   Call site for Classic HUD: RoundedRectangle(cornerRadius: 14, style: .continuous)
-//   Call site for Aurora HUD:  Capsule(style: .continuous)
+//   Call site (HUD): `HUDLane.panelShape` — the shared panel silhouette.
 //
 // [decision: traveling edge-chaser pattern uses SwiftUI shape.trim + TimelineView.
 //  Colors matched to AnimatedGradientBorder state palettes for visual coherence.]

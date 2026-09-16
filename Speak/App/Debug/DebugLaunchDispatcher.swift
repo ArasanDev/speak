@@ -286,7 +286,8 @@ final class DebugLaunchDispatcher {
         )
         vc.show()
         keepAlive(vc)
-        log.info("DebugLaunchDispatcher: Dashboard opened at section=\(section.rawValue, privacy: .public) settingsCategory=\(settingsCategory.rawValue, privacy: .public) (seeded).")
+        let destination = "section=\(section.rawValue) settingsCategory=\(settingsCategory.rawValue)"
+        log.info("DebugLaunchDispatcher: Dashboard opened at \(destination, privacy: .public) (seeded).")
     }
 
     /// Parse `--debug-open dashboard:<section>[:<settingsCategory>]`
@@ -334,6 +335,12 @@ final class DebugLaunchDispatcher {
             // [decision: "the quick brown fox" — readable sample that exercises
             //  the partial-text rendering path. Static level 0.6 shows mid-range bars.]
             overlayModel.partialText = "the quick brown fox"
+            // `windowText` is what the pill's text lane renders; `stopHint` +
+            // `elapsedSeconds` fill the header row so the demo shows the real
+            // HUD composition, not a bare placeholder.
+            overlayModel.windowText = "the quick brown fox jumps over the lazy dog"
+            overlayModel.stopHint = "⌘⌘ Right Command"
+            overlayModel.elapsedSeconds = 12
             overlayModel.level = 0.6   // [decision: 0.6 = mid-level, visually interesting]
 
         case .processing:
@@ -341,8 +348,9 @@ final class DebugLaunchDispatcher {
             overlayModel.partialText = ""
 
         case .done:
-            // Done shows checkmark only.
+            // Done shows the delivered tick + frozen final time in the header.
             overlayModel.partialText = ""
+            overlayModel.elapsedSeconds = 9
 
         case .error:
             // W2.2: error demo — show a sample reason in the red pill.

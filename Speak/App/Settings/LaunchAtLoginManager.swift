@@ -8,11 +8,12 @@ import os
 import ServiceManagement
 import SpeakCore
 
+@Observable
 @MainActor
-public final class LaunchAtLoginManager: ObservableObject {
+public final class LaunchAtLoginManager {
     public static let shared = LaunchAtLoginManager()
 
-    @Published public private(set) var isEnabled: Bool = false
+    public private(set) var isEnabled: Bool = false
 
     private init() {
         refresh()

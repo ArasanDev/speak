@@ -16,7 +16,7 @@ import SwiftUI
 struct GeneralSettingsView: View {
     let context: DashboardContext
 
-    @ObservedObject private var launchAtLogin = LaunchAtLoginManager.shared
+    private let launchAtLogin = LaunchAtLoginManager.shared
     @State private var showResetConfirmation = false
 
     /// Raw `SMAppService` status. `LaunchAtLoginManager` publishes only the

@@ -26,8 +26,7 @@
 // GENERIC SHAPE (S: InsettableShape):
 //   Uses `strokeBorder` (not `stroke`) so the line stays within view bounds,
 //   exactly aligning with the host panel's clip shape.
-//   Call site for Classic HUD: RoundedRectangle(cornerRadius: 14, style: .continuous)
-//   Call site for Aurora HUD:  Capsule(style: .continuous)
+//   Call site (HUD): `HUDLane.panelShape` — the shared panel silhouette.
 //
 // [decision: two-layer glow+crisp = standard macOS "neon outline" pattern.
 //  Colors matched to AuroraOverlayView aurora palette for visual coherence.
@@ -64,7 +63,7 @@ struct AnimatedGradientBorder<S: InsettableShape>: View {
 
     // MARK: - Parameters
 
-    /// The panel's clip shape — RoundedRectangle for Classic, Capsule for Aurora.
+    /// The panel's clip shape — `HUDLane.panelShape` at the HUD call sites.
     let shape: S
     let state: OverlayState
     /// Live RMS level (0…1). Only used in `.listening` to modulate glow intensity.

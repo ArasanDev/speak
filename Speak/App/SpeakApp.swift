@@ -28,15 +28,17 @@ import SwiftUI
 
 // MARK: - AppDelegate
 
+@Observable
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Owned here for its lifetime. Passed to SwiftUI via the App's body.
     /// Optional because we may terminate early in the single-instance guard.
-    /// @Published so the Settings scene re-evaluates once the controller is
-    /// assigned in applicationDidFinishLaunching — the scene's body can be
-    /// built before that assignment and would otherwise stay empty forever.
-    @Published var controller: DictationController?
+    /// Tracked (`@Observable`) so the Settings scene re-evaluates once the
+    /// controller is assigned in applicationDidFinishLaunching — the scene's
+    /// body can be built before that assignment and would otherwise stay
+    /// empty forever.
+    var controller: DictationController?
 
     /// The NSStatusItem controller, retained for the app lifetime.
     private var statusBarController: StatusBarController?
@@ -155,7 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 /// `SettingsExperienceView` once the controller exists. Without observation the
 /// scene captured a nil controller at launch and stayed blank forever.
 private struct SettingsSceneHost: View {
-    @ObservedObject var appDelegate: AppDelegate
+    let appDelegate: AppDelegate
 
     var body: some View {
         if let ctrl = appDelegate.controller {

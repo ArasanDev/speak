@@ -26,7 +26,7 @@ import SwiftUI
 
 @MainActor
 struct ThemeEditorSheet: View {
-    @ObservedObject var engine: ThemeEngine
+    let engine: ThemeEngine
     @Environment(\.dismiss) private var dismiss
 
     @State private var confirmDelete = false
@@ -168,7 +168,7 @@ struct ThemeEditorSheet: View {
 @MainActor
 private struct RoleEditorRow: View {
     let role: ThemeColorRole
-    @ObservedObject var engine: ThemeEngine
+    let engine: ThemeEngine
 
     /// Field contents are local until they parse — the draft only ever sees
     /// canonical "#RRGGBB" values, so an invalid keystroke can't corrupt it.

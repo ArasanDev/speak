@@ -29,20 +29,6 @@ struct VisualEffectView: NSViewRepresentable {
     }
 }
 
-// MARK: - VRule
-
-/// A vertical rule shape — the capsule-bar HUD's lane divider. Stroked with
-/// a dash pattern by callers ("a dotted line, a little thicker" per the
-/// owner's sketch). Shared by `TranscriptOverlayView` and `AuroraOverlayView`.
-struct VRule: Shape {
-    func path(in rect: CGRect) -> Path {
-        var p = Path()
-        p.move(to: CGPoint(x: rect.midX, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
-        return p
-    }
-}
-
 // MARK: - WaveformView
 
 /// A 15-bar waveform driven by `level` (0…1) with per-bar phase offset.

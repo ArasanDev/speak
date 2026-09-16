@@ -1,17 +1,15 @@
 // App/Overlay/OverlayRootView.swift
 //
-// H-UI: the single content root hosted by `TranscriptOverlayPanel`. Switches
-// between the classic bar-waveform HUD and the Aurora ambient-orb HUD based
-// on `SettingsStore.hudStyle`.
+// The single content root hosted by `TranscriptOverlayPanel`.
 //
-// Reading `settingsStore.hudStyle` inside `body` subscribes this view to
-// `SettingsStore`'s `@Observable` change tracking, so toggling the setting in
-// `SettingsView` swaps the HUD content live — no relaunch, no panel
-// recreation (the panel + `NSHostingView` are created once and retained per
-// `TranscriptOverlayPanel`'s existing contract).
+// v2 (2026-09-17): the classic/Aurora HUD styles UNIFIED on the minimal
+// floating pill (`TranscriptOverlayView` → `HUDPill`). The Aurora
+// differentiator was the animated border — that is now an orthogonal opt-in
+// (`SettingsStore.borderAnimationStyle`), so a per-style layout fork no
+// longer earns its keep. `hudStyle` remains a persisted setting (its tests
+// still pin the round-trip) but no longer forks the view tree.
 //
-// [decision H-UI: default `.classic` in SettingsStore means this switch is a
-//  no-op for every existing user until they opt in — zero regression risk.]
+// [decision: one good design over two divergent ones — owner direction.]
 
 import SpeakCore
 import SwiftUI
@@ -21,12 +19,6 @@ struct OverlayRootView: View {
     let settingsStore: SettingsStore
 
     var body: some View {
-        switch settingsStore.hudStyle {
-        case .classic:
-            TranscriptOverlayView(model: model, settingsStore: settingsStore)
-
-        case .aurora:
-            AuroraOverlayView(model: model, settingsStore: settingsStore)
-        }
+        TranscriptOverlayView(model: model, settingsStore: settingsStore)
     }
 }

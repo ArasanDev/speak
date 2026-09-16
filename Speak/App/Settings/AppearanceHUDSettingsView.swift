@@ -84,7 +84,7 @@ struct AppearanceHUDSettingsView: View {
 /// t3code's theme editor.
 @MainActor
 private struct ThemeRows: View {
-    @ObservedObject var engine: ThemeEngine
+    let engine: ThemeEngine
     let onEdit: () -> Void
 
     /// The custom theme awaiting a confirmed deletion — nil clears the dialog.

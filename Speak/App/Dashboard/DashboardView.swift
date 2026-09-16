@@ -404,7 +404,7 @@ struct DashboardView: View {
         config.arguments = ["--replace"]
         NSWorkspace.shared.openApplication(at: bundleURL, configuration: config) { _, error in
             if error == nil {
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     NSApplication.shared.terminate(nil)
                 }
             }
