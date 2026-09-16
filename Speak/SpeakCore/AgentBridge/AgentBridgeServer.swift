@@ -24,6 +24,16 @@ public actor AgentBridgeServer {
     /// gets an answer. [decision H-3: lenient over strict for a v0 slice]
     private var didInitialize = false
 
+    /// sessionId → sessionToken cache, populated from each successful
+    /// `speak_register_session` reply. This actor lives for the `speak-mcp`
+    /// process lifetime, so an agent that registered once need not repeat
+    /// the token on every tool call — any call carrying that sessionId gets
+    /// the cached token attached automatically (an explicit `sessionToken`
+    /// argument still wins, e.g. an agent re-registering after a speak-mcp
+    /// restart with a token it persisted itself).
+    /// [decision: session-capability-token]
+    private var sessionTokensById: [String: String] = [:]
+
     public init(backend: any BridgeBackend) {
         self.backend = backend
     }
@@ -145,35 +155,40 @@ public actor AgentBridgeServer {
         // AVB-6: every tool below accepts an optional 'sessionId' — absent
         // means "exactly today's behavior" for all of them. [decision: AVB-6]
         let sessionId = call.arguments["sessionId"]?.stringValue
+        // session-capability-token: an explicit 'sessionToken' argument wins;
+        // otherwise fall back to the token this process captured when the
+        // session was registered. [decision: session-capability-token]
+        let sessionToken = call.arguments["sessionToken"]?.stringValue
+            ?? sessionId.flatMap { sessionTokensById[$0] }
 
         switch call.name {
         case "speak_register_session":
             return await runRegisterSessionTool(call)
 
         case "speak_status":
-            let outcome = await backend.status(sessionId: sessionId)
+            let outcome = await backend.status(sessionId: sessionId, sessionToken: sessionToken)
             return Self.render(outcome.value, sessionNote: outcome.sessionNote)
 
         case "speak_notify":
-            return await runNotifyTool(call, sessionId: sessionId)
+            return await runNotifyTool(call, sessionId: sessionId, sessionToken: sessionToken)
 
         case "speak_say":
-            return await runSayTool(call, sessionId: sessionId)
+            return await runSayTool(call, sessionId: sessionId, sessionToken: sessionToken)
 
         case "speak_ask":
-            return await runAskTool(call, sessionId: sessionId)
+            return await runAskTool(call, sessionId: sessionId, sessionToken: sessionToken)
 
         case "speak_confirm":
-            return await runConfirmTool(call, sessionId: sessionId)
+            return await runConfirmTool(call, sessionId: sessionId, sessionToken: sessionToken)
 
         case "speak_request_input":
-            return await runRequestInputTool(call, sessionId: sessionId)
+            return await runRequestInputTool(call, sessionId: sessionId, sessionToken: sessionToken)
 
         case "speak_submit_call":
-            return await runSubmitCallTool(call, sessionId: sessionId)
+            return await runSubmitCallTool(call, sessionId: sessionId, sessionToken: sessionToken)
 
         case "speak_get_call":
-            return await runGetCallTool(call, sessionId: sessionId)
+            return await runGetCallTool(call, sessionId: sessionId, sessionToken: sessionToken)
 
         default:
             // Unreachable: handleToolsCall already checked membership in
@@ -184,7 +199,7 @@ public actor AgentBridgeServer {
 
 
 
-    private func runNotifyTool(_ call: MCPToolCallRequest, sessionId: String?) async -> MCPToolCallResult {
+    private func runNotifyTool(_ call: MCPToolCallRequest, sessionId: String?, sessionToken: String?) async -> MCPToolCallResult {
         guard let summary = call.arguments["summary"]?.stringValue?
             .trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty else {
             return .error("speak_notify requires a non-empty 'summary' argument.")
@@ -195,7 +210,7 @@ public actor AgentBridgeServer {
             return .error("speak_notify 'kind' must be completion, blocked, warning, or requested.")
         }
         let interrupt = call.arguments["interrupt"]?.boolValue ?? false
-        switch await backend.say(text: summary, interrupt: interrupt, sessionId: sessionId) {
+        switch await backend.say(text: summary, interrupt: interrupt, sessionId: sessionId, sessionToken: sessionToken) {
         case .success(let outcome):
             return .text(Self.appendingNote("notification accepted (kind: \(kind)).", outcome.sessionNote))
         case .failure(let reason):
@@ -203,33 +218,33 @@ public actor AgentBridgeServer {
         }
     }
 
-    private func runSayTool(_ call: MCPToolCallRequest, sessionId: String?) async -> MCPToolCallResult {
+    private func runSayTool(_ call: MCPToolCallRequest, sessionId: String?, sessionToken: String?) async -> MCPToolCallResult {
         guard let text = call.arguments["text"]?.stringValue, !text.isEmpty else {
             return .error("speak_say requires a non-empty 'text' argument.")
         }
         let interrupt = call.arguments["interrupt"]?.boolValue ?? false
-        switch await backend.say(text: text, interrupt: interrupt, sessionId: sessionId) {
+        switch await backend.say(text: text, interrupt: interrupt, sessionId: sessionId, sessionToken: sessionToken) {
         case .success(let outcome): return .text(Self.appendingNote("spoken.", outcome.sessionNote))
         case .failure(let reason): return .error(reason.description)
         }
     }
 
-    private func runAskTool(_ call: MCPToolCallRequest, sessionId: String?) async -> MCPToolCallResult {
+    private func runAskTool(_ call: MCPToolCallRequest, sessionId: String?, sessionToken: String?) async -> MCPToolCallResult {
         guard let question = call.arguments["question"]?.stringValue, !question.isEmpty else {
             return .error("speak_ask requires a non-empty 'question' argument.")
         }
         let timeout = call.arguments["timeout"]?.doubleValue
-        switch await backend.ask(question: question, timeoutSeconds: timeout, sessionId: sessionId) {
+        switch await backend.ask(question: question, timeoutSeconds: timeout, sessionId: sessionId, sessionToken: sessionToken) {
         case .success(let outcome): return .text(Self.appendingNote(outcome.value, outcome.sessionNote))
         case .failure(let reason): return .error(reason.description)
         }
     }
 
-    private func runConfirmTool(_ call: MCPToolCallRequest, sessionId: String?) async -> MCPToolCallResult {
+    private func runConfirmTool(_ call: MCPToolCallRequest, sessionId: String?, sessionToken: String?) async -> MCPToolCallResult {
         guard let question = call.arguments["question"]?.stringValue, !question.isEmpty else {
             return .error("speak_confirm requires a non-empty 'question' argument.")
         }
-        switch await backend.confirm(question: question, sessionId: sessionId) {
+        switch await backend.confirm(question: question, sessionId: sessionId, sessionToken: sessionToken) {
         case .success(let outcome):
             return .text(Self.appendingNote(outcome.value ? "yes" : "no", outcome.sessionNote))
         case .failure(let reason): return .error(reason.description)
@@ -248,18 +263,29 @@ public actor AgentBridgeServer {
         let workingDirectory = call.arguments["cwd"]?.stringValue
         let requestedCapabilities = call.arguments["capabilities"]?.arrayValue?.compactMap { $0.stringValue } ?? []
         let existingSessionId = call.arguments["sessionId"]?.stringValue
+        // Re-registering an existing sessionId requires its issued token —
+        // explicit argument wins, else the cached token (same-session
+        // reconnect inside one speak-mcp lifetime).
+        // [decision: session-capability-token]
+        let sessionToken = call.arguments["sessionToken"]?.stringValue
+            ?? existingSessionId.flatMap { sessionTokensById[$0] }
 
         let result = await backend.registerSession(
             sessionId: existingSessionId,
             provider: provider,
             label: label,
             workingDirectory: workingDirectory,
-            requestedCapabilities: requestedCapabilities
+            requestedCapabilities: requestedCapabilities,
+            sessionToken: sessionToken
         )
         switch result {
         case .success(let registration):
+            // Cache the issued token so every later tool call that names this
+            // sessionId is authenticated without the agent repeating it.
+            sessionTokensById[registration.sessionId] = registration.sessionToken
             let fields: [String: JSONValue] = [
                 "sessionId": .string(registration.sessionId),
+                "sessionToken": .string(registration.sessionToken),
                 "capabilities": .array(registration.capabilities.map { .string($0) })
             ]
             let data = (try? JSONEncoder().encode(JSONValue.object(fields))) ?? Data()
@@ -280,7 +306,7 @@ public actor AgentBridgeServer {
 
     // MARK: - AVB-5 speak_request_input
 
-    private func runRequestInputTool(_ call: MCPToolCallRequest, sessionId: String?) async -> MCPToolCallResult {
+    private func runRequestInputTool(_ call: MCPToolCallRequest, sessionId: String?, sessionToken: String?) async -> MCPToolCallResult {
         guard let requestId = call.arguments["requestId"]?.stringValue, !requestId.isEmpty else {
             return .error("speak_request_input requires a non-empty 'requestId' argument.")
         }
@@ -304,7 +330,8 @@ public actor AgentBridgeServer {
             timeoutSeconds: call.arguments["timeout"]?.doubleValue,
             consequence: call.arguments["consequence"]?.stringValue,
             spokenSummary: call.arguments["spokenSummary"]?.stringValue,
-            sessionId: sessionId
+            sessionId: sessionId,
+            sessionToken: sessionToken
         ))
         switch result {
         case .success(let outcome):
@@ -350,7 +377,7 @@ public actor AgentBridgeServer {
 
     // MARK: - AVB-7 speak_submit_call / speak_get_call
 
-    private func runSubmitCallTool(_ call: MCPToolCallRequest, sessionId: String?) async -> MCPToolCallResult {
+    private func runSubmitCallTool(_ call: MCPToolCallRequest, sessionId: String?, sessionToken: String?) async -> MCPToolCallResult {
         guard let sessionId, !sessionId.isEmpty else {
             return .error("speak_submit_call requires a 'sessionId' — call speak_register_session first.")
         }
@@ -383,7 +410,8 @@ public actor AgentBridgeServer {
             spokenSummary: call.arguments["spokenSummary"]?.stringValue,
             urgency: urgency,
             expiresInSeconds: expiresInSeconds,
-            sessionId: sessionId
+            sessionId: sessionId,
+            sessionToken: sessionToken
         )
         switch await backend.submitCall(args) {
         case .success(let outcome):
@@ -393,14 +421,14 @@ public actor AgentBridgeServer {
         }
     }
 
-    private func runGetCallTool(_ call: MCPToolCallRequest, sessionId: String?) async -> MCPToolCallResult {
+    private func runGetCallTool(_ call: MCPToolCallRequest, sessionId: String?, sessionToken: String?) async -> MCPToolCallResult {
         guard let sessionId, !sessionId.isEmpty else {
             return .error("speak_get_call requires a 'sessionId' — call speak_register_session first.")
         }
         guard let callIdString = call.arguments["callId"]?.stringValue, let callId = UUID(uuidString: callIdString) else {
             return .error("speak_get_call requires a valid 'callId' argument.")
         }
-        switch await backend.getCall(callId: callId, sessionId: sessionId) {
+        switch await backend.getCall(callId: callId, sessionId: sessionId, sessionToken: sessionToken) {
         case .success(let outcome):
             guard let agentCall = outcome.value else {
                 return .error("speak_get_call: no such call for this session.")

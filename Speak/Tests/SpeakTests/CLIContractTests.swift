@@ -431,13 +431,36 @@ final class CLIContractTests: XCTestCase {
         XCTAssertNil(json?["requestedCapabilities"])
     }
 
-    func testRegisteredReplyEncodesSessionIdAndCapabilities() throws {
-        let reply = CLIReply.registered(sessionId: "new-id", capabilities: ["notify", "status"])
+    func testRegisteredReplyEncodesSessionIdTokenAndCapabilities() throws {
+        let reply = CLIReply.registered(sessionId: "new-id", sessionToken: "tok-1", capabilities: ["notify", "status"])
         let data = try reply.encode()
         let decoded = try CLIReply.decode(data)
         XCTAssertTrue(decoded.ok)
         XCTAssertEqual(decoded.sessionId, "new-id")
+        XCTAssertEqual(decoded.sessionToken, "tok-1")
         XCTAssertEqual(decoded.capabilities, ["notify", "status"])
+    }
+
+    // MARK: - session-capability-token wire fields
+
+    func testRequestSessionTokenRoundTrips() throws {
+        let req = CLIRequest(cmd: .getCall, sessionId: "sess-1", sessionToken: "tok-abc",
+                             callId: UUID().uuidString)
+        let data = try req.encode()
+        let decoded = try CLIRequest.decode(data)
+        XCTAssertEqual(decoded.sessionToken, "tok-abc")
+    }
+
+    func testRequestSessionTokenOmittedWhenNil() throws {
+        // Pre-token callers (and requests with no sessionId) simply omit the
+        // field — additive Optional, so old/new binaries still decode each
+        // other. [decision: session-capability-token]
+        let req = CLIRequest(cmd: .status, sessionId: "sess-1")
+        let data = try req.encode()
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertNil(json?["sessionToken"])
+        let decoded = try CLIRequest.decode(data)
+        XCTAssertNil(decoded.sessionToken)
     }
 
     // MARK: - AVB-6 sessionNote plumbing

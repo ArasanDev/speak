@@ -30,7 +30,7 @@ struct CLIContractVersionTests {
         )
         let stub = StubCLITransport(reply: staleReply)
         let backend = CLIBridgeBackend(transport: stub)
-        let outcome = await backend.status(sessionId: nil)
+        let outcome = await backend.status(sessionId: nil, sessionToken: nil)
         let report = outcome.value
         #expect(report.appRunning) // the app IS running — this is a version problem, not a reachability one
         #expect(report.contractMismatch)
@@ -41,7 +41,7 @@ struct CLIContractVersionTests {
     func statusMapsMatchingVersion() async {
         let stub = StubCLITransport(reply: .status(state: .idle, binding: "Fn ×2"))
         let backend = CLIBridgeBackend(transport: stub)
-        let outcome = await backend.status(sessionId: nil)
+        let outcome = await backend.status(sessionId: nil, sessionToken: nil)
         let report = outcome.value
         #expect(report.appRunning)
         #expect(!report.contractMismatch)
@@ -55,7 +55,7 @@ struct CLIContractVersionTests {
         )
         let stub = StubCLITransport(reply: unversionedReply)
         let backend = CLIBridgeBackend(transport: stub)
-        let outcome = await backend.status(sessionId: nil)
+        let outcome = await backend.status(sessionId: nil, sessionToken: nil)
         let report = outcome.value
         #expect(report.contractMismatch)
         #expect(report.detail?.contains("pre-versioning") == true)

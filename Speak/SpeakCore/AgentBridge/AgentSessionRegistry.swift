@@ -21,6 +21,22 @@
 
 import Foundation
 
+/// Outcome of `AgentSessionRegistry.register`. `.rejected` means the caller
+/// asked to re-register a sessionId that is already held by a DIFFERENT
+/// caller — the existing session (and its token) is left untouched. Rejecting
+/// rather than rotating is the whole point of the token: silently rotating
+/// the capability on re-register would let any local process that learns a
+/// sessionId hijack the session. [decision: session-capability-token]
+public enum AgentSessionRegistration: Sendable, Equatable {
+    /// Registration accepted. `sessionToken` is the opaque capability the
+    /// caller must present alongside `sessionId` on every session-scoped
+    /// request (and on any later re-registration of the same sessionId).
+    case registered(session: AgentSession, sessionToken: String)
+    /// The supplied sessionId is already registered and the presented token
+    /// was missing or did not match. No state changed.
+    case rejected
+}
+
 @MainActor
 public final class AgentSessionRegistry {
 
@@ -39,6 +55,12 @@ public final class AgentSessionRegistry {
     ]
 
     private var sessionsById: [String: AgentSession] = [:]
+    /// Per-session capability tokens, keyed by sessionId. Kept OUT of
+    /// `AgentSession` itself so the token never rides the Codable session
+    /// record into `list()`/`Dashboard`/`sessionNote` surfaces — it is a
+    /// bearer credential returned exactly once, at registration.
+    /// [decision: session-capability-token]
+    private var tokensById: [String: String] = [:]
     private let now: @Sendable () -> Date
 
     /// - Parameter now: injectable clock for staleness tests.
@@ -47,10 +69,28 @@ public final class AgentSessionRegistry {
     }
 
     /// Register a new session, or re-register an existing one when
-    /// `sessionId` is supplied and already known (updates fields + `lastSeen`
-    /// rather than creating a duplicate entry).
+    /// `sessionId` is supplied and already known AND the presented
+    /// `sessionToken` matches the token issued at first registration
+    /// (updates fields + `lastSeen` rather than creating a duplicate entry).
     ///
-    /// Returns the negotiated capabilities — the intersection of `requested`
+    /// Token semantics [decision: session-capability-token]:
+    ///   - New/unknown sessionId → a fresh opaque token is minted
+    ///     (`UUID().uuidString` — a local capability, not crypto-bearing) and
+    ///     returned in `.registered`. The caller presents it alongside
+    ///     `sessionId` on every session-scoped request.
+    ///   - Re-register a known sessionId with the SAME token → allowed;
+    ///     idempotent reconnect (e.g. an agent that restarted). The stored
+    ///     token is NOT rotated — the same token is returned again.
+    ///   - Re-register a known sessionId with a missing or DIFFERENT token →
+    ///     `.rejected`; the existing session and token are untouched. Never
+    ///     silently rotate: that was the session-hijack vector.
+    ///   - A session only stops being "known" if a future cleanup/eviction
+    ///     removes it (see the TODO below — sessions currently persist for
+    ///     the app lifetime). After eviction the sessionId is unknown again,
+    ///     so re-registering with a stale token becomes a FRESH registration
+    ///     and is allowed.
+    ///
+    /// `negotiated` capabilities are the intersection of `requested`
     /// with `Self.supportedCapabilities`, in `supportedCapabilities`' order so
     /// the response is deterministic regardless of request order.
     @discardableResult
@@ -59,9 +99,15 @@ public final class AgentSessionRegistry {
         provider: String,
         label: String,
         workingDirectory: String?,
-        requestedCapabilities: [String]
-    ) -> AgentSession {
+        requestedCapabilities: [String],
+        sessionToken: String?
+    ) -> AgentSessionRegistration {
         let id = sessionId ?? UUID().uuidString
+        let existingToken = tokensById[id]
+        if sessionsById[id] != nil, existingToken != sessionToken {
+            return .rejected
+        }
+        let token = existingToken ?? UUID().uuidString
         let negotiated = Self.supportedCapabilities.filter { requestedCapabilities.contains($0) }
         let session = AgentSession(
             sessionId: id,
@@ -91,18 +137,31 @@ public final class AgentSessionRegistry {
         //      lifecycle must be managed (see the lifecycle-leaks survey
         //      findings in DictationController/StatusBarController/
         //      HistoryViewModel for why that bookkeeping matters here).
-        // Either way, `isKnown(sessionId:)`/`touch(sessionId:)`/`list()` must
+        // Either way, `isKnown(sessionId:)`/`touch`/`list()` must
         // keep working for any session not yet evicted — no TOCTOU window.
         sessionsById[id] = session
-        return session
+        tokensById[id] = token
+        return .registered(session: session, sessionToken: token)
     }
 
-    /// Update `lastSeen` for a known session. No-op (returns `false`) when
-    /// `sessionId` is not registered — the caller decides how to react
-    /// (compatibility first: proceed anyway, note the session is unregistered).
+    /// `true` iff `sessionId` is a currently-known session AND `sessionToken`
+    /// matches the token issued at registration. This is the session-scoped
+    /// auth check: a wrong/missing token is indistinguishable from an
+    /// unregistered session — callers must never leak "exists but wrong
+    /// token" upstream. [decision: session-capability-token]
+    public func isAuthenticated(sessionId: String, sessionToken: String?) -> Bool {
+        guard let sessionToken else { return false }
+        return tokensById[sessionId] == sessionToken
+    }
+
+    /// Update `lastSeen` for an authenticated session. No-op (returns
+    /// `false`) when `sessionId` is not registered OR the token doesn't
+    /// match — an unauthenticated caller must not be able to refresh another
+    /// session's liveness. [decision: session-capability-token]
     @discardableResult
-    public func touch(sessionId: String) -> Bool {
-        guard let existing = sessionsById[sessionId] else { return false }
+    public func touch(sessionId: String, sessionToken: String?) -> Bool {
+        guard isAuthenticated(sessionId: sessionId, sessionToken: sessionToken),
+              let existing = sessionsById[sessionId] else { return false }
         sessionsById[sessionId] = AgentSession(
             sessionId: existing.sessionId,
             provider: existing.provider,

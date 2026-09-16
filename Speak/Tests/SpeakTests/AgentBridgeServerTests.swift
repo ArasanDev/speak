@@ -25,7 +25,7 @@ final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
     var askResult: Result<String, BridgeUnavailable>
     var confirmResult: Result<Bool, BridgeUnavailable>
     var requestInputResult: Result<HumanResponseOutcome, BridgeUnavailable>
-    var registerSessionResult: Result<(sessionId: String, capabilities: [String]), BridgeUnavailable>
+    var registerSessionResult: Result<(sessionId: String, sessionToken: String, capabilities: [String]), BridgeUnavailable>
     var submitCallResult: Result<AgentCallSubmitOutcome, BridgeUnavailable>
     var getCallResult: Result<AgentCall?, BridgeUnavailable>
     /// Set to make the corresponding tool call's `BridgeOutcome.sessionNote` non-nil.
@@ -35,9 +35,11 @@ final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
     private(set) var lastRequestInputMode: RequestInputMode?
     private(set) var lastRequestInputChoices: [String]?
     private(set) var lastSessionId: String?
+    private(set) var lastSessionToken: String?
     private(set) var lastRegisterProvider: String?
     private(set) var lastRegisterLabel: String?
     private(set) var lastRegisterCapabilities: [String]?
+    private(set) var lastRegisterSessionToken: String?
     private(set) var lastSubmitCallArgs: SubmitCallArguments?
     private(set) var lastGetCallId: UUID?
 
@@ -49,8 +51,8 @@ final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
         ask: Result<String, BridgeUnavailable> = .success("blue"),
         confirm: Result<Bool, BridgeUnavailable> = .success(true),
         requestInput: Result<HumanResponseOutcome, BridgeUnavailable> = .success(.answered(text: "blue", choice: nil)),
-        registerSession: Result<(sessionId: String, capabilities: [String]), BridgeUnavailable> =
-            .success((sessionId: "generated-id", capabilities: ["notify", "say"])),
+        registerSession: Result<(sessionId: String, sessionToken: String, capabilities: [String]), BridgeUnavailable> =
+            .success((sessionId: "generated-id", sessionToken: "generated-token", capabilities: ["notify", "say"])),
         submitCall: Result<AgentCallSubmitOutcome, BridgeUnavailable>? = nil,
         getCall: Result<AgentCall?, BridgeUnavailable> = .success(nil),
         sessionNote: String? = nil
@@ -75,24 +77,28 @@ final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
         self.sessionNote = sessionNote
     }
 
-    func status(sessionId: String?) async -> BridgeOutcome<BridgeStatusReport> {
+    func status(sessionId: String?, sessionToken: String?) async -> BridgeOutcome<BridgeStatusReport> {
         lastSessionId = sessionId
+        lastSessionToken = sessionToken
         return BridgeOutcome(statusResult, sessionNote: sessionNote)
     }
-    func say(text: String, interrupt: Bool, sessionId: String?) async -> Result<BridgeOutcome<Void>, BridgeUnavailable> {
+    func say(text: String, interrupt: Bool, sessionId: String?, sessionToken: String?) async -> Result<BridgeOutcome<Void>, BridgeUnavailable> {
         lastSaidText = text
         lastInterrupt = interrupt
         lastSessionId = sessionId
+        lastSessionToken = sessionToken
         return sayResult.map { BridgeOutcome($0, sessionNote: sessionNote) }
     }
     func ask(
-        question: String, timeoutSeconds: Double?, sessionId: String?
+        question: String, timeoutSeconds: Double?, sessionId: String?, sessionToken: String?
     ) async -> Result<BridgeOutcome<String>, BridgeUnavailable> {
         lastSessionId = sessionId
+        lastSessionToken = sessionToken
         return askResult.map { BridgeOutcome($0, sessionNote: sessionNote) }
     }
-    func confirm(question: String, sessionId: String?) async -> Result<BridgeOutcome<Bool>, BridgeUnavailable> {
+    func confirm(question: String, sessionId: String?, sessionToken: String?) async -> Result<BridgeOutcome<Bool>, BridgeUnavailable> {
         lastSessionId = sessionId
+        lastSessionToken = sessionToken
         return confirmResult.map { BridgeOutcome($0, sessionNote: sessionNote) }
     }
 
@@ -102,6 +108,7 @@ final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
         lastRequestInputMode = call.mode
         lastRequestInputChoices = call.choices
         lastSessionId = call.sessionId
+        lastSessionToken = call.sessionToken
         return requestInputResult.map { BridgeOutcome($0, sessionNote: sessionNote) }
     }
 
@@ -110,9 +117,12 @@ final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
         provider: String,
         label: String,
         workingDirectory: String?,
-        requestedCapabilities: [String]
-    ) async -> Result<(sessionId: String, capabilities: [String]), BridgeUnavailable> {
+        requestedCapabilities: [String],
+        sessionToken: String?
+    ) async -> Result<(sessionId: String, sessionToken: String, capabilities: [String]), BridgeUnavailable> {
         lastSessionId = sessionId
+        lastSessionToken = sessionToken
+        lastRegisterSessionToken = sessionToken
         lastRegisterProvider = provider
         lastRegisterLabel = label
         lastRegisterCapabilities = requestedCapabilities
@@ -122,12 +132,14 @@ final class StubBridgeBackend: BridgeBackend, @unchecked Sendable {
     func submitCall(_ args: SubmitCallArguments) async -> Result<BridgeOutcome<AgentCallSubmitOutcome>, BridgeUnavailable> {
         lastSubmitCallArgs = args
         lastSessionId = args.sessionId
+        lastSessionToken = args.sessionToken
         return submitCallResult.map { BridgeOutcome($0, sessionNote: sessionNote) }
     }
 
-    func getCall(callId: UUID, sessionId: String?) async -> Result<BridgeOutcome<AgentCall?>, BridgeUnavailable> {
+    func getCall(callId: UUID, sessionId: String?, sessionToken: String?) async -> Result<BridgeOutcome<AgentCall?>, BridgeUnavailable> {
         lastGetCallId = callId
         lastSessionId = sessionId
+        lastSessionToken = sessionToken
         return getCallResult.map { BridgeOutcome($0, sessionNote: sessionNote) }
     }
 
@@ -652,27 +664,8 @@ struct AgentBridgeServerToolsCallTests {
     }
 
     // MARK: - AVB-6 speak_register_session + sessionId threading
-
-    @Test("speak_register_session happy path returns {sessionId, capabilities} and forwards provider/label/cwd")
-    func registerSessionHappyPath() async throws {
-        let backend = StubBridgeBackend(
-            registerSession: .success((sessionId: "generated-1", capabilities: ["notify", "say"]))
-        )
-        let server = AgentBridgeServer(backend: backend)
-        let outbound = try await call(server, name: "speak_register_session", arguments: [
-            "provider": .string("codex"), "label": .string("fix bug"), "cwd": .string("/repo"),
-            "capabilities": .array([.string("notify"), .string("say"), .string("open_microphone")])
-        ])
-        let result = try #require(outbound.result?.objectValue)
-        #expect(result["isError"]?.boolValue == nil || result["isError"]?.boolValue == false)
-        let text = try #require(result["content"]?.arrayValue?.first?.objectValue?["text"]?.stringValue)
-        let json = try #require(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
-        #expect(json["sessionId"] as? String == "generated-1")
-        #expect(json["capabilities"] as? [String] == ["notify", "say"])
-        #expect(backend.lastRegisterProvider == "codex")
-        #expect(backend.lastRegisterLabel == "fix bug")
-        #expect(backend.lastRegisterCapabilities == ["notify", "say", "open_microphone"])
-    }
+    // (session-capability-token coverage lives in
+    //  AgentBridgeServerSessionTokenTests.swift — split for file_length)
 
     @Test("speak_register_session requires a non-empty provider and label")
     func registerSessionRequiresProviderAndLabel() async throws {
@@ -806,7 +799,7 @@ struct CLIBridgeBackendTests {
     func statusMapsSuccess() async {
         let stub = StubCLITransport(reply: .status(state: .listening, binding: "Fn ×2"))
         let backend = CLIBridgeBackend(transport: stub)
-        let outcome = await backend.status(sessionId: nil)
+        let outcome = await backend.status(sessionId: nil, sessionToken: nil)
         let report = outcome.value
         #expect(report.appRunning)
         #expect(report.engineState == "listening")
@@ -818,7 +811,7 @@ struct CLIBridgeBackendTests {
     func statusMapsPortNotFound() async {
         let stub = StubCLITransport(error: .portNotFound)
         let backend = CLIBridgeBackend(transport: stub)
-        let outcome = await backend.status(sessionId: nil)
+        let outcome = await backend.status(sessionId: nil, sessionToken: nil)
         let report = outcome.value
         #expect(!report.appRunning)
         #expect(report.detail?.contains("not running") == true)
@@ -828,7 +821,7 @@ struct CLIBridgeBackendTests {
     func sayMapsAcceptedToSuccess() async {
         let stub = StubCLITransport(reply: .accepted())
         let backend = CLIBridgeBackend(transport: stub)
-        let result = await backend.say(text: "hi", interrupt: true, sessionId: nil)
+        let result = await backend.say(text: "hi", interrupt: true, sessionId: nil, sessionToken: nil)
         guard case .success = result else {
             Issue.record("expected success, got \(result)")
             return
@@ -840,7 +833,7 @@ struct CLIBridgeBackendTests {
     @Test("say() maps portNotFound to .appNotRunning")
     func sayMapsPortNotFoundToAppNotRunning() async {
         let backend = CLIBridgeBackend(transport: StubCLITransport(error: .portNotFound))
-        let result = await backend.say(text: "hi", interrupt: false, sessionId: nil)
+        let result = await backend.say(text: "hi", interrupt: false, sessionId: nil, sessionToken: nil)
         guard case .failure(let reason) = result else {
             Issue.record("expected failure, got \(result)")
             return
@@ -851,7 +844,7 @@ struct CLIBridgeBackendTests {
     @Test("say() maps an ok=false CLIReply to a failure carrying the app's error string")
     func sayMapsFailureReply() async {
         let backend = CLIBridgeBackend(transport: StubCLITransport(reply: .failure("no voice output")))
-        let result = await backend.say(text: "hi", interrupt: false, sessionId: nil)
+        let result = await backend.say(text: "hi", interrupt: false, sessionId: nil, sessionToken: nil)
         guard case .failure(let reason) = result else {
             Issue.record("expected failure, got \(result)")
             return
@@ -894,7 +887,7 @@ struct CLIBridgeBackendTests {
             .callStatus(answeredCall(pending, text: "blue please"))
         ])
         let backend = CLIBridgeBackend(transport: stub)
-        let result = await backend.ask(question: "coffee or tea?", timeoutSeconds: 10, sessionId: nil)
+        let result = await backend.ask(question: "coffee or tea?", timeoutSeconds: 10, sessionId: nil, sessionToken: nil)
         guard case .success(let outcome) = result else {
             Issue.record("expected success, got \(result)"); return
         }
@@ -911,14 +904,14 @@ struct CLIBridgeBackendTests {
             .callStatus(answeredCall(pending, text: "ok"))
         ])
         let backend = CLIBridgeBackend(transport: stub)
-        _ = await backend.ask(question: "q?", timeoutSeconds: nil, sessionId: nil)
+        _ = await backend.ask(question: "q?", timeoutSeconds: nil, sessionId: nil, sessionToken: nil)
         #expect(stub.lastTimeoutSeconds == CLIContract.getCallSendTimeoutSeconds)
     }
 
     @Test("ask() maps a transport timeout to .timedOut")
     func askMapsTransportTimeout() async {
         let backend = CLIBridgeBackend(transport: StubCLITransport(error: .timeout))
-        let result = await backend.ask(question: "q?", timeoutSeconds: 5, sessionId: nil)
+        let result = await backend.ask(question: "q?", timeoutSeconds: 5, sessionId: nil, sessionToken: nil)
         guard case .failure(let reason) = result else {
             Issue.record("expected failure, got \(result)")
             return
@@ -929,7 +922,7 @@ struct CLIBridgeBackendTests {
     @Test("ask() maps portNotFound to .appNotRunning")
     func askMapsPortNotFound() async {
         let backend = CLIBridgeBackend(transport: StubCLITransport(error: .portNotFound))
-        let result = await backend.ask(question: "q?", timeoutSeconds: 5, sessionId: nil)
+        let result = await backend.ask(question: "q?", timeoutSeconds: 5, sessionId: nil, sessionToken: nil)
         guard case .failure(let reason) = result else {
             Issue.record("expected failure, got \(result)")
             return
@@ -945,7 +938,7 @@ struct CLIBridgeBackendTests {
             .callStatus(answeredCall(pending, text: "yes please", choice: "approved"))
         ])
         let backend = CLIBridgeBackend(transport: stub)
-        let result = await backend.confirm(question: "proceed?", sessionId: nil)
+        let result = await backend.confirm(question: "proceed?", sessionId: nil, sessionToken: nil)
         guard case .success(let outcome) = result else {
             Issue.record("expected success, got \(result)")
             return
@@ -962,7 +955,7 @@ struct CLIBridgeBackendTests {
             .callStatus(declinedCall(pending))
         ])
         let backend = CLIBridgeBackend(transport: stub)
-        let result = await backend.confirm(question: "proceed?", sessionId: nil)
+        let result = await backend.confirm(question: "proceed?", sessionId: nil, sessionToken: nil)
         guard case .success(let outcome) = result else {
             Issue.record("expected success, got \(result)")
             return
@@ -978,7 +971,7 @@ struct CLIBridgeBackendTests {
             .callStatus(answeredCall(pending, text: "maybe"))
         ])
         let backend = CLIBridgeBackend(transport: stub)
-        let result = await backend.confirm(question: "proceed?", sessionId: nil)
+        let result = await backend.confirm(question: "proceed?", sessionId: nil, sessionToken: nil)
         guard case .failure(let reason) = result else {
             Issue.record("expected failure, got \(result)")
             return
@@ -989,7 +982,7 @@ struct CLIBridgeBackendTests {
     @Test("confirm() maps a transport timeout to .timedOut")
     func confirmMapsTransportTimeout() async {
         let backend = CLIBridgeBackend(transport: StubCLITransport(error: .timeout))
-        let result = await backend.confirm(question: "q?", sessionId: nil)
+        let result = await backend.confirm(question: "q?", sessionId: nil, sessionToken: nil)
         guard case .failure(let reason) = result else {
             Issue.record("expected failure, got \(result)")
             return

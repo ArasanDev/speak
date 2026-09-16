@@ -35,6 +35,14 @@
 //   the CLI-tool side can wait long enough without changing the default for the other
 //   three commands. [decision: H-3]
 //
+// SESSION TOKEN [decision: session-capability-token]:
+//   `registerSession` issues an opaque `sessionToken` per sessionId. Every
+//   request that supplies a `sessionId` must also supply the matching
+//   `sessionToken`; a missing/wrong token is answered exactly like an
+//   unregistered session (fail closed — never "exists but wrong token").
+//   Re-registering a known sessionId requires presenting its token; a
+//   mismatch is rejected rather than silently rotated.
+//
 // MenubarIcon → CLIState mapping [decision: W2.3]:
 //   .idle       → "idle"
 //   .listening  → "listening"
@@ -118,7 +126,14 @@ public enum CLIContract {
     /// actionable error (see `BridgeUnavailable.contractVersionMismatch`)
     /// instead of a confusing malformed-request/decode failure.
     /// [decision: output-conversation-reconnect §4 — contract-version guard]
-    public static let bridgeContractVersion: Int = 1
+    ///
+    /// v1 → v2: `sessionToken` is a purely additive Optional field (old/new
+    /// binaries still decode each other), but the AUTH SEMANTICS changed —
+    /// session-scoped calls now fail closed when the token is missing/wrong.
+    /// The bump converts a stale speak-mcp's confusing "register a session
+    /// first" failures into the loud, actionable version-mismatch error.
+    /// [decision: session-capability-token]
+    public static let bridgeContractVersion: Int = 2
 }
 
 // MARK: - CLICommand (request)
@@ -202,6 +217,14 @@ public struct CLIRequest: Codable, Sendable {
     /// attribution (spec §7.1). `registerSession`: optional existing
     /// sessionId to re-register instead of minting a new one. [decision: AVB-6]
     public let sessionId: String?
+    /// The capability token issued by `registerSession` for `sessionId`.
+    /// Required to AUTHENTICATE a supplied `sessionId` — a missing or wrong
+    /// token makes the request indistinguishable from an unregistered
+    /// session (fail closed, never "exists but wrong token"). On
+    /// `registerSession` itself it is presented when re-registering an
+    /// existing sessionId. `nil` on pre-token callers and on requests that
+    /// carry no `sessionId` at all. [decision: session-capability-token]
+    public let sessionToken: String?
     /// `registerSession`: the agent client/provider identifier.
     public let provider: String?
     /// `registerSession`: human-readable label for the session.
@@ -231,6 +254,7 @@ public struct CLIRequest: Codable, Sendable {
                 prompt: String? = nil, mode: RequestInputMode? = nil,
                 choices: [String]? = nil, consequence: String? = nil,
                 spokenSummary: String? = nil, sessionId: String? = nil,
+                sessionToken: String? = nil,
                 provider: String? = nil, label: String? = nil,
                 workingDirectory: String? = nil, requestedCapabilities: [String]? = nil,
                 callId: String? = nil, urgency: AgentCallUrgency? = nil,
@@ -248,6 +272,7 @@ public struct CLIRequest: Codable, Sendable {
         self.consequence = consequence
         self.spokenSummary = spokenSummary
         self.sessionId = sessionId
+        self.sessionToken = sessionToken
         self.provider = provider
         self.label = label
         self.workingDirectory = workingDirectory
@@ -304,6 +329,11 @@ public struct CLIReply: Codable, Sendable {
     /// Present in `registerSession` replies: the (possibly server-generated)
     /// sessionId. [decision: AVB-6]
     public let sessionId: String?
+    /// Present in `registerSession` replies: the opaque capability token the
+    /// caller must present alongside `sessionId` on every session-scoped
+    /// request (and when re-registering the same sessionId). Returned once
+    /// here, never echoed on any other reply. [decision: session-capability-token]
+    public let sessionToken: String?
     /// Present in `registerSession` replies: the negotiated capabilities —
     /// the intersection of the request's `requestedCapabilities` with what
     /// speak actually supports this slice. [decision: AVB-6]
@@ -359,11 +389,13 @@ public struct CLIReply: Codable, Sendable {
                  sessionNote: sessionNote)
     }
 
-    /// `registerSession` reply carrying the (possibly re-used) sessionId and
-    /// negotiated capabilities. [decision: AVB-6]
-    public static func registered(sessionId: String, capabilities: [String]) -> CLIReply {
+    /// `registerSession` reply carrying the (possibly re-used) sessionId, the
+    /// freshly-issued (or, on an idempotent reconnect, still-valid)
+    /// `sessionToken`, and negotiated capabilities.
+    /// [decision: AVB-6, session-capability-token]
+    public static func registered(sessionId: String, sessionToken: String, capabilities: [String]) -> CLIReply {
         CLIReply(ok: true, error: nil, state: nil, binding: nil, answer: nil, confirmed: nil,
-                 sessionId: sessionId, capabilities: capabilities)
+                 sessionId: sessionId, sessionToken: sessionToken, capabilities: capabilities)
     }
 
     /// `requestInput` reply carrying one of the five canonical
@@ -394,7 +426,8 @@ public struct CLIReply: Codable, Sendable {
     public init(ok: Bool, error: String?, state: CLIState?, binding: String?,
                 answer: String? = nil, confirmed: Bool? = nil,
                 outcome: String? = nil, choice: String? = nil,
-                sessionId: String? = nil, capabilities: [String]? = nil,
+                sessionId: String? = nil, sessionToken: String? = nil,
+                capabilities: [String]? = nil,
                 contractVersion: Int? = nil,
                 sessionNote: String? = nil,
                 agentCall: AgentCall? = nil, duplicateSubmission: Bool? = nil) {
@@ -407,6 +440,7 @@ public struct CLIReply: Codable, Sendable {
         self.outcome = outcome
         self.choice = choice
         self.sessionId = sessionId
+        self.sessionToken = sessionToken
         self.capabilities = capabilities
         self.contractVersion = contractVersion
         self.sessionNote = sessionNote

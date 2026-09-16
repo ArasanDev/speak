@@ -329,45 +329,61 @@ extension DictationController {
     // MARK: - AVB-6 (specs/agent-voice-bridge.md §7.1) session registration
 
     /// `speak_register_session`: register (or re-register, when `sessionId` is
-    /// already known) an `AgentSession` and negotiate capabilities. Fast/
-    /// in-memory — no mic, no HUD, no speech. [decision: AVB-6]
+    /// already known AND `sessionToken` matches) an `AgentSession` and
+    /// negotiate capabilities. Fast/in-memory — no mic, no HUD, no speech.
+    /// [decision: AVB-6, session-capability-token]
     func cliRegisterSession(
         sessionId: String?,
         provider: String,
         label: String,
         workingDirectory: String?,
-        requestedCapabilities: [String]
-    ) -> (sessionId: String, capabilities: [String]) {
-        let session = agentSessionRegistry.register(
+        requestedCapabilities: [String],
+        sessionToken: String?
+    ) -> CLIRegisterSessionOutcome {
+        switch agentSessionRegistry.register(
             sessionId: sessionId,
             provider: provider,
             label: label,
             workingDirectory: workingDirectory,
-            requestedCapabilities: requestedCapabilities
-        )
-        SpeakLog.cli.info(
-            "DictationController: cliRegisterSession(\(session.sessionId, privacy: .public)) — provider=\(provider, privacy: .public)."
-        )
-        return (sessionId: session.sessionId, capabilities: session.capabilities)
+            requestedCapabilities: requestedCapabilities,
+            sessionToken: sessionToken
+        ) {
+        case .registered(let session, let issuedToken):
+            SpeakLog.cli.info(
+                "DictationController: cliRegisterSession(\(session.sessionId, privacy: .public)) — provider=\(provider, privacy: .public)."
+            )
+            return .registered(
+                sessionId: session.sessionId,
+                sessionToken: issuedToken,
+                capabilities: session.capabilities
+            )
+        case .rejected:
+            SpeakLog.cli.info(
+                "DictationController: cliRegisterSession refused — sessionId held by another caller."
+            )
+            return .rejected
+        }
     }
 
-    /// Update `lastSeen` for `sessionId` and report whether it was already
-    /// known. Every agent-bridge tool that carries an optional `sessionId`
-    /// routes through this so a call for an unrecognized session still
-    /// proceeds — the note is attached one layer up (`CLIPortServer`).
-    /// [decision: AVB-6]
-    func cliTouchSession(_ sessionId: String) -> Bool {
-        agentSessionRegistry.touch(sessionId: sessionId)
+    /// Update `lastSeen` for an authenticated (sessionId, sessionToken) pair
+    /// and report whether it was recognized. Every agent-bridge tool that
+    /// carries an optional `sessionId` routes through this so a call for an
+    /// unrecognized OR unauthenticated session still proceeds — the note is
+    /// attached one layer up (`CLIPortServer`).
+    /// [decision: AVB-6, session-capability-token]
+    func cliTouchSession(_ sessionId: String, sessionToken: String?) -> Bool {
+        agentSessionRegistry.touch(sessionId: sessionId, sessionToken: sessionToken)
     }
 
     // MARK: - AVB-7 (specs/avb7-durable-calls-design.md) durable calls
 
-    /// Synchronous session-registration check backing `speak_submit_call`/
+    /// Synchronous session-authentication check backing `speak_submit_call`/
     /// `speak_get_call` — split out so `CLIPortServer` can validate inline
     /// (no Task, no pump) and touch `agentCallStore` directly for the actual
-    /// I/O. [decision: AVB-7-pump-fix]
-    func cliIsSessionKnown(_ sessionId: String) -> Bool {
-        agentSessionRegistry.isKnown(sessionId: sessionId)
+    /// I/O. `sessionId` alone is asserted identity; the token proves it.
+    /// [decision: AVB-7-pump-fix, session-capability-token]
+    func cliIsSessionAuthenticated(sessionId: String, sessionToken: String?) -> Bool {
+        agentSessionRegistry.isAuthenticated(sessionId: sessionId, sessionToken: sessionToken)
     }
 
     /// AVB-7 inbox UI "Answer by voice" row action. Routes through the SAME

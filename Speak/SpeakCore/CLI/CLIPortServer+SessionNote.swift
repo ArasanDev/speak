@@ -18,9 +18,13 @@ extension CLIPortServer {
     /// and then omitted the note. `AgentSessionRegistry` is now
     /// `@MainActor`-isolated, so `cliTouchSession` is synchronous and this
     /// call is direct — no Task, no pump. [decision: AVB-6-pump-fix]
-    static func pumpedSessionNote(sessionId: String?, handler: any CLICommandHandler) -> String? {
+    static func pumpedSessionNote(sessionId: String?, sessionToken: String?, handler: any CLICommandHandler) -> String? {
         guard let sessionId else { return nil }
-        let known = handler.cliTouchSession(sessionId)
+        // The session must authenticate: a supplied sessionId without a
+        // matching sessionToken resolves as "unregistered" — same note, never
+        // a distinguishable "exists but wrong token" signal.
+        // [decision: session-capability-token]
+        let known = handler.cliTouchSession(sessionId, sessionToken: sessionToken)
         return known ? nil : BridgeOutcome<Void>.unregisteredSessionNote(sessionId)
     }
 }

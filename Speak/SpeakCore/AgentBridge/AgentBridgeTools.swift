@@ -11,14 +11,30 @@ public enum AgentBridgeTools {
     /// Reused by every tool below so `sessionId` documents the same contract
     /// everywhere. [decision: AVB-6]
     private static let sessionIdDescription: String =
-        "Optional. The sessionId returned by speak_register_session. If present and recognized, this call " +
-        "is attributed to that session. If present but unrecognized, the call still proceeds and the " +
-        "result notes the session is unregistered. If omitted, behavior is unchanged from before session " +
-        "registration existed."
+        "Optional. The sessionId returned by speak_register_session. If present and authenticated by " +
+        "its sessionToken, this call is attributed to that session. If present but unrecognized or " +
+        "unauthenticated (missing/wrong token), the call still proceeds and the result notes the " +
+        "session is unregistered. If omitted, behavior is unchanged from before session registration " +
+        "existed."
 
     private static let sessionIdProperty: JSONValue = [
         "type": "string",
         "description": .string(sessionIdDescription)
+    ]
+
+    /// The capability token that authenticates a `sessionId`. Returned once by
+    /// `speak_register_session`; `speak-mcp` caches it for the process lifetime
+    /// and attaches it automatically whenever a call carries that sessionId —
+    /// passing it explicitly is only needed when a different client (or a
+    /// speak-mcp that did not perform the registration) presents the sessionId.
+    /// [decision: session-capability-token]
+    private static let sessionTokenProperty: JSONValue = [
+        "type": "string",
+        "description": .string(
+            "Optional. The sessionToken returned by speak_register_session for 'sessionId'. " +
+            "Auto-attached by speak-mcp for sessions registered through this server — pass it " +
+            "explicitly only when presenting a sessionId registered elsewhere."
+        )
     ]
 
     public static let notifyInputSchema: JSONValue = [
@@ -41,7 +57,8 @@ public enum AgentBridgeTools {
                 "type": "boolean",
                 "description": "Replace speech already in progress. Defaults to false."
             ],
-            "sessionId": sessionIdProperty
+            "sessionId": sessionIdProperty,
+            "sessionToken": sessionTokenProperty
         ],
         "required": ["summary"]
     ]
@@ -54,7 +71,8 @@ public enum AgentBridgeTools {
                 "type": "boolean",
                 "description": "Cut off any speech currently playing before speaking this. Defaults to false."
             ],
-            "sessionId": sessionIdProperty
+            "sessionId": sessionIdProperty,
+            "sessionToken": sessionTokenProperty
         ],
         "required": ["text"]
     ]
@@ -67,7 +85,8 @@ public enum AgentBridgeTools {
                 "description": "The question to speak, then listen for the human's spoken answer."
             ],
             "timeout": ["type": "number", "description": "Seconds to wait for a spoken answer before giving up."],
-            "sessionId": sessionIdProperty
+            "sessionId": sessionIdProperty,
+            "sessionToken": sessionTokenProperty
         ],
         "required": ["question"]
     ]
@@ -79,7 +98,8 @@ public enum AgentBridgeTools {
                 "type": "string",
                 "description": "A yes/no question to speak and listen for a deterministic yes/no/cancel answer."
             ],
-            "sessionId": sessionIdProperty
+            "sessionId": sessionIdProperty,
+            "sessionToken": sessionTokenProperty
         ],
         "required": ["question"]
     ]
@@ -90,7 +110,8 @@ public enum AgentBridgeTools {
 
     private static let reRegisterSessionIdDescription: String =
         "Optional. Re-register an existing sessionId (updates its fields and lastSeen) instead of " +
-        "minting a new one."
+        "minting a new one. Requires presenting that session's sessionToken — a missing or wrong " +
+        "token rejects the call rather than taking the session over."
 
     /// AVB-6 (specs/agent-voice-bridge.md §7.1). `capabilities` is the caller's
     /// requested set; the response is the intersection with what speak actually
@@ -119,6 +140,14 @@ public enum AgentBridgeTools {
             "sessionId": [
                 "type": "string",
                 "description": .string(reRegisterSessionIdDescription)
+            ],
+            "sessionToken": [
+                "type": "string",
+                "description": .string(
+                    "Optional. Present when re-registering an existing 'sessionId' — the " +
+                    "token issued at its first registration. speak-mcp supplies the cached token " +
+                    "automatically for sessions it registered."
+                )
             ]
         ],
         "required": ["provider", "label"]
@@ -162,17 +191,19 @@ public enum AgentBridgeTools {
                 "type": "string",
                 "description": "What to actually speak aloud. Defaults to 'prompt' when omitted."
             ],
-            "sessionId": sessionIdProperty
+            "sessionId": sessionIdProperty,
+            "sessionToken": sessionTokenProperty
         ],
         "required": ["requestId", "prompt", "mode"]
     ]
 
-    /// `sessionId` is the one optional property — everything else stays absent
-    /// so a bare `{}` call remains valid. [decision: AVB-6]
+    /// `sessionId`/`sessionToken` are the only optional properties — everything
+    /// else stays absent so a bare `{}` call remains valid. [decision: AVB-6]
     public static let statusInputSchema: JSONValue = [
         "type": "object",
         "properties": [
-            "sessionId": sessionIdProperty
+            "sessionId": sessionIdProperty,
+            "sessionToken": sessionTokenProperty
         ],
         "additionalProperties": false
     ]
@@ -182,9 +213,25 @@ public enum AgentBridgeTools {
     /// Unlike every other tool's `sessionId` (optional, advisory), durable calls
     /// REQUIRE a registered session — this is deliberately a different
     /// description from `sessionIdDescription` above. [decision: AVB-7]
+    /// The session must also authenticate with its `sessionToken` — a missing
+    /// or wrong token fails identically to an unregistered session.
+    /// [decision: session-capability-token]
     private static let durableCallSessionIdProperty: JSONValue = [
         "type": "string",
-        "description": "Required. The sessionId returned by speak_register_session. Call speak_register_session first — unlike other tools, this one fails without a registered session."
+        "description": .string(
+            "Required. The sessionId returned by speak_register_session. Call speak_register_session " +
+            "first — unlike other tools, this one fails without a registered session. The session " +
+            "must authenticate with its sessionToken."
+        )
+    ]
+
+    private static let durableCallSessionTokenProperty: JSONValue = [
+        "type": "string",
+        "description": .string(
+            "Optional. The sessionToken returned by speak_register_session for 'sessionId'. " +
+            "speak-mcp attaches the cached token automatically for sessions it registered — " +
+            "required for the call to authenticate."
+        )
     ]
 
     public static let submitCallInputSchema: JSONValue = [
@@ -220,7 +267,8 @@ public enum AgentBridgeTools {
                 "type": "number",
                 "description": "Seconds until this call expires if the human never engages it. Defaults to 24 hours when omitted."
             ],
-            "sessionId": durableCallSessionIdProperty
+            "sessionId": durableCallSessionIdProperty,
+            "sessionToken": durableCallSessionTokenProperty
         ],
         "required": ["requestId", "prompt", "mode", "sessionId"]
     ]
@@ -229,7 +277,8 @@ public enum AgentBridgeTools {
         "type": "object",
         "properties": [
             "callId": ["type": "string", "description": "The callId returned by speak_submit_call."],
-            "sessionId": durableCallSessionIdProperty
+            "sessionId": durableCallSessionIdProperty,
+            "sessionToken": durableCallSessionTokenProperty
         ],
         "required": ["callId", "sessionId"]
     ]
@@ -240,9 +289,9 @@ public enum AgentBridgeTools {
             description: "Register this agent session with speak so other tool calls can be attributed " +
                 "to it, and negotiate which capabilities are available. Registration identifies a " +
                 "routable destination and grants NO access to files, screen contents, dictation history, " +
-                "or the microphone. Returns a sessionId to pass as 'sessionId' on subsequent calls — " +
-                "optional everywhere else; skipping it preserves today's behavior. Requires speak.app " +
-                "to be running.",
+                "or the microphone. Returns a sessionId and a sessionToken — the token proves ownership " +
+                "of the sessionId on session-scoped calls (speak-mcp attaches it automatically) and is " +
+                "required to re-register the same sessionId. Requires speak.app to be running.",
             inputSchema: registerSessionInputSchema
         ),
         MCPTool(

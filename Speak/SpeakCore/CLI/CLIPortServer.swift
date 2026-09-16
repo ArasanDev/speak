@@ -94,15 +94,20 @@ public protocol CLICommandHandler: AnyObject {
     // MARK: - AVB-6 (specs/agent-voice-bridge.md §7.1)
 
     /// Update `lastSeen` for `sessionId` in the app's `AgentSessionRegistry` and
-    /// report whether it was known. Every tool that carries an optional
-    /// `sessionId` (notify/say/ask/confirm/request_input/status) routes through
-    /// this before replying so the wire can attach an "unregistered session"
-    /// note without rejecting the call. [decision: AVB-6]
-    func cliTouchSession(_ sessionId: String) -> Bool
+    /// report whether the (sessionId, sessionToken) pair authenticated. Every
+    /// tool that carries an optional `sessionId` (notify/say/ask/confirm/
+    /// request_input/status) routes through this before replying so the wire
+    /// can attach an "unregistered session" note without rejecting the call.
+    /// A missing/wrong token reads as unregistered — the session's `lastSeen`
+    /// is NOT refreshed. [decision: AVB-6, session-capability-token]
+    func cliTouchSession(_ sessionId: String, sessionToken: String?) -> Bool
 
     /// `speak_register_session`: register (or re-register, when `sessionId` is
-    /// already known) an `AgentSession` and negotiate capabilities against
-    /// `AgentSessionRegistry.supportedCapabilities`. [decision: AVB-6]
+    /// already known AND `sessionToken` matches) an `AgentSession` and
+    /// negotiate capabilities against `AgentSessionRegistry
+    /// .supportedCapabilities`. Re-registering a known sessionId with a
+    /// missing/different token is REJECTED — never silently rotated, that was
+    /// the session-hijack vector. [decision: AVB-6, session-capability-token]
     ///
     /// Synchronous (not `async`) since `AgentSessionRegistry` is `@MainActor`
     /// isolated and this method itself only runs on the main thread — no
@@ -112,17 +117,18 @@ public protocol CLICommandHandler: AnyObject {
         provider: String,
         label: String,
         workingDirectory: String?,
-        requestedCapabilities: [String]
-    ) -> (sessionId: String, capabilities: [String])
+        requestedCapabilities: [String],
+        sessionToken: String?
+    ) -> CLIRegisterSessionOutcome
 
     // MARK: - AVB-7 (specs/avb7-durable-calls-design.md)
 
-    /// Synchronous, MainActor session-registration check — mirrors
-    /// `cliTouchSession`. Split out of the old `cliSubmitCall`/`cliGetCall` so
-    /// the port server can validate registration inline (no Task, no pump)
-    /// before bridging only the genuine `agentCallStore` actor-hop below.
-    /// [decision: AVB-7-pump-fix]
-    func cliIsSessionKnown(_ sessionId: String) -> Bool
+    /// Synchronous, MainActor session-AUTHENTICATION check — `true` only when
+    /// `sessionId` is registered AND `sessionToken` matches the token issued
+    /// at registration. Replaces the old claimed-identity `cliIsSessionKnown`
+    /// check: `sessionId` alone is asserted identity, never proof.
+    /// [decision: AVB-7-pump-fix, session-capability-token]
+    func cliIsSessionAuthenticated(sessionId: String, sessionToken: String?) -> Bool
 
     /// The durable-call store itself — a plain (non-`MainActor`) actor doing
     /// real SQLite I/O, and `Sendable` (`AgentCallStoring: Sendable`). Exposed
@@ -131,6 +137,22 @@ public protocol CLICommandHandler: AnyObject {
     /// without capturing the non-`Sendable` `any CLICommandHandler` existential
     /// itself. [decision: AVB-7-pump-fix]
     var agentCallStore: any AgentCallStoring { get }
+}
+
+// MARK: - AVB-6 registerSession outcome
+
+/// Outcome of `CLICommandHandler.cliRegisterSession`. `.rejected` means the
+/// caller asked to re-register an already-registered `sessionId` without
+/// presenting its issued `sessionToken` — refused, existing session
+/// untouched (never silently rotated). [decision: session-capability-token]
+public enum CLIRegisterSessionOutcome: Sendable, Equatable {
+    /// Registration accepted — carries the sessionId, the issued (or, on an
+    /// idempotent reconnect, still-valid) sessionToken, and negotiated
+    /// capabilities.
+    case registered(sessionId: String, sessionToken: String, capabilities: [String])
+    /// The requested sessionId is already held by a caller presenting a
+    /// different (or no) token.
+    case rejected
 }
 
 // MARK: - AVB-7 durable-call outcomes
@@ -306,7 +328,11 @@ public final class CLIPortServer {
     /// Decode the incoming request and build a reply.
     ///
     /// Called on the main thread. Reads `handler.icon` (we are already on main — see scheduling above).
-    private func handle(data: Data?) -> Unmanaged<CFData>? {
+    /// `internal` (not `private`) so `@testable` suites can drive the dispatch
+    /// table directly without a live CFMessagePort — e.g. the session-token
+    /// auth matrix in CLIPortServerSessionTokenTests.
+    /// [decision: session-capability-token]
+    func handle(data: Data?) -> Unmanaged<CFData>? {
         guard let data else {
             SpeakLog.cli.error("CLIPortServer: received nil data — returning failure reply.")
             return CLIPortServer.encodeReply(.failure("no request data"))
@@ -327,22 +353,32 @@ public final class CLIPortServer {
             return CLIPortServer.encodeReply(.failure("internal: handler unavailable"))
         }
 
+        return CLIPortServer.encodeReply(dispatch(request, handler: cmdHandler))
+    }
+
+    /// The full request → reply dispatch table, split out of `handle(data:)`
+    /// (which only owns decode + handler-lookup + encode) so `@testable`
+    /// suites can drive it against a stub `CLICommandHandler` with no live
+    /// CFMessagePort registration. `internal`, not `private`, for exactly
+    /// that seam — the session-token auth matrix lives in
+    /// CLIPortServerSessionTokenTests. [decision: session-capability-token]
+    func dispatch(_ request: CLIRequest, handler cmdHandler: any CLICommandHandler) -> CLIReply {
         // ask/confirm need to pump a nested run loop while an async round-trip
         // completes — see `pumpUntilResult(timeoutSeconds:poll:)` below.
         if request.cmd == .ask || request.cmd == .confirm {
-            return CLIPortServer.encodeReply(handleAskOrConfirm(request, handler: cmdHandler))
+            return handleAskOrConfirm(request, handler: cmdHandler)
         }
         if request.cmd == .requestInput {
-            return CLIPortServer.encodeReply(handleRequestInput(request, handler: cmdHandler))
+            return handleRequestInput(request, handler: cmdHandler)
         }
         if request.cmd == .registerSession {
-            return CLIPortServer.encodeReply(handleRegisterSession(request, handler: cmdHandler))
+            return handleRegisterSession(request, handler: cmdHandler)
         }
         if request.cmd == .submitCall {
-            return CLIPortServer.encodeReply(handleSubmitCall(request, handler: cmdHandler))
+            return handleSubmitCall(request, handler: cmdHandler)
         }
         if request.cmd == .getCall {
-            return CLIPortServer.encodeReply(handleGetCall(request, handler: cmdHandler))
+            return handleGetCall(request, handler: cmdHandler)
         }
 
         // AVB-6: resolve the optional sessionId note (if any) before the
@@ -350,10 +386,13 @@ public final class CLIPortServer {
         // cannot be awaited from inside a synchronous method.
         // `nil` when the request carries no sessionId, matching "absent →
         // exactly today's behavior." [decision: AVB-6]
-        let sessionNote = CLIPortServer.pumpedSessionNote(sessionId: request.sessionId, handler: cmdHandler)
+        // A sessionId without a matching sessionToken resolves as
+        // "unregistered" — fail closed, never "exists but wrong token".
+        // [decision: session-capability-token]
+        let sessionNote = CLIPortServer.pumpedSessionNote(
+            sessionId: request.sessionId, sessionToken: request.sessionToken, handler: cmdHandler)
 
         // Read handler state synchronously for status; dispatch Tasks for start/stop/say.
-        let reply: CLIReply
         switch request.cmd {
 
         case .status:
@@ -362,7 +401,7 @@ public final class CLIPortServer {
             let binding = cmdHandler.currentHotkeyDisplayString
             SpeakLog.cli.info("CLIPortServer: status — state=\(state.rawValue, privacy: .public)")
             SpeakLog.cli.info("CLIPortServer: status — binding=\(binding, privacy: .public)")
-            reply = .status(state: state, binding: binding, sessionNote: sessionNote)
+            return .status(state: state, binding: binding, sessionNote: sessionNote)
 
         case .start:
             // Idempotency gate: only dispatch if idle.
@@ -374,11 +413,11 @@ public final class CLIPortServer {
                 SpeakLog.cli.info(
                     "CLIPortServer: --start ignored — not idle (icon=\(iconDescription, privacy: .public))"
                 )
-                return CLIPortServer.encodeReply(.accepted())  // already in desired or transitional state
+                return .accepted()  // already in desired or transitional state
             }
             cmdHandler.cliBeginDictation()
             SpeakLog.cli.info("CLIPortServer: --start dispatched.")
-            reply = .accepted()
+            return .accepted()
 
         case .stop:
             // Idempotency gate: only dispatch if listening.
@@ -389,11 +428,11 @@ public final class CLIPortServer {
                 SpeakLog.cli.info(
                     "CLIPortServer: --stop ignored — not listening (icon=\(iconDescription, privacy: .public))"
                 )
-                return CLIPortServer.encodeReply(.accepted())  // already stopped or in transition
+                return .accepted()  // already stopped or in transition
             }
             cmdHandler.cliEndDictation()
             SpeakLog.cli.info("CLIPortServer: --stop dispatched.")
-            reply = .accepted()
+            return .accepted()
 
         case .say:
             // Accept-ack, mirrors start/stop: the port replies immediately;
@@ -403,18 +442,16 @@ public final class CLIPortServer {
             // waiting for the previous utterance to finish. [decision: H-3]
             guard let text = request.text, !text.isEmpty else {
                 SpeakLog.cli.error("CLIPortServer: say ignored — empty/missing text.")
-                return CLIPortServer.encodeReply(.failure("say requires non-empty text"))
+                return .failure("say requires non-empty text")
             }
             cmdHandler.cliSay(text: text, interrupt: request.interrupt ?? false)
             SpeakLog.cli.info("CLIPortServer: say dispatched.")
-            reply = .accepted(sessionNote: sessionNote)
+            return .accepted(sessionNote: sessionNote)
 
         case .ask, .confirm, .requestInput, .registerSession, .submitCall, .getCall:
             // Handled above, before this switch — unreachable here.
-            reply = .failure("internal: ask/confirm/requestInput/registerSession/submitCall/getCall routed incorrectly")
+            return .failure("internal: ask/confirm/requestInput/registerSession/submitCall/getCall routed incorrectly")
         }
-
-        return CLIPortServer.encodeReply(reply)
     }
 
     // MARK: - H-3 ask/confirm dispatch (blocking-avoidance pump)
@@ -463,7 +500,8 @@ public final class CLIPortServer {
         let timeout = request.timeout ?? CLIContract.askConfirmDefaultTimeoutSeconds
         // AVB-6: resolved up front so it's available regardless of which branch
         // below returns. [decision: AVB-6]
-        let sessionNote = CLIPortServer.pumpedSessionNote(sessionId: request.sessionId, handler: handler)
+        let sessionNote = CLIPortServer.pumpedSessionNote(
+            sessionId: request.sessionId, sessionToken: request.sessionToken, handler: handler)
         let mode: RequestInputMode = request.cmd == .confirm ? .approval : .freeform
 
         // Adapter path: always `sessionId: nil` on the durable row so `getCall`
@@ -539,7 +577,8 @@ public final class CLIPortServer {
         }
 
         let timeout = request.timeout ?? CLIContract.askConfirmDefaultTimeoutSeconds
-        let sessionNote = CLIPortServer.pumpedSessionNote(sessionId: request.sessionId, handler: handler)
+        let sessionNote = CLIPortServer.pumpedSessionNote(
+            sessionId: request.sessionId, sessionToken: request.sessionToken, handler: handler)
 
         // Adapter path: durable row is nil-session (same as ask/confirm). Request
         // sessionId stays advisory via sessionNote. [decision: AgentCall adapter isolation]
@@ -637,9 +676,21 @@ public final class CLIPortServer {
             provider: provider,
             label: label,
             workingDirectory: request.workingDirectory,
-            requestedCapabilities: request.requestedCapabilities ?? []
+            requestedCapabilities: request.requestedCapabilities ?? [],
+            sessionToken: request.sessionToken
         )
-        return .registered(sessionId: result.sessionId, capabilities: result.capabilities)
+        switch result {
+        case .registered(let sessionId, let sessionToken, let capabilities):
+            return .registered(sessionId: sessionId, sessionToken: sessionToken, capabilities: capabilities)
+        case .rejected:
+            // The sessionId is already held by a caller with a different
+            // token — refuse rather than rotate (the hijack vector this fix
+            // closes). Registration inherently reveals that the requested id
+            // is taken; the refusal names no token state.
+            // [decision: session-capability-token]
+            SpeakLog.cli.info("CLIPortServer: registerSession refused — sessionId already registered.")
+            return .failure("registerSession refused: the requested sessionId is already registered")
+        }
     }
 
     // MARK: - AVB-7 submitCall / getCall dispatch
@@ -688,7 +739,12 @@ public final class CLIPortServer {
         // own default-applying parse. [decision: AVB-7]
         let expiresInSeconds = request.expiresInSeconds ?? AgentCallDefaults.defaultExpirySeconds
 
-        guard let sessionId = request.sessionId, handler.cliIsSessionKnown(sessionId) else {
+        // sessionId alone is ASSERTED identity — the request must also present
+        // the sessionToken issued at registration. A missing/wrong token is
+        // indistinguishable from an unregistered session: same refusal text,
+        // never "exists but wrong token". [decision: session-capability-token]
+        guard let sessionId = request.sessionId,
+              handler.cliIsSessionAuthenticated(sessionId: sessionId, sessionToken: request.sessionToken) else {
             SpeakLog.cli.info("CLIPortServer: submitCall refused — unregistered session.")
             return .failure(
                 "register a session first (speak_register_session) before using speak_submit_call.")
@@ -758,7 +814,11 @@ public final class CLIPortServer {
         // are submitted with `sessionId: nil` to match. Only reject when a
         // sessionId WAS supplied but isn't registered. [decision: AVB-7-ask-confirm-pump-fix]
         let sessionId = request.sessionId
-        if let sessionId, !handler.cliIsSessionKnown(sessionId) {
+        // Same token-authenticated gate as submitCall — a supplied sessionId
+        // must be proven with its sessionToken; failure is identical to the
+        // unregistered-session refusal. [decision: session-capability-token]
+        if let sessionId,
+           !handler.cliIsSessionAuthenticated(sessionId: sessionId, sessionToken: request.sessionToken) {
             SpeakLog.cli.info("CLIPortServer: getCall refused — unregistered session.")
             return .failure(
                 "register a session first (speak_register_session) before using speak_get_call.")

@@ -138,6 +138,47 @@ queue. Conversation mode (`fullDuplex` / `pushToTalk` / `gatedTurn`) is a local
 Speak setting — never an MCP tool argument. Agents must not compose overlay,
 mic, or TTS primitives. `[decision 2026-07-30]`
 
+### Session authentication — capability tokens `[decision: session-capability-token]`
+
+A `sessionId` on the wire is **asserted identity, not proof**. Any local process
+that learns or guesses a session ID could previously re-register it, keep it
+alive, or use it with session-scoped tools — including approval prompts. The IPC
+seam therefore issues an opaque **sessionToken** that proves ownership of a
+session ID:
+
+- `speak_register_session` returns a freshly generated `sessionToken` (a UUID —
+  a local bearer capability, not a cryptographic secret) alongside the
+  `sessionId`. The registry stores one token per session ID, kept out of the
+  Codable `AgentSession` record so it never appears on `list()`/dashboard/
+  `sessionNote` surfaces.
+- Re-registering an existing `sessionId` with the **same** token is allowed
+  (idempotent reconnect — e.g. an agent that restarted): fields and `lastSeen`
+  update, and the stored token is returned unchanged — never rotated.
+- Re-registering an existing `sessionId` with a **different or missing** token
+  is **rejected**; the existing session and token are untouched. Rotation on
+  re-register would itself be the hijack vector.
+- If a session is actually evicted/cleaned up (no eviction exists today —
+  entries persist for the app lifetime; see the registry's TODO), its token
+  dies with it: re-registering the stale `sessionId` afterward is a fresh
+  registration and is allowed.
+- Every request that supplies a `sessionId` must also supply the matching
+  `sessionToken`. A missing or wrong token **fails closed and is
+  indistinguishable from an unknown session** — `speak_submit_call` /
+  `speak_get_call` refuse with the same "register a session first" error, and
+  advisory tools (`speak_notify` / `speak_say` / `speak_ask` / `speak_confirm` /
+  `speak_request_input` / `speak_status`) attach the same "not a registered
+  session" note. No path ever answers "exists but wrong token".
+- `speak-mcp` caches each issued token for its process lifetime and attaches it
+  automatically to any tool call carrying that `sessionId`; an explicit
+  `sessionToken` argument still wins (a session registered by a different
+  client, or one persisted across a `speak-mcp` restart).
+- `CLIContract.bridgeContractVersion` is now **2**. `sessionToken` is an
+  additive `Optional` field so old/new binaries still decode each other, but a
+  pre-token caller on a session-scoped call **fails closed** (it cannot
+  authenticate); the version bump converts that into the loud, actionable
+  contract-mismatch error reported by `speak_status` rather than a confusing
+  normal response.
+
 ### Withdrawn tools
 
 `speak_ask_user` and `speak_stream_speech` (Layer-4 experiment) are **withdrawn**
@@ -177,7 +218,9 @@ suppression and request ownership, and rejects concurrent capture as `busy`.
 - Hotkey input always outranks and interrupts agent TTS.
 - No agent receives ambient microphone access.
 - Every agent-initiated capture is visible, bounded, and cancellable.
-- Only the originating call/session receives its response.
+- Only the originating call/session receives its response — and a bare
+  `sessionId` never counts as "originating": session-scoped requests must
+  authenticate with the session's issued `sessionToken` (§5).
 - No tool reads pasteboard contents, dictation history, files, or screen text.
 - No generic shell, Git, browser, Shortcuts, or OS-automation tools belong in
   the agent bridge.

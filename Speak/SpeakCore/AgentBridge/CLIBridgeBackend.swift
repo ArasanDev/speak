@@ -18,9 +18,9 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
         self.transport = transport
     }
 
-    public func status(sessionId: String?) async -> BridgeOutcome<BridgeStatusReport> {
+    public func status(sessionId: String?, sessionToken: String?) async -> BridgeOutcome<BridgeStatusReport> {
         do {
-            let reply = try transport.send(CLIRequest(cmd: .status, sessionId: sessionId))
+            let reply = try transport.send(CLIRequest(cmd: .status, sessionId: sessionId, sessionToken: sessionToken))
             guard reply.ok else {
                 return BridgeOutcome(BridgeStatusReport(
                     appRunning: true, engineState: nil, hotkeyBinding: nil,
@@ -64,9 +64,9 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
     }
 
     public func say(
-        text: String, interrupt: Bool, sessionId: String?
+        text: String, interrupt: Bool, sessionId: String?, sessionToken: String?
     ) async -> Result<BridgeOutcome<Void>, BridgeUnavailable> {
-        let request = CLIRequest(cmd: .say, text: text, interrupt: interrupt, sessionId: sessionId)
+        let request = CLIRequest(cmd: .say, text: text, interrupt: interrupt, sessionId: sessionId, sessionToken: sessionToken)
         do {
             let reply = try transport.send(request, timeoutSeconds: CLIContract.sendTimeoutSeconds)
             guard reply.ok else {
@@ -90,7 +90,7 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
     /// for the advisory `sessionNote` only.
     private func pollUntilTerminal(callId: UUID, deadline: Date) async -> AgentCall? {
         while true {
-            switch await getCall(callId: callId, sessionId: nil) {
+            switch await getCall(callId: callId, sessionId: nil, sessionToken: nil) {
             case .success(let outcome):
                 if let call = outcome.value, call.state.isTerminal {
                     return call
@@ -104,10 +104,10 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
     }
 
     public func ask(
-        question: String, timeoutSeconds: Double?, sessionId: String?
+        question: String, timeoutSeconds: Double?, sessionId: String?, sessionToken: String?
     ) async -> Result<BridgeOutcome<String>, BridgeUnavailable> {
         let effectiveTimeout = timeoutSeconds ?? CLIContract.askConfirmDefaultTimeoutSeconds
-        let request = CLIRequest(cmd: .ask, question: question, timeout: effectiveTimeout, sessionId: sessionId)
+        let request = CLIRequest(cmd: .ask, question: question, timeout: effectiveTimeout, sessionId: sessionId, sessionToken: sessionToken)
         do {
             let reply = try transport.send(request, timeoutSeconds: CLIContract.sendTimeoutSeconds)
             guard reply.ok else {
@@ -135,9 +135,9 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
         }
     }
 
-    public func confirm(question: String, sessionId: String?) async -> Result<BridgeOutcome<Bool>, BridgeUnavailable> {
+    public func confirm(question: String, sessionId: String?, sessionToken: String?) async -> Result<BridgeOutcome<Bool>, BridgeUnavailable> {
         let effectiveTimeout = CLIContract.askConfirmDefaultTimeoutSeconds
-        let request = CLIRequest(cmd: .confirm, question: question, timeout: effectiveTimeout, sessionId: sessionId)
+        let request = CLIRequest(cmd: .confirm, question: question, timeout: effectiveTimeout, sessionId: sessionId, sessionToken: sessionToken)
         do {
             let reply = try transport.send(request, timeoutSeconds: CLIContract.sendTimeoutSeconds)
             guard reply.ok else {
@@ -199,7 +199,8 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
             choices: call.choices,
             consequence: call.consequence,
             spokenSummary: call.spokenSummary,
-            sessionId: call.sessionId
+            sessionId: call.sessionId,
+            sessionToken: call.sessionToken
         )
         do {
             let reply = try transport.send(request, timeoutSeconds: CLIContract.sendTimeoutSeconds)
@@ -235,11 +236,13 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
         provider: String,
         label: String,
         workingDirectory: String?,
-        requestedCapabilities: [String]
-    ) async -> Result<(sessionId: String, capabilities: [String]), BridgeUnavailable> {
+        requestedCapabilities: [String],
+        sessionToken: String?
+    ) async -> Result<(sessionId: String, sessionToken: String, capabilities: [String]), BridgeUnavailable> {
         let request = CLIRequest(
             cmd: .registerSession,
             sessionId: sessionId,
+            sessionToken: sessionToken,
             provider: provider,
             label: label,
             workingDirectory: workingDirectory,
@@ -253,7 +256,13 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
             guard let registeredId = reply.sessionId else {
                 return .failure(.transportError("speak_register_session", "reply missing 'sessionId' field"))
             }
-            return .success((sessionId: registeredId, capabilities: reply.capabilities ?? []))
+            // A pre-token app build replies without this field — fail loud
+            // (transport error) rather than proceed tokenless into calls that
+            // would all fail closed anyway. [decision: session-capability-token]
+            guard let issuedToken = reply.sessionToken else {
+                return .failure(.transportError("speak_register_session", "reply missing 'sessionToken' field"))
+            }
+            return .success((sessionId: registeredId, sessionToken: issuedToken, capabilities: reply.capabilities ?? []))
         } catch CLITransportError.portNotFound {
             return .failure(.appNotRunning)
         } catch {
@@ -276,6 +285,7 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
             consequence: args.consequence,
             spokenSummary: args.spokenSummary,
             sessionId: args.sessionId,
+            sessionToken: args.sessionToken,
             urgency: args.urgency,
             expiresInSeconds: args.expiresInSeconds
         )
@@ -298,8 +308,8 @@ public final class CLIBridgeBackend: BridgeBackend, @unchecked Sendable {
         }
     }
 
-    public func getCall(callId: UUID, sessionId: String?) async -> Result<BridgeOutcome<AgentCall?>, BridgeUnavailable> {
-        let request = CLIRequest(cmd: .getCall, sessionId: sessionId, callId: callId.uuidString)
+    public func getCall(callId: UUID, sessionId: String?, sessionToken: String?) async -> Result<BridgeOutcome<AgentCall?>, BridgeUnavailable> {
+        let request = CLIRequest(cmd: .getCall, sessionId: sessionId, sessionToken: sessionToken, callId: callId.uuidString)
         do {
             let reply = try transport.send(
                 request, timeoutSeconds: CLIContract.getCallSendTimeoutSeconds

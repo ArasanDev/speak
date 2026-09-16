@@ -136,6 +136,9 @@ public struct RequestInputCall: Sendable {
     public let consequence: String?
     public let spokenSummary: String?
     public let sessionId: String?
+    /// The capability token proving ownership of `sessionId` — issued by
+    /// `speak_register_session`. [decision: session-capability-token]
+    public let sessionToken: String?
 
     public init(
         requestId: String,
@@ -146,7 +149,8 @@ public struct RequestInputCall: Sendable {
         timeoutSeconds: Double? = nil,
         consequence: String? = nil,
         spokenSummary: String? = nil,
-        sessionId: String? = nil
+        sessionId: String? = nil,
+        sessionToken: String? = nil
     ) {
         self.requestId = requestId
         self.idempotencyKey = idempotencyKey
@@ -157,6 +161,7 @@ public struct RequestInputCall: Sendable {
         self.consequence = consequence
         self.spokenSummary = spokenSummary
         self.sessionId = sessionId
+        self.sessionToken = sessionToken
     }
 }
 
@@ -177,11 +182,16 @@ public struct SubmitCallArguments: Sendable {
     /// when the caller omits it. [decision: AVB-7 orchestrator amendment 1]
     public let expiresInSeconds: Double
     public let sessionId: String?
+    /// The capability token proving ownership of `sessionId` — issued by
+    /// `speak_register_session`; `submit_call` fails closed without it.
+    /// [decision: session-capability-token]
+    public let sessionToken: String?
 
     public init(
         requestId: String, idempotencyKey: String? = nil, prompt: String, mode: RequestInputMode,
         choices: [String] = [], consequence: String? = nil, spokenSummary: String? = nil,
-        urgency: AgentCallUrgency = .normal, expiresInSeconds: Double, sessionId: String? = nil
+        urgency: AgentCallUrgency = .normal, expiresInSeconds: Double, sessionId: String? = nil,
+        sessionToken: String? = nil
     ) {
         self.requestId = requestId
         self.idempotencyKey = idempotencyKey
@@ -193,6 +203,7 @@ public struct SubmitCallArguments: Sendable {
         self.urgency = urgency
         self.expiresInSeconds = expiresInSeconds
         self.sessionId = sessionId
+        self.sessionToken = sessionToken
     }
 }
 
@@ -213,13 +224,18 @@ public struct AgentCallSubmitOutcome: Sendable, Equatable {
 /// backend as `speak_say`. Every method reports what happened as a
 /// value (never throws) so `AgentBridgeServer` can turn "not available" into
 /// a tool execution error instead of a protocol error.
+/// Every method takes the session's `sessionToken` alongside `sessionId`:
+/// the token is the capability that proves the caller owns the sessionId it
+/// claims. `nil` token on a non-nil sessionId fails closed on the app side —
+/// indistinguishable from an unregistered session.
+/// [decision: session-capability-token]
 public protocol BridgeBackend: Sendable {
-    func status(sessionId: String?) async -> BridgeOutcome<BridgeStatusReport>
-    func say(text: String, interrupt: Bool, sessionId: String?) async -> Result<BridgeOutcome<Void>, BridgeUnavailable>
+    func status(sessionId: String?, sessionToken: String?) async -> BridgeOutcome<BridgeStatusReport>
+    func say(text: String, interrupt: Bool, sessionId: String?, sessionToken: String?) async -> Result<BridgeOutcome<Void>, BridgeUnavailable>
     func ask(
-        question: String, timeoutSeconds: Double?, sessionId: String?
+        question: String, timeoutSeconds: Double?, sessionId: String?, sessionToken: String?
     ) async -> Result<BridgeOutcome<String>, BridgeUnavailable>
-    func confirm(question: String, sessionId: String?) async -> Result<BridgeOutcome<Bool>, BridgeUnavailable>
+    func confirm(question: String, sessionId: String?, sessionToken: String?) async -> Result<BridgeOutcome<Bool>, BridgeUnavailable>
 
     /// AVB-5 (specs/agent-voice-bridge.md §6): `speak_request_input`. Reuses the
     /// CFMessagePort CLI IPC's new `.requestInput` command — no new transport.
@@ -233,23 +249,29 @@ public protocol BridgeBackend: Sendable {
     /// AVB-6 (specs/agent-voice-bridge.md §7.1): `speak_register_session`.
     /// Reuses the CFMessagePort CLI IPC's new `.registerSession` command — no
     /// new transport. Returns the negotiated capabilities alongside the
-    /// (possibly server-generated) sessionId.
+    /// (possibly server-generated) sessionId AND the freshly-issued
+    /// `sessionToken` the caller must present on every session-scoped call.
+    /// `sessionToken` is the caller-presented token when re-registering an
+    /// existing sessionId — `nil` for a fresh registration.
+    /// [decision: session-capability-token]
     func registerSession(
         sessionId: String?,
         provider: String,
         label: String,
         workingDirectory: String?,
-        requestedCapabilities: [String]
-    ) async -> Result<(sessionId: String, capabilities: [String]), BridgeUnavailable>
+        requestedCapabilities: [String],
+        sessionToken: String?
+    ) async -> Result<(sessionId: String, sessionToken: String, capabilities: [String]), BridgeUnavailable>
 
     // MARK: - AVB-7 (specs/avb7-durable-calls-design.md) durable calls
 
     /// `speak_submit_call`. No mic, no pump — a fast durable write. Fails with
-    /// `BridgeUnavailable` when the caller has no registered session (never
-    /// silently proceeds, unlike the advisory `sessionNote` other tools attach).
+    /// `BridgeUnavailable` when the caller has no registered+authenticated
+    /// session (never silently proceeds, unlike the advisory `sessionNote`
+    /// other tools attach).
     func submitCall(_ args: SubmitCallArguments) async -> Result<BridgeOutcome<AgentCallSubmitOutcome>, BridgeUnavailable>
 
     /// `speak_get_call`. `nil` inside the outcome means "not found or not yours"
     /// — isolation, never an error. [decision: AVB-7]
-    func getCall(callId: UUID, sessionId: String?) async -> Result<BridgeOutcome<AgentCall?>, BridgeUnavailable>
+    func getCall(callId: UUID, sessionId: String?, sessionToken: String?) async -> Result<BridgeOutcome<AgentCall?>, BridgeUnavailable>
 }
