@@ -7,6 +7,92 @@
 
 ## Current phase
 
+**Audit fixes (2026-09-16) — capture gating, cancellation safety, cleanup-status honesty, ordered streaming cleanup.**
+
+Direct audit-driven pass (not a roadmap pull): six structural fixes to make the dictation
+pipeline safe-by-construction. Details of each fix + tests live in the source comments tagged
+`[fix: audit — …]`.
+
+- **Capture gates & ownership (C1).** `SpeakEngine` is now the only place production capture is
+  minted/started: `beginDictation` and the new `beginAuxiliarySession(includeCleanup:)` both
+  enforce hardware mute (checked twice — before mint and immediately before `session.start()`,
+  closing the TCC-prompt TOCTOU window), mic authorization (prompts on `.notDetermined`), and
+  single-capture exclusion across dictation AND auxiliary sessions. `CommandModeController` and
+  `VoiceSandboxModel` now drive `engine.beginAuxiliarySession` + `end/cancelAuxiliarySession`;
+  the old `SpeakCore/Engine/VoiceSandbox.swift` factory is **deleted** (supersedes the Loop #99
+  note below — the sandbox no longer owns a second, ungated transcriber). VU meter uses
+  `engine.micLevelStream()`. `setMuted(true)` / `cancelDictation()` cancel both session slots.
+- **Cancellation safety (C2).** `CaptureSession` exposes an off-actor `cancelRequestedFlag`
+  (OSAllocatedUnfairLock) so non-actor code (inserter, watchdogs) sees cancellation.
+  `TextInserting.insert(_:shouldContinue:)` checks the predicate after the clipboard floor,
+  before Cmd+V, and between key events — a cancel mid-paste suppresses the remaining keystrokes
+  (releasing any held modifiers) while keeping the clipboard floor, and `CancellationError`
+  maps to `.sessionCancelled` (not `.pasteboardBusy`). The voice-actions handler call is bounded
+  (`voiceActionsTimeoutNanoseconds`, default 10 s, cancel-poll every 10 ms) — a hung
+  Shortcut/AX handler degrades to plain dictation instead of wedging `stop()`. An engine-level
+  stop watchdog (`processingWatchdog`, default 30 s) force-cancels a session whose `stop()`
+  outlives the bounded path, releasing ownership.
+- **Cleanup-status honesty (H3).** `TranscriptionResult.cleanupStatus` is an explicit
+  `CleanupStatus` — `.cleaned` / `.skipped` / `.fallbackRaw(reason)` where reason is
+  `.cleanerUnavailable`, `.cleanerError`, `.timedOut`, `.emptyOutput`. Persisted to history as
+  `cleanupStatus` TEXT column ("" = legacy row). `LatencyStats` partitions on the status:
+  `.skipped`→raw, `.cleaned`→cleanup, `.fallbackRaw`→neither; legacy rows keep the
+  `cleanupSeconds == 0` sentinel discriminator. Failed/timed-out passes no longer inflate the
+  cleanup-success median.
+- **Ordered streaming cleanup (H5).** Finalized chunks carry a monotonic `ingestSequence`
+  stamped in `CaptureSession`; `StreamingChunkCoordinator` stores `(sequence, task)` pairs and
+  `finalizeAndStitch()` sorts by sequence before awaiting — transcript order is preserved even
+  when cleanup tasks complete out of order.
+- **Lint-driven code motion (zero behavior change).** `runCleanup` returns a named
+  `CleanupPassResult` struct (was a 4-member tuple — `large_tuple` error). Auxiliary verbs moved
+  to `SpeakEngine+Auxiliary.swift` and Null* stores to `DictationController+NullStores.swift`
+  to keep both files under `file_length`; the members they touch are module-internal now
+  (still not public API).
+- **Verification**: `xcodegen generate` clean · `xcodebuild build` **BUILD SUCCEEDED** ·
+  `build-for-testing` **TEST BUILD SUCCEEDED** · full `xcodebuild test` suite: **1287 passed /
+  10 skipped / 0 test failures** (the single recorded failure is a LaunchServices test-host
+  launch flake — "Could not launch SpeakTests" — that self-heals on retry; suites affected were
+  skipped-not-run, not failed) · `swiftlint` on touched files: 0 errors · `make verify-moat`
+  7/7 PASS.
+- **Not verified**: real TCC mic prompt path, live Cmd+V suppression + modifier release against
+  a real pasteboard, real Shortcut/AX hang (tests use hung-closure mocks), real Foundation
+  Models non-cooperative cancellation, live aux capture with real audio.
+
+**Audit fixes — second half (same batch, 2026-09-16).** The remaining audit remediations landed
+in the same working session, committed separately:
+
+- **AVB session capability tokens (M4).** `register_session` now issues an opaque
+  `sessionToken`; every session-scoped request (`submit_call`, `get_call`, `notify`,
+  `request_input`, `say`, `ask`, `confirm`) must present it. Mismatch → same not-found
+  response as an unknown session (no existence leak); same-token re-register is idempotent,
+  different-token re-register is rejected (no silent rotation — that was the hijack vector).
+  `bridgeContractVersion = 2`; pre-token callers fail closed. Spec: `agent-voice-bridge.md` §5.
+- **Single LocalInferenceServer (M5).** `DictationController` owns the one server;
+  `DashboardContext` transports it; Inference pane + Agent Playground inject it instead of
+  each binding `defaultPort 11235`. Lifecycle stays demand-scoped.
+- **SpeakCore→SpeakLLM edge severed (H4).** The dependency direction reversed: `SpeakLLM`
+  now links `SpeakCore` for the pure-data `LLMAuthStyle`/`ProviderPreset` (still Codable in
+  `SpeakCore/Cleanup/ProviderPreset.swift` — persisted `CleanupEngine` JSON unchanged, no
+  migration). `OpenAICompatibleCleaner` + `defaultCleaner(for:)` moved to `Speak/App/Cleanup/`
+  as App-internal. `project.yml`: SpeakCore deps drop SpeakLLM; SpeakLLM deps gain SpeakCore.
+  The moat audit's "zero networking symbols in SpeakCore" now holds at the link graph too.
+- **Command-mode mic cap.** `CommandModeController` abandons an instruction capture after 60 s
+  — a lost chord `.end` can no longer hold the mic open indefinitely (was the last unbounded
+  piece of C1).
+- **Dead-surface honesty.** `SpeakCore/Eval/*` is `#if DEBUG`-gated (was shipping in release);
+  Streaming settings row labeled "Live keystrokes (v0.1)" (delivery is compiled out); the
+  Transforms pane doc comment no longer claims an invoke path.
+- **Aggregate gate**: `make gates` on the settled tree — build OK · 1036 tests, 0 failures ·
+  lint 0 serious · verify-moat 7/7.
+- **Known leftovers (not fixed):** `DashboardContext.conversationStore` declared but never
+  wired (Playground persistence nil in production); `LLMSystemPrompts` spec'd prompts are
+  test-only — the production PromptBuilder never uses them; `TextFlowDesktopPanel` is an
+  orphaned property; `VoiceTurnCoordinator` is test-only; CFMessagePort ask/confirm still
+  pumps a nested run loop (transport redesign deferred); `docs/roadmap.md:159` still describes
+  `.llmCleanupFailed` surfacing semantics that no longer reach the session.
+
+---
+
 **Loop #99 (2026-09-11) — Settings & Control Room: all six sensory seams wired to real data flows.**
 Direct user directive (not a roadmap pull): turn `App/Settings/` from static controls into a live
 control console. Everything below is real — no placeholders, no canned strings.
