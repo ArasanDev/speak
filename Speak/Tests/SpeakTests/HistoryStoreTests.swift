@@ -62,6 +62,32 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(loaded.engineId, entry.engineId)
     }
 
+    /// [fix: audit — cleanup honesty] `cleanupStatus` round-trips through
+    /// SQLite so `LatencyStats` can distinguish a failed/timed-out cleanup pass
+    /// from a successful one. A nil-status entry persists as the legacy "" row.
+    func testCleanupStatusRoundTrips() async throws {
+        let url = TestStorage.tempDatabaseURL()
+        let store = try await makeStore(url: url)
+
+        try await store.save(HistoryEntry(
+            rawText: "cleaned", cleanedText: "Cleaned.", createdAt: Date(),
+            engineId: "e", cleanupStatus: CleanupStatus.cleaned.storageKey))
+        try await store.save(HistoryEntry(
+            rawText: "timed out", cleanedText: nil, createdAt: Date(),
+            engineId: "e", cleanupStatus: CleanupStatus.fallbackRaw(.timedOut).storageKey))
+        try await store.save(HistoryEntry(
+            rawText: "legacy", cleanedText: nil, createdAt: Date(), engineId: "e"))
+
+        let rows = try await store.recent(limit: 10)
+        XCTAssertEqual(rows.count, 3)
+        let byRaw = Dictionary(uniqueKeysWithValues: rows.map { ($0.rawText, $0) })
+        XCTAssertEqual(byRaw["cleaned"]?.cleanupOutcome, .cleaned)
+        XCTAssertEqual(byRaw["timed out"]?.cleanupOutcome, .fallbackRaw(.timedOut))
+        XCTAssertNil(byRaw["legacy"]?.cleanupOutcome,
+            "A row saved without a status must read back as legacy/unknown.")
+        XCTAssertEqual(byRaw["legacy"]?.cleanupStatus, "")
+    }
+
     // MARK: - P9: recent(limit:) newest-first + respects limit
 
     func testRecentNewestFirstAndLimit() async throws {

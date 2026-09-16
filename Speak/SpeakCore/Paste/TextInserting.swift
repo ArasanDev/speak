@@ -31,4 +31,31 @@ public protocol TextInserting: Sendable {
     ///   — that case cannot be detected without reading the pasteboard (hard
     ///   rule violation), so it is a `[deferred — needs human verification]` row.
     func insert(_ text: String) async throws
+
+    /// Cancellation-aware variant of `insert(_:)`.
+    ///
+    /// `shouldContinue` is consulted at the points where proceeding would
+    /// commit a user-visible paste — in `PasteboardWriter`, after the settle
+    /// delay, before the Cmd+V sequence starts, and between its events.
+    /// Returning `false`
+    /// throws `SpeakError.sessionCancelled` (never `.pasteboardBusy`); the
+    /// clipboard floor write may already have run, which is by design — the
+    /// text stays recoverable from the clipboard even when the keystroke is
+    /// suppressed. [fix: audit — cancel-during-paste]
+    ///
+    /// - Parameter shouldContinue: Called on the insert path; must return
+    ///   `false` when the owning session was cancelled.
+    /// - Throws: `SpeakError.sessionCancelled` when `shouldContinue()` is false.
+    func insert(_ text: String, shouldContinue: @Sendable () -> Bool) async throws
+}
+
+public extension TextInserting {
+    /// Default: consult the predicate once, up front, then run the plain insert.
+    /// Conformers with internal suspension points (settle delays, event gaps)
+    /// should override and re-check `shouldContinue` there — the front check
+    /// alone cannot catch a cancel that lands mid-insert.
+    func insert(_ text: String, shouldContinue: @Sendable () -> Bool) async throws {
+        guard shouldContinue() else { throw SpeakError.sessionCancelled }
+        try await insert(text)
+    }
 }

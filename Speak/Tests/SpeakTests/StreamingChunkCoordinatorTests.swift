@@ -28,8 +28,8 @@ final class StreamingChunkCoordinatorTests: XCTestCase {
 
         let coordinator = StreamingChunkCoordinator(cleaner: mock, mode: .punctuation)
 
-        await coordinator.ingestChunk("hello world")
-        await coordinator.ingestChunk("how are you")
+        await coordinator.ingestChunk("hello world", sequence: 0)
+        await coordinator.ingestChunk("how are you", sequence: 1)
 
         let count = await coordinator.chunkCount
         XCTAssertEqual(count, 2)
@@ -45,7 +45,7 @@ final class StreamingChunkCoordinatorTests: XCTestCase {
 
         let coordinator = StreamingChunkCoordinator(cleaner: mock, mode: .punctuation)
 
-        await coordinator.ingestChunk("first sentence")
+        await coordinator.ingestChunk("first sentence", sequence: 0)
         let result = try await coordinator.finalizeAndStitch(trailingRawText: "trailing segment")
 
         XCTAssertEqual(result, "First sentence. Trailing segment.")
@@ -55,8 +55,8 @@ final class StreamingChunkCoordinatorTests: XCTestCase {
         let mock = MockChunkCleaner()
         let coordinator = StreamingChunkCoordinator(cleaner: mock, mode: .punctuation)
 
-        await coordinator.ingestChunk("chunk one")
-        await coordinator.ingestChunk("chunk two")
+        await coordinator.ingestChunk("chunk one", sequence: 0)
+        await coordinator.ingestChunk("chunk two", sequence: 1)
 
         var count = await coordinator.chunkCount
         XCTAssertEqual(count, 2)
@@ -77,11 +77,30 @@ final class StreamingChunkCoordinatorTests: XCTestCase {
 
         let coordinator = StreamingChunkCoordinator(cleaner: mock, mode: .styled(.code, .medium))
 
-        await coordinator.ingestChunk("we will do option one")
-        await coordinator.ingestChunk("actually not option two do option one and three immediately")
+        await coordinator.ingestChunk("we will do option one", sequence: 0)
+        await coordinator.ingestChunk("actually not option two do option one and three immediately", sequence: 1)
 
         let result = try await coordinator.finalizeAndStitch()
         XCTAssertEqual(result, "Implement option 1 and option 3 immediately.")
+    }
+
+    /// [fix: audit — unordered ingestion] Arrival order is scheduler-dependent
+    /// once CaptureSession hops through unstructured Tasks; the stitched
+    /// transcript must follow the producer-assigned sequence, not arrival.
+    func testOutOfOrderArrivalStitchesInSequenceOrder() async throws {
+        let mock = MockChunkCleaner()
+        mock.cleanedResults["second"] = "Second."
+        mock.cleanedResults["first"] = "First."
+
+        let coordinator = StreamingChunkCoordinator(cleaner: mock, mode: .punctuation)
+
+        // Delivered to the coordinator REVERSED — seq 1 arrives before seq 0.
+        await coordinator.ingestChunk("second", sequence: 1)
+        await coordinator.ingestChunk("first", sequence: 0)
+
+        let result = try await coordinator.finalizeAndStitch()
+        XCTAssertEqual(result, "First. Second.",
+            "Stitch must follow producer sequence, not arrival order.")
     }
 
     /// A single chunk — however long — was already cleaned as one unit during
@@ -94,7 +113,7 @@ final class StreamingChunkCoordinatorTests: XCTestCase {
 
         let coordinator = StreamingChunkCoordinator(cleaner: mock, mode: .styled(.code, .medium))
 
-        await coordinator.ingestChunk(longChunk)
+        await coordinator.ingestChunk(longChunk, sequence: 0)
         let result = try await coordinator.finalizeAndStitch()
 
         XCTAssertEqual(result, "We should pick the first approach.")

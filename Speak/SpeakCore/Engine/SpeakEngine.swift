@@ -55,14 +55,18 @@ public actor SpeakEngine {
 
     // MARK: - Configuration (immutable post-init)
 
-    private let transcriber: any Transcribing
-    private let cleaner: (any LLMCleaning)?
+    // [lint] `transcriber`/`cleaner`/`snippetStore`/`settings` are internal (not
+    // `private`) so the auxiliary-session verbs in `SpeakEngine+Auxiliary.swift`
+    // can mint sessions with the same wiring — module-internal only, still not
+    // public API.
+    let transcriber: any Transcribing
+    let cleaner: (any LLMCleaning)?
     private let inserter: (any TextInserting)?
     private let history: any HistoryStoring
 
     /// Optional snippet store. Read at `newSession()` time (like settings) so a snippet
     /// edit applies to the next dictation without an engine restart. `nil` = no snippets.
-    private let snippetStore: SnippetStore?
+    let snippetStore: SnippetStore?
 
     /// Optional profile store (PE-2). Read at `newSession()` time so a profile edited in
     /// AI Studio applies on the next dictation. `nil` → fall back to the hardcoded
@@ -73,7 +77,7 @@ public actor SpeakEngine {
     /// and the transcription locale take effect on the next dictation without
     /// requiring an engine restart. `@unchecked Sendable` on `SettingsStore` makes
     /// this actor-safe.
-    private let settings: SettingsStore
+    let settings: SettingsStore
 
     /// [H-1] Optional Voice Actions executor (specs/horizon-voice-os.md, Pillar 1).
     /// `ShortcutsCLIExecutor()` in production (injected by the app shell); `nil` in
@@ -95,12 +99,34 @@ public actor SpeakEngine {
     /// Optional closure returning whether microphone permission is granted.
     /// Defaults to `AVCaptureDevice.authorizationStatus(for: .audio) == .authorized`,
     /// or `true` in headless unit test environments (`XCTest`).
-    private let isMicrophoneAuthorized: @Sendable () -> Bool
+    /// Internal (not `private`) so `SpeakEngine+Auxiliary.swift` can enforce the
+    /// same auth gate — see the [lint] note on `transcriber` above.
+    let isMicrophoneAuthorized: @Sendable () -> Bool
+
+    /// [fix: audit — C2 stop-wedge watchdog] Upper bound on how long
+    /// `endDictation` / `endAuxiliarySession` wait for `session.stop()` before
+    /// force-cancelling the session so the engine slot is released. Derivation:
+    /// the worst-case bounded path inside `stop()` is stream-drain watchdog
+    /// (5 s) + voice-actions bound (10 s) + cleanup bound T_cleanup (10 s)
+    /// ≈ 25 s; 30 s gives headroom without firing on a valid slow run.
+    /// Injectable so tests can shrink it. [decision: 30 s]
+    private let processingWatchdog: Duration
 
     // MARK: - Session state (actor-isolated)
 
     /// The in-flight dictation session. `nil` when idle.
-    private var currentSession: CaptureSession?
+    /// `private(set)` — read by `SpeakEngine+Auxiliary.swift` for the
+    /// single-capture exclusion check; written only in this file.
+    private(set) var currentSession: CaptureSession?
+
+    /// The in-flight auxiliary (non-dictation) capture session — Command Mode
+    /// instruction capture, the Settings "Test My Voice" sandbox. Minted and
+    /// started only by `beginAuxiliarySession`, tracked here so `setMuted(true)`
+    /// / `cancelDictation()` reach it and `beginDictation` can refuse to start
+    /// a second concurrent capture. `nil` when no aux capture is in flight.
+    /// [fix: audit — C1 gate bypass]
+    /// Internal (module scope) — the aux verbs live in `SpeakEngine+Auxiliary.swift`.
+    var auxiliarySession: CaptureSession?
 
     /// Hardware-mute state (SPEC §7.4 / product.md §8 #4). When `true`,
     /// `beginDictation` refuses to start a session — so no `CaptureSession` and
@@ -108,7 +134,9 @@ public actor SpeakEngine {
     /// point for the privacy guarantee ("when muted, no audio is read"): the gate
     /// lives in the one place that starts capture, not in the UI layer that could
     /// be circumvented. Actor-isolated so reads/writes are data-race-free.
-    private var muted: Bool = false
+    /// `private(set)` — read by `SpeakEngine+Auxiliary.swift`; written only in
+    /// `setMuted` below.
+    private(set) var muted: Bool = false
 
     // MARK: - Init
 
@@ -128,6 +156,9 @@ public actor SpeakEngine {
     ///     live paste (write-never-read, hard constraint §2).
     ///   - history: Persistence store for completed dictations. Injected so tests
     ///     can substitute an in-memory or temp-file store.
+    ///   - processingWatchdog: Bound on `session.stop()` inside `endDictation` /
+    ///     `endAuxiliarySession`; on expiry the session is force-cancelled so the
+    ///     engine slot is released. Default 30 s [decision: see property doc].
     ///   - settings: The `SettingsStore` whose `cleanupEnabled`, `language`, and
     ///     `cleanupStyle`/`cleanupLevel` are all read at each `newSession()` call.
     ///     The cleanup toggle, transcription locale, and neat-writing mode apply
@@ -144,7 +175,8 @@ public actor SpeakEngine {
                 profileStore: ProfileStore? = nil,
                 voiceActionsExecutor: (any ActionExecuting)? = nil,
                 voiceActionsCommandService: CommandModeService? = nil,
-                isMicrophoneAuthorized: (@Sendable () -> Bool)? = nil) {
+                isMicrophoneAuthorized: (@Sendable () -> Bool)? = nil,
+                processingWatchdog: Duration = .seconds(30)) {
         self.transcriber = transcriber
         self.cleaner = cleaner
         self.inserter = inserter
@@ -160,6 +192,7 @@ public actor SpeakEngine {
             }
             return AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         }
+        self.processingWatchdog = processingWatchdog
     }
 
     // MARK: - Session factory
@@ -191,13 +224,19 @@ public actor SpeakEngine {
     /// again before the prior session is terminal replaces the reference
     /// (the prior session should have been stopped or cancelled first).
     ///
+    /// `internal` (not public): this is the raw mint — it builds a session but
+    /// runs NO capture gates (mute, TCC, single-capture). Public callers must
+    /// use `beginDictation` / `beginAuxiliarySession`, which apply the gates
+    /// before/around calling this. Tests keep access through `@testable`.
+    /// [fix: audit — C1 gate bypass]
+    ///
     /// - Parameter frontmostBundleID: the frontmost app's bundle id at dictation
     ///   start (read on the main actor by the app layer and passed in, so the engine
     ///   stays AppKit-free). When it matches a built-in profile's `targetApps`, that
     ///   profile runs; otherwise the global styled() default applies. `nil` (CLI /
     ///   tests) → default.
     @discardableResult
-    public func newSession(frontmostBundleID: String? = nil) -> CaptureSession {
+    func newSession(frontmostBundleID: String? = nil) -> CaptureSession {
         // Read both the cleanup toggle and the locale from settings at call time
         // (SettingsStore is @unchecked Sendable — actor read is safe).
         // W4.1: CleanupLevel.none short-circuits cleanup regardless of cleanupEnabled.
@@ -565,6 +604,18 @@ public actor SpeakEngine {
                 return false
             }
         }
+        // [fix: audit — C1] Single-capture exclusion spans BOTH session kinds:
+        // an auxiliary capture (command mode / sandbox) owns the shared
+        // transcriber's microphone, so a dictation starting alongside it would
+        // run two captures on one device. Refuse (same silent-no-op semantics
+        // as the [A3] guard above); a terminal aux session is released.
+        if let aux = auxiliarySession {
+            guard await aux.isTerminal else {
+                SpeakLog.engine.info("SpeakEngine: beginDictation refused — auxiliary capture in flight.")
+                return false
+            }
+            auxiliarySession = nil
+        }
         // Apply the persisted mic pin (Settings → Microphone) at session start.
         // `nil` follows the system default; an unplugged preferred device
         // resolves to default inside CoreAudioDeviceMonitor — never an error
@@ -572,6 +623,17 @@ public actor SpeakEngine {
         setPreferredInputDeviceUID(settings.preferredInputDeviceUID)
 
         let session = newSession(frontmostBundleID: frontmostBundleID)
+        // [fix: audit — mute TOCTOU] The TCC prompt and the terminal-release
+        // awaits above can suspend long enough for a mute to land. Re-check at
+        // the last moment before opening the mic so the "muted ⇒ no audio is
+        // read" guarantee has no check-then-act window.
+        guard !muted else {
+            SpeakLog.engine.info("SpeakEngine: beginDictation refused — muted during start.")
+            if currentSession === session {
+                currentSession = nil
+            }
+            throw SpeakError.microphoneMuted
+        }
         SpeakLog.engine.info("SpeakEngine: beginDictation — starting new session.")
         // [Engine-L2] If session.start() throws (e.g., mic permission denied), clear
         // currentSession so the A3 re-entrancy guard doesn't permanently block the
@@ -611,7 +673,9 @@ public actor SpeakEngine {
     /// and returns `true` so the new begin can proceed. Returns `false` when a
     /// live session is still in flight (the normal A3 refusal path) and `true`
     /// when no session exists.
-    private func releaseCurrentSessionIfTerminal() async -> Bool {
+    /// Internal (not `private`) — called by `beginAuxiliarySession` in
+    /// `SpeakEngine+Auxiliary.swift` for the single-capture exclusion check.
+    func releaseCurrentSessionIfTerminal() async -> Bool {
         guard let existing = currentSession else { return true }
         guard await existing.isTerminal else { return false }
         SpeakLog.engine.info(
@@ -673,6 +737,12 @@ public actor SpeakEngine {
             throw SpeakError.unknown("SpeakEngine.endDictation() called with no active session.")
         }
         SpeakLog.engine.info("SpeakEngine: endDictation — stopping session.")
+        // [fix: audit — C2 stop-wedge watchdog] Every await inside stop() is now
+        // bounded, but defense-in-depth says the engine must not trust that
+        // forever: arm a watchdog that force-cancels the session (releasing the
+        // A3 slot) if stop() is still non-terminal when it fires.
+        let watchdog = armStopWatchdog(for: session)
+        defer { watchdog.cancel() }
         // [A3 wedge fix] If session.stop() throws (e.g., A1 cancel-during-processing
         // re-check, or a paste failure), `currentSession = nil` below is never reached.
         // Clear currentSession before propagating the error so a subsequent
@@ -695,6 +765,35 @@ public actor SpeakEngine {
             )
             throw error
         }
+    }
+
+    /// Arm the [C2] stop-wedge watchdog: if `session` is still the tracked
+    /// session AND still non-terminal when the watchdog fires, force-cancel it
+    /// so the pending `stop()` fails at its next `.error` re-check and the
+    /// engine slot is released instead of wedging on a hung await.
+    /// The returned task must be cancelled (`defer`) when the call completes.
+    /// Internal (not `private`) — `endAuxiliarySession` in
+    /// `SpeakEngine+Auxiliary.swift` arms the same watchdog.
+    func armStopWatchdog(for session: CaptureSession) -> Task<Void, Never> {
+        let bound = processingWatchdog
+        return Task { [weak self] in
+            try? await Task.sleep(for: bound)
+            guard !Task.isCancelled, let self else { return }
+            await self.forceCancelIfStalled(session)
+        }
+    }
+
+    /// Watchdog body — identity-guarded (a newer session in the same slot must
+    /// survive) and terminal-guarded (a session that already settled must not
+    /// be re-cancelled).
+    private func forceCancelIfStalled(_ session: CaptureSession) async {
+        let tracked = currentSession === session || auxiliarySession === session
+        guard tracked else { return }
+        guard await !session.isTerminal else { return }
+        SpeakLog.engine.error(
+            "SpeakEngine: stop watchdog fired — session still non-terminal after \(self.processingWatchdog, privacy: .public); force-cancelling."
+        )
+        await session.cancel()
     }
 
     /// Completes the end-dictation flow after a successful `session.stop()`:
@@ -727,7 +826,11 @@ public actor SpeakEngine {
             engineId: result.engineId,
             duration: result.duration,
             stopToPasteSeconds: result.latency?.stopToPasteSeconds ?? 0,
-            cleanupSeconds: result.latency?.cleanupSeconds ?? 0
+            cleanupSeconds: result.latency?.cleanupSeconds ?? 0,
+            // [fix: audit — cleanup honesty] Persist the real cleanup outcome so
+            // failed/timed-out passes are never counted as successful cleanup in
+            // LatencyStats. Empty string = legacy/unknown (pre-migration rows).
+            cleanupStatus: result.cleanupStatus.storageKey
         )
         do {
             try await history.save(entry)
@@ -747,17 +850,31 @@ public actor SpeakEngine {
     }
 
     /// Hard-cancel the current dictation. Safe to call if no session is in flight.
+    /// Also cancels any in-flight auxiliary capture (command mode / sandbox):
+    /// mute semantics are "no audio is read", and that covers every capture the
+    /// engine owns — not only the dictation slot. [fix: audit — C1]
     public func cancelDictation() async {
-        guard let session = currentSession else {
-            SpeakLog.engine.info("SpeakEngine: cancelDictation() — no session in flight, no-op.")
-            return
+        var cancelled = false
+        if let session = currentSession {
+            SpeakLog.engine.info("SpeakEngine: cancelDictation — cancelling session.")
+            await session.cancel()
+            // Identity-guarded: only release the session we actually cancelled.
+            // A newer session installed during the await must survive. [fix: clobber]
+            if currentSession === session {
+                currentSession = nil
+            }
+            cancelled = true
         }
-        SpeakLog.engine.info("SpeakEngine: cancelDictation — cancelling session.")
-        await session.cancel()
-        // Identity-guarded: only release the session we actually cancelled.
-        // A newer session installed during the await must survive. [fix: clobber]
-        if currentSession === session {
-            currentSession = nil
+        if let aux = auxiliarySession {
+            SpeakLog.engine.info("SpeakEngine: cancelDictation — cancelling auxiliary session.")
+            await aux.cancel()
+            if auxiliarySession === aux {
+                auxiliarySession = nil
+            }
+            cancelled = true
+        }
+        if !cancelled {
+            SpeakLog.engine.info("SpeakEngine: cancelDictation() — no session in flight, no-op.")
         }
     }
 

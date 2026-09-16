@@ -186,7 +186,11 @@ struct PipelineSettingsView: View {
                         model: sandbox,
                         isEnabled: micGranted
                     ) {
-                        await sandbox.begin(settings: store, snippetStore: context.snippetStore)
+                        await sandbox.begin(
+                            engine: context.speakEngine,
+                            settings: store,
+                            snippetStore: context.snippetStore
+                        )
                     } onEnd: {
                         await sandbox.end()
                     }

@@ -17,7 +17,9 @@
 //   [x] stop() with cleaner=nil (cleanup off) → cleanedText=nil, engineId=STT id
 //   [x] stop() with cleaner.isAvailable=false → cleanedText=nil, no error,
 //       engineId=STT id (graceful fallback, NOT .error)
-//   [x] stop() with cleaner.clean() throwing → throws SpeakError.llmCleanupFailed
+//   [x] stop() with cleaner.clean() throwing → raw fallback, .done, status
+//       .fallbackRaw(.cleanerError) — cleanup errors are NOT session errors
+//       (`.llmCleanupFailed` is only thrown inside cleaner implementations)
 //   [x] stop() with cleaner available and succeeding → cleanedText populated,
 //       engineId="<stt>+<cleaner>"
 //   [x] double-start() throws

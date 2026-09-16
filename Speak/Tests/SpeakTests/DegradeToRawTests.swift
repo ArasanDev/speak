@@ -113,6 +113,8 @@ final class DegradeToRawTests: XCTestCase {
             "[SM-3-1] raw text must be preserved on cleanup error")
         XCTAssertEqual(result.engineId, "sm3-stt",
             "[SM-3-1] cleanup error → engineId is STT id only, not combined")
+        XCTAssertEqual(result.cleanupStatus, .fallbackRaw(.cleanerError),
+            "[SM-3-1] cleanup error → status must report the failed pass, not pretend success")
         let state = await session.currentState
         XCTAssertTrue(state == .done,
             "[SM-3-1] cleanup error → .done (NOT .error), got \(state)")
@@ -137,6 +139,8 @@ final class DegradeToRawTests: XCTestCase {
             "[SM-3-1] generic error → cleanedText must be nil")
         XCTAssertEqual(result.rawText, "hello world",
             "[SM-3-1] raw text must be preserved on generic error")
+        XCTAssertEqual(result.cleanupStatus, .fallbackRaw(.cleanerError),
+            "[SM-3-1] generic error → .fallbackRaw(.cleanerError)")
         let state = await session.currentState
         XCTAssertTrue(state == .done,
             "[SM-3-1] generic error → .done (NOT .error), got \(state)")
@@ -162,6 +166,8 @@ final class DegradeToRawTests: XCTestCase {
             "[SM-3-2] raw text must be preserved when cleaner is unavailable")
         XCTAssertEqual(result.engineId, "sm3-stt",
             "[SM-3-2] unavailable → engineId is STT id only")
+        XCTAssertEqual(result.cleanupStatus, .fallbackRaw(.cleanerUnavailable),
+            "[SM-3-2] unavailable → .fallbackRaw(.cleanerUnavailable), not .skipped — a pass was attempted")
         let state = await session.currentState
         XCTAssertTrue(state == .done,
             "[SM-3-2] unavailable → .done (NOT .error), got \(state)")
@@ -187,6 +193,8 @@ final class DegradeToRawTests: XCTestCase {
             "[SM-3-3] raw text must be preserved when cleanup hangs")
         XCTAssertEqual(result.engineId, "sm3-stt",
             "[SM-3-3] timeout → engineId is STT id only (not combined)")
+        XCTAssertEqual(result.cleanupStatus, .fallbackRaw(.timedOut),
+            "[SM-3-3] timeout → .fallbackRaw(.timedOut) — LatencyStats must not count this as success")
         let state = await session.currentState
         XCTAssertTrue(state == .done,
             "[SM-3-3] timeout → .done (NOT stuck in .processing), got \(state)")
@@ -217,6 +225,8 @@ final class DegradeToRawTests: XCTestCase {
             "[SM-3-4] raw text must be preserved when cleaner returns empty string")
         XCTAssertEqual(result.engineId, "sm3-stt",
             "[SM-3-4] empty output → engineId is STT id only (fallback path)")
+        XCTAssertEqual(result.cleanupStatus, .fallbackRaw(.emptyOutput),
+            "[SM-3-4] empty output → .fallbackRaw(.emptyOutput)")
         let state = await session.currentState
         XCTAssertTrue(state == .done,
             "[SM-3-4] empty output → .done (NOT .error), got \(state)")
@@ -242,9 +252,21 @@ final class DegradeToRawTests: XCTestCase {
             "Raw text must always be preserved")
         XCTAssertEqual(result.engineId, "sm3-stt+sm3-cleaner",
             "Successful cleanup → combined engineId")
+        XCTAssertEqual(result.cleanupStatus, .cleaned,
+            "Successful cleanup → .cleaned")
         let state = await session.currentState
         XCTAssertTrue(state == .done,
             "Successful cleanup → .done, got \(state)")
+    }
+
+    /// [fix: audit — cleanup honesty] No cleaner at all → `.skipped` (cleanup
+    /// never ran), distinct from `.fallbackRaw` (a pass ran and failed).
+    func testNilCleanerReportsSkippedStatus() async throws {
+        let session = makeSession(rawText: "hello world", cleaner: nil)
+        try await startAndWait(session)
+        let result = try await session.stop()
+        XCTAssertNil(result.cleanedText)
+        XCTAssertEqual(result.cleanupStatus, .skipped)
     }
 }
 

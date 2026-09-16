@@ -37,17 +37,20 @@ final class LatencyRecordTests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// Build a `HistoryEntry` with injected latency values.
+    /// Build a `HistoryEntry` with injected latency values. `status` nil leaves
+    /// `cleanupStatus` empty — modelling a legacy (pre-column) row.
     private func entry(
         stopToPaste: Double = 0,
-        cleanup: Double = 0
+        cleanup: Double = 0,
+        status: CleanupStatus? = nil
     ) -> HistoryEntry {
         HistoryEntry(
             rawText: "test",
             cleanedText: nil,
             engineId: "test",
             stopToPasteSeconds: stopToPaste,
-            cleanupSeconds: cleanup
+            cleanupSeconds: cleanup,
+            cleanupStatus: status?.storageKey ?? ""
         )
     }
 
@@ -281,6 +284,70 @@ final class LatencyRecordTests: XCTestCase {
             "Median of sorted [0.1, 0.3, 0.6, 0.8, 0.95] at index 2 must be 0.6")
         XCTAssertEqual(stats.rawP95 ?? 0, 0.95, accuracy: 0.001,
             "p95 of 5-element array must be the last element (0.95)")
+    }
+
+    // MARK: - LatencyStats: cleanupStatus partitioning [fix: audit — cleanup honesty]
+
+    /// A failed/timed-out cleanup pass records cleanupSeconds > 0 but produced
+    /// raw text — it must land in NEITHER population: not "raw" (a pass ran and
+    /// consumed real time), not "cleanup" (it did not succeed).
+    func testLatencyStats_fallbackRawExcludedFromBothPopulations() {
+        let entries = [
+            entry(stopToPaste: 10.5, cleanup: 10.0, status: .fallbackRaw(.timedOut)),
+            entry(stopToPaste: 1.1, cleanup: 0.4, status: .fallbackRaw(.cleanerError)),
+            entry(stopToPaste: 1.0, cleanup: 0.3, status: .fallbackRaw(.cleanerUnavailable)),
+            entry(stopToPaste: 0.9, cleanup: 0.2, status: .fallbackRaw(.emptyOutput))
+        ]
+        let stats = LatencyStats(entries: entries)
+        XCTAssertEqual(stats.rawSampleCount, 0,
+            "Fallback rows must not pollute the raw population.")
+        XCTAssertEqual(stats.cleanupSampleCount, 0,
+            "Fallback rows must not count as successful cleanup.")
+    }
+
+    /// `.cleaned` rows are the successful-cleanup population.
+    func testLatencyStats_cleanedStatusCountsAsCleanup() {
+        let entries = [entry(stopToPaste: 1.4, cleanup: 0.6, status: .cleaned)]
+        let stats = LatencyStats(entries: entries)
+        XCTAssertEqual(stats.cleanupSampleCount, 1)
+        XCTAssertEqual(stats.cleanupMedian ?? 0, 1.4, accuracy: 0.001)
+        XCTAssertEqual(stats.rawSampleCount, 0)
+    }
+
+    /// `.skipped` rows (cleanup never ran) are the raw population.
+    func testLatencyStats_skippedStatusCountsAsRaw() {
+        let entries = [entry(stopToPaste: 0.6, cleanup: 0, status: .skipped)]
+        let stats = LatencyStats(entries: entries)
+        XCTAssertEqual(stats.rawSampleCount, 1)
+        XCTAssertEqual(stats.rawMedian ?? 0, 0.6, accuracy: 0.001)
+        XCTAssertEqual(stats.cleanupSampleCount, 0)
+    }
+
+    /// Legacy rows (empty cleanupStatus) keep the old `cleanupSeconds`
+    /// discriminator — the migration must not silently empty a population.
+    func testLatencyStats_legacyRowsFallBackToSentinelDiscriminator() {
+        let entries = [
+            entry(stopToPaste: 0.8, cleanup: 0),    // legacy raw
+            entry(stopToPaste: 1.6, cleanup: 0.7)   // legacy cleanup
+        ]
+        let stats = LatencyStats(entries: entries)
+        XCTAssertEqual(stats.rawSampleCount, 1)
+        XCTAssertEqual(stats.cleanupSampleCount, 1)
+    }
+
+    /// Mixed new-format populations partition honestly: fallback rows drop out
+    /// of both buckets while cleaned/skipped rows land correctly.
+    func testLatencyStats_statusPopulationMixed() {
+        let entries = [
+            entry(stopToPaste: 0.5, cleanup: 0, status: .skipped),
+            entry(stopToPaste: 1.2, cleanup: 0.5, status: .cleaned),
+            entry(stopToPaste: 9.9, cleanup: 9.9, status: .fallbackRaw(.timedOut)),
+            entry(stopToPaste: 1.8, cleanup: 0.9, status: .cleaned)
+        ]
+        let stats = LatencyStats(entries: entries)
+        XCTAssertEqual(stats.rawSampleCount, 1)
+        XCTAssertEqual(stats.cleanupSampleCount, 2)
+        XCTAssertEqual(stats.cleanupMedian ?? 0, 1.8, accuracy: 0.001)
     }
 
     // MARK: - LatencyStats: budget thresholds (named constants, no magic numbers)

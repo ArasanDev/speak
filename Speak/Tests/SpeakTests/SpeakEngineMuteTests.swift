@@ -61,8 +61,12 @@ final class SpeakEngineMuteTests: XCTestCase {
     // MARK: - Helpers
 
     /// Build an engine wired to a recording transcriber and an isolated
-    /// SettingsStore (never touches `.standard`).
-    private func makeEngine(transcriber: RecordingTranscriber) throws -> SpeakEngine {
+    /// SettingsStore (never touches `.standard`). `authorized` injects the mic
+    /// gate so the TCC path can be exercised deterministically headless.
+    private func makeEngine(
+        transcriber: RecordingTranscriber,
+        authorized: Bool = true
+    ) throws -> SpeakEngine {
         let suiteName = "SpeakEngineMuteTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
@@ -72,7 +76,8 @@ final class SpeakEngineMuteTests: XCTestCase {
             cleaner: nil,
             inserter: nil,
             history: NullHistory(),
-            settings: settings
+            settings: settings,
+            isMicrophoneAuthorized: { authorized }
         )
     }
 
@@ -178,6 +183,124 @@ final class SpeakEngineMuteTests: XCTestCase {
         try await engine.beginDictation()
         XCTAssertTrue(transcriber.didStartStream,
             "After unmuting, beginDictation must start capture again.")
+        await engine.cancelDictation()
+    }
+
+    // MARK: - Auxiliary capture gates [fix: audit — C1]
+
+    /// Muted ⇒ `beginAuxiliarySession` throws `.microphoneMuted` AND the
+    /// transcriber never starts — the same bypass-proof guarantee as
+    /// `beginDictation`, covering Command Mode + the Settings sandbox.
+    func testMutedRefusesAuxiliarySessionAndNeverStartsTranscriber() async throws {
+        let transcriber = RecordingTranscriber()
+        let engine = try makeEngine(transcriber: transcriber)
+        await engine.setMuted(true)
+
+        do {
+            _ = try await engine.beginAuxiliarySession(includeCleanup: false)
+            XCTFail("beginAuxiliarySession must throw when muted.")
+        } catch SpeakError.microphoneMuted {
+            // expected
+        } catch {
+            XCTFail("Expected SpeakError.microphoneMuted, got \(error).")
+        }
+        XCTAssertFalse(transcriber.didStartStream,
+            "Muted engine MUST NOT start the transcriber for an auxiliary capture.")
+    }
+
+    /// Denied mic ⇒ `beginAuxiliarySession` throws `.microphoneDenied` and the
+    /// transcriber never starts.
+    func testDeniedMicRefusesAuxiliarySession() async throws {
+        let transcriber = RecordingTranscriber()
+        let engine = try makeEngine(transcriber: transcriber, authorized: false)
+
+        do {
+            _ = try await engine.beginAuxiliarySession(includeCleanup: false)
+            XCTFail("beginAuxiliarySession must throw when the mic grant is absent.")
+        } catch SpeakError.microphoneDenied {
+            // expected
+        } catch {
+            XCTFail("Expected SpeakError.microphoneDenied, got \(error).")
+        }
+        XCTAssertFalse(transcriber.didStartStream,
+            "Denied-mic engine MUST NOT start the transcriber for an auxiliary capture.")
+    }
+
+    /// Muting cancels an in-flight auxiliary capture — mute semantics cover
+    /// every capture the engine owns, not only the dictation slot.
+    func testMutingCancelsInFlightAuxiliarySession() async throws {
+        let transcriber = RecordingTranscriber()
+        let engine = try makeEngine(transcriber: transcriber)
+
+        let session = try await engine.beginAuxiliarySession(includeCleanup: false)
+        let live = await session.currentState
+        XCTAssertEqual(String(describing: live), String(describing: CaptureSession.State.listening),
+            "Precondition: aux session must be listening before we mute.")
+
+        await engine.setMuted(true)
+
+        let after = await session.currentState
+        guard case .error(.sessionCancelled) = after else {
+            XCTFail("Muting must cancel the in-flight aux session — got \(after).")
+            return
+        }
+    }
+
+    /// `cancelDictation()` (safe-idle no-op) also cancels an in-flight aux
+    /// session — this is the mute path reaching auxiliary capture.
+    func testCancelDictationReachesAuxiliarySession() async throws {
+        let transcriber = RecordingTranscriber()
+        let engine = try makeEngine(transcriber: transcriber)
+
+        let session = try await engine.beginAuxiliarySession(includeCleanup: false)
+        await engine.cancelDictation()
+
+        let after = await session.currentState
+        guard case .error(.sessionCancelled) = after else {
+            XCTFail("cancelDictation must cancel the aux session — got \(after).")
+            return
+        }
+    }
+
+    /// Single-capture exclusion, direction 1: a live aux capture blocks a
+    /// dictation (the shared transcriber owns one mic).
+    func testAuxiliarySessionBlocksDictation() async throws {
+        let transcriber = RecordingTranscriber()
+        let engine = try makeEngine(transcriber: transcriber)
+
+        let session = try await engine.beginAuxiliarySession(includeCleanup: false)
+        let started = try await engine.beginDictation()
+        XCTAssertFalse(started,
+            "beginDictation must refuse while an auxiliary capture owns the mic.")
+        await engine.cancelAuxiliarySession(session)
+    }
+
+    /// Single-capture exclusion, direction 2: a live dictation blocks an aux
+    /// capture.
+    func testDictationBlocksAuxiliarySession() async throws {
+        let transcriber = RecordingTranscriber()
+        let engine = try makeEngine(transcriber: transcriber)
+
+        try await engine.beginDictation()
+        do {
+            _ = try await engine.beginAuxiliarySession(includeCleanup: false)
+            XCTFail("beginAuxiliarySession must refuse while a dictation is in flight.")
+        } catch {
+            // .unknown — refusal, not a gate error
+        }
+        await engine.cancelDictation()
+    }
+
+    /// `endAuxiliarySession` releases the slot: a dictation may begin after a
+    /// completed aux run.
+    func testEndAuxiliarySessionReleasesSlot() async throws {
+        let transcriber = RecordingTranscriber()
+        let engine = try makeEngine(transcriber: transcriber)
+
+        let session = try await engine.beginAuxiliarySession(includeCleanup: false)
+        _ = try await engine.endAuxiliarySession(session)
+        let started = try await engine.beginDictation()
+        XCTAssertTrue(started, "After endAuxiliarySession the slot must be free.")
         await engine.cancelDictation()
     }
 }

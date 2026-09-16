@@ -1,13 +1,18 @@
 // SpeakTests/VoiceSandboxTests.swift
 //
-// Tests for `VoiceSandbox` — the "Test My Voice" session factory backing
-// Settings ▸ AI Models. Mock engines only; the assertion surface is wiring:
+// Tests for the "Test My Voice" sandbox path — `SpeakEngine.beginAuxiliarySession`
+// (includeCleanup: true). Mock engines only; the assertion surface is wiring:
 //
-//   - inserter is nil → the run is paste-free by construction
+//   - the aux session is paste-free by construction (engine wires inserter: nil)
 //   - acoustic corrections apply to the delivered rawText (expander chain)
 //   - cleaner gated on cleanupEnabled && cleanupLevel != .none
 //   - cleaner receives the corrected text + merged vocabulary mode
 //   - state machine reaches .done (not .error) on a clean run
+//   - cleanupStatus honestly reports .cleaned / .skipped
+//
+// [fix: audit — C1] `VoiceSandbox` (a parallel, ungated factory minting a second
+// transcriber) is deleted; the sandbox is an engine-minted auxiliary session
+// sharing the engine's transcriber so mute/TCC/single-capture gates apply.
 
 @testable import SpeakCore
 import XCTest
@@ -55,6 +60,15 @@ private final class SandboxCleaner: LLMCleaning, @unchecked Sendable {
     }
 }
 
+/// A no-op history store so the engine can be constructed headlessly.
+private final class NullHistory: HistoryStoring, @unchecked Sendable {
+    func save(_ entry: HistoryEntry) async throws {}
+    func recent(limit: Int) async throws -> [HistoryEntry] { [] }
+    func search(_ substring: String) async throws -> [HistoryEntry] { [] }
+    func clear() async throws {}
+    func export() async throws -> String { "[]" }
+}
+
 // MARK: - Tests
 
 final class VoiceSandboxTests: XCTestCase {
@@ -69,37 +83,26 @@ final class VoiceSandboxTests: XCTestCase {
         return defaults
     }
 
+    /// Drive a sandbox run through the REAL engine path: `beginAuxiliarySession`
+    /// mints+starts (mute/TCC/single-capture gates inside), `endAuxiliarySession`
+    /// stops under the watchdog and releases the slot.
     private func runSandbox(
         settings: SettingsStore,
         said: String,
         cleaner: SandboxCleaner? = SandboxCleaner(),
         snippetStore: SnippetStore? = nil
     ) async throws -> TranscriptionResult {
-        let sandbox = VoiceSandbox(
-            settings: settings,
+        let engine = SpeakEngine(
             transcriber: SandboxTranscriber(text: said),
-            cleaner: cleaner
+            cleaner: cleaner,
+            inserter: nil,
+            history: NullHistory(),
+            settings: settings,
+            snippetStore: snippetStore,
+            isMicrophoneAuthorized: { true }
         )
-        // Inject the snippet store through the production path when supplied:
-        // the test seam sets snippetStore to nil, so build the expander the
-        // same way makeSession() does when snippets matter.
-        let session: CaptureSession
-        if snippetStore != nil {
-            let levelIsNone = settings.cleanupLevel == .none
-            session = CaptureSession(
-                transcriber: SandboxTranscriber(text: said),
-                cleaner: (settings.cleanupEnabled && !levelIsNone) ? cleaner : nil,
-                inserter: nil,
-                locale: settings.language,
-                cleanupMode: .styled(settings.cleanupStyle, settings.cleanupLevel,
-                                     customVocabulary: settings.effectiveVocabulary),
-                expander: defaultExpander(for: settings, snippetStore: snippetStore)
-            )
-        } else {
-            session = sandbox.makeSession()
-        }
-        try await session.start()
-        return try await session.stop()
+        let session = try await engine.beginAuxiliarySession(includeCleanup: true)
+        return try await engine.endAuxiliarySession(session)
     }
 
     func testSandboxReturnsResultWithoutPaste() async throws {
@@ -108,6 +111,7 @@ final class VoiceSandboxTests: XCTestCase {
         XCTAssertEqual(result.rawText, "um hello world")
         XCTAssertEqual(result.cleanedText, "um hello world [cleaned]")
         XCTAssertEqual(result.engineId, "sandbox-stt+sandbox-cleaner")
+        XCTAssertEqual(result.cleanupStatus, .cleaned)
     }
 
     func testSandboxAppliesAcousticCorrectionsToRawAndCleanerInput() async throws {
@@ -147,6 +151,7 @@ final class VoiceSandboxTests: XCTestCase {
         XCTAssertNil(result.cleanedText)
         XCTAssertEqual(result.engineId, "sandbox-stt")
         XCTAssertEqual(result.rawText, "hello")
+        XCTAssertEqual(result.cleanupStatus, .skipped)
     }
 
     func testSandboxCleanupLevelNoneDeliversRaw() async throws {
@@ -155,6 +160,7 @@ final class VoiceSandboxTests: XCTestCase {
         let result = try await runSandbox(settings: settings, said: "hello")
         XCTAssertNil(result.cleanedText)
         XCTAssertEqual(result.engineId, "sandbox-stt")
+        XCTAssertEqual(result.cleanupStatus, .skipped)
     }
 
     func testSandboxNilCleanerDeliversRaw() async throws {
@@ -162,6 +168,7 @@ final class VoiceSandboxTests: XCTestCase {
         let result = try await runSandbox(settings: settings, said: "hello", cleaner: nil)
         XCTAssertNil(result.cleanedText)
         XCTAssertEqual(result.rawText, "hello")
+        XCTAssertEqual(result.cleanupStatus, .skipped)
     }
 
     func testSandboxCleanerReceivesEffectiveVocabulary() async throws {
@@ -175,5 +182,24 @@ final class VoiceSandboxTests: XCTestCase {
             return
         }
         XCTAssertEqual(vocab, ["GraphQL", "kubectl"])
+    }
+
+    /// Command Mode path (`includeCleanup: false`): no cleaner is wired even
+    /// when cleanup is on — the instruction capture is transcriber-only.
+    func testAuxiliarySessionWithoutCleanupDeliversRaw() async throws {
+        let settings = SettingsStore(defaults: freshDefaults())
+        let engine = SpeakEngine(
+            transcriber: SandboxTranscriber(text: "make it formal"),
+            cleaner: SandboxCleaner(),
+            inserter: nil,
+            history: NullHistory(),
+            settings: settings,
+            isMicrophoneAuthorized: { true }
+        )
+        let session = try await engine.beginAuxiliarySession(includeCleanup: false)
+        let result = try await engine.endAuxiliarySession(session)
+        XCTAssertNil(result.cleanedText)
+        XCTAssertEqual(result.rawText, "make it formal")
+        XCTAssertEqual(result.cleanupStatus, .skipped)
     }
 }

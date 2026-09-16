@@ -150,8 +150,8 @@ public actor HistoryStore: HistoryStoring {
     private func saveEntryAndTrim(_ entry: HistoryEntry) throws {
         let sql = """
             INSERT OR REPLACE INTO history \
-            (id, rawText, cleanedText, createdAt, engineId, duration, stopToPasteSeconds, cleanupSeconds)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (id, rawText, cleanedText, createdAt, engineId, duration, stopToPasteSeconds, cleanupSeconds, cleanupStatus)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
         try execute(sql: sql) { stmt in
             let idStr = entry.id.uuidString
@@ -180,6 +180,7 @@ public actor HistoryStore: HistoryStoring {
             guard sqlite3_bind_double(stmt, 8, entry.cleanupSeconds) == SQLITE_OK else {
                 throw dbError("bind cleanupSeconds")
             }
+            try bind(stmt, index: 9, text: entry.cleanupStatus)
         }
         try trimToCapacity()
     }
@@ -187,7 +188,7 @@ public actor HistoryStore: HistoryStoring {
     public func recent(limit: Int) throws -> [HistoryEntry] {
         let sql = """
             SELECT id, rawText, cleanedText, createdAt, engineId, duration,
-                   stopToPasteSeconds, cleanupSeconds
+                   stopToPasteSeconds, cleanupSeconds, cleanupStatus
             FROM history
             ORDER BY createdAt DESC, rowid DESC
             LIMIT ?
@@ -216,7 +217,7 @@ public actor HistoryStore: HistoryStoring {
         // SQLite's instr() uses BINARY collation by default; lower() normalises both sides.
         let sql = """
             SELECT id, rawText, cleanedText, createdAt, engineId, duration,
-                   stopToPasteSeconds, cleanupSeconds
+                   stopToPasteSeconds, cleanupSeconds, cleanupStatus
             FROM history
             WHERE instr(lower(rawText), lower(?)) > 0 OR instr(lower(cleanedText), lower(?)) > 0
             ORDER BY createdAt DESC, rowid DESC
@@ -297,7 +298,8 @@ public actor HistoryStore: HistoryStoring {
                 engineId           TEXT NOT NULL,
                 duration           REAL NOT NULL DEFAULT 0,
                 stopToPasteSeconds REAL NOT NULL DEFAULT 0,
-                cleanupSeconds     REAL NOT NULL DEFAULT 0
+                cleanupSeconds     REAL NOT NULL DEFAULT 0,
+                cleanupStatus      TEXT NOT NULL DEFAULT ''
             );
             CREATE INDEX IF NOT EXISTS idx_history_createdAt ON history (createdAt DESC);
             """
@@ -330,6 +332,8 @@ public actor HistoryStore: HistoryStoring {
         // P13 migration: stop→paste latency columns (benchmark.md §7).
         sqlite3_exec(db, "ALTER TABLE history ADD COLUMN stopToPasteSeconds REAL NOT NULL DEFAULT 0", nil, nil, nil)
         sqlite3_exec(db, "ALTER TABLE history ADD COLUMN cleanupSeconds REAL NOT NULL DEFAULT 0", nil, nil, nil)
+        // [fix: audit — cleanup honesty] cleanup outcome column; '' = legacy/unknown.
+        sqlite3_exec(db, "ALTER TABLE history ADD COLUMN cleanupStatus TEXT NOT NULL DEFAULT ''", nil, nil, nil)
     }
 
     // MARK: - Capacity trim
@@ -403,6 +407,7 @@ public actor HistoryStore: HistoryStoring {
             let duration = sqlite3_column_double(stmt, 5)
             let stopToPasteSeconds = sqlite3_column_double(stmt, 6)
             let cleanupSeconds = sqlite3_column_double(stmt, 7)
+            let cleanupStatus = sqlite3_column_text(stmt, 8).map { String(cString: $0) } ?? ""
             entries.append(HistoryEntry(
                 id: id,
                 rawText: rawText,
@@ -411,7 +416,8 @@ public actor HistoryStore: HistoryStoring {
                 engineId: engineId,
                 duration: duration,
                 stopToPasteSeconds: stopToPasteSeconds,
-                cleanupSeconds: cleanupSeconds
+                cleanupSeconds: cleanupSeconds,
+                cleanupStatus: cleanupStatus
             ))
             stepResult = sqlite3_step(stmt)
         }

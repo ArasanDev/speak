@@ -23,10 +23,21 @@ public struct HistoryEntry: Sendable, Identifiable, Equatable {
     /// The raw-path budget is < 1.0 s median; full-path (cleanup) < 2.0 s.
     public let stopToPasteSeconds: Double
     /// Seconds spent in the on-device cleanup pass (Foundation Models).
-    /// 0 when cleanup did not run (cleaner nil, unavailable, or cleanupLevel==.none).
-    /// Use `stopToPasteSeconds > 0 && cleanupSeconds > 0` to identify
-    /// the "cleanup ran" population for the full-path median.
+    /// 0 when cleanup did not run (cleaner nil or cleanupLevel==.none).
+    /// > 0 when a cleanup pass was ATTEMPTED — including failed/timed-out runs.
+    /// Use `cleanupStatus` (not this field alone) to distinguish "cleanup
+    /// succeeded" from "cleanup fell back"; see `cleanupOutcome`.
     public let cleanupSeconds: Double
+    /// Persisted `CleanupStatus.storageKey` — "cleaned", "skipped", or
+    /// "fallbackRaw.<reason>". Empty string on rows written before the column
+    /// existed (outcome unknown; `LatencyStats` falls back to the
+    /// `cleanupSeconds` discriminator for them). [fix: audit — cleanup honesty]
+    public let cleanupStatus: String
+
+    /// Parsed cleanup outcome. `nil` for legacy rows (empty `cleanupStatus`).
+    public var cleanupOutcome: CleanupStatus? {
+        CleanupStatus(storageKey: cleanupStatus)
+    }
 
     public init(
         id: UUID = UUID(),
@@ -36,7 +47,8 @@ public struct HistoryEntry: Sendable, Identifiable, Equatable {
         engineId: String,
         duration: TimeInterval = 0,
         stopToPasteSeconds: Double = 0,
-        cleanupSeconds: Double = 0
+        cleanupSeconds: Double = 0,
+        cleanupStatus: String = ""
     ) {
         self.id = id
         self.rawText = rawText
@@ -46,5 +58,6 @@ public struct HistoryEntry: Sendable, Identifiable, Equatable {
         self.duration = duration
         self.stopToPasteSeconds = stopToPasteSeconds
         self.cleanupSeconds = cleanupSeconds
+        self.cleanupStatus = cleanupStatus
     }
 }

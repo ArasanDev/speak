@@ -187,6 +187,19 @@ public final class PasteboardWriter: TextInserting, Sendable {
     ///           `SpeakError.pasteIntoSecureField` when focused element is a password field.
     ///           `SpeakError.pasteboardBusy` when CGEvent construction fails.
     public func insert(_ text: String) async throws {
+        try await insert(text, shouldContinue: { true })
+    }
+
+    /// Cancellation-aware insert: identical to `insert(_:)` except the
+    /// `shouldContinue` predicate is consulted after the settle delay, before
+    /// any Cmd+V event is posted. A false return throws `.sessionCancelled`
+    /// — the clipboard floor (step 1) has already run by then, so the text
+    /// stays recoverable from the clipboard while the keystroke is suppressed.
+    /// [fix: audit — cancel-during-settle must not post Cmd+V]
+    ///
+    /// - Parameter shouldContinue: the owning session's liveness predicate
+    ///   (`CaptureSession` wires its off-actor cancel flag here).
+    public func insert(_ text: String, shouldContinue: @Sendable () -> Bool) async throws {
         log.info(
             "PasteboardWriter: writing \(text.count, privacy: .public) chars to pasteboard"
         )
@@ -231,8 +244,20 @@ public final class PasteboardWriter: TextInserting, Sendable {
         // responder re-focus after the hotkey tap. [decision] dictation-flow.md §5
         try await Task.sleep(for: settle)
 
+        // ── Step 4b: continuation predicate ──────────────────────────────────
+        // [fix: audit — C6] A cancel() can land during the settle sleep; the
+        // session's flag is already set by then. Consult the predicate here —
+        // the last moment before an event is posted — so a cancelled session
+        // never emits Cmd+V. The clipboard floor stays (text recoverable).
+        guard shouldContinue() else {
+            log.info(
+                "PasteboardWriter: session cancelled during settle — clipboard floor ran; Cmd+V suppressed"
+            )
+            throw SpeakError.sessionCancelled
+        }
+
         // ── Step 5: Cmd-down → V-down → V-up → Cmd-up ───────────────────────
-        try await simulateCmdV()
+        try await simulateCmdV(shouldContinue: shouldContinue)
 
         log.info("PasteboardWriter: Cmd+V sequence posted to .cghidEventTap")
     }
@@ -263,9 +288,18 @@ public final class PasteboardWriter: TextInserting, Sendable {
 
     /// Map `pasteEventPlan()` entries to `CGEvent` instances and post each.
     ///
+    /// `shouldContinue` is consulted after every inter-event gap, before the
+    /// next event is posted [fix: audit — C2]: a cancel() landing mid-sequence
+    /// suppresses the remaining keystrokes. When events were already posted,
+    /// the not-yet-posted key-UP events are still posted first so a ⌘ or V
+    /// key-down is never left held — then `.sessionCancelled` is thrown.
+    ///
     /// - Throws: `SpeakError.pasteboardBusy` when `CGEvent` construction fails
     ///   (rare; indicates the event infrastructure is unavailable).
-    private func simulateCmdV() async throws {
+    ///           `SpeakError.sessionCancelled` when `shouldContinue` goes false
+    ///           mid-sequence. `CancellationError` (task cancel during a gap
+    ///   sleep) likewise releases held keys before propagating.
+    private func simulateCmdV(shouldContinue: @Sendable () -> Bool) async throws {
         // `CGEventSource(stateID:)` returns nil when the event infrastructure is
         // unavailable (rare; occurs in headless CI or when Accessibility is denied).
         // Architecture §11 uses `source` as an optional — nil is valid; CGEvent
@@ -297,16 +331,38 @@ public final class PasteboardWriter: TextInserting, Sendable {
         // [validation-fix C3] Insert `pasteEventGap` (default 10 ms, VoiceInk pattern)
         // BETWEEN events so Electron/web/Cocoa targets don't drop the chord. No gap
         // after the final event. Tests inject `.zero` to avoid real sleeps.
-        // [Input-L4] Task.sleep can throw (via Task cancellation). If cancelled between
-        // the Cmd-down and Cmd-up posts, the ⌘ modifier would be left held. In practice
-        // this self-heals on the next real key event; no user-visible stuck-key has been
-        // observed. A future cancellation-aware paste path should synthesise a Cmd-up
-        // before propagating the cancellation error. [decision: defer to v0.1 paste seam]
+        // [fix: audit — C2 + Input-L4] Before each event after the first, consult
+        // `shouldContinue` — and on ANY abort (predicate false, or Task.sleep's
+        // CancellationError), post the remaining key-UP events first so no
+        // modifier is ever left held, THEN throw. This retires the old
+        // "stuck ⌘ self-heals" deferral: the release is now explicit.
+        let plan = Self.pasteEventPlan()
         for (index, event) in events.enumerated() {
             if index > 0 {
-                try await Task.sleep(for: pasteEventGap)
+                do {
+                    try await Task.sleep(for: pasteEventGap)
+                } catch {
+                    releaseHeldKeys(fromIndex: index, events: events, plan: plan)
+                    throw error
+                }
+                guard shouldContinue() else {
+                    releaseHeldKeys(fromIndex: index, events: events, plan: plan)
+                    log.info(
+                        "PasteboardWriter: session cancelled mid-sequence — released held keys; remaining events suppressed"
+                    )
+                    throw SpeakError.sessionCancelled
+                }
             }
             postEvent(event)
+        }
+    }
+
+    /// Post the not-yet-posted key-UP events (indices `fromIndex`…) so a
+    /// modifier/key-down posted earlier in the sequence is never left held.
+    /// Posting a stray key-up for a never-pressed key is harmless.
+    private func releaseHeldKeys(fromIndex: Int, events: [CGEvent], plan: [PasteKeyEvent]) {
+        for i in fromIndex ..< events.count where plan[i].keyDown == false {
+            postEvent(events[i])
         }
     }
 }

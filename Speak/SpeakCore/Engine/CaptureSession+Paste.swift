@@ -37,10 +37,35 @@ extension CaptureSession {
             prefixToUse = agentPrefix
         }
         let textToInsert = prefixToUse.isEmpty ? baseText : "\(prefixToUse)\(baseText)"
+        // [fix: audit — C2/H1 cancel-during-paste] Hand the inserter the session's
+        // off-actor cancel flag as a continuation predicate. `PasteboardWriter`
+        // consults it after the settle delay and before posting Cmd+V, so a
+        // cancel() that lands mid-paste suppresses the keystroke instead of
+        // pasting against the user's intent.
+        let flag = cancelRequestedFlag
         do {
-            try await inserter.insert(textToInsert)
+            try await inserter.insert(textToInsert) {
+                !flag.withLock { $0 }
+            }
         } catch {
-            let speakError = (error as? SpeakError) ?? .pasteboardBusy
+            // Never overwrite an existing terminal error — a `.sessionCancelled`
+            // set by cancel() while the inserter was suspended wins over whatever
+            // the inserter threw (including its own .sessionCancelled on the
+            // predicate path above).
+            if case .error(let existing) = state {
+                throw existing
+            }
+            // [fix: audit — error mapping] CancellationError is a cancellation
+            // signal, not a busy pasteboard; map it to .sessionCancelled so the
+            // app shell treats it as a user-intent abort, not a transient fault.
+            let speakError: SpeakError
+            if let speakErr = error as? SpeakError {
+                speakError = speakErr
+            } else if error is CancellationError {
+                speakError = .sessionCancelled
+            } else {
+                speakError = .pasteboardBusy
+            }
             SpeakLog.engine.error(
                 "CaptureSession: paste failed — \(speakError.recoverySuggestion, privacy: .public)"
             )

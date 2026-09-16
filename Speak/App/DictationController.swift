@@ -50,55 +50,12 @@ import CoreAudio
 import Foundation
 import Observation
 import SpeakCore
+import SpeakLLM
 import SwiftUI
 
-// MARK: - NullHistoryStore
-
-/// A no-op `HistoryStoring` used when the production SQLite store fails to open.
-/// Every method succeeds silently — the dictation flow is unaffected.
-private final class NullHistoryStore: HistoryStoring, @unchecked Sendable {
-    func save(_ entry: HistoryEntry) throws {}
-    func recent(limit: Int) throws -> [HistoryEntry] { [] }
-    func search(_ substring: String) throws -> [HistoryEntry] { [] }
-    func clear() throws {}
-    func export() throws -> String { "[]" }
-}
-
-// MARK: - NullAgentCallStore
-
-/// AVB-7: a no-op `AgentCallStoring` used when `AgentCallStore`'s SQLite open
-/// fails. Mirrors `NullHistoryStore`'s degradation shape — the durable-call
-/// surface is silently disabled for the session rather than crashing the app;
-/// `speak_request_input`'s own round-trip is entirely unaffected (its durable
-/// side effect is a best-effort write that swallows errors already).
-private actor NullAgentCallStore: AgentCallStoring {
-    func submit(_ submission: AgentCallSubmission) async throws -> AgentCallSubmitResult {
-        throw SpeakError.unknown("AgentCallStore unavailable")
-    }
-    func get(id: UUID, requestingSessionId: String?) async throws -> AgentCall? { nil }
-    func pendingAndPresented() async throws -> [AgentCall] { [] }
-    func markPresented(id: UUID) async throws {}
-    @discardableResult
-    func resolve(id: UUID, outcome: HumanResponseOutcome) async throws -> Bool { false }
-    func expireOverdue(now: Date) async throws {}
-}
-
-/// Open the production `AgentCallStore`, falling back to `NullAgentCallStore`
-/// on failure. A free function (not a method) so `DictationController`'s own
-/// class body stays under SwiftLint's `type_body_length` cap — pure code
-/// motion, no behavior change, matching this file's existing precedent
-/// (`applyAppearance`/`rebindExtraBindings` moved to an extension for the
-/// same reason).
-private func makeAgentCallStore() -> any AgentCallStoring {
-    do {
-        return try AgentCallStore.makeProductionStore()
-    } catch {
-        SpeakLog.storage.error(
-            "DictationController: AgentCallStore open failed — durable calls disabled. \(error.localizedDescription, privacy: .public)"
-        )
-        return NullAgentCallStore()
-    }
-}
+// The Null* fallback stores + `makeAgentCallStore()` moved to
+// `DictationController+NullStores.swift` — pure code motion so this file
+// stays under SwiftLint's `file_length` cap.
 
 // MARK: - DictationController
 
@@ -209,6 +166,21 @@ final class DictationController: CLICommandHandler {
     /// request_input adapter's side effect, and the inbox pane. Falls back to a
     /// no-op store on open failure, mirroring `historyStore`.
     let agentCallStore: any AgentCallStoring
+
+    /// The app's ONE `LocalInferenceServer` — owned here at the composition
+    /// root and injected into every UI surface via
+    /// `DashboardContext.inferenceServer`. Before this, the Inference pane and
+    /// the Agent Playground each constructed their own `LocalInferenceServer`,
+    /// and the second listener to start collided on port 11235 (two owners,
+    /// one port, no coordination). [fix: single-server ownership]
+    ///
+    /// [decision: demand-scoped lifecycle — the controller never auto-starts
+    ///  the server. The Inference pane's Start/Stop button and the Playground's
+    ///  appear-time auto-start both act on this one instance; `start()` is
+    ///  idempotent and `stop()` stops THE server for everyone. The Inference
+    ///  pane therefore shows true shared state, and its Stop button will cut a
+    ///  live Playground stream — the honest consequence of one server.]
+    let inferenceServer = LocalInferenceServer()
 
     /// The most recent finished transcript (cleaned if available, else raw). Drives the
     /// "Paste Last Transcript" menu item; empty until the
@@ -743,7 +715,7 @@ final class DictationController: CLICommandHandler {
         // Command Mode (Wave D): construct the controller + consume the Fn+Ctrl chord
         // stream. [deferred — human verification: the live chord gesture + AX edit.]
         commandModeController = CommandModeController(
-            settings: settingsStore,
+            engine: engine,
             cleaner: defaultCleaner(for: settingsStore)
         )
         startCommandChordTask()

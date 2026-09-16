@@ -228,6 +228,87 @@ final class PasteTests: XCTestCase {
         }
     }
 
+    // MARK: - Cancellation-aware paste [fix: audit — C2]
+
+    /// An inserter that records the `shouldContinue` predicate's value after a
+    /// short internal suspend — modelling the real writer's settle→predicate
+    /// point. Gives the test a window to land `cancel()` mid-insert.
+    private final class PredicateInserter: TextInserting, @unchecked Sendable {
+        private let lock = NSLock()
+        private var _observed: Bool?
+
+        var observedShouldContinue: Bool? { lock.withLock { _observed } }
+
+        func insert(_ text: String) async throws {
+            XCTFail("session must use the cancellation-aware insert overload")
+        }
+
+        func insert(_ text: String, shouldContinue: @Sendable () -> Bool) async throws {
+            try? await Task.sleep(nanoseconds: 30_000_000)  // settle window
+            let go = shouldContinue()
+            lock.withLock { _observed = go }
+            if !go { throw SpeakError.sessionCancelled }
+        }
+    }
+
+    /// cancel() during the inserter's suspend: the predicate reads the off-actor
+    /// flag, insert aborts, stop() throws `.sessionCancelled`, and the session
+    /// must NOT settle `.done` over a cancelled dictation.
+    func testCancelDuringPasteAbortsInsertAndYieldsSessionCancelled() async throws {
+        let transcriber = PasteMockTranscriber(script: chunks(["cancel me"]))
+        let inserter = PredicateInserter()
+        let session = CaptureSession(transcriber: transcriber, inserter: inserter)
+        try await session.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let stopTask = Task { try await session.stop() }
+        // Let stop() reach the inserter's internal suspend, then cancel.
+        try await Task.sleep(nanoseconds: 10_000_000)
+        await session.cancel()
+
+        do {
+            _ = try await stopTask.value
+            XCTFail("stop() must throw after a cancel-during-paste")
+        } catch SpeakError.sessionCancelled {
+            // expected — cancellation, not .pasteboardBusy
+        } catch {
+            XCTFail("Expected SpeakError.sessionCancelled, got \(error)")
+        }
+
+        XCTAssertEqual(inserter.observedShouldContinue, false,
+            "The predicate must observe the session's cancel flag off-actor.")
+        let state = await session.currentState
+        guard case .error(.sessionCancelled) = state else {
+            XCTFail("cancelled session must be .error(.sessionCancelled), got \(state)")
+            return
+        }
+    }
+
+    /// [fix: audit — error mapping] A generic `CancellationError` thrown by the
+    /// inserter must map to `.sessionCancelled`, never `.pasteboardBusy`.
+    func testInserterCancellationErrorMapsToSessionCancelled() async throws {
+        let transcriber = PasteMockTranscriber(script: chunks(["some text"]))
+        let inserter = MockInserter(errorToThrow: CancellationError())
+        let session = CaptureSession(transcriber: transcriber, inserter: inserter)
+        try await session.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        do {
+            _ = try await session.stop()
+            XCTFail("stop() must throw when insert() throws CancellationError")
+        } catch SpeakError.sessionCancelled {
+            // Expected — cancellation is a user-intent abort, not a busy pasteboard.
+        } catch {
+            XCTFail("Expected SpeakError.sessionCancelled, got \(error)")
+        }
+
+        let state = await session.currentState
+        guard case .error(.sessionCancelled) = state else {
+            XCTFail("CancellationError must map to .error(.sessionCancelled), got \(state)")
+            return
+        }
+    }
+
     // MARK: - Inserter throws (generic error): wrapped to .pasteboardBusy
 
     func testInserterGenericThrowWrappedToPasteboardBusy() async throws {
@@ -688,6 +769,80 @@ final class SecureFieldGuardTests: XCTestCase {
 
         XCTAssertEqual(inserter.snapshot(), ["[stt-input:raw] dynamic test"],
                        "Dynamic setAgentPrefix(style:includeState:) must update the delivered text prefix.")
+    }
+}
+
+// MARK: - Cancellation-aware PasteboardWriter tests [fix: audit — C2]
+
+final class PasteCancellationTests: XCTestCase {
+
+    /// `shouldContinue == false` at the post-settle check → `.sessionCancelled`,
+    /// zero Cmd+V events, and the clipboard floor still ran (text recoverable).
+    func testCancelledDuringSettleSuppressesCmdVButKeepsClipboardFloor() async throws {
+        let uniqueText = "SPEAK_CANCEL_TEST_\(UUID().uuidString)"
+        let recorder = PasteSideEffectRecorder()
+        let writer = PasteboardWriter(
+            isAccessibilityTrusted: { true },
+            settle: .zero,
+            pasteEventGap: .zero,
+            writeClipboard: { recorder.recordClipboardWrite($0) },
+            postEvent: { recorder.recordPostedEvent($0) }
+        )
+
+        do {
+            try await writer.insert(uniqueText, shouldContinue: { false })
+            XCTFail("insert() must throw .sessionCancelled when the predicate is false")
+        } catch SpeakError.sessionCancelled {
+            // expected
+        } catch {
+            XCTFail("Expected SpeakError.sessionCancelled, got \(error)")
+        }
+
+        XCTAssertEqual(recorder.clipboardWrites, [uniqueText],
+                       "Clipboard floor must still run — text stays recoverable.")
+        XCTAssertEqual(recorder.postedEventCount, 0,
+                       "A cancelled session must never post a Cmd+V event.")
+    }
+
+    /// Cancel landing MID-sequence (after the post-settle check passed): the
+    /// remaining key-downs are suppressed but the not-yet-posted key-UPs are
+    /// still posted so no modifier is left held.
+    ///
+    /// Plan: [0] Cmd-down [1] V-down [2] V-up [3] Cmd-up. Predicate returns true
+    /// on call #1 (step 4b) and false on call #2 (before V-down) → posted:
+    /// Cmd-down + V-up + Cmd-up = 3 events, and `.sessionCancelled` is thrown.
+    func testCancelMidSequenceSuppressesKeyDownsButReleasesHeldKeys() async throws {
+        let recorder = PasteSideEffectRecorder()
+        let predicateCalls = NSLock()
+        var callCount = 0
+        let writer = PasteboardWriter(
+            isAccessibilityTrusted: { true },
+            settle: .zero,
+            pasteEventGap: .zero,
+            writeClipboard: { recorder.recordClipboardWrite($0) },
+            postEvent: { recorder.recordPostedEvent($0) }
+        )
+
+        do {
+            try await writer.insert("mid-sequence cancel", shouldContinue: {
+                predicateCalls.lock()
+                callCount += 1
+                let n = callCount
+                predicateCalls.unlock()
+                return n <= 1   // pass the settle check, fail mid-sequence
+            })
+            XCTFail("insert() must throw .sessionCancelled on mid-sequence cancel")
+        } catch SpeakError.sessionCancelled {
+            // expected
+        } catch SpeakError.pasteboardBusy {
+            return  // headless CI — CGEvent construction unavailable
+        } catch {
+            XCTFail("Expected SpeakError.sessionCancelled, got \(error)")
+        }
+
+        // Cmd-down posted; V-down suppressed; V-up + Cmd-up posted to release.
+        XCTAssertEqual(recorder.postedEventCount, 3,
+            "Mid-sequence cancel must suppress V-down but still post the release events (Cmd-down + V-up + Cmd-up).")
     }
 }
 

@@ -6,9 +6,13 @@
 // TERMINOLOGY (aligned to benchmark.md §7):
 //   The headline metric is `stopToPasteSeconds` for BOTH populations:
 //   • stop→paste (raw path):     t_stop → t_pasted, cleanup was NOT run.
-//                                Population: `cleanupSeconds == 0.0` (exact sentinel).
-//   • stop→paste (full path):    t_stop → t_pasted, cleanup WAS run.
-//                                Population: `cleanupSeconds > 0`.
+//                                Population: `cleanupStatus == .skipped` (legacy
+//                                rows: `cleanupSeconds == 0.0` exact sentinel).
+//   • stop→paste (full path):    t_stop → t_pasted, cleanup SUCCEEDED.
+//                                Population: `cleanupStatus == .cleaned` (legacy
+//                                rows: `cleanupSeconds > 0`). A failed/timed-out
+//                                pass (`fallbackRaw`) lands in NEITHER bucket —
+//                                see LatencyStats.swift [fix: audit — cleanup honesty].
 //
 // SENTINEL DESIGN (P13):
 //   `cleanupSeconds` is NOT a DispatchTime delta between two DispatchTime.now() calls
@@ -57,10 +61,11 @@ public struct LatencyRecord: Sendable {
 
     /// Seconds spent in the on-device cleanup pass.
     ///
-    /// **Sentinel contract**: `0.0` (exact) means cleanup did NOT run (cleaner nil
-    /// or unavailable). This is the literal value returned by `runCleanup()` for
-    /// no-cleanup paths — not a clock measurement. `LatencyStats` partitions
-    /// populations using `== 0 / > 0`; this invariant must be preserved.
+    /// **Sentinel contract**: `0.0` (exact) means cleanup did NOT run (cleaner nil).
+    /// This is the literal value returned by `runCleanup()` for the no-cleanup
+    /// path — not a clock measurement. `LatencyStats` now partitions on
+    /// `HistoryEntry.cleanupOutcome` (see LatencyStats.swift); the `== 0 / > 0`
+    /// discriminator is retained only for legacy rows and must still be preserved.
     ///
     /// `> 0` means the cleaner's `clean()` was called; value is elapsed seconds
     /// from before the continuation to after it returned. Timed-out runs carry

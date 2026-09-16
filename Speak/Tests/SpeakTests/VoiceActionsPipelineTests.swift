@@ -302,6 +302,74 @@ final class VoiceActionsPipelineTests: XCTestCase {
         XCTAssertEqual(result.rawText, "hey speak make it formal")
     }
 
+    // MARK: - Bounded wait [fix: audit — C2 unbounded await]
+
+    /// A handler that never returns must not wedge `stop()`: the bounded wait
+    /// resumes `.degradedToDictation`, so the ORIGINAL transcript is still
+    /// delivered through the normal paste path — the user's words survive.
+    func testHungHandler_degradesToDictationWithinBound() async throws {
+        let inserter = RecordingInserter()
+        let handler: CaptureSession.VoiceActionsHandler = { text in
+            // Never returns — models a hung Shortcut/AX call.
+            try? await Task.sleep(nanoseconds: 60_000_000_000)
+            return .dictation(text: text)
+        }
+        let session = CaptureSession(
+            transcriber: ScriptedTranscriber(finalText: "hey speak hang forever"),
+            cleaner: nil,
+            inserter: inserter,
+            voiceActionsHandler: handler,
+            voiceActionsTimeoutNanoseconds: 200_000_000   // 200 ms bound
+        )
+
+        let start = ContinuousClock.now
+        let result = try await drive(session)
+        let elapsed = ContinuousClock.now - start
+
+        XCTAssertLessThan(elapsed, .seconds(5),
+            "A hung handler must degrade within the bound, not wedge stop().")
+        let pasted = await inserter.snapshot()
+        XCTAssertEqual(pasted, ["hey speak hang forever"],
+            "A timed-out action must degrade to dictation and paste the original transcript.")
+        XCTAssertEqual(result.rawText, "hey speak hang forever")
+    }
+
+    /// cancel() during a hung handler returns promptly with `.sessionCancelled`
+    /// — the bounded wait polls the off-actor cancel flag, so it does not sit
+    /// out the full deadline behind a cancel.
+    func testCancelDuringHungHandler_returnsSessionCancelledPromptly() async throws {
+        let inserter = RecordingInserter()
+        let handler: CaptureSession.VoiceActionsHandler = { text in
+            try? await Task.sleep(nanoseconds: 60_000_000_000)
+            return .dictation(text: text)
+        }
+        let session = CaptureSession(
+            transcriber: ScriptedTranscriber(finalText: "hey speak hang forever"),
+            cleaner: nil,
+            inserter: inserter,
+            voiceActionsHandler: handler,
+            voiceActionsTimeoutNanoseconds: 60_000_000_000   // long bound — cancel must beat it
+        )
+        try await session.start()
+        try await Task.sleep(nanoseconds: 30_000_000)
+
+        let stopTask = Task { try await session.stop() }
+        // Let stop() reach the bounded voice-actions wait, then cancel.
+        try await Task.sleep(nanoseconds: 100_000_000)
+        await session.cancel()
+
+        do {
+            _ = try await stopTask.value
+            XCTFail("stop() must throw after a cancel during voice-actions routing")
+        } catch SpeakError.sessionCancelled {
+            // expected — cancel beats the (long) handler bound
+        } catch {
+            XCTFail("Expected SpeakError.sessionCancelled, got \(error)")
+        }
+        let pasted = await inserter.snapshot()
+        XCTAssertTrue(pasted.isEmpty, "A cancelled session must never paste.")
+    }
+
     // MARK: - Feature ON, no prefix ⇒ plain dictation (paste runs)
 
     func testNoPrefix_plainDictation_pastesTranscript() async throws {

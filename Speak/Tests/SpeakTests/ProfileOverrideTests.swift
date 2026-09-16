@@ -171,7 +171,10 @@ final class ProfileOverrideTests: XCTestCase {
         await session.forceRawForThisSession()
 
         // Run cleanup with forcedRaw == true.
-        let (cleanedText, engineId, cleanupSeconds) = await session.runCleanup(rawText: "raw text")
+        let cleanup = await session.runCleanup(rawText: "raw text")
+        let cleanedText = cleanup.cleanedText
+        let engineId = cleanup.engineId
+        let cleanupSeconds = cleanup.cleanupSeconds
 
         // Assert: cleanedText is nil (raw passthrough).
         XCTAssertNil(
@@ -218,7 +221,7 @@ final class ProfileOverrideTests: XCTestCase {
         await session.setOverrideCleanupMode(overrideMode)
 
         // Run cleanup.
-        let (cleanedText, _, _) = await session.runCleanup(rawText: "raw text")
+        let cleanedText = (await session.runCleanup(rawText: "raw text")).cleanedText
 
         // Assert: cleanup ran (cleanedText is not nil).
         XCTAssertNotNil(cleanedText, "Cleanup should have run with the override mode.")
@@ -403,7 +406,7 @@ final class ProfileOverrideTests: XCTestCase {
         await engine.applyRawOverride()
 
         // Assert: the session's forcedRaw is now true (observable via runCleanup returning nil).
-        let (cleanedText, _, _) = await session.runCleanup(rawText: "raw text")
+        let cleanedText = (await session.runCleanup(rawText: "raw text")).cleanedText
         XCTAssertNil(
             cleanedText,
             "applyRawOverride should cause runCleanup to return nil (raw passthrough)."
@@ -461,7 +464,9 @@ final class ProfileOverrideTests: XCTestCase {
         )
 
         // Also verify: cleanup runs with the base mode.
-        let (cleanedText, engineId, _) = await session.runCleanup(rawText: "raw text")
+        let cleanupResult = await session.runCleanup(rawText: "raw text")
+        let cleanedText = cleanupResult.cleanedText
+        let engineId = cleanupResult.engineId
         XCTAssertNotNil(
             cleanedText,
             "Cleanup should have run with the base mode."

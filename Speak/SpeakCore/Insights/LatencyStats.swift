@@ -8,14 +8,23 @@
 //   segmented by whether cleanup ran:
 //
 //   • rawMedian / rawP95:
-//       Population: entries where `stopToPasteSeconds > 0` AND `cleanupSeconds == 0`.
-//       (Cleanup did not run: cleaner nil, unavailable, or cleanupLevel=.none.)
+//       Population: entries where `stopToPasteSeconds > 0` AND cleanup did NOT
+//       run — `cleanupOutcome == .skipped` (or, for legacy rows written before
+//       the cleanupStatus column, `cleanupSeconds == 0`).
 //       Budget: < 1.0 s median [benchmark.md §7 L_e2e, raw-only path].
 //
 //   • cleanupMedian / cleanupP95:
-//       Population: entries where `stopToPasteSeconds > 0` AND `cleanupSeconds > 0`.
-//       (Cleanup ran — the Foundation Models pass contributed time.)
+//       Population: entries where `stopToPasteSeconds > 0` AND cleanup
+//       SUCCEEDED — `cleanupOutcome == .cleaned` (or, for legacy rows,
+//       `cleanupSeconds > 0`). A failed/timed-out pass (`fallbackRaw`) still
+//       costs cleanupSeconds > 0 but its transcript is raw — counting it here
+//       would lie about how long successful cleanup takes.
 //       Budget: < 2.0 s median [benchmark.md §7 L_e2e, incl. on-device cleanup].
+//
+//   [fix: audit — cleanup honesty] `cleanupOutcome == .fallbackRaw(_)` entries
+//   belong to NEITHER population: not "raw" (a cleanup pass ran and consumed
+//   time) and not "cleanup" (it failed/timed out). They still contribute
+//   `stopToPasteSeconds` to `measured` filtering only.
 //
 //   Entries where `stopToPasteSeconds == 0` are pre-P13 rows or headless-test
 //   rows with no live inserter — excluded from both populations.
@@ -75,8 +84,25 @@ public struct LatencyStats: Sendable, Equatable {
         // Partition into populations.
         // Entries where stopToPasteSeconds == 0 are pre-P13 or headless-test rows — excluded.
         let measured = entries.filter { $0.stopToPasteSeconds > 0 }
-        let rawSamples     = measured.filter { $0.cleanupSeconds == 0 }.map(\.stopToPasteSeconds)
-        let cleanupSamples = measured.filter { $0.cleanupSeconds  > 0 }.map(\.stopToPasteSeconds)
+        // [fix: audit — cleanup honesty] Partition on the persisted OUTCOME, not
+        // the duration alone: a failed/timed-out cleanup records cleanupSeconds
+        // > 0 but produced raw text, so it must count in neither population.
+        // Legacy rows (cleanupOutcome == nil) keep the old `cleanupSeconds`
+        // discriminator — they carry no recorded failure to mislabel.
+        let rawSamples = measured.filter { e in
+            switch e.cleanupOutcome {
+            case .cleaned, .fallbackRaw: return false
+            case .skipped:               return true
+            case nil:                    return e.cleanupSeconds == 0
+            }
+        }.map(\.stopToPasteSeconds)
+        let cleanupSamples = measured.filter { e in
+            switch e.cleanupOutcome {
+            case .cleaned:               return true
+            case .skipped, .fallbackRaw: return false
+            case nil:                    return e.cleanupSeconds > 0
+            }
+        }.map(\.stopToPasteSeconds)
 
         rawSampleCount     = rawSamples.count
         cleanupSampleCount = cleanupSamples.count

@@ -11,6 +11,17 @@ import os
 
 extension CaptureSession {
 
+    /// Result of `runCleanup` — a named struct rather than a 4-member tuple
+    /// (SwiftLint `large_tuple` is an error in this project).
+    /// See `runCleanup`'s doc comment for the `cleanupSeconds` sentinel and
+    /// `status` contract.
+    struct CleanupPassResult: Sendable {
+        let cleanedText: String?
+        let engineId: String
+        let cleanupSeconds: Double
+        let status: CleanupStatus
+    }
+
     /// Run the cleanup pass per the architecture's P3.5 contract.
     ///
     /// - `cleaner == nil` (cleanup off): `cleanedText = nil`, `engineId = STT id`.
@@ -40,39 +51,55 @@ extension CaptureSession {
     /// `(nil, transcriber.id)`. Only a successful clean produces `(cleaned, combinedId)`.
     /// Run the optional cleanup pass and measure how long it took.
     ///
-    /// Returns a triple `(cleanedText, engineId, cleanupSeconds)` where:
-    /// - `cleanupSeconds == 0.0` (exact) when cleanup did NOT run (cleaner nil or unavailable).
-    ///   This is a **sentinel** — not a clock measurement — so `LatencyStats` can partition
-    ///   entries as "raw" vs "cleanup" by testing `cleanupSeconds == 0`.
-    /// - `cleanupSeconds > 0` when the cleaner's `clean()` was actually called, whether it
-    ///   succeeded, failed, or timed out. The value is the wall-clock time spent inside the
-    ///   timeout race, converted to seconds. [decision P13: timed-out runs fall into the
-    ///   cleanup population — their longer elapsed time is the real user-experienced latency.]
+    /// Returns `(cleanedText, engineId, cleanupSeconds, status)` where:
+    /// - `cleanupSeconds == 0.0` (exact) when cleanup did NOT run (cleaner nil or
+    ///   forced-Raw override). This is a **sentinel** — not a clock measurement —
+    ///   so `LatencyStats` can test `cleanupSeconds == 0` for "cleanup skipped".
+    /// - `cleanupSeconds > 0` when a cleanup pass was attempted — success, error,
+    ///   empty output, unavailable, or timeout. The value is the wall-clock time
+    ///   spent inside the availability check + timeout race, converted to seconds.
+    ///   [decision P13: timed-out/failed runs keep their real elapsed time — it is
+    ///   the user-experienced latency; the `status` field, not `cleanupSeconds`,
+    ///   now discriminates success from fallback.]
+    /// - `status` is the honest outcome: `.skipped` (never ran — cleanupSeconds==0),
+    ///   `.cleaned`, or `.fallbackRaw(reason)` for every raw-fallback path.
+    ///   `LatencyStats` partitions on `status` (falling back to `cleanupSeconds`
+    ///   for legacy rows) so failed/timed-out passes no longer pollute the
+    ///   "cleanup succeeded" median. [fix: audit — cleanup latency honesty]
     ///
     /// [decision P13: timing goes inside runCleanup so the sentinel `0.0` can never be produced
     ///  by a live clock read between two DispatchTime.now() calls on the no-cleanup paths.
     ///  This is the discriminator for LatencyStats population partitioning.]
-    func runCleanup(rawText: String) async -> (cleanedText: String?, engineId: String, cleanupSeconds: Double) {
+    func runCleanup(rawText: String) async -> CleanupPassResult {
         if forcedRaw {
             // PE-3: the user picked Raw in the live panel for THIS dictation — skip cleanup
             // and paste the raw transcript (the base-core bypass), exactly like cleaner-nil.
             // cleanupSeconds = 0.0 (sentinel: cleanup did not run).
             SpeakLog.engine.info("CaptureSession: live-panel Raw override — skipping cleanup for this dictation.")
-            return (nil, transcriber.id, 0.0)
+            return CleanupPassResult(cleanedText: nil, engineId: transcriber.id, cleanupSeconds: 0.0, status: .skipped)
         }
         guard let cleaner = cleaner else {
             // Cleanup off — raw transcript, STT engine id only.
             // cleanupSeconds = 0.0 (sentinel: cleanup did not run).
-            return (nil, transcriber.id, 0.0)
+            return CleanupPassResult(cleanedText: nil, engineId: transcriber.id, cleanupSeconds: 0.0, status: .skipped)
         }
+
+        // t_cleanupStart: monotonic instant before the availability check. Any path
+        // that reaches here *intended* to run cleanup — including the
+        // unavailable-fallback — so all of them report cleanupSeconds > 0 and a
+        // non-.skipped status. (Unavailable was previously a 0.0 sentinel; it is
+        // now an explicit `.fallbackRaw(.cleanerUnavailable)` so LatencyStats no
+        // longer folds "the engine was off" into the raw population.)
+        let tCleanupStart = DispatchTime.now().uptimeNanoseconds
+
         let available = await cleaner.isAvailable
         if !available {
             // Engine unavailable — graceful fallback, NOT an error.
-            // cleanupSeconds = 0.0 (sentinel: cleanup did not run).
+            let elapsedNs = max(DispatchTime.now().uptimeNanoseconds - tCleanupStart, 1)
             SpeakLog.engine.info(
                 "CaptureSession: cleaner '\(cleaner.id, privacy: .public)' unavailable; falling back to raw transcript."
             )
-            return (nil, transcriber.id, 0.0)
+            return CleanupPassResult(cleanedText: nil, engineId: transcriber.id, cleanupSeconds: Double(elapsedNs) / 1_000_000_000, status: .fallbackRaw(.cleanerUnavailable))
         }
 
         // Bounded timeout: race the cleanup call against T_cleanup.
@@ -88,11 +115,6 @@ extension CaptureSession {
         // mode) so a chip tap during listening reshapes THIS dictation's output.
         let mode = effectiveCleanupMode
         let sttId = transcriber.id
-
-        // t_cleanupStart: monotonic instant just before entering the continuation.
-        // Placed AFTER the early-return guards above so it is only set when cleanup
-        // actually runs; cleanupSeconds > 0 is guaranteed for this path.
-        let tCleanupStart = DispatchTime.now().uptimeNanoseconds
 
         enum CleanupOutcome {
             case success(String)
@@ -182,13 +204,13 @@ extension CaptureSession {
                 SpeakLog.engine.warning(
                     "CaptureSession: cleaner returned empty string — falling back to raw transcript."
                 )
-                return (nil, sttId, cleanupSeconds)
+                return CleanupPassResult(cleanedText: nil, engineId: sttId, cleanupSeconds: cleanupSeconds, status: .fallbackRaw(.emptyOutput))
             }
             SpeakLog.engine.info("""
                 CaptureSession: cleanup produced \(cleaned.count, privacy: .public) chars \
                 from \(rawText.count, privacy: .public) raw chars
                 """)
-            return (cleaned, "\(sttId)+\(cleanerId)", cleanupSeconds)
+            return CleanupPassResult(cleanedText: cleaned, engineId: "\(sttId)+\(cleanerId)", cleanupSeconds: cleanupSeconds, status: .cleaned)
 
         case .failure(let detail):
             // [decision: cleanup error → graceful fallback to raw transcript, NOT .error.
@@ -196,7 +218,7 @@ extension CaptureSession {
             SpeakLog.engine.error(
                 "CaptureSession: cleanup failed — falling back to raw transcript. Detail: \(detail, privacy: .public)"
             )
-            return (nil, sttId, cleanupSeconds)
+            return CleanupPassResult(cleanedText: nil, engineId: sttId, cleanupSeconds: cleanupSeconds, status: .fallbackRaw(.cleanerError))
 
         case .timedOut:
             // [decision: cleanup timeout → graceful fallback to raw transcript.
@@ -204,7 +226,7 @@ extension CaptureSession {
             SpeakLog.engine.error(
                 "CaptureSession: cleanup timed out after T_cleanup — falling back to raw transcript."
             )
-            return (nil, sttId, cleanupSeconds)
+            return CleanupPassResult(cleanedText: nil, engineId: sttId, cleanupSeconds: cleanupSeconds, status: .fallbackRaw(.timedOut))
         }
     }
 }

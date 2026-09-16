@@ -18,7 +18,12 @@ public actor StreamingChunkCoordinator {
 
     private let cleaner: any LLMCleaning
     private let mode: CleanupMode
-    private var chunkTasks: [Task<String, Never>] = []
+    /// Ingested chunk work items in ARRIVAL order. `sequence` is the
+    /// producer-assigned emission order (CaptureSession stamps it on the actor
+    /// before the unstructured-Task hop); `finalizeAndStitch` sorts by it so
+    /// out-of-order arrival can never scramble the stitched transcript.
+    /// [fix: audit — unordered streaming ingestion]
+    private var chunkTasks: [(sequence: Int, task: Task<String, Never>)] = []
     private var rawChunks: [String] = []
     private var chunkErrors: [String] = []
     private var lastTask: Task<String, Never>?
@@ -52,8 +57,14 @@ public actor StreamingChunkCoordinator {
     /// Ingests a finalized raw text chunk during active speech and fires an asynchronous cleanup task.
     /// Serializes tasks using a task chain to prevent concurrent contention on the Neural Engine.
     ///
-    /// - Parameter chunkText: The stabilized text emitted by the speech recognizer.
-    public func ingestChunk(_ chunkText: String) {
+    /// - Parameters:
+    ///   - chunkText: The stabilized text emitted by the speech recognizer.
+    ///   - sequence: Producer-assigned emission order. `CaptureSession` stamps a
+    ///     monotonically increasing value on its actor before the unstructured
+    ///     `Task` hop, so arrival order here is NOT emission order — the value
+    ///     is stored with the task and `finalizeAndStitch` sorts on it.
+    ///     [fix: audit — unordered streaming ingestion]
+    public func ingestChunk(_ chunkText: String, sequence: Int) {
         let trimmed = chunkText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
@@ -64,6 +75,12 @@ public actor StreamingChunkCoordinator {
 
         // Chain the task onto the prior task to ensure strict single-lane execution
         // while still processing continuously in the background during active speech.
+        // The chain follows ARRIVAL order (each new task awaits the previously
+        // arrived one) — execution order may therefore differ from `sequence`
+        // order when tasks arrive reordered. That is deliberate: the chain only
+        // prevents Neural-Engine contention; the stitch below restores emission
+        // order by sorting on `sequence`, so correctness never depends on the
+        // scheduler. [decision: overlap preserved, order restored at stitch]
         let task = Task<String, Never> { [weak self] in
             _ = await priorTask?.value
             guard let self, await self.cleanerAvailable() else {
@@ -82,7 +99,7 @@ public actor StreamingChunkCoordinator {
             }
         }
         self.lastTask = task
-        chunkTasks.append(task)
+        chunkTasks.append((sequence: sequence, task: task))
     }
 
     /// `cleaner.isAvailable` with a short TTL — see `availabilityCache`.
@@ -122,8 +139,13 @@ public actor StreamingChunkCoordinator {
     /// - Parameter trailingRawText: Any final volatile or remaining text not captured in earlier chunks.
     /// - Returns: The stitched, normalized, and macro-consolidated full transcript.
     public func finalizeAndStitch(trailingRawText: String? = nil) async throws -> String {
-        for task in chunkTasks {
-            _ = await task.value
+        // [fix: audit — unordered ingestion] `chunkTasks` is in ARRIVAL order,
+        // which is scheduler-dependent once CaptureSession hops through
+        // unstructured Tasks. Sort by the producer-assigned `sequence` so the
+        // stitched transcript always follows the order the chunks were spoken.
+        let ordered = chunkTasks.sorted { $0.sequence < $1.sequence }
+        for entry in ordered {
+            _ = await entry.task.value
         }
         if let firstError = chunkErrors.first {
             throw SpeakError.llmCleanupFailed("Chunk cleanup failed: \(firstError)")
@@ -131,8 +153,8 @@ public actor StreamingChunkCoordinator {
 
         var cleanedChunks: [String] = []
 
-        for task in chunkTasks {
-            let cleaned = await task.value
+        for entry in ordered {
+            let cleaned = await entry.task.value
             if !cleaned.isEmpty {
                 cleanedChunks.append(cleaned)
             }
@@ -183,8 +205,8 @@ public actor StreamingChunkCoordinator {
     public func reset() {
         lastTask?.cancel()
         lastTask = nil
-        for task in chunkTasks {
-            task.cancel()
+        for entry in chunkTasks {
+            entry.task.cancel()
         }
         chunkTasks.removeAll()
         chunkErrors.removeAll()

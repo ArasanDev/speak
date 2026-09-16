@@ -19,10 +19,17 @@
 // (P4) and the live status icon (P8).
 //
 // Cleanup contract (architecture §10a.1, roadmap P3.5 done-when):
-//   • cleaner == nil (cleanup off)        → cleanedText = nil, engineId = STT id
-//   • cleaner.isAvailable == false        → cleanedText = nil, NO error (fallback)
-//   • cleaner.clean() throws              → throws SpeakError.llmCleanupFailed
-//                                            (genuine API failure only)
+//   • cleaner == nil (cleanup off)        → cleanedText = nil, engineId = STT id,
+//                                            cleanupStatus = .skipped
+//   • cleaner.isAvailable == false        → cleanedText = nil, NO error (fallback),
+//                                            cleanupStatus = .fallbackRaw(.cleanerUnavailable)
+//   • cleaner.clean() throws or times out → cleanedText = nil, NO error (fallback),
+//                                            cleanupStatus = .fallbackRaw(reason)
+//   `runCleanup` NEVER throws — every cleanup failure degrades to the raw
+//   transcript and the session reaches `.done` (see CaptureSession+Cleanup.swift).
+//   `.llmCleanupFailed` still exists but only inside cleaner implementations and
+//   the streaming coordinator; it is caught at the runCleanup boundary.
+//   [fix: audit — header previously claimed clean() throws surfaced; they never do]
 //
 // Signatures are verbatim from `docs/architecture.md` §6.
 
@@ -82,6 +89,20 @@ public actor CaptureSession {
     /// byte-identical to pre-V01-W. See `CaptureSession+WarmUp.swift`.
     var warmUp: WarmUpState?
 
+    /// [fix: audit — C2/H1 cancellation] "cancel() was called" readable OFF the
+    /// actor. `cancel()` sets this before its first `await` so the in-flight
+    /// paste path (`runPaste` → `PasteboardWriter`'s `shouldContinue` predicate)
+    /// and the bounded voice-actions wait can observe cancellation without
+    /// actor-hopping back onto a suspended `stop()`. `nonisolated let` is safe:
+    /// `OSAllocatedUnfairLock` is itself a lock — reads/writes are data-race-free.
+    nonisolated let cancelRequestedFlag = OSAllocatedUnfairLock<Bool>(initialState: false)
+
+    /// [fix: audit — C2 unbounded await] Upper bound on a voice-actions handler
+    /// call inside `stop()`. Matched to `T_cleanup` (benchmark.md §7): an action/
+    /// command transform is the same class of model work as cleanup, so it gets
+    /// the same 10 s bound. Injectable (init is internal) so tests can shrink it.
+    let voiceActionsTimeoutNanoseconds: UInt64
+
     // MARK: - Mutable session state (actor-isolated)
 
     var state: State = .idle
@@ -130,6 +151,12 @@ public actor CaptureSession {
     /// segment is [unverified] — if it does, double-spaces may appear; this can
     /// be revisited with a live multi-segment test corpus.
     var finalizedText: String = ""
+    /// [fix: audit — unordered streaming ingestion] Monotonically increasing
+    /// sequence number stamped onto each finalized chunk handed to
+    /// `StreamingChunkCoordinator`. Assigned inside `ingest` on the actor, then
+    /// carried through the unstructured `Task` hop so the coordinator can stitch
+    /// results in emission order even when the tasks arrive reordered.
+    private var ingestSequence = 0
     private var sessionStartTime: Date?
     var partialsContinuation: AsyncStream<TranscriptChunk>.Continuation?
 
@@ -165,19 +192,29 @@ public actor CaptureSession {
     ///   - agentPrefix: Optional prompt prefix for coding agents. Default: "" (none).
     ///   - agentPrefixStyle: Structured STT origin tag style. Default: .none.
     ///   - agentPrefixIncludeState: Whether to append :clean or :raw to the tag. Default: false.
-    public init(transcriber: any Transcribing,
-                cleaner: (any LLMCleaning)? = nil,
-                inserter: (any TextInserting)? = nil,
-                streamingInserter: (any StreamingRawTextInserting)? = nil,
-                locale: Locale = Locale(identifier: "en-US"),
-                cleanupMode: CleanupMode = .punctuation,
-                expander: (any SnippetExpanding)? = nil,
-                voiceCommandPreprocessor: VoiceCommandPreprocessor? = nil,
-                voiceActionsHandler: VoiceActionsHandler? = nil,
-                warmUpHandler: WarmUpHandler? = nil,
-                agentPrefix: String = "",
-                agentPrefixStyle: AgentPrefixStyle = .none,
-                agentPrefixIncludeState: Bool = false) {
+    ///   - voiceActionsTimeoutNanoseconds: Bound on the voice-actions handler call
+    ///     inside `stop()` [fix: audit — unbounded await]. Defaults to T_cleanup
+    ///     (10 s, benchmark.md §7); tests inject a smaller value.
+    ///
+    /// `internal` — engine-minted only. No code outside the `SpeakCore` module
+    /// can construct a session: `SpeakEngine.beginDictation` /
+    /// `beginAuxiliarySession` are the sole mint points and the only paths that
+    /// enforce the mute, mic-permission, and single-capture gates. Tests use
+    /// `@testable`, which sees internal symbols. [fix: audit — gate bypass]
+    init(transcriber: any Transcribing,
+         cleaner: (any LLMCleaning)? = nil,
+         inserter: (any TextInserting)? = nil,
+         streamingInserter: (any StreamingRawTextInserting)? = nil,
+         locale: Locale = Locale(identifier: "en-US"),
+         cleanupMode: CleanupMode = .punctuation,
+         expander: (any SnippetExpanding)? = nil,
+         voiceCommandPreprocessor: VoiceCommandPreprocessor? = nil,
+         voiceActionsHandler: VoiceActionsHandler? = nil,
+         warmUpHandler: WarmUpHandler? = nil,
+         agentPrefix: String = "",
+         agentPrefixStyle: AgentPrefixStyle = .none,
+         agentPrefixIncludeState: Bool = false,
+         voiceActionsTimeoutNanoseconds: UInt64 = 10_000_000_000) {
         self.transcriber = transcriber
         self.cleaner = cleaner
         self.inserter = inserter
@@ -191,6 +228,7 @@ public actor CaptureSession {
         self.agentPrefix = agentPrefix
         self.agentPrefixStyle = agentPrefixStyle
         self.agentPrefixIncludeState = agentPrefixIncludeState
+        self.voiceActionsTimeoutNanoseconds = voiceActionsTimeoutNanoseconds
     }
 
     /// Set or update the agent prefix prepended to delivered text at paste time.
@@ -286,6 +324,7 @@ public actor CaptureSession {
         sessionStartTime = Date()
         latestChunk = nil
         finalizedText = ""
+        ingestSequence = 0
 
         if let cleaner, !forcedRaw {
             if await cleaner.isAvailable {
@@ -443,13 +482,18 @@ public actor CaptureSession {
 
         // Run cleanup. Never throws — all failure/timeout paths return raw fallback.
         // `cleanupSeconds` is the measured time spent inside the cleanup pass:
-        //   - Exactly 0.0 (sentinel) when cleanup was skipped (cleaner nil or unavailable).
-        //   - > 0 when the cleaner's clean() was called (success, error, or timeout).
-        // This sentinel distinction drives LatencyStats population partitioning —
-        // do NOT replace with a DispatchTime.now() delta here.
+        //   - Exactly 0.0 (sentinel) when cleanup was skipped (cleaner nil or Raw override).
+        //   - > 0 when a cleanup pass was attempted (success OR any fallback).
+        // `cleanupStatus` is the honest outcome discriminator — `.cleaned` vs
+        // `.fallbackRaw(reason)` vs `.skipped` — persisted to history so
+        // LatencyStats never counts a failed/timed-out pass as a success.
         // [PE-3.1] cleanupInputText is the snippet-expanded + voice-command-stripped text.
         // It equals rawText when no voice command was detected.
-        let (cleanedText, engineId, cleanupSeconds) = await runCleanup(rawText: cleanupInputText)
+        let cleanup = await runCleanup(rawText: cleanupInputText)
+        let cleanedText = cleanup.cleanedText
+        let engineId = cleanup.engineId
+        let cleanupSeconds = cleanup.cleanupSeconds
+        let cleanupStatus = cleanup.status
 
         // [A1] Cancel-during-processing guard: cancel() can enter this actor during
         // any of the awaits above (transcriber.stop, task.value, runCleanup). It sets
@@ -470,7 +514,8 @@ public actor CaptureSession {
             cleanedText: cleanedText,
             duration: duration,
             engineId: engineId,
-            createdAt: sessionEndedAt
+            createdAt: sessionEndedAt,
+            cleanupStatus: cleanupStatus
             // latency is set below after the paste step, once t_pasted is known.
         )
 
@@ -480,6 +525,17 @@ public actor CaptureSession {
 
         // Paste step (P6): deliver the final text via runPaste() (CaptureSession+Paste.swift).
         try await runPaste(result)
+
+        // [A1-parallel, fix: audit — cancel-during-paste] `runPaste` suspends on
+        // the inserter (clipboard write + settle + Cmd+V). A cancel() can land
+        // during it; when the inserter returns without throwing, the state must
+        // be re-checked so a cancelled session never settles `.done`.
+        if case .error(let cancelErr) = state {
+            SpeakLog.engine.info(
+                "CaptureSession: cancel arrived during paste — refusing to settle .done."
+            )
+            throw cancelErr
+        }
 
         // t_pasted: text has been written to the pasteboard and Cmd+V simulated
         // (or the pasteboard floor ran). When no inserter is wired (tests / fixture
@@ -500,7 +556,8 @@ public actor CaptureSession {
             duration: result.duration,
             engineId: result.engineId,
             createdAt: result.createdAt,
-            latency: latency
+            latency: latency,
+            cleanupStatus: cleanupStatus
         )
 
         state = .done
@@ -570,7 +627,10 @@ public actor CaptureSession {
         createdAt: Date
     ) async throws -> TranscriptionResult? {
         guard let voiceActionsHandler else { return nil }
-        let outcome = await voiceActionsHandler(rawText)
+        // [fix: audit — C2 unbounded await] The handler awaits Shortcut/AX work
+        // that can hang; run it under a bounded, cancel-responsive wait so a
+        // hung action can never wedge `stop()` (or a cancel) forever.
+        let outcome = await boundedVoiceActions(voiceActionsHandler, rawText: rawText)
         // [A1-parallel] `run(named:)` / `CommandModeService.run` are async — a cancel()
         // may have entered the actor while they were in flight. Re-check BEFORE settling
         // terminal state so a cancelled session never reports `.done`.
@@ -597,6 +657,69 @@ public actor CaptureSession {
                 "CaptureSession: Voice Actions command executed (selection replaced) — suppressing dictation paste."
             )
             return settleVoiceActionExecuted(rawText: rawText, duration: duration, createdAt: createdAt)
+        }
+    }
+
+    /// [fix: audit — C2 unbounded await] Run the voice-actions handler under a
+    /// bounded wait. Two exits, both benign:
+    ///
+    ///   - **Deadline** (`voiceActionsTimeoutNanoseconds`, default T_cleanup = 10 s
+    ///     [benchmark.md §7]): resumes `.degradedToDictation` so the user's words
+    ///     are still delivered through the normal cleanup + paste path.
+    ///   - **Cancel flag** (`cancelRequestedFlag`, polled at 10 ms): resumes
+    ///     `.degradedToDictation` immediately; the `.error` re-check in
+    ///     `routeVoiceActions` then throws `.sessionCancelled`. Without this, a
+    ///     cancel() during a hung action would sit behind the full bound — or
+    ///     forever, if the handler never returns.
+    ///
+    /// The continuation resumes exactly once (`resumeOnce` test-and-set); a
+    /// hung handler that eventually completes finds the slot taken and its late
+    /// outcome is discarded — its side effects (a Shortcut already run, an AX
+    /// replacement already applied) may still have landed, which is logged via
+    /// the timeout path. [unverified: a hung Shortcut cannot be un-run.]
+    private func boundedVoiceActions(
+        _ handler: @escaping VoiceActionsHandler,
+        rawText: String
+    ) async -> VoiceActionOutcome {
+        await withCheckedContinuation { continuation in
+            let resumeOnce = OSAllocatedUnfairLock<Bool>(initialState: false)
+            let flag = cancelRequestedFlag
+
+            let work = Task(priority: .userInitiated) {
+                let outcome = await handler(rawText)
+                resumeOnce.withLock { resumed in
+                    guard !resumed else { return }
+                    resumed = true
+                    continuation.resume(returning: outcome)
+                }
+            }
+
+            Task {
+                let deadline = DispatchTime.now().uptimeNanoseconds + self.voiceActionsTimeoutNanoseconds
+                while DispatchTime.now().uptimeNanoseconds < deadline {
+                    if flag.withLock({ $0 }) {
+                        resumeOnce.withLock { resumed in
+                            guard !resumed else { return }
+                            resumed = true
+                            work.cancel()   // best-effort — a hung handler ignores this
+                            continuation.resume(returning: .degradedToDictation(
+                                text: rawText, reason: "cancelled during voice actions"))
+                        }
+                        return
+                    }
+                    try? await Task.sleep(nanoseconds: 10_000_000) // 10 ms poll
+                }
+                resumeOnce.withLock { resumed in
+                    guard !resumed else { return }
+                    resumed = true
+                    work.cancel()
+                    SpeakLog.voiceActions.error(
+                        "CaptureSession: voice actions timed out — degrading to dictation."
+                    )
+                    continuation.resume(returning: .degradedToDictation(
+                        text: rawText, reason: "voice actions timed out"))
+                }
+            }
         }
     }
 
@@ -662,6 +785,11 @@ public actor CaptureSession {
             break
         }
         SpeakLog.engine.info("CaptureSession: cancelling.")
+        // [fix: audit — C2/H1] Set the off-actor flag BEFORE the first await so a
+        // paste suspended inside `insert(_:shouldContinue:)` or a voice-actions
+        // wait observes cancellation immediately — not only after the actor
+        // resumes. This is the flag `runPaste`'s predicate reads.
+        cancelRequestedFlag.withLock { $0 = true }
         await transcriber.stop()
         cancelWarmUp()
         if let coordinator = streamingCoordinator {
@@ -719,8 +847,16 @@ public actor CaptureSession {
             }
 
             if let coordinator = streamingCoordinator {
+                // [fix: audit — unordered ingestion] Stamp the chunk with an
+                // actor-assigned sequence number BEFORE hopping off the actor.
+                // The unstructured Task can deliver it to the coordinator out of
+                // order; the coordinator sorts by `seq` at stitch time so the
+                // final transcript always follows emission order. Cleanup itself
+                // stays progressive/overlapped — only stitching is reordered.
+                let seq = ingestSequence
+                ingestSequence += 1
                 let textToIngest = expander?.expand(chunk.text) ?? chunk.text
-                Task(priority: .userInitiated) { await coordinator.ingestChunk(textToIngest) }
+                Task(priority: .userInitiated) { await coordinator.ingestChunk(textToIngest, sequence: seq) }
             }
 
             // Stream finalized chunk if keystroke streaming is enabled.

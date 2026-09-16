@@ -130,9 +130,9 @@ final class PerfRegressionTests: XCTestCase {
         let cleaner = CountingCleaner()
         let coordinator = StreamingChunkCoordinator(cleaner: cleaner, mode: .fillersOnly)
 
-        await coordinator.ingestChunk("first chunk")
-        await coordinator.ingestChunk("second chunk")
-        await coordinator.ingestChunk("third chunk")
+        await coordinator.ingestChunk("first chunk", sequence: 0)
+        await coordinator.ingestChunk("second chunk", sequence: 1)
+        await coordinator.ingestChunk("third chunk", sequence: 2)
         _ = try await coordinator.finalizeAndStitch()
 
         let checks = cleaner.checks
