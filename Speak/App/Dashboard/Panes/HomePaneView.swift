@@ -14,6 +14,7 @@
 // [decision: retired the glassmorphism/gradient treatment — restrained Apple
 //  chrome; color is reserved for semantics (permissions, on-air, delivered).]
 
+import Combine
 import Foundation
 import os
 import SpeakCore
@@ -45,7 +46,7 @@ struct HomePaneView: View {
     }
 
     var body: some View {
-        let contentView = ScrollView {
+        ScrollView {
             VStack(alignment: .leading, spacing: SpeakSpacing.lg) {
                 permissionStatusCard
                 startDictationHero
@@ -58,15 +59,13 @@ struct HomePaneView: View {
         .task { await loadInitialData() }
         .task { await monitorLiveState() }
         .onAppear { refreshLiveState() }
-
-        if let publisher = context.dictationCompletedPublisher {
-            contentView
-                .onReceive(publisher) { _ in
-                    isRecording = false
-                    Task { await loadInitialData() }
-                }
-        } else {
-            contentView
+        // Unconditional modifier (Empty fallback when the publisher is absent,
+        // e.g. previews/tests) — a conditional `if let` would give the two
+        // branches different view identities and tear down the subtree if the
+        // publisher ever appeared or disappeared mid-lifetime.
+        .onReceive(context.dictationCompletedPublisher ?? Empty().eraseToAnyPublisher()) { _ in
+            isRecording = false
+            Task { await loadInitialData() }
         }
     }
 

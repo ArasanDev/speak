@@ -52,6 +52,19 @@ struct DashboardView: View {
     @State private var isSettingsHovered: Bool = false
     @State private var isSelfHealHovered: Bool = false
     @State private var showUpdateNotification: Bool = false
+    /// Pending resets for the transient badges — cancelled and replaced on
+    /// re-trigger so rapid clicks restart the clock instead of an older
+    /// timer dismissing a badge that was just re-shown.
+    @State private var selfHealResetTask: Task<Void, Never>?
+    @State private var updateToastTask: Task<Void, Never>?
+
+    /// How long the self-heal "re-armed" confirmation stays lit.
+    /// [decision: 2.5s — long enough to register as a confirmation, short
+    ///  enough not to read as a stuck state]
+    private static let selfHealConfirmationSeconds: Double = 2.5
+    /// How long the update-check badge stays visible.
+    /// [decision: 3.0s — transient toast convention]
+    private static let updateToastSeconds: Double = 3.0
 
     /// Which Settings category Mode B opens on — seeded by the debug
     /// deep-link (`--debug-open dashboard:settings:<category>`); the normal
@@ -312,7 +325,10 @@ struct DashboardView: View {
                 Divider()
                 Button("Check for Updates (v0.0.1)") {
                     showUpdateNotification = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    updateToastTask?.cancel()
+                    updateToastTask = Task {
+                        try? await Task.sleep(for: .seconds(Self.updateToastSeconds))
+                        guard !Task.isCancelled else { return }
                         showUpdateNotification = false
                     }
                 }
@@ -374,7 +390,10 @@ struct DashboardView: View {
         }
         context.onSelfHeal?()
         isSelfHealed = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+        selfHealResetTask?.cancel()
+        selfHealResetTask = Task {
+            try? await Task.sleep(for: .seconds(Self.selfHealConfirmationSeconds))
+            guard !Task.isCancelled else { return }
             isSelfHealed = false
         }
     }

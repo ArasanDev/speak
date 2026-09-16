@@ -26,26 +26,27 @@ import SwiftUI
 // MARK: - PlaygroundViewModel
 
 @MainActor
-final class PlaygroundViewModel: ObservableObject {
+@Observable
+final class PlaygroundViewModel {
 
-    // MARK: - Published state
+    // MARK: - Observed state
 
-    @Published var messages: [ChatMessage] = []
-    @Published var streamingText = ""
-    @Published var isStreaming = false
-    @Published var inputText = ""
-    @Published var selectedModel = "speak-default"
-    @Published var systemPrompt = ""
-    @Published var conversations: [Conversation] = []
-    @Published var activeConversation: Conversation?
-    @Published var showSystemPrompt = false
-    @Published var errorMessage: String?
-    @Published var serverPort: UInt16 = LocalInferenceServer.defaultPort
-    @Published var apiKey = ""
-    @Published var lastProvenance: ProvenanceReceipt?
-    @Published var provenanceLog: [String: ProvenanceReceipt] = [:]
-    @Published var backends: [BackendInfo] = []
-    @Published var contextTokenEstimate = 0
+    var messages: [ChatMessage] = []
+    var streamingText = ""
+    var isStreaming = false
+    var inputText = ""
+    var selectedModel = "speak-default"
+    var systemPrompt = ""
+    var conversations: [Conversation] = []
+    var activeConversation: Conversation?
+    var showSystemPrompt = false
+    var errorMessage: String?
+    var serverPort: UInt16 = LocalInferenceServer.defaultPort
+    var apiKey = ""
+    var lastProvenance: ProvenanceReceipt?
+    var provenanceLog: [String: ProvenanceReceipt] = [:]
+    var backends: [BackendInfo] = []
+    var contextTokenEstimate = 0
 
     // MARK: - Dependencies
 
@@ -302,13 +303,13 @@ final class PlaygroundViewModel: ObservableObject {
 /// The pane's spine: masthead, buffer, composer. Three bands on one measure.
 struct AgentPlaygroundView: View {
     let context: DashboardContext
-    @StateObject private var viewModel: PlaygroundViewModel
+    @State private var viewModel: PlaygroundViewModel
 
     init(context: DashboardContext) {
         self.context = context
         // The shared server — same instance the Inference pane controls, so a
         // playground stream rides the one app listener on port 11235.
-        _viewModel = StateObject(wrappedValue: PlaygroundViewModel(
+        _viewModel = State(initialValue: PlaygroundViewModel(
             store: context.conversationStore,
             server: context.inferenceServer
         ))

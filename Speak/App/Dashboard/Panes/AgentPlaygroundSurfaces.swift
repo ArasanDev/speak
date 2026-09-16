@@ -74,7 +74,7 @@ struct PlaygroundHairline: View {
 /// the model selector: the health readout and the choice are the same object,
 /// which is what an engine room is.
 struct PlaygroundMasthead: View {
-    @ObservedObject var viewModel: PlaygroundViewModel
+    var viewModel: PlaygroundViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -102,7 +102,7 @@ struct PlaygroundMasthead: View {
 /// The backend health readout. Each chip is a live probe result *and* the model
 /// picker: clicking one routes the next request to it.
 struct PlaygroundEngineRoom: View {
-    @ObservedObject var viewModel: PlaygroundViewModel
+    var viewModel: PlaygroundViewModel
 
     var body: some View {
         HStack(spacing: SpeakSpacing.xs) {

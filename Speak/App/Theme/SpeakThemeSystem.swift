@@ -244,18 +244,12 @@ enum SpeakThemeRuntime {
 
 // MARK: - Environment
 
-private struct SpeakThemeEnvironmentKey: EnvironmentKey {
-    static let defaultValue: SpeakTheme = .speak
-}
-
 extension EnvironmentValues {
     /// The active theme. Injected by `ThemedRoot`; changing it invalidates the
     /// entire subtree, which is what repaints the `Color.speak*` statics.
     /// New code may also read it directly via `@Environment(\.speakTheme)`.
-    var speakTheme: SpeakTheme {
-        get { self[SpeakThemeEnvironmentKey.self] }
-        set { self[SpeakThemeEnvironmentKey.self] = newValue }
-    }
+    /// The `.speak` default is a stable static — safe as an `@Entry` default.
+    @Entry var speakTheme: SpeakTheme = .speak
 }
 
 // MARK: - ThemedRoot

@@ -34,14 +34,14 @@ import SwiftUI
 struct InferencePaneView: View {
     let context: DashboardContext
 
-    @StateObject private var viewModel: InferenceViewModel
+    @State private var viewModel: InferenceViewModel
 
     init(context: DashboardContext) {
         self.context = context
         // The shared server — same instance the Agent Playground uses, so both
         // surfaces report and control one listener instead of two. The pane's
         // Start/Stop now genuinely controls THE app server. [fix: single-server]
-        _viewModel = StateObject(wrappedValue: InferenceViewModel(server: context.inferenceServer))
+        _viewModel = State(initialValue: InferenceViewModel(server: context.inferenceServer))
     }
 
     var body: some View {
@@ -99,7 +99,7 @@ struct InferencePaneView: View {
 ///  from a single breathing status dot (one signal, one animation) plus a
 ///  statically tinted card border.]
 private struct ServerStatusCard: View {
-    @ObservedObject var viewModel: InferenceViewModel
+    var viewModel: InferenceViewModel
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -268,7 +268,7 @@ private struct ServerStatusCard: View {
 
 /// The masked API key on a code-like field, with copy and regenerate.
 private struct APIKeyCard: View {
-    @ObservedObject var viewModel: InferenceViewModel
+    @Bindable var viewModel: InferenceViewModel
 
     var body: some View {
         InferenceCard(

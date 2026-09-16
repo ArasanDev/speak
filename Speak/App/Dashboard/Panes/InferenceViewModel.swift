@@ -18,56 +18,59 @@ import SwiftUI
 // MARK: - InferenceViewModel
 
 /// Observable view model that owns references to the inference server actors
-/// and polls status periodically. All state is published for SwiftUI binding.
+/// and polls status periodically. `@Observable` (not `ObservableObject`) so
+/// views invalidate only on the properties they actually read — a poll tick
+/// updating `uptimeSeconds` no longer repaints the quick-test console.
 @MainActor
-final class InferenceViewModel: ObservableObject {
+@Observable
+final class InferenceViewModel {
 
-    // MARK: - Published state
+    // MARK: - Observed state
 
     /// Whether the inference server is currently accepting connections.
-    @Published var isServerRunning = false
+    var isServerRunning = false
 
     /// The port the server is listening on.
-    @Published var serverPort: UInt16 = LocalInferenceServer.defaultPort
+    var serverPort: UInt16 = LocalInferenceServer.defaultPort
 
     /// The current API key (fetched from the server's key store).
-    @Published var apiKey = ""
+    var apiKey = ""
 
     /// Discovered inference backends from the model registry.
-    @Published var backends: [BackendInfo] = []
+    var backends: [BackendInfo] = []
 
     /// Number of active connections (from /health endpoint).
-    @Published var activeConnections = 0
+    var activeConnections = 0
 
     /// Server uptime in seconds (from /health endpoint).
-    @Published var uptimeSeconds: TimeInterval = 0
+    var uptimeSeconds: TimeInterval = 0
 
     /// Whether a start/stop operation is in flight.
-    @Published var isTogglingServer = false
+    var isTogglingServer = false
 
     /// Whether a model discovery pass is in flight.
-    @Published var isDiscovering = false
+    var isDiscovering = false
 
     /// Quick test console: the prompt input.
-    @Published var testPrompt = ""
+    var testPrompt = ""
 
     /// Quick test console: the selected model ID.
-    @Published var selectedModelID = "speak-default"
+    var selectedModelID = "speak-default"
 
     /// Quick test console: the response output.
-    @Published var testOutput = ""
+    var testOutput = ""
 
     /// Whether a test request is in flight.
-    @Published var isTesting = false
+    var isTesting = false
 
     /// Whether the regenerate-key confirmation dialog is showing.
-    @Published var showRegenerateConfirmation = false
+    var showRegenerateConfirmation = false
 
     /// Whether the "Connect Your Tools" card is expanded.
-    @Published var showToolsCard = false
+    var showToolsCard = false
 
     /// Error message to display (transient).
-    @Published var errorMessage: String?
+    var errorMessage: String?
 
     // MARK: - Dependencies
 

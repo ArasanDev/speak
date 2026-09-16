@@ -19,7 +19,7 @@ import SwiftUI
 // MARK: - Composer
 
 struct PlaygroundComposer: View {
-    @ObservedObject var viewModel: PlaygroundViewModel
+    @Bindable var viewModel: PlaygroundViewModel
 
     @FocusState private var isFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -175,7 +175,7 @@ struct PlaygroundCircleButton: View {
 /// Persona · context pressure · key hint. Persona/key hint are chrome (SF Pro);
 /// the token count is data (SF Mono). All tertiary until something asks for attention.
 struct PlaygroundComposerFooter: View {
-    @ObservedObject var viewModel: PlaygroundViewModel
+    @Bindable var viewModel: PlaygroundViewModel
 
     var body: some View {
         HStack(spacing: SpeakSpacing.sm) {
@@ -305,7 +305,7 @@ struct PlaygroundErrorStrip: View {
 /// The system persona, edited in place. Framed as authorship ("the voice the
 /// agent writes in"), which is what it actually controls.
 struct PlaygroundPersonaEditor: View {
-    @ObservedObject var viewModel: PlaygroundViewModel
+    @Bindable var viewModel: PlaygroundViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: SpeakSpacing.sm) {

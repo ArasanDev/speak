@@ -21,7 +21,7 @@ import SwiftUI
 /// The buffer. A single scrolling column of turns — no bubbles, no avatars, no
 /// alternating alignment. The document is the interface.
 struct PlaygroundDocument: View {
-    @ObservedObject var viewModel: PlaygroundViewModel
+    var viewModel: PlaygroundViewModel
 
     var body: some View {
         ScrollViewReader { proxy in

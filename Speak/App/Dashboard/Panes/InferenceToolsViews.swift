@@ -21,7 +21,7 @@ import SwiftUI
 /// so they carry the list conventions: a status dot, a name, quiet metadata,
 /// and a right-aligned status word.
 struct ModelRegistryCard: View {
-    @ObservedObject var viewModel: InferenceViewModel
+    var viewModel: InferenceViewModel
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -184,7 +184,7 @@ struct BackendRow: View {
 /// local inference server directly from the dashboard. When the server is
 /// stopped the whole console reads as blocked rather than merely disabled.
 struct QuickTestConsole: View {
-    @ObservedObject var viewModel: InferenceViewModel
+    @Bindable var viewModel: InferenceViewModel
     let context: DashboardContext
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

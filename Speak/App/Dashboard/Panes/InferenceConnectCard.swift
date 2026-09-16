@@ -41,7 +41,7 @@ struct InferenceSnippet: Identifiable, Hashable {
 /// Collapsible card showing copy-paste integration snippets for popular
 /// developer tools. Each snippet uses the actual port and API key.
 struct ConnectToolsCard: View {
-    @ObservedObject var viewModel: InferenceViewModel
+    var viewModel: InferenceViewModel
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selection: String = InferenceSnippet.all[0].id
