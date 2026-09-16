@@ -86,13 +86,16 @@ struct SpeechToTextSettingsView: View {
 
             SettingsRow(
                 "Streaming",
-                description: "Type cleaned text live as you speak, instead of pasting at the end."
+                description: "Type cleaned text live as you speak, instead of pasting at the end. Keystroke streaming is not yet active (v0.1) — the setting is stored but delivery is disabled."
             ) {
                 Picker("", selection: Binding(
                     get: { store.streamingMode },
                     set: { store.streamingMode = $0 }
                 )) {
-                    Text("Live keystrokes").tag(StreamingMode.keystrokeInjection)
+                    // [audit fix] "(v1)"-style deferred label — the delivery path is
+                    // compiled out (`streamingInserter` is always nil in SpeakEngine)
+                    // pending ordered keystroke injection in v0.1.
+                    Text("Live keystrokes (v0.1)").tag(StreamingMode.keystrokeInjection)
                     Text("Off").tag(StreamingMode.off)
                 }
                 .pickerStyle(.menu)

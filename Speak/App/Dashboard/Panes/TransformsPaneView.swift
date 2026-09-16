@@ -1,7 +1,9 @@
 // App/Dashboard/Panes/TransformsPaneView.swift
 //
-// The Transforms pane — highlight text, invoke the transform action, and have speak rewrite it
-// on-device using local language models. This provides a catalog of built-in and custom rewrite presets.
+// The Transforms pane — a discovery/catalog surface for speak's on-device rewrite
+// transforms (e.g., Polish, Prompt Engineer). Rows are display-only: there is no
+// invoke path here yet — the transform execution flow is a v0.1+ surface. Custom
+// transforms are authored as profiles in AI Studio.
 //
 // Lists built-in transforms so the interface is discoverable and ready for custom authoring.
 //

@@ -1,5 +1,9 @@
 // SpeakCore/Eval/CleaningQualityScorer.swift
 //
+// `#if DEBUG`: eval-only scoring, consumed by SpeakTests which always builds
+// SpeakCore in Debug — kept out of release binaries [audit fix].
+#if DEBUG
+//
 // Reference-free scoring of a raw→cleaned dictation pair. The primary use case
 // is evaluating real history rows (HistoryEntry.rawText / .cleanedText), which
 // have no human-authored "expected" text — so we score over-editing and cleanup
@@ -163,3 +167,5 @@ public func scoreCleaning(raw: String, cleaned: String) -> CleaningQualityReport
         failedChecks: failed
     )
 }
+
+#endif

@@ -3,6 +3,12 @@
 // Pure scoring functions for the small-models eval harness (roadmap SM-0).
 // All functions are deterministic and have no side effects — suitable for both
 // mock and live evaluation paths without modification.
+//
+// `#if DEBUG`: the eval harness is only consumed by SpeakTests (EvalHarnessTests,
+// HistoryCleaningEvalTests, EvalScoringMetricRedesignTests), which always builds
+// SpeakCore in Debug. Gating keeps the FM-scoring surface out of release binaries
+// [audit fix — release-shipping dead code].
+#if DEBUG
 
 import Foundation
 
@@ -425,3 +431,5 @@ public func percentile95(_ latencies: [Double]) -> Double {
     let index = max(0, (Int(Double(sorted.count) * 0.95) + 1) - 1)  // Nearest-rank for p95
     return sorted[min(index, sorted.count - 1)]
 }
+
+#endif
