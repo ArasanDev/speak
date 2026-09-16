@@ -5,8 +5,9 @@
 // stay under the 400-line file_length budget — the logic here is unchanged and
 // the published surface is identical (other files bind to these names).
 //
-// Owns references to the inference-server actors (`LocalInferenceServer`,
-// `ModelRegistry`, `InferenceClient`) and polls status periodically. All server
+// Holds the app's SHARED `LocalInferenceServer` (injected — owned by
+// DictationController, never constructed here) plus its own `ModelRegistry`
+// and `InferenceClient`, and polls status periodically. All server
 // interactions are async (actor isolation). No print — os.Logger only.
 
 import Foundation
@@ -68,10 +69,14 @@ final class InferenceViewModel: ObservableObject {
     /// Error message to display (transient).
     @Published var errorMessage: String?
 
-    // MARK: - Private dependencies
+    // MARK: - Dependencies
 
-    /// The local inference server actor.
-    private let server = LocalInferenceServer()
+    /// The app's shared inference server — injected from
+    /// `DashboardContext.inferenceServer` (owned by `DictationController`), so
+    /// this pane and the Agent Playground drive the SAME listener on port
+    /// 11235. Must NOT construct its own. [fix: single-server ownership]
+    /// `internal` (not private) so SpeakTests can assert instance identity.
+    let server: LocalInferenceServer
 
     /// The model registry actor for backend discovery.
     private let registry = ModelRegistry()
@@ -87,6 +92,15 @@ final class InferenceViewModel: ObservableObject {
 
     /// Poll interval for server status. [decision: 2.5s — responsive without hammering]
     private static let pollIntervalSeconds: UInt64 = 2_500_000_000
+
+    // MARK: - Init
+
+    /// - Parameter server: the shared `LocalInferenceServer` from the
+    ///   `DashboardContext`. Required — no default — so a future consumer can't
+    ///   silently reintroduce a second listener on the port.
+    init(server: LocalInferenceServer) {
+        self.server = server
+    }
 
     // MARK: - Lifecycle
 

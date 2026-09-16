@@ -34,10 +34,14 @@ import SwiftUI
 struct InferencePaneView: View {
     let context: DashboardContext
 
-    @StateObject private var viewModel = InferenceViewModel()
+    @StateObject private var viewModel: InferenceViewModel
 
     init(context: DashboardContext) {
         self.context = context
+        // The shared server — same instance the Agent Playground uses, so both
+        // surfaces report and control one listener instead of two. The pane's
+        // Start/Stop now genuinely controls THE app server. [fix: single-server]
+        _viewModel = StateObject(wrappedValue: InferenceViewModel(server: context.inferenceServer))
     }
 
     var body: some View {

@@ -12,6 +12,7 @@
 
 import Combine
 import SpeakCore
+import SpeakLLM
 import SwiftUI
 
 // MARK: - DashboardContext
@@ -100,6 +101,24 @@ struct DashboardContext {
     /// Agent Playground conversation persistence. Nil only in preview contexts.
     var conversationStore: (any ConversationStoring)?
 
+    /// The app's ONE `LocalInferenceServer`, owned by `DictationController`
+    /// (the composition root) and shared here so the Inference pane and the
+    /// Agent Playground drive the SAME listener on port 11235 — previously each
+    /// constructed its own and the second to start collided on the port.
+    /// [fix: single-server ownership]
+    ///
+    /// [decision: demand-scoped lifecycle — the owner never auto-starts it.
+    ///  The Inference pane's Start/Stop button and the Playground's appear-time
+    ///  `ensureServerRunning()` both act on this one instance; `start()` is
+    ///  idempotent. Stopping from the Inference pane stops it for everyone —
+    ///  intended, since the pane reports true shared state.]
+    ///
+    /// `let`, not `var`: unlike `speakEngine`/`permissionManager` this never
+    /// needs a show-time refresh — the instance is fixed for the app's
+    /// lifetime. The init default gives previews/tests a fresh, never-started
+    /// server so they need no wiring.
+    let inferenceServer: LocalInferenceServer
+
     /// AVB-7: "Answer by voice" row action — routes through
     /// `DictationController.answerAgentCallByVoice(_:)` (the same capture path
     /// `speak_request_input` uses). Nil in preview contexts.
@@ -145,6 +164,7 @@ struct DashboardContext {
         agentSessionRegistry: AgentSessionRegistry? = nil,
         agentCallStore: (any AgentCallStoring)? = nil,
         conversationStore: (any ConversationStoring)? = nil,
+        inferenceServer: LocalInferenceServer = LocalInferenceServer(),
         answerAgentCallByVoice: ((AgentCall) async -> HumanResponseOutcome)? = nil,
         declineAgentCall: ((UUID) async -> Void)? = nil,
         dismissAgentCall: ((UUID) async -> Void)? = nil,
@@ -172,6 +192,7 @@ struct DashboardContext {
         self.agentSessionRegistry = agentSessionRegistry
         self.agentCallStore = agentCallStore
         self.conversationStore = conversationStore
+        self.inferenceServer = inferenceServer
         self.answerAgentCallByVoice = answerAgentCallByVoice
         self.declineAgentCall = declineAgentCall
         self.dismissAgentCall = dismissAgentCall

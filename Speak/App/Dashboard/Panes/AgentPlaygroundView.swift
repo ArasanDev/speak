@@ -50,7 +50,12 @@ final class PlaygroundViewModel: ObservableObject {
     // MARK: - Dependencies
 
     private let client = StreamingChatClient()
-    private let server = LocalInferenceServer()
+    /// The app's shared inference server — injected from
+    /// `DashboardContext.inferenceServer` (owned by `DictationController`), so
+    /// this pane and the Inference pane drive the SAME listener on port 11235.
+    /// Must NOT construct its own. [fix: single-server ownership]
+    /// `internal` (not private) so SpeakTests can assert instance identity.
+    let server: LocalInferenceServer
     private let registry = ModelRegistry()
     private var store: (any ConversationStoring)?
     private var streamTask: Task<Void, Never>?
@@ -61,8 +66,12 @@ final class PlaygroundViewModel: ObservableObject {
 
     // MARK: - Init
 
-    init(store: (any ConversationStoring)?) {
+    /// - Parameter server: the shared `LocalInferenceServer` from the
+    ///   `DashboardContext`. Required — no default — so a future consumer can't
+    ///   silently reintroduce a second listener on the port.
+    init(store: (any ConversationStoring)?, server: LocalInferenceServer) {
         self.store = store
+        self.server = server
     }
 
     // MARK: - Lifecycle
@@ -297,7 +306,12 @@ struct AgentPlaygroundView: View {
 
     init(context: DashboardContext) {
         self.context = context
-        _viewModel = StateObject(wrappedValue: PlaygroundViewModel(store: context.conversationStore))
+        // The shared server — same instance the Inference pane controls, so a
+        // playground stream rides the one app listener on port 11235.
+        _viewModel = StateObject(wrappedValue: PlaygroundViewModel(
+            store: context.conversationStore,
+            server: context.inferenceServer
+        ))
     }
 
     var body: some View {

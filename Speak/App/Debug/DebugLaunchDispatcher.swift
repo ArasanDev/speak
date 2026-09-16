@@ -49,6 +49,7 @@
 import AppKit
 import os
 import SpeakCore
+import SpeakLLM
 import SwiftUI
 
 // MARK: - DebugTarget
@@ -273,7 +274,10 @@ final class DebugLaunchDispatcher {
             voiceOut: AppleSpeechSynthesizer(),
             // Bound to the SAME seeded defaults suite so debug theme edits
             // never touch the user's real settings.
-            themeEngine: ThemeEngine(settingsStore: settings)
+            themeEngine: ThemeEngine(settingsStore: settings),
+            // The controller's shared server — the debug dashboard's Inference
+            // pane / Playground must drive the same listener as a real session.
+            inferenceServer: controller.inferenceServer
         )
         let vc = DashboardWindowController(
             context: context,

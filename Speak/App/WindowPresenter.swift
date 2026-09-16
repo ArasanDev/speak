@@ -28,6 +28,7 @@
 import AppKit
 import Combine
 import SpeakCore
+import SpeakLLM
 import SwiftUI
 
 // MARK: - WindowPresenter
@@ -141,6 +142,11 @@ final class WindowPresenter {
             themeEngine: themeEngine,
             agentSessionRegistry: dictationController?.agentSessionRegistry,
             agentCallStore: dictationController?.agentCallStore,
+            // The ONE shared inference server — owned by DictationController so
+            // the Inference pane and Agent Playground never bind two listeners
+            // to port 11235. The `??` fallback (fresh, never-started instance)
+            // only fires when there is no controller, i.e. tests.
+            inferenceServer: dictationController?.inferenceServer ?? LocalInferenceServer(),
             answerAgentCallByVoice: { [weak self] call in
                 await self?.dictationController?.answerAgentCallByVoice(call) ?? .cancelled
             },
