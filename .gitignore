@@ -82,3 +82,7 @@ ai_tmp/
 .commandcode/
 .qoder/
 skills-lock.json
+
+# npx-installed skills land as symlinks into .agents/ (ignored) — a committed
+# symlink would dangle on fresh clones. `skills-lock.json` records provenance.
+.claude/skills/swiftui-expert-skill
