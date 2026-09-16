@@ -91,6 +91,40 @@ in the same working session, committed separately:
   pumps a nested run loop (transport redesign deferred); `docs/roadmap.md:159` still describes
   `.llmCleanupFailed` surfacing semantics that no longer reach the session.
 
+**Live runtime validation (2026-09-17).** Built, launched, and exercised the app end-to-end
+with live `os.Logger` streaming. Verified working:
+
+- **Full dictation pipeline via `--debug-open simulate-dictation`** [verified]: fixture
+  `hello_speech.caf` → real `SpeechAnalyzer` → progressive `StreamingChunkCoordinator`
+  (1 chunk, the H5 path) → Foundation Models cleanup → `PasteboardWriter` write + Cmd+V →
+  text landed in focused TextEdit → `HistoryStore` row saved. `stopToPaste=174ms`,
+  `cleanup=1ms` (chunk pre-cleaned during capture — progressive overlap working).
+- **CLI IPC round-trip** [verified]: `--status`/`--start`/`--stop` → `idle → listening → idle`.
+- **Normal launch** [verified]: AX-trust rising edge → CGEventTap armed →
+  `permissionsNeeded` cleared; `SpeechPrewarmer` warm-up complete; HistoryStore +
+  AgentCallStore open; `CLIPortServer` registered; `CoreAudioDeviceMonitor` listening.
+- **Silent-input classifier** [verified earlier]: real-mic run with no speech →
+  "No audio detected" overlay error, no history row — honest empty-input handling.
+- **History** [verified]: real dictations persist with cleanup latencies 1.1–4.2s.
+- `[voice-stt]` paste prefix = configured `agentPrefixStyle` (.voiceSTT), applied to
+  every paste by design — not a defect.
+
+Two defects found by live logs and fixed (`38a7eea`):
+
+1. **Stale fixture path** — `helloSpeechFixture()` walked to `repoRoot/SpeakTests/`
+   (pre-restructure); actual is `Speak/Tests/SpeakTests/Fixtures/`. simulate-dictation
+   aborted with "not found". Fixed; pinned by `testHelloSpeechFixtureResolvesToExistingFile`.
+2. **Inference API key rotated per-request in degraded Keychain state** — dev rebuilds
+   change the binary cdhash, so the stored item's ACL rejected reads while `SecItemAdd`
+   still returned `errSecDuplicateItem` (-25299). `currentKey()` had no cache and
+   `validate()` calls it per request → every Bearer check compared against a fresh
+   random key → all requests 401'd. Now caches per launch + repairs the slot via
+   update → delete+add fallback. Pinned by 3 `LocalAPIKeyStoreStabilityTests`.
+
+**Gates after fixes**: `make gates` — build OK · 1040 tests, 10 skipped, 0 failures ·
+lint 0 serious · moat pass. Not verified live: real Cmd+V cancellation mid-keystroke,
+real TCC prompt path, aux capture with real audio, hotkey double-tap by hand.
+
 ---
 
 **Loop #99 (2026-09-11) — Settings & Control Room: all six sensory seams wired to real data flows.**
