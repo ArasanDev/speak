@@ -7,10 +7,9 @@
 // This file is entirely wrapped in `#if DEBUG` so zero bytes reach the release binary.
 //
 // Fixture resolution strategy:
-//   Prefer the test bundle's Fixtures/ directory so this works in normal test runs.
-//   Fall back to a source-tree relative path (`#filePath`-anchored) for the
-//   app target's DEBUG build, where the test bundle is not present.
-//   The CAF file is SpeakTests/Fixtures/hello_speech.caf.
+//   Source-tree relative path (`#filePath`-anchored) — the fixture is not
+//   bundled into Speak.app, so the DEBUG app resolves it from the checkout.
+//   The CAF file is Speak/Tests/SpeakTests/Fixtures/hello_speech.caf.
 //   [decision: source-tree-relative path for dev builds; moat-safe since DEBUG only]
 
 #if DEBUG
@@ -40,20 +39,23 @@ public final class FixtureAudioProducer: AudioBufferProducing, @unchecked Sendab
     /// Convenience: resolve the `hello_speech.caf` fixture from the source tree.
     ///
     /// Walks up from this source file's directory to find
-    /// `SpeakTests/Fixtures/hello_speech.caf`. Returns `nil` if the file does
-    /// not exist at the expected location.
+    /// `Tests/SpeakTests/Fixtures/hello_speech.caf` under `Speak/`. Returns
+    /// `nil` if the file does not exist at the expected location.
     ///
     /// [decision: source-tree-relative path via `#filePath`; works for dev DEBUG
     ///  builds on the same machine; not a release concern (DEBUG only)]
     public static func helloSpeechFixture() -> URL? {
         // #filePath resolves to SpeakCore/Debug/FixtureAudioProducer.swift at build time.
-        // Walk up two levels: SpeakCore/Debug → SpeakCore → repo root.
+        // Walk up three levels: Debug/ → SpeakCore/ → Speak/ — then down into
+        // Tests/SpeakTests/Fixtures/. [fix: stale path — the previous walk
+        // expected repoRoot/SpeakTests but tests live under Speak/Tests/.]
         let thisFile = URL(fileURLWithPath: #filePath)
-        let repoRoot = thisFile
+        let speakDir = thisFile
             .deletingLastPathComponent() // Debug/
             .deletingLastPathComponent() // SpeakCore/
-            .deletingLastPathComponent() // repo root
-        let fixtureURL = repoRoot
+            .deletingLastPathComponent() // Speak/
+        let fixtureURL = speakDir
+            .appendingPathComponent("Tests")
             .appendingPathComponent("SpeakTests")
             .appendingPathComponent("Fixtures")
             .appendingPathComponent("hello_speech.caf")

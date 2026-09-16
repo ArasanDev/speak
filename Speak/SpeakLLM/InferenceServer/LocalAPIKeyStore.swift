@@ -20,6 +20,15 @@ import Security
 /// The actor isolation prevents concurrent key generation races.
 public actor LocalAPIKeyStore {
 
+    // MARK: - State
+
+    /// In-memory copy of the active key. `currentKey()` and `validate()` call
+    /// this first so a Keychain read failure cannot make the key rotate
+    /// mid-session (previously every `validate` regenerated → all Bearer
+    /// checks failed once the stored item became unreadable, e.g. after a
+    /// dev rebuild changed the binary's cdhash relative to the item's ACL).
+    private var cachedKey: String?
+
     // MARK: - Constants
 
     /// Keychain service identifier for the inference server API key.
@@ -45,12 +54,18 @@ public actor LocalAPIKeyStore {
     ///
     /// - Returns: The API key string (e.g., "sk-speak-9F8A7B6C-...").
     public func currentKey() -> String {
+        if let cachedKey { return cachedKey }
         if let existing = readFromKeychain() {
+            cachedKey = existing
             return existing
         }
         let newKey = generateKey()
-        saveToKeychain(newKey)
-        logger.info("Generated new inference API key")
+        if saveToKeychain(newKey) {
+            logger.info("Generated new inference API key")
+        } else {
+            logger.error("Inference API key not persisted — in-memory key is valid for this launch only")
+        }
+        cachedKey = newKey
         return newKey
     }
 
@@ -62,9 +77,14 @@ public actor LocalAPIKeyStore {
     /// - Returns: The newly generated API key string.
     public func regenerate() -> String {
         deleteFromKeychain()
+        cachedKey = nil
         let newKey = generateKey()
-        saveToKeychain(newKey)
-        logger.info("Regenerated inference API key")
+        if saveToKeychain(newKey) {
+            logger.info("Regenerated inference API key")
+        } else {
+            logger.error("Regenerated API key not persisted — in-memory key is valid for this launch only")
+        }
+        cachedKey = newKey
         return newKey
     }
 
@@ -121,21 +141,41 @@ public actor LocalAPIKeyStore {
     }
 
     /// Saves the API key to the macOS Keychain.
-    private func saveToKeychain(_ key: String) {
-        guard let data = key.data(using: .utf8) else { return }
+    ///
+    /// - Returns: `true` if the key was persisted. A stale item can occupy the
+    ///   (service, account) slot while remaining unreadable to this binary —
+    ///   e.g. an item written by a previous dev build whose cdhash no longer
+    ///   satisfies the item's access requirement. In that case `SecItemAdd`
+    ///   returns `errSecDuplicateItem`; fall back to updating the value, then
+    ///   delete-and-recreate, matching LLMKeychainStore's delete-before-add.
+    private func saveToKeychain(_ key: String) -> Bool {
+        guard let data = key.data(using: .utf8) else { return false }
 
-        let attributes: [String: Any] = [
+        let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.keychainService,
-            kSecAttrAccount as String: Self.keychainAccount,
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            kSecAttrAccount as String: Self.keychainAccount
         ]
+        var attributes = query
+        attributes[kSecValueData as String] = data
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
 
-        let status = SecItemAdd(attributes as CFDictionary, nil)
+        var status = SecItemAdd(attributes as CFDictionary, nil)
+        if status == errSecDuplicateItem {
+            status = SecItemUpdate(
+                query as CFDictionary,
+                [kSecValueData as String: data] as CFDictionary
+            )
+            if status != errSecSuccess {
+                SecItemDelete(query as CFDictionary)
+                status = SecItemAdd(attributes as CFDictionary, nil)
+            }
+        }
         if status != errSecSuccess {
             logger.error("Failed to save API key to Keychain: status \(status)")
+            return false
         }
+        return true
     }
 
     /// Deletes the API key from the macOS Keychain.
@@ -143,7 +183,7 @@ public actor LocalAPIKeyStore {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.keychainService,
-            kSecAttrAccount as String: Self.keychainAccount,
+            kSecAttrAccount as String: Self.keychainAccount
         ]
 
         SecItemDelete(query as CFDictionary)
