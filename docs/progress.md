@@ -2085,3 +2085,35 @@ follow-up: near-rectangle silhouette, not a circle-ended capsule.
 (all touched files clean; remaining warnings pre-existing) ·
 `make verify-moat` 7/7. Overlay screenshot-verified live in listening/done/
 error states via `--debug-open overlay-demo*`.
+
+### 2026-09-17 — UI philosophy canonized + docs↔code reconciliation
+
+**Owner direction:** "UI components need a proper philosophy — everything is
+scattered; before the next phase the project must read as a proper open-source
+project." Audited the docs surface: the scaffolding (LICENSE/CONTRIBUTING/CoC/
+SECURITY/issue templates/CI) was already complete — the real gap was that the
+UI docs had drifted from the code.
+
+**What changed:**
+- `docs/ui/philosophy.md` (new) — the canonical "why": instrument-not-app
+  thesis, the three load-bearing rules (warm=human/cool=agent · onAir=tally ·
+  signal-driven motion), per-surface ideas (HUD=instrument, menubar=presence
+  dot, dashboard=console, settings=workbench, onboarding=handshake,
+  history=record), the shape language table, the never list, and the real
+  design-system file map.
+- `docs/ui/foundations.md` — §2 replaced the phantom `Tokens.swift` enum
+  (never existed) with the actual token files (`SpeakColors`/`SpeakTypography`/
+  `SpeakMotion`/`SpeakCard`/`SpeakTheme`/`HUDLane.panelShape`); surface map
+  gained Dashboard + conversation overlay + Pet (spec'd, not shipped); §3
+  motion grammar now cites `SpeakMotion` constants (120/320/spring .35·.8/4s);
+  §6 icon table corrected to the real `iconPresentation` mapping.
+- `docs/ui/surfaces-v0.md` §2.3 — HUD section rewritten for the shipped
+  near-rect panel (panelShape r14, 560–760pt sizes, morphing leading slot,
+  opt-in borders); old capsule/LevelMeterView description removed.
+- `docs/README.md` — index + task routing now point at philosophy.md first.
+- `README.md` — hero image slot added (`img/speak-hero.png`, 720pt).
+- `docs/assets/hero-image-prompt.md` (new) — generation prompt for the hero,
+  anchored to the real palette (ink/bone/humanAmber/onAir) with a negative
+  prompt (no capsule panel, no RGB glow, no mascot).
+
+**Verification:** `make verify-moat` 7/7. Docs-only change; no build needed.

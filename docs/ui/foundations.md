@@ -15,11 +15,14 @@
 | Menubar item | always present | — |
 | Menubar dropdown | click icon | takes focus |
 | Recording HUD | double-tap Fn | **never steals focus** [hard constraint] |
+| Dashboard window | `Open speak…` in menubar | takes focus [implemented] |
 | Onboarding window | first launch / perm revoke | takes focus (justified) |
 | Settings window | `Settings…` in menubar | takes focus |
 | History window | `History…` in menubar | takes focus |
 | Permission recovery banner | on perm denied | non-focus |
 | About / Help | menubar `About` | takes focus |
+| Conversation overlay | agent bridge call | non-activating panel [implemented] |
+| Voice Desktop Pet | setting toggle | non-activating, draggable [spec'd: `specs/frontend-identity.md` §5 — not yet shipped] |
 | Snippet editor | menubar `Snippets…` | takes focus [planned: v1] |
 | Custom-vocab editor | settings row | takes focus [planned: v1] |
 | Mode editor | settings row | takes focus [planned: v1] |
@@ -43,8 +46,9 @@
 
    Double-tap Fn ──────────────────────────────► HUD at bottom-center
    ┌──────────────────────────────────────────────┐
-   │  ▌▌▌▌▌  Listening…                            │  ← 340×80, non-activating NSPanel
-   └──────────────────────────────────────────────┘
+   │  ▌▌▌▌▌  LISTENING · 0:12                      │  ← near-rect panel
+   └──────────────────────────────────────────────┘    560–760 × 64–88 (3 sizes),
+        micro-curved corners (r14 continuous)           non-activating NSPanel
 ```
 
 ---
@@ -66,64 +70,28 @@ Anti-pattern: bespoke icons + custom buttons + heavy shadows → looks like Elec
 
 ## 2. Design tokens [decision]
 
-**Rule:** every constant lives in `SpeakCore/UI/Tokens.swift`. No magic numbers in views.
+**Rule:** every constant lives in `App/DesignSystem/` (or `App/Theme/SpeakTheme.swift`
+for the content voice). No magic numbers in views; every value is `[decision]`-tagged.
 
-```swift
-// SpeakCore/UI/Tokens.swift
-public enum Tokens {
-    public enum Radius {
-        public static let card: CGFloat   = 14   // HUD, settings card
-        public static let pill: CGFloat   = 999  // full-pill (menubar split, status chips)
-        public static let sheet: CGFloat  = 18   // window sheets
-        public static let button: CGFloat = 8    // form buttons
-    }
+The real token files — there is **no** `Tokens.swift`; the design system is a set of
+SwiftUI extensions:
 
-    public enum Spacing {
-        public static let xxs: CGFloat = 2
-        public static let xs:  CGFloat = 4
-        public static let s:   CGFloat = 8
-        public static let m:   CGFloat = 12
-        public static let l:   CGFloat = 16
-        public static let xl:  CGFloat = 24
-        public static let xxl: CGFloat = 32
-    }
+| File | Owns |
+|---|---|
+| `App/DesignSystem/SpeakColors.swift` | `Color.speak*` — the two-temperature palette (warm = human, cool = agent), `onAir`/`delivered`/`error`/`warning`/`ok` status roles, surface tokens (`speakInk`/`speakInk2`/`speakBone`/`speakMica`), workspace tokens (`speakSidebarBg`/`speakWindowCanvas`/`speakCardCanvas`/`speakCardBorder`), and the flow-border spectra. All theme-resolved via `SpeakThemeRuntime`. |
+| `App/DesignSystem/SpeakTypography.swift` | `Font.speak*` — New York serif display / SF Pro body / SF Mono transcript faces; 11/13/15/20/28 scale; regular + semibold only. |
+| `App/Theme/SpeakTheme.swift` | `Font.speakMono*` — the Monaco content voice (history rows, timestamps, keycaps). The one file that names the family. |
+| `App/DesignSystem/SpeakMotion.swift` | `SpeakMotion.micro/state/idleBreath` — 120 ms / 320 ms / spring(0.35, 0.8); all Reduce-Motion-aware. |
+| `App/DesignSystem/SpeakCard.swift` | `speakCard()` (r16 raised card) / `speakInset()` (r8 recessed well) — the only two container primitives. |
+| `App/Overlay/HUDLaneViews.swift` | `HUDLane.panelShape` / `panelCornerRadius` (14, continuous) — the near-rect HUD silhouette shared by clip, wash, hairline, and border layers. |
 
-    public enum Sizing {
-        public static let menubarIcon:     CGFloat = 18  // logical pt
-        public static let hudWidth:        CGFloat = 340 // [decision: 60 chars @ 13pt]
-        public static let hudHeight:       CGFloat = 80  // [decision: 3 lines + meter]
-        public static let hudYFromBottom:  CGFloat = 24  // [decision]
-        public static let levelBars:       Int     = 5
-        public static let levelBarW:       CGFloat = 3
-        public static let levelBarGap:     CGFloat = 3
-        public static let levelBarMin:     CGFloat = 3
-        public static let levelBarMax:     CGFloat = 20
-    }
+**Shape language** (see `philosophy.md` §3): near-rect 14 = a *surface*; card 16 = a *group*;
+well 8 = a *recess*; capsule = a *label* only, never a panel.
 
-    public enum Motion {
-        public static let fast:        Double = 0.12  // bar/level meter tween
-        public static let normal:      Double = 0.18  // panel show/hide
-        public static let slow:        Double = 0.36  // state change, accent pulse
-        public static let flash:       Double = 0.6   // "done" green flash
-        public static let breathCycle: Double = 1.2   // idle breathing
-    }
-
-    public enum Opacity {
-        public static let idle:   Double = 0.45
-        public static let active: Double = 0.85
-        public static let peak:   Double = 1.0
-    }
-
-    public enum State {
-        public static let idle       = Color.secondary
-        public static let listening  = Color.red
-        public static let processing = Color.orange
-        public static let done       = Color.green
-        public static let error      = Color.red
-        public static let muted      = Color.gray
-    }
-}
-```
+**Channel colors** (load-bearing semantics — a theme may change hue, never meaning):
+`speakHumanAmber` = the human is acting · `speakAgentViolet` = an agent is acting ·
+`speakOnAir` = mic is capturing (**iff** — tally-light hard rule) · `speakDelivered` =
+terminal success only · `speakVoiceBlue` = fixed functional voice blue (theme-independent).
 
 ---
 
@@ -131,17 +99,24 @@ public enum Tokens {
 
 **The HUD is the only continuously-animated surface.** Every other surface animates only on show/hide.
 
-Use `.easeInOut` for state transitions. Use `.spring(response: 0.3, dampingFraction: 0.8)` for show/hide of small panels. Use `.linear` for the level meter.
+The canonical constants live in `SpeakMotion` (`App/DesignSystem/SpeakMotion.swift`):
 
-**Respect Reduce Motion** (`NSWorkspace.accessibilityDisplayShouldReduceMotion`):
-- Replace idle "breathing" bars with static dim bars.
-- Replace show/hide spring with a quick fade (0.12 s).
-- Disable the "done" green flash; show checkmark directly.
+| Constant | Value | Use |
+|---|---|---|
+| `microDuration` | 120 ms | hover, tap feedback, level-meter tween |
+| `stateDuration` | 320 ms | state transitions (idle → listening → processing → done) |
+| `stateSpring` | spring(0.35, 0.8) | panel show/hide, state changes |
+| `idleBreathCycle` | 4 s | the one licensed idle animation |
 
-State transitions (idle → listening → processing → done): use `Motion.slow` (0.36 s). Level meter transitions: use `Motion.fast` (0.12 s).
+**Respect Reduce Motion** — `SpeakMotion.micro(reduceMotion:)` /
+`state(reduceMotion:)` / `idleBreath(reduceMotion:)` already encode the
+fallbacks: crossfades replace movement, breath becomes a slow opacity pulse.
 
-No animation exceeds 600 ms except the "done" hold.
+No animation exceeds ~600 ms except the "done" hold.
 No rotation, bounce, or parallax. These read as toy-like on Mac.
+Every animation maps to a real signal (audio level, state transition,
+attention request) — if it doesn't read from a signal, cut it
+(motion charter, `specs/frontend-identity.md` §4).
 
 Reference: Superwhisper's HUD has the cleanest motion. Wispr's top-pill HUD is the cautionary tale — too much motion.
 
@@ -169,11 +144,14 @@ Hotkey labels use standard macOS key glyphs ("Fn", "Globe", "⌘", "⌥").
 
 ## 6. Menubar icon states [implemented]
 
-| State | SF Symbol | Color | Animation |
+Mapping: `SpeakCore/Engine/MenubarIcon.swift` (state → case) →
+`StatusBarController.iconPresentation` (case → symbol + tint). `[verified]` by `MenubarIconTests`.
+
+| State | SF Symbol | Color | Rendering |
 |---|---|---|---|
-| idle | `waveform` | primary | — |
-| listening | `waveform.circle.fill` | red | slow pulse (Reduce Motion: static) |
-| processing | `hourglass` | orange | rotate |
-| done | `checkmark.circle.fill` | green | hold 600 ms → idle |
-| error | `exclamationmark.triangle.fill` | red | static |
+| idle | `waveform` | secondary label | template (auto-invert) |
+| listening | `waveform.circle.fill` | systemRed | tinted |
+| processing | `hourglass` | systemYellow | tinted |
+| done | `checkmark.circle` | systemGreen | tinted, hold 600 ms → idle |
+| error | `xmark.circle` | systemRed | tinted |
 | muted | `mic.slash.fill` | gray | static [planned: v0.1] |

@@ -99,65 +99,37 @@ Modes submenu, Languages submenu, Engine submenu → [planned: v1].
 
 ---
 
-## 2.3 Recording HUD [implemented]
+## 2.3 Recording HUD [implemented — unified near-rect panel]
 
 **Hard constraint:** `NSPanel`, `NSNonActivatingPanelMask`. Never steals focus. Never shown in idle.
 
 **Constraint:** bottom-center position only. Top-center (Wispr style) is explicitly rejected — it steals attention from the dictating app.
 
-Position: 340 pt wide, 80 pt tall, 24 pt from screen bottom (`Tokens.Sizing.hudYFromBottom`).
-Background: `.hudWindow` material. Corner radius: `Tokens.Radius.card` (14 pt).
+**Silhouette:** one shared shape — `HUDLane.panelShape` = `RoundedRectangle(cornerRadius: 14, style: .continuous)` — a near-rectangle with micro-curved corners. The same constant drives clip, state wash, the 1 pt `speakCardBorder` hairline, and the opt-in animated borders, so layers cannot disagree. (Owner direction 2026-09-17: square-ish, not capsule.)
+
+**Sizes:** `OverlayPanelSize` in `SettingsStore` — compact 560×64 / standard 640×76 / wide 760×88, anchored ~24 pt from the screen bottom.
+
+**Anatomy (one frame, all four states):** leading slot (morphs by state — waveform/voice animation → progress → ✓ → ⚠) · header line carrying phase + inline timer (`LISTENING · 0:12`) · transcript lane (`model.windowText`) · quiet controls. No dividers, no icon tiles, no timer endcap. State is conveyed by the leading-slot symbol + a faint phase-colored wash over frosted glass — the frame never reshapes.
 
 ### Listening [implemented]
 
-```
-┌──────────────────────────────────────────────────┐
-│  ▌▌▌▌▌  Listening…  (or partial text here)        │
-└──────────────────────────────────────────────────┘
-```
-
-`LevelMeterView`: 5 bars, 3 pt wide, 3 pt gap, 3–20 pt height, cosine envelope. Breathing animation when `isActive = false`; real mic level when `isActive = true`.
-
-`Text`: live partial transcript or "Listening…" placeholder, `lineLimit(3)`, 13 pt.
-
-**v0.1 additions [design-exploration]:** confidence-colored transcript (low-confidence words in `.secondary`); live duration readout in right corner ("0:04", 11 pt secondary).
+Voice animation in the leading slot (style + color configurable in Settings → Overlay: spectrum bars / sonar / ring gauge), `LISTENING` header with live timer, streaming partial text in the lane.
 
 ### Processing [implemented]
 
-```
-┌──────────────────────────────────────────────────┐
-│  ⏳  Cleaning up…                                 │
-└──────────────────────────────────────────────────┘
-```
-
-Small `ProgressView` (scale 0.7) + "Cleaning up…" text (secondary). Panel held for full cleanup duration.
-
-Cleanup failure: "Cleanup failed — pasting raw transcript" for 1.2 s, then transitions to `done`.
-Cleanup disabled: show "Pasting…" instead of "Cleaning up…" [planned: v0.1].
+Leading slot morphs to a progress indicator; header reads the processing phase; lane shows the captured transcript settling. Panel held for the full cleanup duration. Cleanup failure falls back to raw transcript and still reaches `.done` (fallback is invisible by design).
 
 ### Done [implemented]
 
-```
-┌──────────────────────────────────────────────────┐
-│  ✓  Done                                          │
-└──────────────────────────────────────────────────┘
-```
-
-`checkmark.circle.fill` (15 pt, green) + "Done" text. Held 600 ms. Then panel hides.
+Leading slot shows a delivered checkmark; `delivered`-role wash. Held ~600 ms, then the panel hides.
 
 Edge case: paste silently lost (e.g., secure field) → show "Done — text on clipboard" for 1.5 s + "Copy" button [planned: v0.1].
 
-### Error [implemented — implicit]
+### Error [implemented]
 
-Current: HUD hides immediately on `.error`. User sees only the red triangle in the menubar.
+Leading slot shows an error symbol with the error wash; lane carries the short message + next action ("Mic permission is off — open System Settings"). Instrument-voice copy (see `philosophy.md` §4 never-list).
 
-**v0.1 proposed:**
-```
-┌──────────────────────────────────────────────────┐
-│  ⚠  Mic permission denied — open System Settings  │
-└──────────────────────────────────────────────────┘
-```
-340×60 pill, 4 s auto-dismiss. "Details…" button opens relevant Settings pane.
+**Opt-in border animation [implemented]:** Settings → Overlay offers none / full glow / edge-flow, with tint, speed, and light-count controls. Default is `none` — the static hairline is the shipped look. When enabled, the animation follows `panelShape` and honors the signal rule (the `onAir` spectrum shows only while the mic is capturing).
 
 ### Edit-before-paste [planned: v1]
 

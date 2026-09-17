@@ -1,5 +1,9 @@
 # `speak`
 
+<p align="center">
+  <img src="img/speak-hero.png" alt="speak — the recording HUD floating over a Mac desktop" width="720">
+</p>
+
 > **Your voice is the new keyboard.** macOS-native, 100% local, free, open-source
 > voice dictation and developer agent interface — speech → on-device AI neat-writing → pasted at cursor.
 
