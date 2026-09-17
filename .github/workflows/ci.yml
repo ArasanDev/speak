@@ -1,9 +1,18 @@
 name: CI
 
-# Trigger on every push and every PR. Cancel in-flight runs for the same
-# branch/PR so a rapid push sequence doesn't queue a pile of runners.
+# Release-time CI, not standing CI.
+#
+# speak is a local-first project: the developer's Mac is the only source of
+# truth for validation (`make gates` locally). Nothing here runs on push —
+# the full suite is triggered manually at release time via workflow_dispatch
+# (Actions tab → CI → Run workflow), once the local gates are green.
+#
+# The one exception: moat-audit still runs on pull_request. External
+# contributions can't be trusted to have run local gates, and the moat audit
+# is the structural check that catches a PR adding cloud egress, telemetry,
+# or a third-party dependency. It's a ~30s ubuntu job (free on public repos).
 on:
-  push:
+  workflow_dispatch:
   pull_request:
 
 concurrency:
@@ -22,11 +31,13 @@ jobs:
       - name: Structural moat audit (no Xcode needed)
         run: make verify-moat
 
-  # Full build/test/lint. speak targets macOS 26 (Tahoe) + Xcode 26 and imports
-  # FoundationModels + SpeechAnalyzer, which only exist on the macOS 26 SDK.
-  # GitHub's `macos-26` image ships Xcode 26; `macos-latest`/older images fail
-  # with `no such module 'FoundationModels'`, so this job MUST pin macos-26.
+  # Full build/test/lint. Runs ONLY on manual dispatch — release-time
+  # verification, not per-push. speak targets macOS 26 (Tahoe) + Xcode 26 and
+  # imports FoundationModels + SpeechAnalyzer, which only exist on the macOS 26
+  # SDK. GitHub's `macos-26` image ships Xcode 26; `macos-latest`/older images
+  # fail with `no such module 'FoundationModels'`, so this job MUST pin macos-26.
   build-test-lint:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-26
     timeout-minutes: 90
     steps:

@@ -75,7 +75,7 @@ APP_BIN   := Speak.app/Contents/MacOS/Speak
 # Local history store (P9). `make history` dumps recent dictations (raw vs cleaned).
 HISTORY_DB := $$HOME/Library/Application Support/speak/history.sqlite
 
-.PHONY: all help generate generate-force build test test-fast eval study lint fmt run kill relaunch restart logs logs-show history history-eval doctor gates lsp clean install clean-install uninstall install-mcp-user register-mcp register-mcp-apply github-release release verify-moat dev-cert reset-permissions release-preflight
+.PHONY: all help generate generate-force build test test-fast eval study lint fmt run kill relaunch restart logs logs-show history history-eval doctor compat gates lsp clean install clean-install uninstall install-mcp-user register-mcp register-mcp-apply github-release release verify-moat dev-cert reset-permissions release-preflight
 
 all: build
 
@@ -272,6 +272,11 @@ doctor:
 	@codesign -dvv "$(APP)" 2>&1 | grep -E "Authority=|Signature" | sed 's/^/  /' || echo "  (unsigned / not built)"
 	@printf -- "-- permissions --\n"
 	@echo "  TCC grant state isn't queryable; if hotkey/paste fail after a re-sign: make reset-permissions"
+
+## compat: one-shot compatibility check — arm64, M5/M4 chip, macOS 26+, dev tools.
+##         Safe for end users (read-only, no sudo). Use before installing or bug reports.
+compat:
+	@bash scripts/check-compat.sh
 
 ## gates: run the full merge gate in order — build, test, lint, moat. The loop's done-check.
 ## pipefail (.SHELLFLAGS) makes each `make <gate> | tail` pipeline fail when the

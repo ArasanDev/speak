@@ -35,10 +35,13 @@ make gates
 `make build` runs `xcodegen generate` automatically. A clean clone has no
 `.xcodeproj` (it is git-ignored; `project.yml` is the source of truth).
 
-**CI** (`.github/workflows/ci.yml`) runs two jobs on every push/PR: `moat-audit`
-(ubuntu, `make verify-moat` — no Xcode needed) and `build-test-lint` (pinned to
-the `macos-26` runner image, since `FoundationModels`/`SpeechAnalyzer` only
-resolve on the macOS 26 SDK — `make build`, `make test`, `make lint`).
+**CI** (`.github/workflows/ci.yml`) is release-time, not per-push — speak is
+local-first, so `make gates` on your Mac is the real gate. `moat-audit` runs
+on pull requests only (it guards external contributions — a PR adding cloud
+egress, telemetry, or a third-party dep fails it). The full
+`build-test-lint` job (`macos-26` runner — `FoundationModels`/`SpeechAnalyzer`
+only resolve on the macOS 26 SDK) runs on manual `workflow_dispatch` when
+cutting a release.
 
 ---
 

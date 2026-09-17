@@ -2117,3 +2117,28 @@ UI docs had drifted from the code.
   prompt (no capsule panel, no RGB glow, no mascot).
 
 **Verification:** `make verify-moat` 7/7. Docs-only change; no build needed.
+
+### 2026-09-17 — CI → release-time only, narrow support matrix, `make compat`
+
+**Owner direction:** no standing CI spend — local is the only validation gate;
+run the full suite manually at release time. Support narrows to Apple Silicon
+M5 (primary) / M4 (supported — it runs macOS 26). Product presents as alpha.
+
+**What changed:**
+- `.github/workflows/ci.yml` — `push` trigger removed. `moat-audit` now runs
+  on `pull_request` only (guards external contributions against egress/dep
+  additions; ~30s ubuntu job, free on public repos). `build-test-lint` is
+  `workflow_dispatch`-only — trigger from the Actions tab when releasing.
+- `scripts/check-compat.sh` (new) + `make compat` — read-only one-shot check:
+  arm64, M5/M4 chip, macOS ≥26, Xcode 26 + xcodegen/swiftlint for source
+  builds. Verified: this machine (M5, 26.5.2) → SUPPORTED.
+- `README.md` — Installation section gains an explicit **alpha** status note;
+  requirements narrowed to M5/M4 + `make compat`; badge updated.
+- `CLAUDE.md` + `CONTRIBUTING.md` — CI sections rewritten to the
+  release-time model.
+
+**Note for future sessions:** the remote reported branch-protection hints
+("changes must be made through a pull request", "2 required status checks
+expected") on the 9f52e7f push — it went through anyway (admin bypass), but
+if protection is ever enforced for real, pushes land via PRs and the manual
+dispatch model still applies.

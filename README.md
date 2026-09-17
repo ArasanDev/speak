@@ -9,7 +9,7 @@
 
 [![CI](https://github.com/ArasanDev/speak/actions/workflows/ci.yml/badge.svg)](https://github.com/ArasanDev/speak/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/platform-macOS%2026%2B%20(Tahoe)-lightgrey)](#quick-start)
-[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-black)](#quick-start)
+[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-M5%20(M4%20supported)-black)](#installation)
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange)](#tech-stack)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Moat audit](https://img.shields.io/badge/moat%20audit-7%2F7%20passed-green)](#privacy--the-7-point-moat)
@@ -66,7 +66,10 @@ Existing voice tools either compromise user privacy for cloud AI, produce raw ra
 
 ## Installation
 
-Requirements: **macOS 26+ (Tahoe)**, **Apple Silicon** (M1/M2/M3/M4/M5).
+> **Status: alpha.** Actively developed; expect rough edges. Local-first means
+> exactly that — the app validates on your machine, not ours.
+
+Requirements: **macOS 26+ (Tahoe)**, **Apple Silicon M5** (primary target; **M4** supported — it runs macOS 26). Not sure? Run `make compat` — a read-only one-shot check of chip, OS, and toolchain.
 
 ### Option 1: Homebrew Cask (Recommended for macOS Users)
 
