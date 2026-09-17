@@ -1,7 +1,7 @@
 # `speak`
 
 <p align="center">
-  <img src="img/speak-hero.png" alt="speak — the recording HUD floating over a Mac desktop" width="720">
+  <img src="docs/assets/speak-hero.png" alt="speak — a local voice HUD over a developer workspace" width="720">
 </p>
 
 > **Your voice is the new keyboard.** macOS-native, 100% local, free, open-source

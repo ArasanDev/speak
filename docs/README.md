@@ -54,4 +54,4 @@ Every session starts with `AGENTS.md` (the operating manual, one level up), then
 
 ## Other
 
-- `assets/` — image/asset workspace. `hero-image-prompt.md` holds the generation prompt for the README hero (`img/speak-hero.png`). `docs/assets/demo.gif` is still pending (referenced by the root README).
+- `assets/` — image/asset workspace. `hero-image-prompt.md` holds the generation prompts for all repo imagery (`docs/assets/speak-hero.png`, social card, product shot). `docs/assets/demo.gif` is still pending (referenced by the root README).

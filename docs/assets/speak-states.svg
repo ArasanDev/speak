@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="560" viewBox="0 0 1600 560" role="img" aria-labelledby="title desc">
+  <title id="title">speak interaction states</title>
+  <desc id="desc">Three stages of speak: listening, processing, and pasted.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#1F232B"/><stop offset="1" stop-color="#0D0F13"/></linearGradient>
+    <filter id="shadow"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#000" flood-opacity="0.4"/></filter>
+  </defs>
+  <rect width="1600" height="560" fill="#16181D"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif">
+    <g transform="translate(72 64)">
+      <text fill="#8A8F98" font-size="14" letter-spacing="3">THE LOCAL HANDOFF</text>
+      <text y="42" fill="#E9E6E0" font-size="32" font-weight="600">Speak. Clean. Deliver.</text>
+    </g>
+    <g transform="translate(72 172)">
+      <rect width="448" height="246" rx="24" fill="url(#bg)" stroke="#8A8F98" stroke-opacity="0.32" filter="url(#shadow)"/>
+      <text x="32" y="48" fill="#FFB25A" font-size="14" font-weight="600" letter-spacing="2">01  LISTENING</text>
+      <circle cx="50" cy="116" r="7" fill="#FF5C49"/>
+      <g stroke="#FFB25A" stroke-width="9" stroke-linecap="round"><path d="M138 135V97"/><path d="M176 150V82"/><path d="M214 162V70"/><path d="M252 142V90"/><path d="M290 128V104"/></g>
+      <text x="32" y="206" fill="#8A8F98" font-size="16">Your words stay on this Mac.</text>
+    </g>
+    <g transform="translate(576 172)">
+      <rect width="448" height="246" rx="24" fill="url(#bg)" stroke="#8A8F98" stroke-opacity="0.32" filter="url(#shadow)"/>
+      <text x="32" y="48" fill="#9D8CFF" font-size="14" font-weight="600" letter-spacing="2">02  CLEANING</text>
+      <circle cx="224" cy="120" r="40" fill="none" stroke="#9D8CFF" stroke-opacity="0.25" stroke-width="2"/>
+      <circle cx="224" cy="120" r="24" fill="none" stroke="#9D8CFF" stroke-width="4" stroke-dasharray="10 12"/>
+      <text x="32" y="206" fill="#8A8F98" font-size="16">Neat-writing, on device.</text>
+    </g>
+    <g transform="translate(1080 172)">
+      <rect width="448" height="246" rx="24" fill="url(#bg)" stroke="#8A8F98" stroke-opacity="0.32" filter="url(#shadow)"/>
+      <text x="32" y="48" fill="#5FBF8F" font-size="14" font-weight="600" letter-spacing="2">03  PASTED</text>
+      <circle cx="224" cy="120" r="34" fill="#5FBF8F" fill-opacity="0.12" stroke="#5FBF8F" stroke-width="3"/>
+      <path d="M205 121l13 13 29-32" fill="none" stroke="#5FBF8F" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="32" y="206" fill="#8A8F98" font-size="16">Clean intent at the cursor.</text>
+    </g>
+  </g>
+</svg>

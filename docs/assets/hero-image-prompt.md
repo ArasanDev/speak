@@ -4,10 +4,10 @@
 > GitHub social preview, done-state variant, app icon. Each prompt is
 > copy-paste ready; model-specific variants at the bottom.
 >
-> **Grounding note:** `img/speak-overlay-ui.png` is a screenshot of the *old*
-> capsule HUD (round end caps, dotted dividers) — **stale, do not use as a
-> visual reference**. The shipped panel is described in "Panel anatomy" below;
-> generate to that, or better: screenshot the real thing (see Option B).
+> **Grounding note:** the shipped panel is described in "Panel anatomy"
+> below — generate to that, or better: screenshot the real thing (see
+> Option B). Do not feed any older HUD mockups or sketches to the model;
+> the panel shape changed and stale references will reproduce the old look.
 
 ---
 
@@ -44,7 +44,7 @@
 
 ---
 
-## Prompt 1 — README hero (`img/speak-hero.png`, 1440×720)
+## Prompt 1 — README hero (`docs/assets/speak-hero.png`, 1440×720)
 
 ```
 A photorealistic wide shot of a Mac desktop at dusk: a muted near-black
@@ -62,7 +62,7 @@ instrument aesthetic, soft ambient light, shallow depth of field, no clutter,
 no people, no logos. High-end product photography, 16:9.
 ```
 
-## Prompt 2 — HUD product shot (isolated, `img/speak-hud-product.png`, 1600×900)
+## Prompt 2 — HUD product shot (isolated, `docs/assets/speak-hud-product.png`, 1600×900)
 
 ```
 Studio product render of a floating macOS HUD panel on a seamless dark ink
@@ -75,7 +75,7 @@ a tiny coral-red tally dot (#FF5C49). Clean, instrument-grade, museum-product
 lighting, crisp on the panel with gentle glow falloff, no other objects.
 ```
 
-## Prompt 3 — GitHub social preview (`img/speak-social.png`, 1280×640)
+## Prompt 3 — GitHub social preview (`docs/assets/speak-social.png`, 1280×640)
 
 ```
 A minimal dark social card, ink background (#16181D). Centered composition:

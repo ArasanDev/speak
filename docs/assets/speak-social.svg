@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">speak — your voice is the new keyboard</title>
+  <desc id="desc">A dark social preview card with a warm amber voice meter and local-first developer tooling message.</desc>
+  <defs>
+    <radialGradient id="bg" cx="72%" cy="42%" r="82%">
+      <stop offset="0" stop-color="#252A33"/>
+      <stop offset="0.55" stop-color="#16181D"/>
+      <stop offset="1" stop-color="#0D0F13"/>
+    </radialGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2C323B" stop-opacity="0.92"/>
+      <stop offset="1" stop-color="#16181D" stop-opacity="0.98"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-30%" width="140%" height="170%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#000000" flood-opacity="0.46"/>
+    </filter>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <path d="M74 492H1206" stroke="#8A8F98" stroke-opacity="0.18"/>
+  <circle cx="1040" cy="180" r="190" fill="#9D8CFF" opacity="0.035"/>
+
+  <g transform="translate(92 132)">
+    <text x="0" y="0" fill="#FFB25A" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="18" font-weight="600" letter-spacing="4">LOCAL VOICE INTERFACE</text>
+    <text x="0" y="116" fill="#E9E6E0" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="104" font-weight="650" letter-spacing="-6">speak</text>
+    <text x="4" y="170" fill="#B9BDC5" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif" font-size="28">your voice is the new keyboard</text>
+    <text x="4" y="226" fill="#8A8F98" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif" font-size="17" letter-spacing="1.4">100% LOCAL  ·  OPEN SOURCE  ·  OFFLINE</text>
+  </g>
+
+  <g transform="translate(720 228)" filter="url(#shadow)">
+    <rect width="440" height="128" rx="14" fill="url(#glass)" stroke="#8A8F98" stroke-opacity="0.62"/>
+    <circle cx="48" cy="64" r="7" fill="#FF5C49"/>
+    <g stroke="#FFB25A" stroke-width="7" stroke-linecap="round">
+      <path d="M132 78V50"/><path d="M164 88V40"/><path d="M196 99V29"/><path d="M228 84V44"/><path d="M260 72V56"/>
+    </g>
+    <path d="M310 31V97" stroke="#8A8F98" stroke-opacity="0.35"/>
+    <g fill="#9D8CFF" opacity="0.72"><circle cx="354" cy="58" r="3"/><circle cx="370" cy="58" r="3"/><circle cx="386" cy="58" r="3"/></g>
+    <text x="310" y="84" fill="#8A8F98" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" letter-spacing="1">READY</text>
+  </g>
+</svg>
