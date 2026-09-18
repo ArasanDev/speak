@@ -38,10 +38,10 @@ make gates
 **CI** (`.github/workflows/ci.yml`) is release-time, not per-push — speak is
 local-first, so `make gates` on your Mac is the real gate. `moat-audit` runs
 on pull requests only (it guards external contributions — a PR adding cloud
-egress, telemetry, or a third-party dep fails it). The full
-`build-test-lint` job (`macos-26` runner — `FoundationModels`/`SpeechAnalyzer`
-only resolve on the macOS 26 SDK) runs on manual `workflow_dispatch` when
-cutting a release.
+egress, telemetry, or a third-party dep fails it). `lint` runs on ubuntu in
+parallel (swiftlint needs no Apple SDK). The `build-test` job (`macos-26`
+runner — `FoundationModels`/`SpeechAnalyzer` only resolve on the macOS 26
+SDK) runs on manual `workflow_dispatch` when cutting a release.
 
 ---
 
@@ -123,8 +123,25 @@ real run.
 
 ## Proposing changes
 
-- For architectural or seam-level changes, read `docs/architecture.md` and open
-  a discussion or issue first. The seams are stable by design.
+### The pull request flow
+
+1. Fork, branch, make your change — `make preflight` gives you the same three
+   checks CI runs on a PR (moat audit + lint + compile, ~2-3 min, no test
+   suite).
+2. Open the PR. Three checks run automatically, in parallel:
+   `moat-audit` (~30s), `lint` (~2min), `build` on macOS (~5-8min).
+   Expect green/red in under 10 minutes.
+3. Review happens against the PR. A maintainer runs `make gates` (full suite)
+   locally before merge — that's the real gate, since speak is local-first.
+4. Squash-merge keeps history linear.
+
+Small fixes (typos, docs, small bugs) don't need an issue first. Anything
+bigger — new surface, new engine conformer, changed public API — open an
+issue to discuss before writing code; it saves everyone time.
+
+For architectural or seam-level changes, read `docs/architecture.md` and open
+a discussion or issue first. The seams are stable by design.
+
 - `docs/product.md` is immutable — it defines the destination and is
   human-owned. Do not propose changes to it in a PR.
 - For new platforms, new STT/cleanup engines, or anything that adds a runtime

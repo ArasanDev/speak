@@ -2142,3 +2142,33 @@ M5 (primary) / M4 (supported — it runs macOS 26). Product presents as alpha.
 expected") on the 9f52e7f push — it went through anyway (admin bypass), but
 if protection is ever enforced for real, pushes land via PRs and the manual
 dispatch model still applies.
+
+### 2026-09-17 — CI speed pass: parallel jobs, DerivedData cache, no redundant steps
+
+- `lint` split into its own ubuntu job — swiftlint is pure source analysis,
+  needs no Apple SDK, and now runs in parallel with the macOS build instead
+  of serially after it.
+- `build-test` (was build-test-lint): dropped the serial `make build` —
+  `make test` compiles the app + test bundle already. Added `actions/cache`
+  on `build/DerivedData` (keyed on project.yml + Speak/**) so same-commit
+  dispatches compile ~nothing. `command -v` gate on xcodegen/swiftlint —
+  both ship preinstalled on the macos-26 image, so brew only runs if
+  actually missing. Timeout trimmed 90 → 60.
+- Net effect: a dispatch run is now bounded by `make test` alone
+  (≈ build+test), with moat-audit + lint finishing in the first minute on
+  free ubuntu runners.
+
+### 2026-09-17 — CI speed pass: parallel jobs, DerivedData cache, no redundant steps
+
+- `lint` split into its own ubuntu job — swiftlint is pure source analysis,
+  needs no Apple SDK, and now runs in parallel with the macOS build instead
+  of serially after it.
+- `build-test` (was build-test-lint): dropped the serial `make build` —
+  `make test` compiles the app + test bundle already. Added `actions/cache`
+  on `build/DerivedData` (keyed on project.yml + Speak/**) so same-commit
+  dispatches compile ~nothing. `command -v` gate on xcodegen/swiftlint —
+  both ship preinstalled on the macos-26 image, so brew only runs if
+  actually missing. Timeout trimmed 90 → 60.
+- Net effect: a dispatch run is now bounded by `make test` alone
+  (≈ build+test), with moat-audit + lint finishing in the first minute on
+  free ubuntu runners.

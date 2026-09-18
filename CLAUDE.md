@@ -97,7 +97,7 @@ v0 = complete core (incl. AI neat-writing), not an MVP. v1/v2/v3+ = attractive/f
 ## CI
 Local is the validation gate — `.github/workflows/ci.yml` is **release-time only**, not per-push:
 - **`moat-audit`** (ubuntu) — `make verify-moat`, runs on `pull_request` only (guards external contributions; ~30s, free).
-- **`build-test-lint`** (`macos-26` image — must pin, `FoundationModels`/`SpeechAnalyzer` only resolve on the macOS 26 SDK) — `workflow_dispatch` only; trigger it manually from the Actions tab when cutting a release, after `make gates` is green locally.
+- **`build-test`** (`macos-26` image — must pin, `FoundationModels`/`SpeechAnalyzer` only resolve on the macOS 26 SDK) — `workflow_dispatch` only; trigger it manually from the Actions tab when cutting a release, after `make gates` is green locally. `lint` runs in parallel on ubuntu (swiftlint needs no Apple SDK).
 
 ## Privacy is structural, not a setting — enforced by audit
 "100% local, no egress, no accounts, no third-party deps, no pasteboard reads, no `print`" is not a claim but a **regression-gated proof**: `scripts/verify-moat.sh` + `SpeakTests/MoatAuditTests.swift` grep every import and networking/auth/paywall symbol in `SpeakCore`/`App`/`CLI` and fail the build if any appear. `SpeakLLM` (opt-in cloud cleanup) is deliberately its own target *outside* the audited directories so the audit's assertion stays honest while still allowing explicitly user-configured cloud cleanup. Don't add `URLSession`/`SecItem*`/`print`/force-unwrap to audited targets — the build will break.

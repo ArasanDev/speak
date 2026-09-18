@@ -3,9 +3,13 @@ name: CI
 # Release-time CI, not standing CI.
 #
 # speak is a local-first project: the developer's Mac is the only source of
-# truth for validation (`make gates` locally). Nothing here runs on push —
-# the full suite is triggered manually at release time via workflow_dispatch
+# truth for validation (`make gates` locally). Nothing here runs on push.
+# The full suite is triggered manually at release time via workflow_dispatch
 # (Actions tab → CI → Run workflow), once the local gates are green.
+#
+# CI's unique value is the CLEAN ROOM: a fresh clone with no caches, no
+# dev-cert, no stale DerivedData — it catches "works on my machine" failures
+# (uncommitted files, xcodegen glob misses) that local builds can't see.
 #
 # The one exception: moat-audit still runs on pull_request. External
 # contributions can't be trusted to have run local gates, and the moat audit
@@ -20,10 +24,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Always-reliable gate: a pure-shell source audit of the benchmark.md §3 BEAT
-  # rows (no egress / account / third-party dep / paywall / pasteboard-read /
-  # print). Needs no Xcode and no Apple SDK, so it runs on free Linux runners and
-  # gives a trustworthy green check independent of Apple-runner availability.
+  # Fast structural audit — no Xcode needed. Always runs (PRs + dispatch).
   moat-audit:
     runs-on: ubuntu-latest
     steps:
@@ -31,29 +32,54 @@ jobs:
       - name: Structural moat audit (no Xcode needed)
         run: make verify-moat
 
-  # Full build/test/lint. Runs ONLY on manual dispatch — release-time
-  # verification, not per-push. speak targets macOS 26 (Tahoe) + Xcode 26 and
-  # imports FoundationModels + SpeechAnalyzer, which only exist on the macOS 26
-  # SDK. GitHub's `macos-26` image ships Xcode 26; `macos-latest`/older images
-  # fail with `no such module 'FoundationModels'`, so this job MUST pin macos-26.
-  build-test-lint:
-    if: github.event_name == 'workflow_dispatch'
+  # Lint on Linux — swiftlint is pure source analysis; no Apple SDK needed.
+  # Runs in PARALLEL with the macOS job instead of serially inside it.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SwiftLint
+        run: brew install swiftlint
+      - name: Lint
+        run: make lint
+
+  # macOS job — the only job that needs the Apple SDK.
+  # macos-26 is pinned because FoundationModels/SpeechAnalyzer only resolve
+  # on the macOS 26 SDK — `macos-latest`/older fail `no such module`.
+  #
+  # Two modes, one job:
+  #   pull_request      → `make build` only — a fast compile check (~5-8 min)
+  #                       so PRs get green/red without burning a full suite run.
+  #   workflow_dispatch → `make test` — the full release-time suite
+  #                       (compiles app + test bundle, then runs all tests).
+  build-test:
     runs-on: macos-26
-    timeout-minutes: 90
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
       - name: Select Xcode 26
         run: sudo xcode-select -s /Applications/Xcode_26.app || sudo xcode-select -s /Applications/Xcode.app
 
-      - name: Install build tooling
-        run: brew install xcodegen swiftlint
+      # xcodegen + swiftlint ship preinstalled on the macos-26 image — check
+      # first and only brew what's actually missing (saves ~1-3 min).
+      - name: Ensure build tooling
+        run: |
+          command -v xcodegen  >/dev/null || brew install xcodegen
+          command -v swiftlint >/dev/null || brew install swiftlint
 
-      - name: Build
+      # Incremental builds on re-runs — same-commit dispatches compile ~nothing.
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: build/DerivedData
+          key: derived-${{ runner.os }}-${{ hashFiles('project.yml', 'Speak/**/*.swift') }}
+          restore-keys: derived-${{ runner.os }}-
+
+      - name: Compile check (pull request)
+        if: github.event_name == 'pull_request'
         run: make build
 
-      - name: Test
+      - name: Build + full test suite (release dispatch)
+        if: github.event_name == 'workflow_dispatch'
         run: make test
-
-      - name: Lint
-        run: make lint

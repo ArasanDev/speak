@@ -75,7 +75,7 @@ APP_BIN   := Speak.app/Contents/MacOS/Speak
 # Local history store (P9). `make history` dumps recent dictations (raw vs cleaned).
 HISTORY_DB := $$HOME/Library/Application Support/speak/history.sqlite
 
-.PHONY: all help generate generate-force build test test-fast eval study lint fmt run kill relaunch restart logs logs-show history history-eval doctor compat gates lsp clean install clean-install uninstall install-mcp-user register-mcp register-mcp-apply github-release release verify-moat dev-cert reset-permissions release-preflight
+.PHONY: all help generate generate-force build test test-fast eval study lint fmt run kill relaunch restart logs logs-show history history-eval doctor compat preflight gates lsp clean install clean-install uninstall install-mcp-user register-mcp register-mcp-apply github-release release verify-moat dev-cert reset-permissions release-preflight
 
 all: build
 
@@ -277,6 +277,14 @@ doctor:
 ##         Safe for end users (read-only, no sudo). Use before installing or bug reports.
 compat:
 	@bash scripts/check-compat.sh
+
+## preflight: fast pre-PR check — moat + lint + compile, no test suite (~2-3 min).
+##            What CI runs on a pull request. `make gates` is still the merge gate.
+preflight:
+	@echo "==> [1/3] verify-moat ..." && $(MAKE) --no-print-directory verify-moat 2>&1 | tail -4
+	@echo "==> [2/3] lint ..."        && $(MAKE) --no-print-directory lint 2>&1 | tail -3
+	@echo "==> [3/3] build ..."       && $(MAKE) --no-print-directory build >/dev/null && echo "    build: OK"
+	@echo "==> preflight: green — mirrors the PR checks. Run 'make gates' before merging."
 
 ## gates: run the full merge gate in order — build, test, lint, moat. The loop's done-check.
 ## pipefail (.SHELLFLAGS) makes each `make <gate> | tail` pipeline fail when the

@@ -10,10 +10,10 @@ non-negotiable and enforced by CI, not just style preference.
 
 ## Checklist
 
-- [ ] `make gates` passes locally (build -> test -> lint -> verify-moat, in that order)
+- [ ] `make preflight` passes (moat + lint + compile — the same checks CI runs on this PR)
+- [ ] `make gates` passes locally if you have a full dev environment (build -> test -> lint -> verify-moat)
 - [ ] New/changed code has test coverage (XCTest or Swift Testing)
-- [ ] `docs/progress.md` updated if this changes project state
-- [ ] Commit message(s) follow `[P<N>] <task>: <what changed>`
+- [ ] Commit messages are clear and imperative (the `[P<N>]` convention is internal tooling — not required)
 
 ## Structural privacy rules (the moat audit will fail the build if violated)
 
