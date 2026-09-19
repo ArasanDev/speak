@@ -7,6 +7,52 @@
 
 ## Current phase
 
+**Overlay diagnosis + cleanup-architecture gap analysis (2026-09-20).**
+Direct user report: dictating into an IDE-hosted terminal shows no HUD — only "one small
+square box at top right with a single character." Live reproduction (CGWindowList dumps +
+screenshots over fullscreen VS Code) established:
+
+- **The main HUD works** over fullscreen VS Code — `speak | layer=3 | 640×76` on-screen
+  bottom-center during `state: listening`. Earlier "no HUD" observations were confounded by
+  session collisions (`beginDictation` → `.collided` when a prior session is still settling
+  → silent no-op) and a competing dictation app running on the machine.
+- **The small square is speak's own caret mini-panel** — `speak | layer=101 | 28×32`,
+  rendering its `…` empty-placeholder at a degenerate AX caret position. VS Code's bundle ID
+  is not in `terminalBundleIDs` (correct — it IS a text editor), but its integrated terminal
+  reports a caret that lands off-screen and clamps into a corner.
+- **Fixes landed:** `CaretOverlayController` now resolves the anchor once per session
+  (`resolveCaretPoint` → AX caret + `isPlausibleCaret` bounds check against screen frames)
+  and only orders front when `partialText` is non-empty — the `…` box is never presented.
+  `showProcessing` reuses `presentIfReady` so batch-style engines (no partials, text at stop)
+  still get the panel. The `microphoneMuted` begin-refusal now shows an error HUD
+  ("Microphone is muted — unmute to dictate.") instead of silently dropping the press —
+  same pattern as the secure-field refusal (`icon = .idle` + `showError`).
+- **Separate unresolved issues** (not code bugs in speak): the Jabra Evolve2 30 SE delivers
+  near-silent input (peak RMS ~0.00009 → "No audio detected" HUD works as designed), and a
+  second dictation product is installed and running — it can hold the mic and intercept
+  triggers. Human check: headset hardware mute + whether the other app is running during tests.
+- **Verification**: `xcodebuild build` clean · `CaretOverlayControllerTests` 7/7 pass ·
+  `make lint` 0 serious · moat pending in this entry's gate run.
+- **Not verified live**: the degenerate-caret suppression against a real VS Code integrated
+  terminal needs a human dogfood (AX contexts can't be simulated in tests — the existing
+  suite's own header notes this).
+
+**Cleanup-architecture gap analysis (same session).** Cloned a reference open-source
+dictation app into `ai_tmp/` (gitignored, local reference only) and wrote
+`specs/cleanup-architecture-gaps.md`: a field comparison of the `LLMCleaning` seam vs. its
+enhancement pipeline. Findings: speak is ahead on structured Profile knobs, per-profile
+few-shot examples, streaming/progressive cleanup, honest latency accounting, and per-dictation
+warm-up. Five ranked gaps: **G1** `ContextInput`/`context:` seam exists but nothing supplies
+values (`.selection` + `.appName` are buildable under existing permissions; `.clipboard` +
+screen OCR deliberately rejected — §2.6 + two-permission rule); **G5** reasoning-tag
+(`<think>`) leakage into pasted text for pluggable engines (blocks V01-2 consumers);
+**G6a** `Profile.autoSubmit` is a dead field — stored and editable, never read;
+**G4** `runCleanup` discards the rendered prompt + raw response (eval can't diff input/output);
+**G3+G2** collapsed error taxonomy + no bounded retry for the opt-in cloud cleaner
+(v0.1 hardening, inside the existing `T_cleanup` budget). Indexed in `specs/README.md`.
+
+---
+
 **Audit fixes (2026-09-16) — capture gating, cancellation safety, cleanup-status honesty, ordered streaming cleanup.**
 
 Direct audit-driven pass (not a roadmap pull): six structural fixes to make the dictation

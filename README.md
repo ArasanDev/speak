@@ -32,7 +32,7 @@ Existing voice tools either compromise user privacy for cloud AI, produce raw ra
 
 ### 1. Privacy Invasion & Subscription Creep in Voice Dictation
 * **The Problem**: Mainstream commercial voice apps (Wispr Flow, etc.) charge $15+/month, stream private audio to remote cloud servers, take periodic background screenshots of your active windows, and require user accounts. Your private speech, confidential client code, and system context leave your machine.
-* **Our Solution**: **100% Local by Architecture**. Speech transcription uses Apple's native `SpeechAnalyzer`, and neat-writing runs on Apple's on-device Foundation Models. Zero telemetry, zero external network egress, zero accounts, write-only pasteboard (never reads clipboard history), and MIT-licensed free forever.
+* **Our Solution**: **100% Local by Architecture**. Speech transcription uses Apple's native `SpeechAnalyzer`, and ai neat writing runs on Apple's on-device Foundation Models. Zero telemetry, zero external network egress, zero accounts, write-only pasteboard (never reads clipboard history), and MIT-licensed free forever.
 
 ### 2. Dictation Latency, Hallucinations & Over-Editing
 * **The Problem**: Raw speech-to-text dumps unpunctuated, rambling streams filled with *"um"*, *"uh"*, and false starts. Conversely, piping dictation into generic cloud LLMs causes 5–10 second response lags, hallucinated answers to questions instead of transcribing them, and destructive paraphrasing of your exact words.

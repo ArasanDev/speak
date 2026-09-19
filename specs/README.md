@@ -37,6 +37,12 @@ cross-checks — not vibes. See each file's header for its own evidence.
 - **`v01-capability-track.md`** — the v0.1 capability slices (C01–C10) taking `speak`
   from the frozen v0 core toward the Profile Engine + Agent Interface; cited by
   `docs/roadmap.md` as the v0.1 build order.
+- **`cleanup-architecture-gaps.md`** — field gap analysis of the `LLMCleaning`
+  seam against a reference open-source enhancement pipeline. Ranks five gaps
+  (dead `ContextInput`/`autoSubmit` seams, reasoning-tag leakage, prompt
+  observability, pluggable-path retry/error taxonomy) and the deliberate
+  rejections (clipboard/screen context, per-mode STT). Feeds the capability
+  track's build order.
 
 ## Reference (still depended on, not itself a contract)
 

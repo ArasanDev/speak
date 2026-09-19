@@ -108,6 +108,10 @@ final class CaretOverlayController {
     // MARK: - Internals
 
     private var panel: NSPanel?
+    /// The resolved anchor for this session's panel, computed once at `show()`.
+    /// `nil` when the overlay is suppressed for this context (terminal frontmost,
+    /// no AX caret, or an implausible point) — `update` then never presents.
+    private var pendingCaretPoint: CGPoint?
     // Internal (not private) for @testable access in SpeakTests — tests assert on model state.
     let model = CaretOverlayModel()
 
@@ -115,25 +119,68 @@ final class CaretOverlayController {
 
     /// Show the caret overlay near the cursor in `frontmostPID`.
     ///
-    /// Falls back silently to a no-op when CaretLocator returns nil (non-AX
-    /// context) or when the frontmost app is a terminal emulator (see
-    /// `terminalBundleIDs`). Safe to call when a panel already exists —
-    /// re-positions it.
+    /// The anchor is resolved once here — terminal suppression, AX availability,
+    /// and plausibility are all settled in `resolveCaretPoint` — but the panel is
+    /// only ordered front once `partialText` is non-empty. An empty state renders
+    /// as a ~28pt "…" box that reads as a stray square, not a preview; the first
+    /// real partial arrives via `update(partialText:)` and presents the panel at
+    /// the resolved anchor. [fix: stray-square]
+    ///
+    /// Falls back silently when the context can't host a preview (terminal
+    /// emulator, no AX caret, degenerate point).
     func show(partialText: String, frontmostPID: pid_t, bundleID: String? = nil) {
         if let bundleID, Self.terminalBundleIDs.contains(bundleID) {
             SpeakLog.input.debug(
                 "CaretOverlayController: frontmost is a terminal (\(bundleID, privacy: .public)) — skipping overlay."
             )
+            pendingCaretPoint = nil
             return
         }
-
         model.partialText = partialText
+        pendingCaretPoint = Self.resolveCaretPoint(pid: frontmostPID)
+        presentIfReady()
+    }
 
-        guard let caretPoint = CaretLocator.caretScreenPosition(pid: frontmostPID) else {
-            SpeakLog.input.debug("CaretOverlayController: caret unavailable — skipping overlay.")
-            return
-        }
+    /// Update the displayed partial text. Presents the deferred panel on the
+    /// first non-empty partial (see `show`); a no-op for contexts where the
+    /// anchor was suppressed. Safe to call when no panel is visible.
+    func update(partialText: String) {
+        model.partialText = partialText
+        presentIfReady()
+    }
 
+    /// Switch the panel to the processing state: keep it visible, show rawText
+    /// truncated to the same 60-char window as partial, with a ⟳ cleaning suffix.
+    /// Does NOT re-query CaretLocator — panel stays at its resolved anchor.
+    /// `presentIfReady` covers the deferred case (no partials streamed during
+    /// capture but raw text exists at stop, e.g. batch-model engines).
+    func showProcessing(rawText: String) {
+        model.partialText = rawText
+        model.isProcessing = true
+        presentIfReady()
+        panel?.orderFrontRegardless()
+        SpeakLog.input.debug("CaretOverlayController: showProcessing (\(rawText.count, privacy: .public) chars).")
+    }
+
+    /// Hide and release the panel.
+    func hide() {
+        panel?.orderOut(nil)
+        panel = nil
+        pendingCaretPoint = nil
+        model.partialText = ""
+        model.isProcessing = false
+        SpeakLog.input.debug("CaretOverlayController: hidden.")
+    }
+
+    // MARK: - Private
+
+    /// Order the panel front at the resolved anchor, but only once real text
+    /// exists and only if it isn't already visible. The empty "…" placeholder
+    /// is never presented — see `show`.
+    private func presentIfReady() {
+        guard !model.partialText.isEmpty,
+              let caretPoint = pendingCaretPoint,
+              panel?.isVisible != true else { return }
         let panel = ensurePanel()
         let origin = placement(for: caretPoint)
         panel.setFrameOrigin(origin)
@@ -143,31 +190,39 @@ final class CaretOverlayController {
         )
     }
 
-    /// Update the displayed partial text. Safe to call when no panel is visible.
-    func update(partialText: String) {
-        model.partialText = partialText
+    /// Resolve the panel anchor once per session. Returns nil when the overlay
+    /// should not appear at all: the app exposes no AX caret, or the reported
+    /// point is implausible. Terminal suppression happens in `show` (it must
+    /// precede the `model.partialText` write).
+    private static func resolveCaretPoint(pid: pid_t) -> CGPoint? {
+        guard let caretPoint = CaretLocator.caretScreenPosition(pid: pid) else {
+            SpeakLog.input.debug("CaretOverlayController: caret unavailable — skipping overlay.")
+            return nil
+        }
+
+        guard isPlausibleCaret(caretPoint) else {
+            SpeakLog.input.debug(
+                "CaretOverlayController: implausible caret at (\(caretPoint.x, privacy: .public), \(caretPoint.y, privacy: .public)) — skipping overlay."
+            )
+            return nil
+        }
+        return caretPoint
     }
 
-    /// Switch the panel to the processing state: keep it visible, show rawText
-    /// truncated to the same 60-char window as partial, with a ⟳ cleaning suffix.
-    /// Does NOT re-query CaretLocator — panel stays at its current position.
-    func showProcessing(rawText: String) {
-        model.partialText = rawText
-        model.isProcessing = true
-        panel?.orderFrontRegardless()
-        SpeakLog.input.debug("CaretOverlayController: showProcessing (\(rawText.count, privacy: .public) chars).")
+    /// A caret point is plausible only when it lands inside some screen's frame.
+    /// AX-rich apps that host embedded terminals (VS Code, Cursor, other Electron
+    /// shells) can report a caret for a hidden or off-screen element — an origin
+    /// beyond the display bounds — and the panel then clamps into a screen corner
+    /// as a stray box. Quartz point → AppKit: flip y against the primary screen.
+    /// [fix: stray-square — degenerate AX caret]
+    private static func isPlausibleCaret(_ quartzPoint: CGPoint) -> Bool {
+        guard let primary = NSScreen.screens.first else { return false }
+        let appKitPoint = CGPoint(
+            x: quartzPoint.x,
+            y: primary.frame.height - quartzPoint.y
+        )
+        return NSScreen.screens.contains { $0.frame.contains(appKitPoint) }
     }
-
-    /// Hide and release the panel.
-    func hide() {
-        panel?.orderOut(nil)
-        panel = nil
-        model.partialText = ""
-        model.isProcessing = false
-        SpeakLog.input.debug("CaretOverlayController: hidden.")
-    }
-
-    // MARK: - Private
 
     private func ensurePanel() -> NSPanel {
         if let existing = panel { return existing }

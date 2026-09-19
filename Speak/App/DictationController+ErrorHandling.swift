@@ -145,7 +145,12 @@ extension DictationController {
         } catch SpeakError.microphoneMuted {
             monitor.notifySessionEnded()
             icon = .idle
-            SpeakLog.engine.info("DictationController: start ignored — microphone muted.")
+            // A dictation press while muted must not look dead — surface the
+            // refusal in the HUD like every other begin-failure (W2.2). Icon
+            // stays `.idle`: muted is a deliberate state, not an error, and the
+            // menubar already renders it via `isMuted`. [fix: silent-refusal]
+            overlayController.showError("Microphone is muted — unmute to dictate.")
+            SpeakLog.engine.info("DictationController: start refused — microphone muted.")
             return .failed
         } catch SpeakError.sessionCancelled {
             // [fix: audit — cancel-during-start] A cancel() that landed during
