@@ -34,6 +34,9 @@ cross-checks — not vibes. See each file's header for its own evidence.
   streamed partials, <1.2s felt-speed done condition.
 - **`output-conversation-reconnect.md`** — active output-slice spec: re-wiring the
   full-duplex voice loop that was built but never activated.
+- **`v01-capability-track.md`** — the v0.1 capability slices (C01–C10) taking `speak`
+  from the frozen v0 core toward the Profile Engine + Agent Interface; cited by
+  `docs/roadmap.md` as the v0.1 build order.
 
 ## Reference (still depended on, not itself a contract)
 
@@ -93,8 +96,8 @@ Ranked by how likely each is to mislead a reader, highest first.
 2. **`speak-ui-design-final-2026-06-28.md` vs. `frontend-identity.md`** —
    `speak-ui-design-final-2026-06-28.md:5` (original) declared *"Status: Locked design —
    implementation can now proceed"* with no scope limit. `frontend-identity.md:5-6` later
-   states it *"Supersedes the Wispr-Flow-derived look as the default; `HUDStyle.classic`
-   remains available but is no longer the identity."* The two only partially overlap — IA
+   states it supersedes the earlier capsule-derived look as the default (`HUDStyle.classic`
+   remains available but is no longer the identity). The two only partially overlap — IA
    (sidebar, panes) vs. visual identity (palette, Pet) — but nothing in either file marks
    that boundary explicitly; a reader has to infer it.
 Not a contradiction, but a note: `horizon-voice-os.md` self-declares "Superseded

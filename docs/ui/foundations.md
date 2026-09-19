@@ -118,7 +118,9 @@ Every animation maps to a real signal (audio level, state transition,
 attention request) — if it doesn't read from a signal, cut it
 (motion charter, `specs/frontend-identity.md` §4).
 
-Reference: Superwhisper's HUD has the cleanest motion. Wispr's top-pill HUD is the cautionary tale — too much motion.
+The bar is motion restraint: the HUD is a calm instrument, not an attention
+surface. Prominent top-pill HUDs that over-animate are the anti-pattern —
+see `docs/competitors.md` for the landscape analysis.
 
 ---
 

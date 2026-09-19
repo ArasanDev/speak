@@ -103,7 +103,7 @@ Modes submenu, Languages submenu, Engine submenu → [planned: v1].
 
 **Hard constraint:** `NSPanel`, `NSNonActivatingPanelMask`. Never steals focus. Never shown in idle.
 
-**Constraint:** bottom-center position only. Top-center (Wispr style) is explicitly rejected — it steals attention from the dictating app.
+**Constraint:** bottom-center position only. Top-center is explicitly rejected — it steals attention from the dictating app.
 
 **Silhouette:** one shared shape — `HUDLane.panelShape` = `RoundedRectangle(cornerRadius: 14, style: .continuous)` — a near-rectangle with micro-curved corners. The same constant drives clip, state wash, the 1 pt `speakCardBorder` hairline, and the opt-in animated borders, so layers cannot disagree. (Owner direction 2026-09-17: square-ish, not capsule.)
 
@@ -461,8 +461,8 @@ Fallback is **invisible to the user** by design. Settings → AI Cleanup shows l
 ## 6. Open design questions (require human input)
 
 1. **Brand color.** Current: `.tint` (system accent). v1: add `Brand.accent` token.
-2. **Hotkey default.** Double-tap Fn (signature UX) vs. Opt+Space (Wispr migrants). Proposal: default double-tap Fn; offer Opt+Space as 1-click alternative in hotkey step.
-3. **Edit-before-paste toggle default.** Proposal: OFF by default; ON for Wispr migrants, behind a Settings toggle.
+2. **Hotkey default.** Double-tap Fn (signature UX) vs. Opt+Space (familiar to users of other dictation tools). Proposal: default double-tap Fn; offer Opt+Space as 1-click alternative in hotkey step.
+3. **Edit-before-paste toggle default.** Proposal: OFF by default; ON for users migrating from review-before-paste tools, behind a Settings toggle.
 4. **First-run tooltip.** Show 1-time toast over menubar icon: "Double-tap Fn to start." Proposal: yes, 6 s auto-dismiss with "Don't show again."
 5. **History: window vs. popover.** Proposal: window in v0, evaluate popover in v1.
 6. **Brand name + icon.** `speak` is the codename. Final name and icon need a designer.
@@ -480,11 +480,8 @@ This file is **design reference**, not a contract. Active contracts:
 
 ---
 
-## 8. Reference apps
+## 8. External landscape
 
-- **Superwhisper** — cleanest HUD motion. Bottom-center, subtle. Reference for "do less, better."
-- **VoiceInk** — free/open, 3-state HUD, power-user history. Closest to speak's shape.
-- **MacWhisper** — power-user density (split view history, per-word timestamps).
-- **Wispr Flow** — the frontier. Top-pill is the cautionary tale; everything else (snippets, edit-before-paste, dashboard) is the gold standard.
-- **FluidVoice** — open-source baseline. Minimum viable dictation app.
-- **Aiko** — Apple-on-Apple approach. SpeechAnalyzer + Writing Tools + thin shell.
+Product and competitor analysis lives in `docs/competitors.md` and
+`specs/verification-ledger.md`. This document describes only what `speak`
+ships — design decisions stand on their own rationale, not on imitation.

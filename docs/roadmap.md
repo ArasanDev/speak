@@ -1,14 +1,15 @@
-# `speak` — Build Roadmap (v0 only)
+# `speak` — Build Roadmap
 
-> **Purpose**: The v0 task-by-task build order (P0–P14) + the Agent Voice Bridge (AVB) north-star track. · **Audience**: AI agent (pick next task), contributor, maintainer · **Status**: living — read every session per `CLAUDE.md` · **Last reviewed**: 2026-07-25 (git log)
+> **Purpose**: The ordered build plan — v0 task list (P0–P14, shipped), the Agent Voice Bridge (AVB) north-star track, and the v0.1 capability track. · **Audience**: AI agent (pick next task), contributor, maintainer · **Status**: living — read every session per `AGENTS.md §4` · **Last reviewed**: 2026-09-17
 
 > Agent navigation: pick lowest `[ ]` task with no open `[~]` blockers.
 > Status: `[x]` done · `[~]` partial (logic verified; live/visual deferred) · `[ ]` todo · `[!]` blocked.
 > Ship gate: `docs/benchmark.md §4` MATCH + `docs/quality.md §9` all pass.
 
-**Critical path**: P0 → P2 → P3 → P3.5 → P5 → P6 → P11-a → P13.
-P1, P4, P7, P8, P9, P10, P12 can parallelize once their own dependencies are met.
-v0.1/v1/v2/v3+ tasks: see `docs/product.md §9`.
+**Where we are (2026-09-17)**: v0.0.1 shipped — P0–P14 complete, P13 dogfood PASS, all four ship-gate rows green. Open work: the v0.1 capability track (below), AVB-3/4/8/9/10, the `[~]` live-verification debt inside P2/P5–P10, P11-b notarization `[decision: deferred]`, and the P12 demo GIF.
+
+**Critical path**: P0 → P2 → P3 → P3.5 → P5 → P6 → P11-a → P13 → P14 (all landed).
+v0.1+ tasks: see the capability track below and `docs/product.md §9`.
 
 ---
 
@@ -80,32 +81,31 @@ surface; the native attention and voice experience is the product.
 
 ---
 
-## v0.1 — VoiceStudio-inspired adaptation track `[decision 2026-09-08]`
+## v0.1 — Capability track `[decision 2026-09-08]`
 
-> Curated borrow-list + rationale: `specs/voicestudio-inspiration-plan.md`.
-> VoiceStudio (`ai_tmp/VoiceStudio`) is the local-first voice product reference.
-> Non-takes (clipboard reads, media-studio features, AGPL) are deliberate — see §3.
+> Slice list + rationale: `specs/v01-capability-track.md`.
+> Rejected scope (clipboard reads, media-studio features) is deliberate — see §3 there.
 
-- [x] **V01-W — Warm cleanup model** (Tier-1 #W01; landed `e4303f4`): prewarm
-      the Foundation Models engine so stop→clean latency on long dictations drops;
-      wiring + state unit-tested (`WarmCleanupModelTests`, 9 green), live latency
+- [x] **C01 — Warm cleanup model** (landed `e4303f4`): prewarm the Foundation
+      Models engine so stop→clean latency on long dictations drops; wiring +
+      state unit-tested (`WarmCleanupModelTests`, 9 green), live latency
       `[deferred — needs Apple Intelligence Mac]`.
-- [ ] **V01-X Diagnostics surface** (W07)
-- [ ] **V01-X Delivery honesty + session-bound paste audit** (W05 + W06)
-- [ ] **V01-X Per-session voice persona** (W08, needs AVB-8/9)
-- [ ] **V01-X Models Catalogue surface** (W02, needs v0.1 engines real)
-- [ ] **V01-X Steering phrase fallbacks** (W04, needs Transforms wiring)
+- [ ] **C07 — Diagnostics surface**
+- [ ] **C05 + C06 — Delivery honesty + session-bound paste audit**
+- [ ] **C08 — Per-session voice persona** (needs AVB-8/9)
+- [ ] **C02 — Models Catalogue surface** (needs v0.1 engines real)
+- [ ] **C04 — Steering phrase fallbacks** (needs Transforms wiring)
 
 ---
 
-## P0 — Repo setup [~PARTIAL]
+## P0 — Repo setup [DONE]
 
 **Sub-tasks**: `git init`, Xcode project (app + `SpeakCore.framework` + `SpeakTests`), layout per `architecture.md §5`, `README.md`, `LICENSE` (MIT), `.gitignore`, `.swift-version` (5.9+), `Makefile`, GitHub Actions CI.
 
 **Done when**:
 - [x] `make build` produces a runnable `.app` from a clean clone ✓ (XcodeGen → `xcodebuild`; verified `make clean && make build`)
 - [x] `SpeakCore.framework` is a separate build target (the portability seam) ✓
-- [~] CI runs on every push: `xcodebuild build` + `swiftlint` — workflow authored (`.github/workflows/ci.yml`); **[unverified]** until repo has a remote + push
+- [x] CI exists and is reachable — `[verified 2026-09-17]` `.github/workflows/ci.yml` runs `moat-audit` + `lint` + `build` on PRs (parallel, free on the public repo); the full suite is `workflow_dispatch` for release-time verification. Local `make gates` remains the authoritative gate.
 - [x] `LICENSE` is MIT; `.gitignore` covers `DerivedData/`, `.build/`, `*.xcuserstate`, `DS_Store` ✓
 
 ---

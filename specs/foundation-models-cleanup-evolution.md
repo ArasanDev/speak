@@ -3,7 +3,7 @@
 **Status:** Proposed / Active  
 **Author:** Antigravity  
 **Target Module:** `SpeakCore/Cleanup/`  
-**Reference Document:** `prompting_style.md` & `ai_docs/foundation_models/`  
+**Reference Document:** Apple's official Foundation Models prompting guidance (archived locally, untracked)  
 **Evaluation Corpus:** `~/Library/Application Support/speak/history.sqlite` (2,285 real cleaned dictation entries)  
 **Strict Code Constraints:** No file may exceed 800 lines. Optimal line count per file: 300–500 lines. 100% local, no third-party dependencies.
 
@@ -147,7 +147,7 @@ The improvement will be verified against the 2,285 historical rows using `Cleani
 
 ## 6. Implementation Plan (Work Packages)
 
-- **WP-1: Study & Archiving (DONE):** Apple documentation fetched, verified, and saved to `ai_docs/foundation_models/`.
+- **WP-1: Study & Archiving (DONE):** Apple documentation fetched, verified, and archived locally.
 - **WP-2: Extract `DeveloperAcronymNormalizer`:** Decouple acronym rules into a dedicated, unit-tested Swift struct.
 - **WP-3: Extract & Modernize `FoundationModelPromptBuilder`:** Implement step-by-step numbered instructions, 2-shot question anchors, and continuation headers.
 - **WP-4: Streamline `FoundationModelsCleaner`:** Refactor cleaner to delegate to the modular components; ensure all files remain strictly between 200 and 450 lines.

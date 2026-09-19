@@ -181,7 +181,7 @@ control console. Everything below is real — no placeholders, no canned strings
 
 ---
 
-**Loop #98 (2026-09-11) — Dedicated Two-Panel Settings Experience (t3code-inspired) COMPLETE.**
+**Loop #98 (2026-09-11) — Dedicated Two-Panel Settings Experience COMPLETE.**
 - **Two-mode dashboard navigation**:
   - `DashboardView` now treats `selection == .settings` as a mode sentinel: the whole window swaps
     from the desk (Mode A) to the dedicated Settings experience (Mode B). The gear button enters
@@ -195,8 +195,7 @@ control console. Everything below is real — no placeholders, no canned strings
 - **New files** (`App/Settings/`):
   - `SettingsCategory.swift` — 8 rail destinations grouped into System / Intelligence / Experience.
   - `SettingsChrome.swift` — `SettingsSectionCard`, `SettingsRow` (title+description left, control
-    right), `SettingsRowSeparator`, `SettingsStatusPill` — the native analogue of t3code's
-    `SettingsSection`/`SettingsRow`.
+    right), `SettingsRowSeparator`, `SettingsStatusPill` — the native analogue of a studied settings pattern's section/row primitives.
   - `SettingsExperienceView.swift` — header (back button + `Settings › <category>` breadcrumb +
     esc keycap), grouped left rail (208pt), card-based detail canvas.
   - Category views: `GeneralAudioSettingsView` (startup, language, live mic, insertion, voice-out),
@@ -219,7 +218,7 @@ control console. Everything below is real — no placeholders, no canned strings
   - Completely excised the experimental "Voice Desktop Pet" subsystem (`App/Pet/`, `PetView`, `PetPanelController`, `PetState`, `PetGeometry`, `DictationController+Pet.swift`, `PetSection.swift`).
   - Removed corresponding unit tests (`PetGeometryTests.swift`, `PetStateTests.swift`, `PetViewMathTests.swift`, and pet mascot assertions in `FeatureIntegrityIntegrationTests.swift`).
   - Cleaned `SettingsStore` (`petEnabled`, `petPositions`) and updated `SettingsStoreTests.swift` and `SettingsStoreResetAndMiscTests.swift`.
-  - Retained `ai_tmp/` for reference and retained all Speech Synthesizers / TTS infrastructure untouched per user instruction.
+  - Retained local reference clones (gitignored, untracked) and all Speech Synthesizers / TTS infrastructure untouched per user instruction.
 - **Verification & Moat**:
   - `make build`: Clean build (0 errors, 0 compiler warnings).
   - `make test-fast`: Green (✓ SUCCESS, 0 warnings).
@@ -463,7 +462,7 @@ control console. Everything below is real — no placeholders, no canned strings
   - `swiftlint` passed with 0 violations, 0 serious errors on all touched overlay and clean-up files.
 
 **Loop #85 (2026-09-10) — Foundation Models Cleanup Evolution & Chunked Transformation COMPLETE.**
-- **Competitor study & foundation guidelines grounding**: Analyzed Wispr Flow architecture (two-stage pipeline, context-conditioned ASR + fine-tuned Llama on cloud GPUs, $2B valuation), Superwhisper, and Aqua Voice. Studied Apple's official `prompting_style.md` and archived official guides in `ai_docs/foundation_models/`. Audited production `history.sqlite` (2,285 real voice entries) analyzing voice-to-agent instruction flows.
+- **Competitor study & foundation guidelines grounding**: Analyzed Wispr Flow architecture (two-stage pipeline, context-conditioned ASR + fine-tuned Llama on cloud GPUs, $2B valuation), Superwhisper, and Aqua Voice. Studied Apple's official `prompting_style.md` and archived official guides locally (untracked). Audited production `history.sqlite` (2,285 real voice entries) analyzing voice-to-agent instruction flows.
 - **Architectural modularization (<800-line constraint satisfied)**:
   - Extracted `DeveloperAcronymNormalizer.swift` (73 lines) — pure deterministic regex-based spoken→written developer term normalization.
   - Extracted `TranscriptChunker.swift` (110 lines) — sentence- and clause-boundary chunking to eliminate bulk latency and prevent over-editing on long rambles.
@@ -475,13 +474,13 @@ control console. Everything below is real — no placeholders, no canned strings
   - Moat audit: `make verify-moat` passes 7/7 privacy checks.
 - **Next**: Live dogfooding of chunked streaming dictations with coding agents.
 
-**Loop #84 (2026-09-08) — Single-branch consolidation + v0.1 kickoff (VoiceStudio track) COMPLETE.**
-- **Branch consolidation**: unified all work onto `master` (now the only branch, local + remote). Committed the full uncommitted purge (`b92b272`: MCP ask-user/Layer-4 withdrawal, conversation overlay, filmstrip + overlay text-flow, cleanup-quality eval), then merged the 37-commit feature line onto `master` (`2bddd59`, keeping master's v0.0.1/P14 commits and the `research/archive` removal). Deleted `bug-hunter-test-trigger`, `feat/v01-warm-cleanup`, `worktree-input-felt-speed`, `worktree-agent-workflow-subagent` (content preserved), and remote `origin/worktree-input-felt-speed`. Fast-forward push `5aa8f55..2bddd59`. Harness dirs (`.agents/`, `.commandcode/`, `.qoder/`, `skills-lock.json`) gitignored; `ai_tmp/` added for the VoiceStudio reference clone.
+**Loop #84 (2026-09-08) — Single-branch consolidation + v0.1 kickoff (capability track) COMPLETE.**
+- **Branch consolidation**: unified all work onto `master` (now the only branch, local + remote). Committed the full uncommitted purge (`b92b272`: MCP ask-user/Layer-4 withdrawal, conversation overlay, filmstrip + overlay text-flow, cleanup-quality eval), then merged the 37-commit feature line onto `master` (`2bddd59`, keeping master's v0.0.1/P14 commits and the `research/archive` removal). Deleted `bug-hunter-test-trigger`, `feat/v01-warm-cleanup`, `worktree-input-felt-speed`, `worktree-agent-workflow-subagent` (content preserved), and remote `origin/worktree-input-felt-speed`. Fast-forward push `5aa8f55..2bddd59`. Harness dirs (`.agents/`, `.commandcode/`, `.qoder/`, `skills-lock.json`) and local reference-clone folders gitignored.
 - **Stash triage** (3 stashes): (1) `voicestudio-inspiration-plan.md` + warm-cleanup restored from stash; (2) agent-voice-bridge WIP (`26f0552`) — fully superseded by `b92b272`, dropped; (3) color-borders UI (`8c32a84`) — conflicts with the frozen FE-1 identity spec, dropped. All recoverable via those SHAs.
 - **V01-W — Warm cleanup model LANDED** (`e4303f4`, Core-only + additive): `LLMCleaning.warmUp()` (default no-op) + `FoundationModelsCleaner.warmUp()` (throwaway `LanguageModelSession.prewarm()` + one minimal `respond`; `[verified via local SDK swiftinterface, 2026-09-08]`); `CaptureSession` fires it at `start()` concurrently with listening (never on the stop→clean path), cancels (never awaits) at stop/cancel; `SpeakEngine.newSession()` arms it only when cleanup will run. New `WarmCleanupModelTests` (9): armed/disarmed, byte-identical delivery, in-flight-cancel, engine wiring, protocol default + real-cleaner no-throw.
 - **Lint fix** (repo convention): warm-up machinery extracted to `CaptureSession+WarmUp.swift` + `SpeakEngine` private extension; zero serious errors on touched files (only the 2 pre-existing `CLIPortServer` errors remain).
 - Verification: `make build` ✅, focused suites (WarmCleanup + CaptureSession + VoiceActionsPipeline) `** TEST SUCCEEDED **` ✅, `make verify-moat` 7/7 ✅.
-- **Next**: VoiceStudio roadmap/product validation against `ai_tmp/VoiceStudio` (`specs/voicestudio-inspiration-plan.md §5` slice ordering); remaining V01-X slices.
+- **Next**: v0.1 capability track (`specs/v01-capability-track.md §5` slice ordering); remaining slices.
 
 **Loop #83 (2026-08-19) — No-answer prompt fix: model answered question-shaped dictations. COMPLETE.**
 - **Problem (human-reported live)**: the cleanup model sometimes REPLIED to the transcript (answered the question, executed the command) instead of transcribing it.
@@ -1268,7 +1267,7 @@ Two-layer fix:
   (cloth/clod/cloud code→Claude Code, codecs→Codex, chat gpt→ChatGPT, …)
   merged under user entries in `defaultExpander`; user `heard` wins,
   incl. an identity row to disable a built-in. Expander is now never nil.
-- Cloned qwen-audio-agent → ai_tmp/ (reference for agent-voice runtime).
+- Cloned a reference agent-voice project locally (gitignored).
 
 **Verification:** build clean · lint 0 serious · moat 7/7 ·
 AcousticCorrectionsTests 19/19 (incl. new built-in + override tests) ·
@@ -1574,11 +1573,10 @@ was a stale-instance race, not a plumbing bug).
 pretty-output.sh, suite itself passed cleanly) · lint 0 errors ·
 moat 7/7.
 
-### Follow-up — rail icons corrected to monochrome (t3code analysis)
+### Follow-up — rail icons corrected to monochrome (reference-codebase analysis)
 
 User flagged the colored icon tiles as wrong: "shape and size matter,
-not the color." Deep-read of `ai_tmp/t3code` confirmed: t3code's
-`SettingsSidebarNav` uses plain muted 14px Lucide glyphs — no tiles, no
+not the color." Deep-read of a local reference codebase confirmed the pattern: plain muted 14px glyphs — no tiles, no
 hue — with an accent selection pill. Removed `SettingsCategory.tileColor`
 entirely; `SettingsRailRow` now renders a plain 14pt glyph
 (`.secondary` / white-on-accent when selected) and the selection fill is
@@ -1590,14 +1588,14 @@ Semantic status pills (NEEDS MIC / ON / READBACK) retained.
 Verified: build clean · lint 0 errors · moat 7/7 · live screenshot of
 `dashboard:settings:pipeline` shows the corrected rail + diagram.
 
-t3code findings banked for later: sidebar **settings search** (`/` to
+Reference findings banked for later: sidebar **settings search** (`/` to
 focus, arrow-key results, scroll-to-row pulse) and muted `text-sm`
 section headings with optional `headerAction` — candidates if the rail
 grows.
 
 ### Runtime theme system + full-app token migration (agent fleet)
 
-t3code-inspired runtime theming landed: `SpeakThemeSystem.swift` (role model +
+Runtime theming landed: `SpeakThemeSystem.swift` (role model +
 built-ins `speak`/`ember`), `ThemeEngine` (selection/persistence/live draft),
 `SpeakThemeRuntime.active` + `ThemedRoot` environment repaint, Appearance-pane
 theme picker + `ThemeEditorSheet` (role pickers, live preview, custom themes
@@ -1700,7 +1698,7 @@ file sets, shared design contract). Functional fixes surfaced by the pass:
   refresh so sessions could NEVER appear; now reads `context.agentSessionRegistry`;
   install-state check is real (`FileManager.isExecutableFile`), corrected
   install path + JSON snippet to match README verbatim.
-- **ThemeEditorSheet**: dual light/dark wells per role (t3code pattern),
+- **ThemeEditorSheet**: dual light/dark wells per role,
   inheritance ghosting, live hex validation, delete confirmation.
 - **CleanupEngineSheet**: Save no longer dismisses on Keychain failure.
 - **Dead code removed**: HUDStyleSection, BorderStyleSection, dead
@@ -2190,3 +2188,38 @@ for agent speed + human readability, not human authoring ergonomics.
   internal-only; `make preflight` added (moat+lint+compile ≈ PR checks).
 - `~/.devin/AGENTS.md` (global, user-level) — standing rule: no AI-tool
   attribution trailers in commits/PRs/comments, overrides built-in template.
+
+### 2026-09-17 — Doc hygiene pass: local-reference folders + competitor-name discipline
+
+**Owner direction:** `ai_tmp/`/`ai_docs/` are local reference only — no tracked
+doc may point at them. Other projects/products are never named in working
+docs; competitor references live only in dedicated analysis docs
+(`docs/competitors.md`, `specs/verification-ledger.md`, dated research specs)
+where they are professionally analyzed.
+
+**What changed:**
+- `docs/roadmap.md` — rewritten header: "Where we are" state summary, v0.1
+  section renamed to the capability track (C-numbers), P0 CI row corrected to
+  the PR-parallel + manual-dispatch model, P0 marked DONE.
+- `specs/voicestudio-inspiration-plan.md` → `specs/v01-capability-track.md`
+  (git mv) — provenance stripped; capabilities described by what they do for
+  speak; W-IDs renamed C01–C10; rejected-scope decisions kept.
+- `specs/foundation-models-cleanup-evolution.md` — `ai_docs/` paths removed.
+- `docs/progress.md` — local-folder paths scrubbed; "t3code/VoiceStudio/
+  qwen-audio-agent" names neutralized in dated entries (facts preserved).
+- `docs/ui/foundations.md`, `docs/ui/surfaces-v0.md` — casual name-drops
+  replaced with principle statements + pointer to `docs/competitors.md`;
+  §8 "Reference apps" list replaced by an external-landscape pointer.
+- `specs/dictation-flow.md`, `specs/frontend-identity.md`,
+  `docs/ui/surfaces-future.md` — name-drops neutralized.
+- `specs/README.md` — stale verbatim quote fixed; `v01-capability-track.md`
+  indexed under Active/binding.
+
+**Left intentionally (professional analysis):** `docs/competitors.md`,
+`docs/product.md` positioning, `docs/benchmark.md` parity rows,
+`docs/quality.md` risk table, `docs/architecture.md` landscape evidence,
+`specs/verification-ledger.md`, `specs/wispr-*.md`,
+`specs/landscape-analysis-2026-06-28.md`, `specs/input-felt-speed.md`,
+`docs/ui/surfaces-future.md` tagged deep-dive sections, `docs/progress.md`
+dated analysis records. `.claude/prompt.md` retains one `ai_docs/` mention
+in a historical prompt log (harness file, not docs).

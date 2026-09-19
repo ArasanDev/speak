@@ -176,7 +176,7 @@ Rename "History" to "Conversations." Add per-app grouping, per-day grouping, "to
 
 ### Live confidence overlay (v1 → ship it)
 
-Render partial transcript words with confidence coloring: low (0.0–0.6) = `.secondary`, mid (0.6–0.85) = `.primary`, high (0.85+) = primary with subtle underline. Data is already in `TranscriptionResult`. This is the single biggest HUD UX tell Wispr users love.
+Render partial transcript words with confidence coloring: low (0.0–0.6) = `.secondary`, mid (0.6–0.85) = `.primary`, high (0.85+) = primary with subtle underline. Data is already in `TranscriptionResult`. This is the single biggest HUD UX improvement identified in the competitive analysis (`docs/competitors.md`).
 
 ### Code mode (v2)
 

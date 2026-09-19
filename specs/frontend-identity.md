@@ -8,7 +8,7 @@ none · **Last substantive change:** 2026-07-24
 
 > Authored by the orchestrator as the product's design direction. Implementers:
 > build exactly this; escalate taste questions rather than improvising.
-> Supersedes the Wispr-Flow-derived look as the *default*; `HUDStyle.classic`
+> Supersedes the earlier capsule-derived look as the *default*; `HUDStyle.classic`
 > remains available but is no longer the identity.
 
 ## 0. The thesis
@@ -175,7 +175,7 @@ ambient-display research (three-agent sweep; sources in the research reports):
 - **FE-2: the HUD converges.** Aurora becomes the default and adopts the
   two-temperature rule (listening = amber family, cleanup = bone sweep,
   agent = violet). Classic remains selectable. Overlay chrome moves to
-  tokens. The capture card drops Wispr-Flow-era styling.
+  tokens. The capture card drops the earlier-era styling.
 - **FE-3 (after AVB-7): the dashboard becomes the console.** New York pane
   titles, ink surfaces, Agent Inbox pane in the new language, session chips
   (violet) with per-session activity. Menubar icon gains the tally-dot logic.

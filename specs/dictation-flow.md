@@ -92,11 +92,12 @@ Keep `TranscriptOverlayPanel` (mechanics already correct: `.nonactivatingPanel`,
 floating, `[.canJoinAllSpaces, .fullScreenAuxiliary]`, `canBecomeKey=false`,
 `orderFrontRegardless`). Deltas:
 - Add `.stationary, .ignoresCycle` to collectionBehavior.
-- **Position: bottom-center** (VoiceInk/Wispr/Handy consensus; top risks menubar/notch
-  collision). No caret-anchoring — *no* OSS app does it (jitter not worth it).
+- **Position: bottom-center** (industry consensus; top risks menubar/notch
+  collision — landscape analysis: `docs/competitors.md`). No caret-anchoring
+  (jitter not worth it).
 - **Visual states:** idle (dim bars) → recording (live mic waveform) → processing →
   done. Drive the waveform from the live `AVAudioEngine` tap RMS, linearized
-  `pow(10, dB/20)` (Hex). Keep it subtle (Wispr's prominent pill is the cautionary tale).
+  `pow(10, dB/20)`. Keep it subtle — prominent animated pills are the anti-pattern.
 
 ## 5. Text insertion at cursor
 
