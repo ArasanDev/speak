@@ -300,6 +300,10 @@ Many developers avoid background utilities because bloated Electron shells and P
 
 ---
 
+## Contributing — agent-native
+
+This repository is built for AI agents to contribute to. Point your agent at [`AGENTS.md`](AGENTS.md) (the operating manual) and [`llms.txt`](llms.txt) (the machine-readable index) — it can navigate the codebase, implement a task, and self-verify with `make preflight`. Humans direct and review. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 ## License
 
 MIT License. See [`LICENSE`](LICENSE) for details.

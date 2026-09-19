@@ -1,0 +1,55 @@
+# speak
+
+> macOS-native, local-first voice dictation — speech → on-device AI
+> neat-writing → pasted at cursor. Menubar app, macOS 26 (Tahoe), Apple
+> Silicon M5/M4. MIT licensed, alpha stage.
+>
+> **This repository is agent-native.** Contributions are authored by agents
+> and directed/reviewed by humans. AGENTS.md is the operating manual — read
+> it before writing any code.
+
+## Start here (agents, in order)
+
+- `AGENTS.md` — operating manual: hard rules (§2), file authority (§3),
+  session loading protocol (§4), verification gate (§7), commit rules (§8)
+- `docs/progress.md` — current state; read at session start, update at end
+- `docs/roadmap.md` — task queue; lowest-numbered dependency-ready item
+- `docs/README.md` — docs index by task and audience
+
+## Hard rules (a PR violating these fails — they are structural, not style)
+
+- No network egress, telemetry, accounts, or third-party runtime deps in
+  `SpeakCore` / `Speak` app / CLI targets — verified by `make verify-moat`
+  (7/7 must pass). Cloud integrations live ONLY in `SpeakLLM.framework`.
+- Never read the pasteboard — write-only (`PasteboardWriter`).
+- Hardware mute blocks capture unconditionally.
+- No `print` (use `os.Logger` / `SpeakLog`), no force-unwrap/`try!`/`as!`
+  outside tests, no global mutable state, never block the main thread.
+- Apple frameworks only. Swift 5.9+/SwiftUI. macOS 26.0 deployment. arm64.
+- Tag API claims `[verified]`/`[inferred]`/`[decision]`/`[unverified]` —
+  verify Apple APIs with `swiftc -typecheck` against the macOS 26 SDK.
+
+## Verify your work (in order of speed)
+
+- `make test-fast` — ~3s prompt/cleanup subset (inner dev loop)
+- `make preflight` — the PR checks: moat + lint + compile (~2-3 min)
+- `make gates` — merge gate: build + test + lint + verify-moat
+- `make compat` — hardware/OS/toolchain check (M5/M4, macOS 26+)
+- `xcodegen generate` after adding/removing `.swift` files (glob gotcha)
+
+## Architecture map
+
+- `Speak/App/` — SwiftUI shell (menubar, HUD overlay, dashboard, settings)
+- `Speak/SpeakCore/` — headless engine: actors `SpeakEngine`/`CaptureSession`,
+  protocol seams `Transcribing`/`LLMCleaning`/`TextInserting`/`HistoryStoring`
+- `Speak/SpeakLLM/` — opt-in OpenAI-compatible cleanup (the only target with
+  networking symbols; isolated so the moat audit stays honest)
+- `Speak/Tests/SpeakTests/` — XCTest + Swift Testing; TEST_HOST = Speak.app
+- `docs/architecture.md` — full module map; `docs/ui/philosophy.md` — UI why
+
+## For humans (reading/observing, not authoring)
+
+- `README.md` — product intro, install, comparison
+- `docs/ui/philosophy.md` — why each surface exists
+- `docs/progress.md` — observable work log (every session writes it)
+- `docs/human-verification.md` — things only a human+real Mac can verify

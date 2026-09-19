@@ -1,7 +1,14 @@
 # Contributing to `speak`
 
-> **AI agent contributors**: Read `AGENTS.md` first. It is the operating manual.
-> Human contributors: this file covers the contribution workflow.
+> **speak is agent-native.** Contributions are authored by agents — Claude
+> Code, Codex, Devin, Cursor, whatever you drive — and directed/reviewed by
+> humans. Point your agent at `AGENTS.md` (the operating manual) and
+> `llms.txt` (the machine-readable index); it can navigate, implement, and
+> self-verify from there. The human's job is directing intent and reviewing
+> the result, not writing code.
+>
+> **Observing rather than contributing?** README → `docs/ui/philosophy.md` →
+> `docs/progress.md` is the read path.
 
 ---
 
@@ -123,16 +130,17 @@ real run.
 
 ## Proposing changes
 
-### The pull request flow
+### The pull request flow (agent-driven)
 
-1. Fork, branch, make your change — `make preflight` gives you the same three
-   checks CI runs on a PR (moat audit + lint + compile, ~2-3 min, no test
-   suite).
-2. Open the PR. Three checks run automatically, in parallel:
+1. Direct your agent: fork, branch, implement. It runs `make preflight` —
+   the same three checks CI runs on a PR (moat audit + lint + compile,
+   ~2-3 min, no test suite).
+2. The agent opens the PR. Three checks run automatically, in parallel:
    `moat-audit` (~30s), `lint` (~2min), `build` on macOS (~5-8min).
    Expect green/red in under 10 minutes.
-3. Review happens against the PR. A maintainer runs `make gates` (full suite)
-   locally before merge — that's the real gate, since speak is local-first.
+3. A human reviews the PR — direction, taste, and whether the agent's
+   claims match the diff. A maintainer runs `make gates` (full suite)
+   locally before merge — the real gate, since speak is local-first.
 4. Squash-merge keeps history linear.
 
 Small fixes (typos, docs, small bugs) don't need an issue first. Anything

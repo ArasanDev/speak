@@ -2172,3 +2172,21 @@ dispatch model still applies.
 - Net effect: a dispatch run is now bounded by `make test` alone
   (≈ build+test), with moat-audit + lint finishing in the first minute on
   free ubuntu runners.
+
+### 2026-09-17 — Repo declared agent-native; llms.txt added
+
+**Owner direction:** contributions come from agents, not human drive-by
+contributors — humans direct intent and review/observe. Optimize the repo
+for agent speed + human readability, not human authoring ergonomics.
+
+**What changed:**
+- `llms.txt` (new, root) — machine-readable repo index: reading order,
+  hard rules, verify commands by speed, architecture map, human read path.
+- `CONTRIBUTING.md` — reframed: "speak is agent-native; point your agent at
+  AGENTS.md + llms.txt." PR flow section now agent-driven (agent runs
+  preflight + opens PR; human reviews direction/taste/diff-vs-claims).
+- `README.md` — "Contributing — agent-native" section before License.
+- PR template + CONTRIBUTING updated in the same pass: `[P<N>]` marked
+  internal-only; `make preflight` added (moat+lint+compile ≈ PR checks).
+- `~/.devin/AGENTS.md` (global, user-level) — standing rule: no AI-tool
+  attribution trailers in commits/PRs/comments, overrides built-in template.
