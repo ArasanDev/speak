@@ -7,6 +7,41 @@
 
 ## Current phase
 
+**HUD runtime refinement pass (2026-09-20).** Direct owner feedback after a live dictation
+through the Jabra Evolve2 30 SE (input path confirmed working — the message was dictated
+through speak itself; the earlier near-silent-input observation is no longer the active
+problem). Changes, all confined to existing surfaces:
+
+- **Stop hint removed from the HUD header.** The `· ⌘⌘ Right Command to finish` segment was
+  the header's longest element and redundant — the trailing ✕ already affords cancel and the
+  bound gesture lives in Settings. Removed the render, the `OverlayViewModel.stopHint`
+  property, and `OverlayController.resolvedStopHint()` plumbing (dead-surface honesty).
+- **Stronger chrome.** Header control glyphs went from `speakBone` 0.55–0.65 → 0.85–0.9;
+  the "Listening…" placeholder 0.55 → 0.75; the customize button goes full opacity while
+  its panel is open (it now reads as a toggle, not a ghost icon). Added `.help` tooltips.
+- **Level-responsive tally lamp.** The `speakOnAir` dot in the header now brightens
+  (0.7→1.0 opacity) and grows (0.9→1.3×) with the smoothed `model.level` stream — "is it
+  hearing me" is glanceable without watching the waveform. Frozen rule preserved:
+  `speakOnAir` iff capturing (specs/frontend-identity.md).
+- **Per-dictation cleanup Strength.** The customization panel's override grid was three
+  unlabeled chip rows; it is now four labeled rows — **Strength | Format | Tone | Length**.
+  Strength maps the existing `CleanupLevel` ladder onto the current dictation only:
+  `Auto` (saved setting) · `Raw` (bypass the model) · `Light` · `Medium` · `High`.
+  Wiring: `OverlayViewModel.perDictationLevel: CleanupLevel?` → stop-time override check
+  in `endDictation` (`kv == .none` routes to `applyRawOverride`, else the value threads a
+  new `level:` parameter on `SpeakEngine.applyProfileOverride`/`recleanAndPaste`; `nil`
+  keeps the saved level). Known constraint (documented on the API): a session built with
+  the saved level `.none` has no cleaner — a mid-dictation strength tap cannot escalate
+  cleanup on; it can only lower or reshape it.
+
+- **Verification**: `make build` clean · `KnobsTests` 11/11 + `ProfileOverrideTests` 14/14
+  pass (incl. two new tests pinning the `level:` contract) · `make lint` 0 serious ·
+  `make verify-moat` PASS.
+- **Not verified live** `[unverified]`: lamp pulse feel, stronger glyph contrast, and the
+  Strength row's visual fit in the panel need a human dogfood with real audio.
+
+---
+
 **Overlay diagnosis + cleanup-architecture gap analysis (2026-09-20).**
 Direct user report: dictating into an IDE-hosted terminal shows no HUD — only "one small
 square box at top right with a single character." Live reproduction (CGWindowList dumps +

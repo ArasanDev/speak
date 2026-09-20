@@ -283,14 +283,11 @@ final class OverlayController {
         overlayModel.perDictationFormat = .asIs    // PE-4: reset knob overrides each dictation
         overlayModel.perDictationTone = .neutral
         overlayModel.perDictationLength = .preserve
+        overlayModel.perDictationLevel = nil
         overlayModel.onKnobChanged = nil
         overlayModel.onCancel = { [weak self] in
             self?.cancelImmediate()
         }
-        // Stop-gesture hint — rendered inline in the text box's header row.
-        // Resolved next to onCancel so the "how do I get out of this"
-        // affordance lives beside the cancel wiring.
-        overlayModel.stopHint = resolvedStopHint()
         overlayModel.onReclean = nil
         overlayModel.onReadback = nil              // [H-2] reset alongside onReclean — same lifetime
         overlayModel.customInstructions = ""       // P-Code v2: reset per-dictation prompt addition
@@ -425,9 +422,9 @@ final class OverlayController {
         overlayModel.perDictationFormat = .asIs    // PE-4: reset knob overrides
         overlayModel.perDictationTone = .neutral
         overlayModel.perDictationLength = .preserve
+        overlayModel.perDictationLevel = nil
         overlayModel.onKnobChanged = nil
         overlayModel.onCancel = nil
-        overlayModel.stopHint = ""
         overlayModel.customInstructions = ""       // P-Code v2: reset per-dictation prompt addition
         overlayModel.defaultSystemPrompt = ""      // P-Code v2: reset until next beginDictation
         resetCodingPanel()   // P-Code: close the coding panel with the rest of overlay state
@@ -485,32 +482,15 @@ final class OverlayController {
         overlayModel.perDictationFormat = .asIs    // PE-4: reset knob overrides
         overlayModel.perDictationTone = .neutral
         overlayModel.perDictationLength = .preserve
+        overlayModel.perDictationLevel = nil
         overlayModel.onKnobChanged = nil
         overlayModel.onCancel = nil
-        overlayModel.stopHint = ""
         overlayModel.customInstructions = ""       // P-Code v2: reset per-dictation prompt addition
         overlayModel.defaultSystemPrompt = ""      // P-Code v2: reset until next beginDictation
         resetCodingPanel()   // P-Code: close the coding panel with the rest of overlay state
         partialText = ""
         panel?.hide()
         SpeakLog.engine.info("OverlayController: dictation cancelled (immediate hide).")
-    }
-
-    // MARK: - Stop-gesture hint
-
-    /// The bound stop gesture shown as the right-rail hint while listening,
-    /// e.g. "Fn ×2" or "⌘⌘ Right Command".
-    ///
-    /// Resolved at dictation start from the same persisted `HotkeyBinding` the
-    /// `HotkeyMonitor` loads (`UserDefaultsBindingStore`), reconciled with the
-    /// user-facing `SettingsStore.triggerMode` — mirroring the reconcile
-    /// `DictationController.init` performs (`monitor.binding.with(trigger:)`).
-    /// [decision: read the persisted binding here rather than plumbing the live
-    ///  `HotkeyMonitor` through `OverlayController` — the hint is display-only
-    ///  and the binding cannot change mid-dictation.]
-    private func resolvedStopHint() -> String {
-        let persisted = UserDefaultsBindingStore().load() ?? .defaultBinding
-        return persisted.with(trigger: settingsStore.triggerMode).displayString
     }
 
     // MARK: - Duration timer

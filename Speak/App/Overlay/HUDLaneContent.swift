@@ -18,8 +18,11 @@ import SwiftUI
 // MARK: - Header row
 
 /// The header row — phase word leading, the elapsed timer riding inline
-/// (`LISTENING · 0:12`), the stop hint after it, controls trailing.
-/// `overlayShowTimer` gates just the `· m:ss` segment.
+/// (`LISTENING · 0:12`), controls trailing. `overlayShowTimer` gates just
+/// the `· m:ss` segment. The stop-gesture hint was removed (2026-11): the
+/// trailing ✕ already affords cancel, and the bound hotkey is discoverable
+/// in Settings — the header reads cleaner without a third metadata run.
+/// [decision: owner direction — "remove the unnecessary command".]
 struct HUDPillHeader: View {
     let model: OverlayViewModel
     let settingsStore: SettingsStore
@@ -32,12 +35,18 @@ struct HUDPillHeader: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: SpeakSpacing.xs) {
-            // The `speakOnAir` tally lamp — a small light iff the mic is
-            // capturing (the frozen rule survives: tally light, not a red wall).
+            // The `speakOnAir` tally lamp — brightens and grows with the live
+            // mic level, so "is it hearing me" is glanceable in the header
+            // (frozen rule survives: `speakOnAir` iff capturing — a tally
+            // light, not a red wall). `level` is already smoothed RMS, so the
+            // lamp breathes instead of jittering.
             if model.overlayState == .listening {
+                let level = min(max(model.level, 0), 1)
                 Circle()
                     .fill(Color.speakOnAir)
-                    .frame(width: 5, height: 5)
+                    .frame(width: 6, height: 6)
+                    .opacity(0.7 + 0.3 * level)
+                    .scaleEffect(0.9 + 0.4 * level)
                     .accessibilityHidden(true)
             }
 
@@ -52,13 +61,6 @@ struct HUDPillHeader: View {
                     .monospacedDigit()
                     .foregroundStyle(Color.speakMica)
                     .accessibilityLabel("Elapsed \(HUDLane.durationLabel(model.elapsedSeconds))")
-            }
-
-            if model.overlayState == .listening, !model.stopHint.isEmpty {
-                Text("· \(model.stopHint) to finish")
-                    .font(.speakBody(.caption))
-                    .foregroundStyle(Color.speakBone.opacity(0.55))
-                    .lineLimit(1)
             }
 
             Spacer(minLength: 0)
@@ -105,9 +107,10 @@ private struct HUDCustomizeButton: View {
         } label: {
             Image(systemName: "slider.horizontal.3")
                 .font(.system(size: 12))
-                .foregroundStyle(Color.speakBone.opacity(0.55))
+                .foregroundStyle(Color.speakBone.opacity(model.isCodingPanelOpen ? 1.0 : 0.85))
         }
         .buttonStyle(.plain)
+        .help("Customize this dictation")
         .accessibilityLabel("Customize the prompt for this dictation")
         .accessibilityAddTraits(model.isCodingPanelOpen ? [.isSelected, .isButton] : .isButton)
     }
@@ -123,7 +126,7 @@ private struct HUDCloseButton: View {
         } label: {
             Image(systemName: "xmark")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Color.speakBone.opacity(0.65))
+                .foregroundStyle(Color.speakBone.opacity(0.9))
         }
         .buttonStyle(.plain)
         .help("Cancel dictation and hide overlay")
@@ -140,7 +143,7 @@ private struct HUDReadbackButton: View {
         } label: {
             Image(systemName: "speaker.wave.2")
                 .font(.system(size: 13))
-                .foregroundStyle(Color.speakBone.opacity(0.55))
+                .foregroundStyle(Color.speakBone.opacity(0.85))
         }
         .buttonStyle(.plain)
         .help("Read this back aloud")
@@ -157,7 +160,7 @@ private struct HUDRecleanButton: View {
         } label: {
             Image(systemName: "arrow.clockwise")
                 .font(.system(size: 13))
-                .foregroundStyle(Color.speakBone.opacity(0.55))
+                .foregroundStyle(Color.speakBone.opacity(0.85))
         }
         .buttonStyle(.plain)
         .help("Re-clean with current settings")
@@ -179,7 +182,7 @@ struct HUDListeningLane: View {
         if model.windowText.isEmpty {
             Text("Listening\u{2026}")
                 .font(.speakBody(.caption))
-                .foregroundStyle(Color.speakBone.opacity(0.55))
+                .foregroundStyle(Color.speakBone.opacity(0.75))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .accessibilityLabel("Listening for speech")
                 .accessibilityAddTraits(.updatesFrequently)

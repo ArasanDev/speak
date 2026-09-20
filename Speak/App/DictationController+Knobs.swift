@@ -39,7 +39,8 @@ extension DictationController {
         let customInstructions = overlayModel.customInstructions.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
             try await engine.recleanAndPaste(
-                raw, profile: effectiveProfile, category: activeCategory, customInstructions: customInstructions
+                raw, profile: effectiveProfile, category: activeCategory,
+                customInstructions: customInstructions, level: overlayModel.perDictationLevel
             )
             SpeakLog.engine.info("DictationController: reclean completed successfully.")
         } catch {

@@ -4,7 +4,7 @@
 // (v2 redesign, replacing the divider-segmented capsule bar).
 //
 //   ╭───────────────────────────────────────────────────────╮
-//   │  ≋   LISTENING · 0:12 · ⌘⌘ to finish           ⚙  ✕   │
+//   │  ≋   LISTENING · 0:12                          ⚙  ✕   │
 //   │      the quick brown fox jumps over the lazy dog…     │
 //   ╰───────────────────────────────────────────────────────╯
 //
@@ -230,7 +230,7 @@ struct HUDLeadingSlot: View {
 
 // MARK: - Text lane
 
-/// The flexible lane: a header row (phase word · inline timer · stop hint ·
+/// The flexible lane: a header row (phase word · inline timer ·
 /// quiet controls) over the per-state content. `.clipped()` keeps the
 /// transcript inside the pill no matter how long the FIFO window runs.
 struct HUDTextLane: View {

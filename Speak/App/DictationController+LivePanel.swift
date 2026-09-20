@@ -107,6 +107,7 @@ extension DictationController {
         overlayController.overlayModel.perDictationFormat = .asIs
         overlayController.overlayModel.perDictationTone = .neutral
         overlayController.overlayModel.perDictationLength = .preserve
+        overlayController.overlayModel.perDictationLevel = nil
         // [P2.3] Clear the partial-text preview so the processing overlay never shows
         // stale text from a prior session. Placed above the pin early-return so it
         // runs on ALL paths (pinned and default). Cleared here; set by onPartialTextUpdated.

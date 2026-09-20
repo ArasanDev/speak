@@ -335,11 +335,10 @@ final class DebugLaunchDispatcher {
             // [decision: "the quick brown fox" — readable sample that exercises
             //  the partial-text rendering path. Static level 0.6 shows mid-range bars.]
             overlayModel.partialText = "the quick brown fox"
-            // `windowText` is what the pill's text lane renders; `stopHint` +
-            // `elapsedSeconds` fill the header row so the demo shows the real
+            // `windowText` is what the pill's text lane renders;
+            // `elapsedSeconds` fills the header row so the demo shows the real
             // HUD composition, not a bare placeholder.
             overlayModel.windowText = "the quick brown fox jumps over the lazy dog"
-            overlayModel.stopHint = "⌘⌘ Right Command"
             overlayModel.elapsedSeconds = 12
             overlayModel.level = 0.6   // [decision: 0.6 = mid-level, visually interesting]
 

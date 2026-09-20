@@ -146,14 +146,6 @@ final class OverlayViewModel {
     /// `showError` cancel the duration task.
     var elapsedSeconds: Int = 0
 
-    /// The bound stop-gesture label shown as the lane's bottom-trailing hint
-    /// while `.listening`, e.g. "Fn ×2" or "⌘⌘ Right Command" — rendered as
-    /// "<hint> to finish". Set by `OverlayController.start()` from the persisted
-    /// `HotkeyBinding` reconciled with `SettingsStore.triggerMode` (the same
-    /// resolve `DictationController.init` performs). Empty ⇒ the hint is
-    /// skipped (tests / unwired callers).
-    var stopHint: String = ""
-
     /// Microphone level (0…1), smoothed RMS from `AudioCapture` (W2.1).
     /// 0.0 when idle; driven live during `.listening`.
     var level: Double = 0.0
@@ -240,6 +232,13 @@ final class OverlayViewModel {
 
     /// Per-dictation length override. `.preserve` = "Auto" (no override).
     var perDictationLength: LengthBias = .preserve
+
+    /// Per-dictation cleanup-strength override. `nil` = "Auto" — the session
+    /// runs the saved `SettingsStore.cleanupLevel`. `.none` = "Raw" — skip the
+    /// model for this dictation (routes to `applyRawOverride` at stop).
+    /// `.light`/`.medium`/`.high` thread into `applyProfileOverride(level:)`.
+    /// [decision: per-dictation only — the saved level in Settings is untouched.]
+    var perDictationLevel: CleanupLevel? = nil
 
     /// Fired when the user changes any knob. `DictationController` wires this to set
     /// `didOverrideThisSession = true` so the stop-time profile apply runs.

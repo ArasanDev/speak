@@ -4,7 +4,7 @@
 // floating panel (v2 redesign, 2026-09-17; near-rect silhouette per owner):
 //
 //   ╭───────────────────────────────────────────────────────╮
-//   │  ≋   LISTENING · 0:12 · ⌘⌘ to finish           ⚙  ✕   │
+//   │  ≋   LISTENING · 0:12                          ⚙  ✕   │
 //   │      the quick brown fox jumps over the lazy dog…     │
 //   ╰───────────────────────────────────────────────────────╯
 //
@@ -17,7 +17,7 @@
 //     users who explicitly pick one.
 //   • Leading slot — morphs by state: live voice animation (`.listening`),
 //     spinner (`.processing`), delivered ✓ (`.done`), error mark (`.error`).
-//   • Header — phase word + inline `· m:ss` timer + stop hint + quiet
+//   • Header — phase word + inline `· m:ss` timer + quiet
 //     controls (customize / readback / re-clean / close).
 //   • Lane — the FIFO `model.windowText` at `.speakMonoFace(.caption)`,
 //     topLeading, clipped — the transcript can never outgrow the pill.
@@ -117,7 +117,6 @@ struct TranscriptOverlayView: View {
 #Preview("Listening — placeholder") {
     let model = OverlayViewModel()
     model.overlayState = .listening
-    model.stopHint = "⌘⌘ Right Command"
     model.level = 0.0
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 640, height: 76)
@@ -127,7 +126,6 @@ struct TranscriptOverlayView: View {
     let model = OverlayViewModel()
     model.overlayState = .listening
     model.windowText = "the quick brown fox jumps over the lazy dog and keeps on streaming words into the bounded capture lane"
-    model.stopHint = "⌘⌘ Right Command"
     model.elapsedSeconds = 12
     model.level = 0.6
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
@@ -139,7 +137,6 @@ struct TranscriptOverlayView: View {
     model.overlayState = .listening
     model.windowText = "newest speech stays in the window while the oldest words flow out first so a long dictation "
             + "keeps streaming inside the two circles without ever overflowing the lane or growing the panel"
-    model.stopHint = "Fn ×2"
     model.elapsedSeconds = 83
     model.level = 0.45
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
@@ -214,7 +211,6 @@ struct TranscriptOverlayView: View {
     let model = OverlayViewModel()
     model.overlayState = .listening
     model.windowText = "open the customization panel"
-    model.stopHint = "⌘⌘ Right Command"
     model.isCodingPanelOpen = true
     return TranscriptOverlayView(model: model, settingsStore: SettingsStore())
         .frame(width: 640, height: 76)

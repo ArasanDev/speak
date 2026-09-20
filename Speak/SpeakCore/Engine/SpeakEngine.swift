@@ -397,10 +397,16 @@ public actor SpeakEngine {
     /// - Parameter customInstructions: (P-Code) free-form text from the coding-
     ///   customization panel, appended as the final instruction clause. Empty by
     ///   default — existing callers (knob-only overrides) are unaffected.
+    /// - Parameter level: optional per-dictation cleanup-strength override.
+    ///   `nil` keeps the saved `settings.cleanupLevel`. `.none` is NOT accepted
+    ///   here — callers route that intent through `applyRawOverride` (the
+    ///   session was built with no cleaner when the saved level is `.none`, so
+    ///   a per-dictation escalation cannot manufacture cleanup mid-session).
     public func applyProfileOverride(
         _ profile: Profile,
         category: AgentCategory,
-        customInstructions: String = ""
+        customInstructions: String = "",
+        level: CleanupLevel? = nil
     ) async {
         guard let session = currentSession else { return }
         guard settings.cleanupEnabled, settings.cleanupLevel != .none else {
@@ -413,7 +419,7 @@ public actor SpeakEngine {
         }
         let mode = CleanupMode.profile(
             profile,
-            level: settings.cleanupLevel,
+            level: level ?? settings.cleanupLevel,
             category: category,
             customVocabulary: settings.effectiveVocabulary,
             customInstructions: customInstructions
@@ -505,7 +511,8 @@ public actor SpeakEngine {
         _ rawTranscript: String,
         profile: Profile,
         category: AgentCategory,
-        customInstructions: String = ""
+        customInstructions: String = "",
+        level: CleanupLevel? = nil
     ) async throws {
         guard profile.model != .raw else {
             SpeakLog.engine.info("SpeakEngine: reclean skipped — profile is Raw (no model).")
@@ -525,7 +532,7 @@ public actor SpeakEngine {
         }
         let mode: CleanupMode = .profile(
             profile,
-            level: settings.cleanupLevel,
+            level: level ?? settings.cleanupLevel,
             category: category,
             customVocabulary: settings.effectiveVocabulary,
             customInstructions: customInstructions

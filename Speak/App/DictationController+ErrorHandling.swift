@@ -211,19 +211,21 @@ extension DictationController {
             // [PE-3 / PE-4] Apply the live-panel override exactly once, here, BEFORE
             // endDictation() triggers the cleanup pass. Reads the per-dictation knob
             // values from the overlay model to build the effective profile. [decision PE-4]
-            let kf = overlayController.overlayModel.perDictationFormat
-            let kt = overlayController.overlayModel.perDictationTone
-            let kl = overlayController.overlayModel.perDictationLength
-            let hasKnobOverride = kf != .asIs || kt != .neutral || kl != .preserve
+            let om = overlayController.overlayModel
+            let kf = om.perDictationFormat, kt = om.perDictationTone
+            let kl = om.perDictationLength, kv = om.perDictationLevel
+            // Strength row (kv): nil = Auto (saved level), .none = Raw
+            // passthrough, else the level threads into the override below.
+            let hasKnobOverride = kf != .asIs || kt != .neutral || kl != .preserve || kv != nil
             // [P-Code v2] The prompt-customization panel's "Additional instructions" field —
             // read directly off the overlay model exactly like the knob values above (same
             // per-dictation, no-callback-needed pattern). Non-empty text also triggers the
             // override path so it reaches the cleaner even when no knob/destination changed.
-            let customInstructions = overlayController.overlayModel.customInstructions
+            let customInstructions = om.customInstructions
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let hasCustomInstructions = !customInstructions.isEmpty
             if didOverrideThisSession || hasKnobOverride || hasCustomInstructions {
-                if overrodeToRaw {
+                if overrodeToRaw || kv == CleanupLevel.none {
                     await engine.applyRawOverride()
                 } else {
                     // Build an effective profile: start from the active destination, then
@@ -235,12 +237,13 @@ extension DictationController {
                     await engine.applyProfileOverride(
                         effectiveProfile,
                         category: activeCategory,
-                        customInstructions: customInstructions
+                        customInstructions: customInstructions,
+                        level: kv
                     )
                 }
             }
-            let agentPrefixStyle = overlayController.overlayModel.agentPrefixStyle
-            let includeState = overlayController.overlayModel.agentPrefixIncludeState
+            let agentPrefixStyle = om.agentPrefixStyle
+            let includeState = om.agentPrefixIncludeState
             await engine.setAgentPrefix(style: agentPrefixStyle, includeState: includeState)
             let result = try await engine.endDictation()
             // Silent-input session: the mic delivered nothing (muted headset,

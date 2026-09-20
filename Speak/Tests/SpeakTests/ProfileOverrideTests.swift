@@ -271,6 +271,69 @@ final class ProfileOverrideTests: XCTestCase {
         }
     }
 
+    /// Test: applyProfileOverride's `level:` parameter overrides the saved
+    /// `settings.cleanupLevel` for THIS session — the per-dictation Strength
+    /// row's engine contract.
+    func testSpeakEngine_applyProfileOverride_levelParamOverridesSettings() async throws {
+        let settings = try makeSettings()
+        settings.cleanupEnabled = true
+        settings.cleanupLevel = .high   // saved level — must NOT win
+
+        let profile = testProfile(name: "TestProfile")
+
+        let recorder = CleanerCallRecorder()
+        let engine = SpeakEngine(
+            transcriber: SimpleTranscriber(finalText: "hello"),
+            cleaner: RecordingCleaner(recorder: recorder),
+            history: NullHistory(),
+            settings: settings
+        )
+
+        let session = await engine.newSession()
+        try await session.start()
+
+        // Per-dictation strength tap: Light, even though Settings says High.
+        await engine.applyProfileOverride(profile, category: .task, level: .light)
+
+        let effective = await session.effectiveCleanupMode
+        if case .profile(let p, let level, _, _, _) = effective {
+            XCTAssertEqual(p.name, "TestProfile", "Profile name should match the override.")
+            XCTAssertEqual(level, .light, "Per-dictation level must win over the saved setting.")
+        } else {
+            XCTFail("effectiveCleanupMode should be .profile(...) after override.")
+        }
+    }
+
+    /// Test: applyProfileOverride with `level: nil` falls back to the saved
+    /// settings level (the Strength row's "Auto" chip contract).
+    func testSpeakEngine_applyProfileOverride_nilLevelKeepsSettings() async throws {
+        let settings = try makeSettings()
+        settings.cleanupEnabled = true
+        settings.cleanupLevel = .high
+
+        let profile = testProfile(name: "TestProfile")
+
+        let recorder = CleanerCallRecorder()
+        let engine = SpeakEngine(
+            transcriber: SimpleTranscriber(finalText: "hello"),
+            cleaner: RecordingCleaner(recorder: recorder),
+            history: NullHistory(),
+            settings: settings
+        )
+
+        let session = await engine.newSession()
+        try await session.start()
+
+        await engine.applyProfileOverride(profile, category: .task, level: nil)
+
+        let effective = await session.effectiveCleanupMode
+        if case .profile(_, let level, _, _, _) = effective {
+            XCTAssertEqual(level, .high, "nil level must keep the saved settings level.")
+        } else {
+            XCTFail("effectiveCleanupMode should be .profile(...) after override.")
+        }
+    }
+
     /// Test: applyProfileOverride is a no-op when cleanup is disabled.
     func testSpeakEngine_applyProfileOverride_noop_cleanupDisabled() async throws {
         let settings = try makeSettings()

@@ -24,10 +24,11 @@ struct KnobsTests {
 
     @Test func knobsResetOnStart() async {
         let controller = OverlayController()
-        // Manually dirty all three knobs on the model before start().
+        // Manually dirty all four knobs on the model before start().
         controller.overlayModel.perDictationFormat = .bullets
         controller.overlayModel.perDictationTone = .formal
         controller.overlayModel.perDictationLength = .condense
+        controller.overlayModel.perDictationLevel = .high
 
         controller.start(
             partialsProvider: { nil },
@@ -41,6 +42,8 @@ struct KnobsTests {
                 "start() must reset tone knob to .neutral (Auto).")
         #expect(controller.overlayModel.perDictationLength == .preserve,
                 "start() must reset length knob to .preserve (Auto).")
+        #expect(controller.overlayModel.perDictationLevel == nil,
+                "start() must reset strength knob to nil (Auto).")
     }
 
     // MARK: - 2. Knob callback wiring
