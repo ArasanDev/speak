@@ -43,6 +43,12 @@ cross-checks — not vibes. See each file's header for its own evidence.
   observability, pluggable-path retry/error taxonomy) and the deliberate
   rejections (clipboard/screen context, per-mode STT). Feeds the capability
   track's build order.
+- **`ai-processing-pipeline.md`** — [proposal] principled architecture for the
+  AI-processing layer: deterministic-before-model doctrine, level-as-pipeline-
+  configuration (Raw/Light/Medium/High as stage sets, not prompt wording),
+  declared `CleanupPlan` stages, and the ranked list of untapped platform
+  capabilities (`session.transcript`, `@Generable`, `streamResponse`,
+  STT segment metadata). Awaiting owner review.
 
 ## Reference (still depended on, not itself a contract)
 
